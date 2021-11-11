@@ -73,12 +73,12 @@ class DQN(Q_Network_Family):
             self.summary.add_scalar("loss/qloss", loss, steps)
             self.summary.add_scalar("loss/targets", t_mean, steps)
         
-    @jax.jit
+    #@jax.jit
     def _loss(self, params, obses, actions, targets, weights=1):
         vals = self.get_q(params,obses)[actions]
         return jnp.mean(weights*jnp.square(vals - targets))
     
-    @jax.jit
+    #@jax.jit
     def _target(self,params,target_params, obses, actions, rewards, nxtobses, not_dones):
         next_q = self.get_q(target_params,nxtobses)
         if self.double_q:
