@@ -1,6 +1,5 @@
 import numpy as np
 import abc as ABC
-from haiku_baselines.common.utils import get_flatten_size, visual_embedding
 import haiku as hk
 import jax
 import jax.numpy as jnp
