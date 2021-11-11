@@ -9,7 +9,7 @@ setup(
         'gym',
         'box2d',
         'box2d-py',
-        'haiku',
+        'dm-haiku',
         'optax',
         'numpy',
         'cpprb',
