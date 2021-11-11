@@ -27,7 +27,7 @@ class Q_Network_Family(object):
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
-        self.key = jax.random.PRNGKey(seed)
+        self.key = jax.random.PRNGKey(self.seed)
         
         self.param_noise = param_noise
         self.learning_starts = learning_starts
