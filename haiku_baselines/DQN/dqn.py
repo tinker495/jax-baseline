@@ -102,7 +102,7 @@ class DQN(Q_Network_Family):
             next_vals = not_dones * next_q[next_actions]
         return jax.lax.stop_gradient((next_vals * self._gamma) + rewards)
     
-    @jax.jit
+
     def _train_step(self, params, target_params, opt_state, steps, obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); not_dones = 1 - dones
         targets = jax.vmap(self._target)(params, target_params, obses, actions, rewards, nxtobses, not_dones)
