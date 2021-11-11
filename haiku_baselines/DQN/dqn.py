@@ -106,7 +106,8 @@ class DQN(Q_Network_Family):
 
     def _train_step(self, params, target_params, opt_state, steps, obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); not_dones = 1 - dones
-        targets = jax.vmap(partial(self._target,params, target_params))(obses, actions, rewards, nxtobses, not_dones)
+        targets = self._target(params, target_params,obses, actions, rewards, nxtobses, not_dones)
+        #jax.vmap(partial(self._target,params, target_params))(obses, actions, rewards, nxtobses, not_dones)
         loss,grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
         online_params = optax.apply_updates(params, updates)
