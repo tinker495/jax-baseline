@@ -38,10 +38,10 @@ class DQN(Q_Network_Family):
                            dualing=self.dualing_model,noisy=self.param_noise,
                            **self.policy_kwargs)(x))
         pre_param = self.preproc.init(sub_key,
-                            [np.zeros((1,*o)) for o in self.observation_space])
+                            [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         model_param = self.model.init(sub_key,
                             self.preproc.apply(pre_param, 
-                            None, [np.zeros((1,*o)) for o in self.observation_space]))
+                            None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]))
         self.params = hk.data_structures.merge(pre_param, model_param)
         self.target_params = self.params
         
