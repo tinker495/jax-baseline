@@ -30,7 +30,10 @@ class DQN(Q_Network_Family):
     def setup_model(self):
         self.key,sub_key = jax.random.split(self.key)
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
-        self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode="normal")(x))
+        if 'cnn_mode' in self.policy_kwargs.keys():
+            cnn_mode = self.policy_kwargs['cnn_mode']
+            del self.policy_kwargs['cnn_mode']
+        self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
         self.model = hk.transform(lambda x: Model(self.action_size,
                            dualing=self.dualing_model,noisy=self.param_noise,
                            **self.policy_kwargs)(x))
