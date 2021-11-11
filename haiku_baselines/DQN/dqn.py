@@ -62,8 +62,12 @@ class DQN(Q_Network_Family):
         else:
             data = self.replay_buffer.sample(self.batch_size)
             
-        self.params, self.target_params, self.opt_state, loss = \
+        self.params, self.target_params, self.opt_state, loss, t_mean = \
             self._train_step(self.params, self.target_params, self.opt_state, steps, **data)  
+            
+        if self.summary and steps % self.log_interval == 0:
+            self.summary.add_scalar("loss/qloss", loss, steps)
+            self.summary.add_scalar("loss/targets", t_mean, steps)
         
     @jax.jit
     def _loss(self, params, obses, actions, targets, weights=1):
@@ -103,7 +107,7 @@ class DQN(Q_Network_Family):
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
         online_params = optax.apply_updates(params, updates)
         hard_update(online_params,target_params,steps,self.target_network_update_freq)
-        return online_params, target_params, opt_state, loss
+        return online_params, target_params, opt_state, loss, jnp.mean(targets)
 
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DQN",
