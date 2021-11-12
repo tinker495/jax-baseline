@@ -23,7 +23,7 @@ def visual_embedding(mode="simple"):
             return hk.Sequential([
                     hk.Conv2D(32,8,4), jax.nn.leaky_relu,
                     hk.Conv2D(64,4,2), jax.nn.leaky_relu,
-                    hk.Conv2D(64,4,2), jax.nn.leaky_relu,
+                    hk.Conv2D(64,3,1), jax.nn.leaky_relu,
                     hk.Flatten()
                     ])(x)
     elif mode == "simple":
