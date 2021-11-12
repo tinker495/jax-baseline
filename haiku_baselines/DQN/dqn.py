@@ -48,6 +48,11 @@ class DQN(Q_Network_Family):
         self.optimizer = optax.adamw(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
         
+        print("----------------------model----------------------")
+        print(jax.tree_map(lambda x: x.shape, pre_param))
+        print(jax.tree_map(lambda x: x.shape, model_param))
+        print("loss : mse")
+        print("-------------------------------------------------")
 
         self.get_q = jax.jit(self.get_q)
         self._get_actions = jax.jit(self._get_actions)
