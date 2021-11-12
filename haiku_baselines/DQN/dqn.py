@@ -48,8 +48,12 @@ class DQN(Q_Network_Family):
         
         self.optimizer = optax.adamw(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
+        
+
+        self.get_q = jax.jit(self.get_q)
+        #self.learner_step = jax.jit(self.learner_step)
     
-    @jax.jit
+    #@jax.jit
     def get_q(self, params, obses) -> jnp.ndarray:
         feature = self.preproc.apply(params, None, obses)
         return self.model.apply(params, None, feature)
