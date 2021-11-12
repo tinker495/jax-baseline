@@ -19,25 +19,22 @@ class PreProcess(hk.Module):
     
 def visual_embedding(mode="simple"):
     if mode == "normal":
-        def net_fn(x) -> jnp.ndarray:
-            return hk.Sequential([
-                    hk.Conv2D(32,8,4), jax.nn.leaky_relu,
-                    hk.Conv2D(64,4,2), jax.nn.leaky_relu,
-                    hk.Conv2D(64,3,1), jax.nn.leaky_relu,
+        net_fn = lambda x: hk.Sequential([
+                    hk.Conv2D(32, kernel_shape=[8, 8], stride=[4, 4], padding='VALID'), jax.nn.leaky_relu,
+                    hk.Conv2D(64, kernel_shape=[4, 4], stride=[2, 2], padding='VALID'), jax.nn.leaky_relu,
+                    hk.Conv2D(64, kernel_shape=[3, 3], stride=[1, 1], padding='VALID'), jax.nn.leaky_relu,
                     hk.Flatten()
                     ])(x)
     elif mode == "simple":
-        def net_fn(x) -> jnp.ndarray:
-            return hk.Sequential([
-                    hk.Conv2D(16,8,4), jax.nn.leaky_relu,
-                    hk.Conv2D(32,4,2), jax.nn.leaky_relu,
+        net_fn = lambda x: hk.Sequential([
+                    hk.Conv2D(16, kernel_shape=[8, 8], stride=[4, 4], padding='VALID'), jax.nn.leaky_relu,
+                    hk.Conv2D(32, kernel_shape=[4, 4], stride=[2, 2], padding='VALID'), jax.nn.leaky_relu,
                     hk.Flatten()
                     ])(x)
     elif mode == "minimum":
-        def net_fn(x) -> jnp.ndarray:
-            return hk.Sequential([
-                    hk.Conv2D(35,3,1), jax.nn.leaky_relu,
-                    hk.Conv2D(144,3,1), jax.nn.leaky_relu,
+        net_fn = lambda x: hk.Sequential([
+                    hk.Conv2D(35, kernel_shape=[3, 3], stride=[1, 1], padding='VALID'), jax.nn.leaky_relu,
+                    hk.Conv2D(144, kernel_shape=[3, 3], stride=[1, 1], padding='VALID'), jax.nn.leaky_relu,
                     hk.Flatten()
                     ])(x)
     elif mode == "none":
