@@ -115,7 +115,7 @@ class Q_Network_Family(object):
         pass
     
     def actions(self,obs,epsilon,befor_train):
-        if (epsilon <= np.random.uniform(0,1) or self.param_noise) and not befor_train:
+        if not befor_train and (epsilon <= np.random.uniform(0,1) or self.param_noise):
             actions = self._get_actions(obs)
         else:
             actions = np.random.choice(self.action_size[0], [self.worker_size,1])

@@ -51,7 +51,7 @@ class DQN(Q_Network_Family):
         
 
         self.get_q = jax.jit(self.get_q)
-        self._get_actions = jax.jit(self._get_actions)
+        #self._get_actions = jax.jit(self._get_actions)
         self._loss = jax.jit(self._loss)
         self._target = jax.jit(self._target)
         self._train_step = jax.jit(self._train_step)
