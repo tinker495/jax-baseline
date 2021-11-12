@@ -101,7 +101,7 @@ class DQN(Q_Network_Family):
             log_pi = q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum
             munchausen_addon = jnp.take_along_axis(log_pi,actions,axis=1)
             
-            rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, min=-1, max=0)
+            rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
             next_vals = not_dones * jnp.take_along_axis(next_q,next_actions,axis=1)
         return jax.lax.stop_gradient((next_vals * self._gamma) + rewards)
