@@ -219,9 +219,8 @@ class Q_Network_Family(object):
             
             if steps > self.learning_starts and steps % self.train_freq == 0:
                 befor_train = False
-                for i in np.arange(self.gradient_steps):
-                    loss = self.train_step(steps)
-                    self.lossque.append(loss)
+                loss = self.train_step(steps,self.gradient_steps)
+                self.lossque.append(loss)
         
     def learn_gym(self, pbar, callback=None, log_interval=100):
         state = convert_states([self.env.reset()])
@@ -250,9 +249,8 @@ class Q_Network_Family(object):
                 
             if steps > self.learning_starts and steps % self.train_freq == 0:
                 befor_train = False
-                for i in np.arange(self.gradient_steps):
-                    loss = self.train_step(steps)
-                    self.lossque.append(loss)
+                loss = self.train_step(steps,self.gradient_steps)
+                self.lossque.append(loss)
             
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description("score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(
@@ -289,9 +287,8 @@ class Q_Network_Family(object):
                 
             if steps > self.learning_starts and steps % self.train_freq == 0:
                 befor_train = False
-                for i in np.arange(self.gradient_steps):
-                    loss = self.train_step(steps)
-                    self.lossque.append(loss)
+                loss = self.train_step(steps,self.gradient_steps)
+                self.lossque.append(loss)
             
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description("score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(

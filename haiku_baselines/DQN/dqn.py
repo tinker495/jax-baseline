@@ -61,15 +61,16 @@ class DQN(Q_Network_Family):
     def _get_actions(self, obses) -> jnp.ndarray:
         return jnp.expand_dims(jnp.argmax(self.get_q(self.params,convert_jax(obses)),axis=1),axis=1)
     
-    def train_step(self, steps):
+    def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         if self.prioritized_replay:
             data = self.replay_buffer.sample(self.batch_size,self.prioritized_replay_beta0)
         else:
             data = self.replay_buffer.sample(self.batch_size)
             
-        self.params, self.target_params, self.opt_state, loss, t_mean = \
-            self._train_step(self.params, self.target_params, self.opt_state, steps, **data)
+        for _ in range(gradient_steps):
+            self.params, self.target_params, self.opt_state, loss, t_mean = \
+                self._train_step(self.params, self.target_params, self.opt_state, steps, **data)
             
         if self.summary and steps % self.log_interval == 0:
             self.summary.add_scalar("loss/qloss", loss, steps)
