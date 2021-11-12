@@ -111,11 +111,11 @@ class DQN(Q_Network_Family):
     def _train_step(self, params, target_params, opt_state, steps, obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = actions.astype(jnp.int32); not_dones = 1 - dones
         targets = self._target(params, target_params,obses, actions, rewards, nxtobses, not_dones)
-        loss,grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights)
+        loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
         online_params = optax.apply_updates(params, updates)
-        hard_update(online_params,target_params,steps,self.target_network_update_freq)
-        return online_params, target_params, opt_state, loss, jnp.mean(targets)
+        update_target_params = hard_update(online_params,target_params,steps,self.target_network_update_freq)
+        return online_params, update_target_params, opt_state, loss, jnp.mean(targets)
 
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DQN",
