@@ -84,9 +84,9 @@ class DQN(Q_Network_Family):
     def _target(self,params,target_params, obses, actions, rewards, nxtobses, not_dones):
         next_q = self.get_q(target_params,nxtobses)
         if self.double_q:
-            next_actions = jnp.argmax(self.get_q(params,nxtobses),axis=1)
+            next_actions = jnp.expand_dims(jnp.argmax(self.get_q(params,nxtobses),axis=1),axis=1)
         else:
-            next_actions = jnp.argmax(next_q,axis=1)
+            next_actions = jnp.expand_dims(jnp.argmax(next_q,axis=1),axis=1)
             
         if self.munchausen:
             logsum = jax.nn.logsumexp((next_q - jnp.max(next_q,axis=1,keepdims=True))/self.munchausen_entropy_tau, 1, keepdims=True)
@@ -107,7 +107,7 @@ class DQN(Q_Network_Family):
     
 
     def _train_step(self, params, target_params, opt_state, steps, obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
-        obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = actions.astype(jnp.int32); not_dones = jnp.expand_dims(1 - dones,axis=1)
+        obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=1); not_dones = jnp.expand_dims(1 - dones,axis=1)
         targets = self._target(params, target_params,obses, actions, rewards, nxtobses, not_dones)
         loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
