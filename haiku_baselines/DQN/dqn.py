@@ -53,7 +53,7 @@ class DQN(Q_Network_Family):
         self._get_actions = jax.jit(self._get_actions)
         self._loss = jax.jit(self._loss)
         self._target = jax.jit(self._target)
-        #self._train_step = jax.jit(self._train_step)
+        self._train_step = jax.jit(self._train_step)
     
     def get_q(self, params, obses) -> jnp.ndarray:
         return self.model.apply(params, None, self.preproc.apply(params, None, obses))
@@ -111,7 +111,6 @@ class DQN(Q_Network_Family):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = actions.astype(jnp.int32)
         rewards = rewards;  not_dones = 1 - dones
         targets = self._target(params, target_params,obses, actions, rewards, nxtobses, not_dones)
-        print(rewards.shape,not_dones.shape,targets.shape)
         loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
         online_params = optax.apply_updates(params, updates)
