@@ -20,8 +20,8 @@ def soft_update(new_tensors, old_tensors, tau : float):
     
 @jax.jit
 def convert_states(obs : List):
-  return [(o* 256).astype('uint8') if len(o.shape) >= 4 else o for o in obs]
+  return [(o* 256).astype(np.uint8) if len(o.shape) >= 4 else o for o in obs]
 
 @jax.jit
 def convert_jax(obs : List):
-  return [jax.device_get(o).astype('float32') if len(o.shape) >= 4 else jax.device_get(o) for o in obs]
+  return [jax.device_get(o).astype(jnp.float32) if len(o.shape) >= 4 else jax.device_get(o) for o in obs]
