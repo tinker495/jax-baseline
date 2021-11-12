@@ -90,20 +90,20 @@ class DQN(Q_Network_Family):
             next_actions = jnp.expand_dims(jnp.argmax(next_q,axis=1),axis=1)
             
         if self.munchausen:
-            logsum = jnp.expand_dims(jax.nn.logsumexp((next_q - jnp.max(next_q,axis=1,keepdims=True))/self.munchausen_entropy_tau, 1),axis=1)
+            logsum = jnp.expand_dims(jax.nn.logsumexp((next_q - jnp.max(next_q,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1),axis=1)
             tau_log_pi_next = next_q - jnp.expand_dims(jnp.max(next_q,axis=1),axis=1) - self.munchausen_entropy_tau*logsum
             pi_target = jax.nn.softmax(next_q/self.munchausen_entropy_tau,dim=1)
-            next_vals = jnp.sum(pi_target* not_dones * (jnp.take_along_axis(next_q,next_actions,axis=1) - tau_log_pi_next))
+            next_vals = jnp.sum(pi_target* not_dones * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next))
             
             q_k_targets = self.get_q(target_params,obses)
             v_k_target = jnp.max(q_k_targets,axis=1,keepdims=True)
-            logsum = jnp.expand_dims(jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, 1, keepdims=True),axis=1)
+            logsum = jnp.expand_dims(jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1),axis=1)
             log_pi = q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum
             munchausen_addon = jnp.take_along_axis(log_pi,actions,axis=1)
             
             rewards += self.munchausen_alpha*jnp.clamp(munchausen_addon, min=-1, max=0)
         else:
-            next_vals = not_dones * jnp.take_along_axis(next_q,next_actions,axis=1)
+            next_vals = not_dones * jnp.take_along_axis(next_q, next_actions, axis=1)
         return jax.lax.stop_gradient((next_vals * self._gamma) + rewards)
     
 
