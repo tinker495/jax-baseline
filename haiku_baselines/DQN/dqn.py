@@ -100,7 +100,7 @@ class DQN(Q_Network_Family):
             v_k_target = jnp.max(q_k_targets,axis=1,keepdims=True)
             logsum = jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, 1, keepdims=True)
             log_pi = q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum
-            munchausen_addon = jnp.take_along_axis(log_pi,actions=1)
+            munchausen_addon = jnp.take_along_axis(log_pi,actions,axis=1)
             
             rewards += self.munchausen_alpha*jnp.clamp(munchausen_addon, min=-1, max=0)
         else:
