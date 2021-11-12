@@ -8,9 +8,9 @@ class ReplayBuffer(object):
     
     def __init__(self, size: int, observation_space: list, action_space = 1, n_step=1,gamma=0.99):
         self.max_size = size
-        self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": {np.uint8}} if len(o) >= 3 else {"shape": o})
+        self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": {np.single}} if len(o) >= 3 else {"shape": o})
                             for idx,o in enumerate(observation_space))
-        self.nextobsdict = dict(("nextobs{}".format(idx),{"shape": o,"dtype": {np.uint8}} if len(o) >= 3 else {"shape": o})
+        self.nextobsdict = dict(("nextobs{}".format(idx),{"shape": o,"dtype": {np.single}} if len(o) >= 3 else {"shape": o})
                             for idx,o in enumerate(observation_space))
         self.n_step = n_step > 1
         n_s = dict()
