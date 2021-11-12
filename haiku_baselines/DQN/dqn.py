@@ -49,11 +49,11 @@ class DQN(Q_Network_Family):
         self.opt_state = self.optimizer.init(self.params)
         
 
-        #self.get_q = jax.jit(self.get_q)
-        #self._get_actions = jax.jit(self._get_actions)
-        #self._loss = jax.jit(self._loss)
-        #self._target = jax.jit(self._target)
-        #self._train_step = jax.jit(self._train_step)
+        self.get_q = jax.jit(self.get_q)
+        self._get_actions = jax.jit(self._get_actions)
+        self._loss = jax.jit(self._loss)
+        self._target = jax.jit(self._target)
+        self._train_step = jax.jit(self._train_step)
     
     def get_q(self, params, obses) -> jnp.ndarray:
         return self.model.apply(params, None, self.preproc.apply(params, None, obses))
@@ -90,20 +90,20 @@ class DQN(Q_Network_Family):
             next_actions = jnp.expand_dims(jnp.argmax(next_q,axis=1),axis=1)
             
         if self.munchausen:
-            logsum = jnp.expand_dims(jax.nn.logsumexp((next_q - jnp.max(next_q,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1),axis=1)
-            tau_log_pi_next = next_q - jnp.expand_dims(jnp.max(next_q,axis=1),axis=1) - self.munchausen_entropy_tau*logsum
+            logsum = jax.nn.logsumexp((next_q - jnp.max(next_q,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
+            tau_log_pi_next = next_q - jnp.max(next_q, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum
             pi_target = jax.nn.softmax(next_q/self.munchausen_entropy_tau,dim=1)
-            next_vals = jnp.sum(pi_target* not_dones * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next))
+            next_vals = jnp.sum(pi_target* not_dones * (jnp.take_along_axis(next_q,next_actions,axis=1) - tau_log_pi_next), axis=1, keepdims=True)
             
             q_k_targets = self.get_q(target_params,obses)
-            v_k_target = jnp.max(q_k_targets,axis=1,keepdims=True)
-            logsum = jnp.expand_dims(jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1),axis=1)
+            v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
+            logsum = jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1, keepdims=True)
             log_pi = q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum
             munchausen_addon = jnp.take_along_axis(log_pi,actions,axis=1)
             
             rewards += self.munchausen_alpha*jnp.clamp(munchausen_addon, min=-1, max=0)
         else:
-            next_vals = not_dones * jnp.take_along_axis(next_q, next_actions, axis=1)
+            next_vals = not_dones * jnp.take_along_axis(next_q,next_actions,axis=1)
         return jax.lax.stop_gradient((next_vals * self._gamma) + rewards)
     
 

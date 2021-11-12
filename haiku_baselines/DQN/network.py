@@ -32,4 +32,4 @@ class Model(hk.Module):
                 )(feature)
             v = hk.Linear(1)(q_net)
             a = hk.Linear(self.action_size[0])(q_net)
-            return v + (a - jnp.mean(a, axis=1))  
+            return v + (a - jnp.mean(a, axis=1, keepdims=True))  
