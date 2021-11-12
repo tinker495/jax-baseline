@@ -57,8 +57,7 @@ class DQN(Q_Network_Family):
         self._train_step = jax.jit(self._train_step)
     
     def get_q(self, params, obses) -> jnp.ndarray:
-        feature = self.preproc.apply(params, None, obses)
-        return self.model.apply(params, None, feature)
+        return self.model.apply(params, None, self.preproc.apply(params, None, obses))
         
     def _get_actions(self, obses) -> jnp.ndarray:
         return jnp.expand_dims(jnp.argmax(self.get_q(self.params,convert_jax(obses)),axis=1),axis=1)
@@ -86,9 +85,9 @@ class DQN(Q_Network_Family):
     def _target(self,params,target_params, obses, actions, rewards, nxtobses, not_dones):
         next_q = self.get_q(target_params,nxtobses)
         if self.double_q:
-            next_actions = jnp.argmax(self.get_q(params,nxtobses),axis=1)
+            next_actions = jnp.expand_dims(jnp.argmax(self.get_q(params,nxtobses),axis=1),axis=1)
         else:
-            next_actions = jnp.argmax(next_q,axis=1)
+            next_actions = jnp.expand_dims(jnp.argmax(next_q,axis=1),axis=1)
             
         if self.munchausen:
             logsum = jax.nn.logsumexp((next_q - jnp.max(next_q,axis=1,keepdims=True))/self.munchausen_entropy_tau, 1, keepdims=True)
