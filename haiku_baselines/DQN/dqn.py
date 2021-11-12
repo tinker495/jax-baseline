@@ -88,7 +88,7 @@ class DQN(Q_Network_Family):
         if self.double_q:
             next_actions = jnp.argmax(self.get_q(params,nxtobses),axis=1)
         else:
-            next_actions = jnp.argmax(next_q)
+            next_actions = jnp.argmax(next_q,axis=1)
             
         if self.munchausen:
             logsum = jax.nn.logsumexp((next_q - jnp.max(next_q,axis=1,keepdims=True))/self.munchausen_entropy_tau, 1, keepdims=True)
