@@ -56,6 +56,9 @@ class Q_Network_Family(object):
         self.munchausen_alpha = 0.9
         self.munchausen_entropy_tau = 0.03
         
+        self.params = None
+        self.target_params = None
+        
         self.get_env_setup()
         self.get_memory_setup()
         
@@ -111,12 +114,12 @@ class Q_Network_Family(object):
     def _train_step(self, steps):
         pass
     
-    def _get_actions(self, obses) -> np.ndarray:
+    def _get_actions(self, params, obses) -> np.ndarray:
         pass
     
     def actions(self,obs,epsilon,befor_train):
         if not befor_train and (epsilon <= np.random.uniform(0,1) or self.param_noise):
-            actions = np.asarray(self._get_actions(obs))
+            actions = np.asarray(self._get_actions(self.params,obs))
         else:
             actions = np.random.choice(self.action_size[0], [self.worker_size,1])
         return actions

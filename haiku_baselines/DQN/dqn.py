@@ -58,8 +58,8 @@ class DQN(Q_Network_Family):
     def get_q(self, params, obses) -> jnp.ndarray:
         return self.model.apply(params, None, self.preproc.apply(params, None, obses))
         
-    def _get_actions(self, obses) -> jnp.ndarray:
-        return jnp.expand_dims(jnp.argmax(self.get_q(self.params,convert_jax(obses)),axis=1),axis=1)
+    def _get_actions(self, params, obses) -> jnp.ndarray:
+        return jnp.expand_dims(jnp.argmax(self.get_q(params,convert_jax(obses)),axis=1),axis=1)
     
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
