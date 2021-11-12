@@ -49,12 +49,10 @@ class DQN(Q_Network_Family):
         self.optimizer = optax.adamw(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
     
-    @jax.jit
+    #@jax.jit
     def get_q(self, params, obses) -> jnp.ndarray:
-        return self.model.apply(
-                                params, None, 
-                                self.preproc.apply(params, None, obses)
-                                )
+        feature = self.preproc.apply(params, None, obses)
+        return self.model.apply(params, None, feature)
         
     def _get_actions(self, obses) -> np.ndarray:
         return np.asarray(jnp.argmax(self.get_q(self.params,convert_jax(obses)),axis=1))
