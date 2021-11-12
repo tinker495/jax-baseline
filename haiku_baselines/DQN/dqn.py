@@ -77,7 +77,16 @@ class DQN(Q_Network_Family):
             self.summary.add_scalar("loss/targets", t_mean, steps)
             
         return loss
-        
+
+    def _train_step(self, params, target_params, opt_state, steps, obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
+        obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = actions.astype(jnp.int32); not_dones = 1.0 - dones
+        target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
+        targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones)
+        loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights)
+        updates, opt_state = self.optimizer.update(grad, opt_state, params)
+        params = optax.apply_updates(params, updates)
+        return params, target_params, opt_state, loss, jnp.mean(targets)
+    
     def _loss(self, params, obses, actions, targets, weights):
         vals = jnp.take_along_axis(self.get_q(params,obses), actions, axis=1)
         return jnp.mean(weights*jnp.square(vals - jax.lax.stop_gradient(targets)))
@@ -105,16 +114,6 @@ class DQN(Q_Network_Family):
         else:
             next_vals = not_dones * jnp.take_along_axis(next_q, next_actions, axis=1)
         return next_vals * self._gamma + rewards
-    
-
-    def _train_step(self, params, target_params, opt_state, steps, obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
-        obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = actions.astype(jnp.int32); not_dones = 1.0 - dones
-        target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
-        targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones)
-        loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights)
-        updates, opt_state = self.optimizer.update(grad, opt_state, params)
-        online_params = optax.apply_updates(params, updates)
-        return online_params, target_params, opt_state, loss, jnp.mean(targets)
 
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DQN",
