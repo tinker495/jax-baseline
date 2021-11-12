@@ -92,8 +92,8 @@ class DQN(Q_Network_Family):
         if self.munchausen:
             logsum = jax.nn.logsumexp((next_q - jnp.max(next_q,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
             tau_log_pi_next = next_q - jnp.max(next_q, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum
-            pi_target = jax.nn.softmax(next_q/self.munchausen_entropy_tau,dim=1)
-            next_vals = jnp.sum(pi_target* not_dones * (jnp.take_along_axis(next_q,next_actions,axis=1) - tau_log_pi_next), axis=1, keepdims=True)
+            pi_target = jax.nn.softmax(next_q/self.munchausen_entropy_tau, axis=1)
+            next_vals = jnp.sum(pi_target* not_dones * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next), axis=1)
             
             q_k_targets = self.get_q(target_params,obses)
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
