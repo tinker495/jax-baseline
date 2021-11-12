@@ -51,7 +51,7 @@ class DQN(Q_Network_Family):
         
 
         self.get_q = jax.jit(self.get_q)
-        #self._get_actions = jax.jit(self._get_actions)
+        self._get_actions = jax.jit(self._get_actions)
         self._loss = jax.jit(self._loss)
         self._target = jax.jit(self._target)
         self._train_step = jax.jit(self._train_step)
@@ -60,8 +60,8 @@ class DQN(Q_Network_Family):
         feature = self.preproc.apply(params, None, obses)
         return self.model.apply(params, None, feature)
         
-    def _get_actions(self, obses) -> np.ndarray:
-        return np.asarray(jnp.expand_dims(jnp.argmax(self.get_q(self.params,convert_jax(obses)),axis=1),axis=1))
+    def _get_actions(self, obses) -> jnp.ndarray:
+        return jnp.expand_dims(jnp.argmax(self.get_q(self.params,convert_jax(obses)),axis=1),axis=1)
     
     def train_step(self, steps):
         # Sample a batch from the replay buffer
