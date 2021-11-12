@@ -7,8 +7,9 @@ from typing import List
  
 @jax.jit
 def hard_update(new_tensors, old_tensors, steps: int, update_period: int):
+  update = (steps % update_period == 0)
   return jax.tree_multimap(
-      lambda new, old: jax.lax.select(steps % update_period == 0, new, old),
+      lambda new, old: jax.lax.select(update, new, old),
       new_tensors, old_tensors)
         
 @jax.jit

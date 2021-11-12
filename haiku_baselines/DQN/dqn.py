@@ -4,7 +4,6 @@ import haiku as hk
 import numpy as np
 import optax
 
-from functools import partial
 from haiku_baselines.DQN.base_class import Q_Network_Family
 from haiku_baselines.DQN.network import Model
 from haiku_baselines.common.Module import PreProcess
