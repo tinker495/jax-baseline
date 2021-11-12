@@ -78,7 +78,9 @@ class DQN(Q_Network_Family):
         return loss
         
     def _loss(self, params, obses, actions, targets, weights=1):
-        vals = jnp.take_along_axis(self.get_q(params,obses), actions, axis=1)
+        qs = self.get_q(params,obses)
+        print(qs.shape,actions.shape)
+        vals = jnp.take_along_axis(qs, actions, axis=1)
         return jnp.mean(weights*jnp.square(vals - targets))
     
     def _target(self,params,target_params, obses, actions, rewards, nxtobses, not_dones):
