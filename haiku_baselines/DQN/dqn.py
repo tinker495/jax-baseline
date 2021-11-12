@@ -111,7 +111,6 @@ class DQN(Q_Network_Family):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = actions.astype(jnp.int32)
         rewards = jnp.expand_dims(rewards, axis=1);  not_dones = jnp.expand_dims(1 - dones,axis=1)
         targets = self._target(params, target_params,obses, actions, rewards, nxtobses, not_dones)
-        print(obses.shape,nxtobses.shape)
         print(rewards.shape,targets.shape)
         loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
