@@ -78,11 +78,11 @@ class DQN(Q_Network_Family):
             
         return loss
         
-    def _loss(self, params, obses, actions, targets, weights=1):
+    def _loss(self, params, obses, actions, targets, weights):
         vals = jnp.take_along_axis(self.get_q(params,obses), actions, axis=1)
         return jnp.mean(weights*jnp.square(vals - jax.lax.stop_gradient(targets)))
     
-    def _target(self,params,target_params, obses, actions, rewards, nxtobses, not_dones):
+    def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones):
         next_q = self.get_q(target_params,nxtobses)
         if self.double_q:
             next_actions = jnp.expand_dims(jnp.argmax(self.get_q(params,nxtobses),axis=1),axis=1)
@@ -93,7 +93,7 @@ class DQN(Q_Network_Family):
             logsum = jax.nn.logsumexp((next_q - jnp.max(next_q,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
             tau_log_pi_next = next_q - jnp.max(next_q, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum
             pi_target = jax.nn.softmax(next_q/self.munchausen_entropy_tau, axis=1)
-            next_vals = jnp.sum(pi_target* not_dones * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next), axis=1)
+            next_vals = jnp.sum(pi_target * not_dones * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next), axis=1)
             
             q_k_targets = self.get_q(target_params,obses)
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
@@ -103,15 +103,14 @@ class DQN(Q_Network_Family):
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
-            next_vals = not_dones * jnp.take_along_axis(next_q,next_actions,axis=1)
-        return (next_vals * self._gamma) + rewards
+            next_vals = not_dones * jnp.take_along_axis(next_q, next_actions, axis=1)
+        return next_vals * self._gamma + rewards
     
 
     def _train_step(self, params, target_params, opt_state, steps, obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
-        obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = actions.astype(jnp.int32)
-        rewards = rewards;  not_dones = 1.0 - dones.astype(jnp.float32)
+        obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = actions.astype(jnp.int32); not_dones = 1.0 - dones
         target_params = hard_update(params,target_params,steps,self.target_network_update_freq)
-        targets = self._target(params, target_params,obses, actions, rewards, nxtobses, not_dones)
+        targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones)
         loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
         online_params = optax.apply_updates(params, updates)
