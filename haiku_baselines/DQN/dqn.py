@@ -78,7 +78,7 @@ class DQN(Q_Network_Family):
         return loss
         
     def _loss(self, params, obses, actions, targets, weights=1):
-        vals = jnp.take(self.get_q(params,obses), actions, axis=1)
+        vals = jnp.take_along_axis(self.get_q(params,obses), actions, axis=1)
         return jnp.mean(weights*jnp.square(vals - targets))
     
     def _target(self,params,target_params, obses, actions, rewards, nxtobses, not_dones):
@@ -92,7 +92,7 @@ class DQN(Q_Network_Family):
             logsum = jax.nn.logsumexp((next_q - jnp.max(next_q,axis=1,keepdims=True))/self.munchausen_entropy_tau, 1, keepdims=True)
             tau_log_pi_next = next_q - jnp.max(next_q,axis=1,keepdims=True) - self.munchausen_entropy_tau*logsum
             pi_target = jax.nn.softmax(next_q/self.munchausen_entropy_tau,dim=1)
-            next_vals = jnp.sum(pi_target*not_dones*(jnp.take(next_q,next_actions,axis=1) - tau_log_pi_next),keepdims=True)
+            next_vals = jnp.sum(pi_target* not_dones * (jnp.take_along_axis(next_q,next_actions,axis=1) - tau_log_pi_next),keepdims=True)
             
             q_k_targets = self.get_q(target_params,obses)
             v_k_target = jnp.max(q_k_targets,axis=1,keepdims=True)
@@ -102,7 +102,7 @@ class DQN(Q_Network_Family):
             
             rewards += self.munchausen_alpha*jnp.clamp(munchausen_addon, min=-1, max=0)
         else:
-            next_vals = not_dones * jnp.take(next_q,next_actions,axis=1)
+            next_vals = not_dones * jnp.take_along_axis(next_q,next_actions,axis=1)
         return jax.lax.stop_gradient((next_vals * self._gamma) + rewards)
     
 
