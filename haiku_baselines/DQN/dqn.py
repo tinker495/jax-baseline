@@ -74,7 +74,6 @@ class DQN(Q_Network_Family):
             else:
                 data = self.replay_buffer.sample(self.batch_size)
             
-        
             self.params, self.target_params, self.opt_state, loss, t_mean, new_priorities = \
                 self._train_step(self.params, self.target_params, self.opt_state, steps, **data)
             
