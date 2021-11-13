@@ -13,26 +13,23 @@ class Model(hk.Module):
         self.noisy = noisy
         self.dualing = dualing
         
-    def __call__(self,feature: jnp.ndarray,w_init=None) -> jnp.ndarray:
-        if w_init is None:
-            stdv = 1. / jnp.sqrt(self.node)
-            w_init=hk.initializers.RandomUniform(-stdv,stdv)
+    def __call__(self,feature: jnp.ndarray) -> jnp.ndarray:
         if not self.dualing:
             q_net = hk.Sequential(
                 [
-                    jax.nn.leaky_relu if i%2 else hk.Linear(self.node,w_init=w_init) for i in range(2*self.hidden_n)
+                    jax.nn.leaky_relu if i%2 else hk.Linear(self.node) for i in range(2*self.hidden_n)
                 ] + 
                 [
-                    hk.Linear(self.action_size[0],w_init=w_init)
+                    hk.Linear(self.action_size[0])
                 ]
                 )(feature)
             return q_net
         else:
             q_net = hk.Sequential(
                 [
-                    jax.nn.leaky_relu if i%2 else hk.Linear(self.node,w_init=w_init) for i in range(2*self.hidden_n)
+                    jax.nn.leaky_relu if i%2 else hk.Linear(self.node) for i in range(2*self.hidden_n)
                 ]
                 )(feature)
-            v = hk.Linear(1,w_init=w_init)(q_net)
-            a = hk.Linear(self.action_size[0],w_init=w_init)(q_net)
+            v = hk.Linear(1)(q_net)
+            a = hk.Linear(self.action_size[0])(q_net)
             return v + (a - jnp.mean(a, axis=1, keepdims=True))  
