@@ -17,7 +17,7 @@ class Model(hk.Module):
         if not self.dualing:
             q_net = hk.Sequential(
                 [
-                    jax.nn.relu if i%2 else hk.Linear(self.node) for i in range(2*self.hidden_n)
+                    jax.nn.relu if i%2 == 1 else hk.Linear(self.node) for i in range(2*self.hidden_n)
                 ] + 
                 [
                     hk.Linear(self.action_size[0])
@@ -27,7 +27,7 @@ class Model(hk.Module):
         else:
             q_net = hk.Sequential(
                 [
-                    jax.nn.relu if i%2 else hk.Linear(self.node) for i in range(2*self.hidden_n)
+                    jax.nn.relu if i%2 == 1 else hk.Linear(self.node) for i in range(2*self.hidden_n)
                 ]
                 )(feature)
             v = hk.Linear(1)(q_net)
