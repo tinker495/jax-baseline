@@ -59,11 +59,11 @@ class DQN(Q_Network_Family):
         print("loss : mse")
         print("-------------------------------------------------")
 
-        self.get_q = jax.jit(self.get_q)
-        self._get_actions = jax.jit(self._get_actions)
-        self._loss = jax.jit(self._loss)
-        self._target = jax.jit(self._target)
-        self._train_step = jax.jit(self._train_step)
+        #self.get_q = jax.jit(self.get_q)
+        #self._get_actions = jax.jit(self._get_actions)
+        #self._loss = jax.jit(self._loss)
+        #self._target = jax.jit(self._target)
+        #self._train_step = jax.jit(self._train_step)
     
     def get_q(self, params, obses, key = None) -> jnp.ndarray:
         return self.model.apply(params, key, self.preproc.apply(params, key, obses))
