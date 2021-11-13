@@ -228,10 +228,12 @@ class Q_Network_Family(object):
     def learn_gym(self, pbar, callback=None, log_interval=100):
         state = convert_states([self.env.reset()])
         self.scores = np.zeros([self.worker_size])
+        self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
         self.lossque = deque(maxlen=10)
         befor_train = True
         for steps in pbar:
+            self.eplen += 1
             update_eps = self.exploration.value(steps)
             actions = self.actions(state,update_eps,befor_train)
             next_state, reward, terminal, info = self.env.step(actions[0][0])
@@ -246,6 +248,7 @@ class Q_Network_Family(object):
                 self.scoreque.append(self.scores[0])
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", self.scores[0], steps)
+                    self.summary.add_scalar("env/episode len",self.eplen[0],steps)
                     self.summary.add_scalar("env/time over",float(not done),steps)
                 self.scores[0] = 0
                 state = self.env.reset()
@@ -265,10 +268,12 @@ class Q_Network_Family(object):
         self.env.reset()
         state = convert_states([np.expand_dims(self.env.state(), axis=0)])
         self.scores = np.zeros([self.worker_size])
+        self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
         self.lossque = deque(maxlen=10)
         befor_train = True
         for steps in pbar:
+            self.eplen += 1
             update_eps = self.exploration.value(steps)
             actions = self.actions(state,update_eps,befor_train)
             reward, terminal = self.env.act(actions[0][0])
@@ -283,6 +288,7 @@ class Q_Network_Family(object):
                 self.scoreque.append(self.scores[0])
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", self.scores[0], steps)
+                    self.summary.add_scalar("env/episode len",self.eplen[0],steps)
                     self.summary.add_scalar("env/time over",0,steps)
                 self.scores[0] = 0
                 self.env.reset()
