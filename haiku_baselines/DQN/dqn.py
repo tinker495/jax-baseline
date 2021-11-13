@@ -45,7 +45,7 @@ class DQN(Q_Network_Family):
         self.params = hk.data_structures.merge(pre_param, model_param)
         self.target_params = self.params
         
-        self.optimizer = optax.adamw(self.learning_rate)
+        self.optimizer = optax.adam(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
         
         print("----------------------model----------------------")
@@ -74,8 +74,11 @@ class DQN(Q_Network_Family):
             data = self.replay_buffer.sample(self.batch_size)
             
         for _ in range(gradient_steps):
-            self.params, self.target_params, self.opt_state, loss, t_mean = \
+            self.params, self.target_params, self.opt_state, loss, t_mean, new_priorities = \
                 self._train_step(self.params, self.target_params, self.opt_state, steps, **data)
+            
+        if self.prioritized_replay:
+            self.replay_buffer.update_priorities(data['indexes'], new_priorities)
             
         if self.summary and steps % self.log_interval == 0:
             self.summary.add_scalar("loss/qloss", loss, steps)
@@ -87,10 +90,14 @@ class DQN(Q_Network_Family):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = actions.astype(jnp.int32); not_dones = 1.0 - dones
         targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones)
         loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights)
-        updates, opt_state = self.optimizer.update(grad, opt_state, params)
+        updates, opt_state = self.optimizer.update(grad, opt_state)
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
-        return params, target_params, opt_state, loss, jnp.mean(targets)
+        new_priorities = None
+        if self.prioritized_replay:
+            vals = jnp.take_along_axis(self.get_q(params, obses), actions, axis=1)
+            new_priorities = jnp.squeeze(jnp.abs(targets - vals)) + self.prioritized_replay_eps
+        return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
     def _loss(self, params, obses, actions, targets, weights):
         vals = jnp.take_along_axis(self.get_q(params, obses), actions, axis=1)
