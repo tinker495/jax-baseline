@@ -68,17 +68,18 @@ class DQN(Q_Network_Family):
     
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
-        if self.prioritized_replay:
-            data = self.replay_buffer.sample(self.batch_size,self.prioritized_replay_beta0)
-        else:
-            data = self.replay_buffer.sample(self.batch_size)
-            
         for _ in range(gradient_steps):
+            if self.prioritized_replay:
+                data = self.replay_buffer.sample(self.batch_size,self.prioritized_replay_beta0)
+            else:
+                data = self.replay_buffer.sample(self.batch_size)
+            
+        
             self.params, self.target_params, self.opt_state, loss, t_mean, new_priorities = \
                 self._train_step(self.params, self.target_params, self.opt_state, steps, **data)
             
-        if self.prioritized_replay:
-            self.replay_buffer.update_priorities(data['indexes'], new_priorities)
+            if self.prioritized_replay:
+                self.replay_buffer.update_priorities(data['indexes'], new_priorities)
             
         if self.summary and steps % self.log_interval == 0:
             self.summary.add_scalar("loss/qloss", loss, steps)
