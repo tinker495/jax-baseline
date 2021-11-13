@@ -45,7 +45,7 @@ class DQN(Q_Network_Family):
         self.params = hk.data_structures.merge(pre_param, model_param)
         self.target_params = self.params
         
-        self.optimizer = optax.adam(self.learning_rate)
+        self.optimizer = optax.adamw(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
         
         print("----------------------model----------------------")
@@ -90,7 +90,7 @@ class DQN(Q_Network_Family):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = actions.astype(jnp.int32); not_dones = 1.0 - dones
         targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones)
         loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights)
-        updates, opt_state = self.optimizer.update(grad, opt_state)
+        updates, opt_state = self.optimizer.update(grad, opt_state, params)
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
