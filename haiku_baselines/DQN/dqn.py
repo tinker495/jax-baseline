@@ -27,8 +27,13 @@ class DQN(Q_Network_Family):
         if _init_setup_model:
             self.setup_model() 
             
+    def update_key(self,num=1):
+        keys = jax.random.split(self.key,num=num+1)
+        self.key = keys[0]
+        return keys[1:]
+            
     def setup_model(self):
-        self.key,sub_key = jax.random.split(self.key)
+        keys = self.update_key(2)
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
         if 'cnn_mode' in self.policy_kwargs.keys():
             cnn_mode = self.policy_kwargs['cnn_mode']
@@ -37,9 +42,9 @@ class DQN(Q_Network_Family):
         self.model = hk.transform(lambda x: Model(self.action_size,
                            dualing=self.dualing_model,noisy=self.param_noise,
                            **self.policy_kwargs)(x))
-        pre_param = self.preproc.init(sub_key,
+        pre_param = self.preproc.init(keys[0],
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
-        model_param = self.model.init(sub_key,
+        model_param = self.model.init(keys[1],
                             self.preproc.apply(pre_param, 
                             None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]))
         self.params = hk.data_structures.merge(pre_param, model_param)
@@ -60,11 +65,11 @@ class DQN(Q_Network_Family):
         self._target = jax.jit(self._target)
         self._train_step = jax.jit(self._train_step)
     
-    def get_q(self, params, obses) -> jnp.ndarray:
+    def get_q(self, params, obses, keys = None) -> jnp.ndarray:
         return self.model.apply(params, None, self.preproc.apply(params, None, obses))
         
-    def _get_actions(self, params, obses) -> jnp.ndarray:
-        return jnp.expand_dims(jnp.argmax(self.get_q(params,convert_jax(obses)),axis=1),axis=1)
+    def _get_actions(self, params, obses, keys = None) -> jnp.ndarray:
+        return jnp.expand_dims(jnp.argmax(self.get_q(params,convert_jax(obses),keys),axis=1),axis=1)
     
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer

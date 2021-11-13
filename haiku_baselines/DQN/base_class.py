@@ -111,6 +111,9 @@ class Q_Network_Family(object):
     def setup_model(self):
         pass
     
+    def update_key(self,num=1):
+        pass
+    
     def _train_step(self, steps):
         pass
     
@@ -119,7 +122,7 @@ class Q_Network_Family(object):
     
     def actions(self,obs,epsilon,befor_train):
         if (epsilon <= np.random.uniform(0,1) or self.param_noise) and not befor_train:
-            actions = np.asarray(self._get_actions(self.params,obs))
+            actions = np.asarray(self._get_actions(self.params,obs,self.update_key()))
         else:
             actions = np.random.choice(self.action_size[0], [self.worker_size,1])
         return actions
