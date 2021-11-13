@@ -208,7 +208,7 @@ class Q_Network_Family(object):
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", np.mean(self.scores[term_ids]), steps)
                     self.summary.add_scalar("env/episode len",np.mean(self.eplen[term_ids]),steps)
-                    self.summary.add_scalar("env/time over",np.mean((not done[term_ids]).astype(np.float32)),steps)
+                    self.summary.add_scalar("env/time over",np.mean(1 - done[term_ids].astype(np.float32)),steps)
                 self.scoreque.extend(self.scores[term_ids])
                 self.scores[term_ids] = 0
                 self.eplen[term_ids] = 0
