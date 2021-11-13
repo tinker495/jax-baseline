@@ -92,7 +92,8 @@ class DQN(Q_Network_Family):
             
         return loss
 
-    def _train_step(self, params, target_params, opt_state, steps, key ,obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
+    def _train_step(self, params, target_params, opt_state, steps, key, 
+                    obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = actions.astype(jnp.int32); not_dones = 1.0 - dones
         targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key)
         loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights)
