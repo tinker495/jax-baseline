@@ -81,7 +81,7 @@ class DQN(Q_Network_Family):
             
             self.params, self.target_params, self.opt_state, loss, t_mean, new_priorities = \
                 self._train_step(self.params, self.target_params, self.opt_state, steps, 
-                                 self.update_key() if self.param_noise else None,**data)
+                                 self.update_key()[0] if self.param_noise else None,**data)
             
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data['indexes'], new_priorities)
