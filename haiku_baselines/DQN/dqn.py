@@ -123,7 +123,7 @@ class DQN(Q_Network_Family):
             pi_target = jax.nn.softmax(next_q/self.munchausen_entropy_tau, axis=1)
             next_vals = jnp.sum(pi_target * not_dones * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next), axis=1)
             
-            q_k_targets = self.get_q(target_params,obses)
+            q_k_targets = self.get_q(target_params,obses,key)
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
             logsum = jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1, keepdims=True)
             log_pi = q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum
