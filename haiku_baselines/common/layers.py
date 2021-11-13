@@ -57,7 +57,6 @@ class NoisyLinear(hk.Module):
         if self.with_bias:
             b_mu = hk.get_parameter("b_mu", [self.output_size], dtype, init=self.b_init)
             b_sigma = hk.get_parameter("b_sigma", [self.output_size], dtype, init=self.b_init)
-            b_mu = jnp.broadcast_to(b_mu, out.shape)
-            b_sigma = jnp.broadcast_to(b_sigma, out.shape)
-            out = out + b_mu + b_sigma*eps_out
+            b = jnp.broadcast_to(b_mu + b_sigma*eps_out, out.shape)
+            out = out + b
         return out
