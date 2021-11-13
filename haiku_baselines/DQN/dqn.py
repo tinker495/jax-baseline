@@ -94,7 +94,7 @@ class DQN(Q_Network_Family):
     
     def _loss(self, params, obses, actions, targets, weights):
         vals = jnp.take_along_axis(self.get_q(params, obses), actions, axis=1)
-        return jnp.mean(weights*jnp.square(vals - jax.lax.stop_gradient(targets)))
+        return jnp.mean(weights*jnp.square(vals - targets))
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones):
         next_q = self.get_q(target_params,nxtobses)
@@ -118,7 +118,7 @@ class DQN(Q_Network_Family):
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
             next_vals = not_dones * jnp.take_along_axis(next_q, next_actions, axis=1)
-        return next_vals * self._gamma + rewards
+        return jax.lax.stop_gradient((next_vals * self._gamma) + rewards)
 
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DQN",
