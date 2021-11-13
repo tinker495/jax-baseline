@@ -206,10 +206,9 @@ class Q_Network_Family(object):
             self.replay_buffer.add(old_obses, actions, reward, nxtobs, done, 0, terminal)
             if term_on:
                 if self.summary:
-                    for tid in term_ids:
-                        self.summary.add_scalar("env/episode_reward", self.scores[tid], steps)
-                        self.summary.add_scalar("env/episode len",self.eplen[tid],steps)
-                        self.summary.add_scalar("env/time over",float(not done[tid]),steps)
+                    self.summary.add_scalar("env/episode_reward", np.mean(self.scores[term_ids]), steps)
+                    self.summary.add_scalar("env/episode len",np.mean(self.eplen[term_ids]),steps)
+                    self.summary.add_scalar("env/time over",np.mean(float(not done[term_ids])),steps)
                 self.scoreque.extend(self.scores[term_ids])
                 self.scores[term_ids] = 0
                 self.eplen[term_ids] = 0
