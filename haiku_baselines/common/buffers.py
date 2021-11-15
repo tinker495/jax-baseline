@@ -22,6 +22,7 @@ class ReplayBuffer(object):
         self._len = 0
         self.n_step = n_step
         self.n_step_method = self.n_step > 1
+        self.gamma = gamma
         self.alpha = alpha
         self.per = alpha is not None
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": jnp.uint8} if len(o) >= 3 else {"shape": o})
