@@ -9,7 +9,7 @@ setup(
         'gym',
         'box2d',
         'box2d-py',
-        'minatar',
+        'git+https://github.com/kenjyoung/MinAtar.git',
         'dm-haiku',
         'optax',
         'numpy',
@@ -17,5 +17,5 @@ setup(
         'tensorboardX',
         'importlib; python_version >= "3.5"',
     ],
-    dependency_links=['https://github.com/kenjyoung/MinAtar#egg=package-1.0']
+    #dependency_links=['https://github.com/kenjyoung/MinAtar#egg=package-1.0']
 )
