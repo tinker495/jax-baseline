@@ -9,7 +9,6 @@ setup(
         'gym',
         'box2d',
         'box2d-py',
-        '-e git://github.com/kenjyoung/MinAtar.git#egg=MinAtar',
         'dm-haiku',
         'optax',
         'numpy',
@@ -18,4 +17,5 @@ setup(
         'importlib; python_version >= "3.5"',
     ],
     #dependency_links=['https://github.com/kenjyoung/MinAtar#egg=package-1.0']
+    #'-e git://github.com/kenjyoung/MinAtar.git#egg=MinAtar',
 )
