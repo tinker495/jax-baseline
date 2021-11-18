@@ -9,6 +9,7 @@ setup(
         'gym',
         'box2d',
         'box2d-py',
+        'minatar',
         'dm-haiku',
         'optax',
         'numpy',
