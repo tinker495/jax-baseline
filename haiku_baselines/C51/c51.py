@@ -5,24 +5,29 @@ import numpy as np
 import optax
 
 from haiku_baselines.DQN.base_class import Q_Network_Family
-from haiku_baselines.DQN.network import Model
+from haiku_baselines.C51.network import Model
 from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import hard_update, convert_jax
 
-class DQN(Q_Network_Family):
-    def __init__(self, env, gamma=0.99, learning_rate=5e-4, buffer_size=50000, exploration_fraction=0.3,
+class C51(Q_Network_Family):
+    def __init__(self, env, gamma=0.99, learning_rate=5e-4, buffer_size=50000, exploration_fraction=0.3, categorial_bar_n = 51,
                  exploration_final_eps=0.02, exploration_initial_eps=1.0, train_freq=1, gradient_steps=1, batch_size=32, double_q=True,
                  dualing_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, prioritized_replay=False,
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
-                 param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
+                 param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None,
+                 categorial_max = 250, categorial_min = -250,
                  full_tensorboard_log=False, seed=None):
         
-        super(DQN, self).__init__(env, gamma, learning_rate, buffer_size, exploration_fraction,
+        super(C51, self).__init__(env, gamma, learning_rate, buffer_size, exploration_fraction,
                  exploration_final_eps, exploration_initial_eps, train_freq, gradient_steps, batch_size, double_q,
                  dualing_model, n_step, learning_starts, target_network_update_freq, prioritized_replay,
                  prioritized_replay_alpha, prioritized_replay_beta0, prioritized_replay_eps, 
                  param_noise, munchausen, log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
                  full_tensorboard_log, seed)
+        
+        self.categorial_bar_n = categorial_bar_n
+        self.categorial_max = categorial_max
+        self.categorial_min = categorial_min
         
         if _init_setup_model:
             self.setup_model() 
@@ -53,6 +58,10 @@ class DQN(Q_Network_Family):
         self.optimizer = optax.adamw(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
         
+        self.categorial_bar = jnp.expand_dims(jnp.linspace(self.categorial_min, self.categorial_max, self.categorial_bar_n),axis=0)
+        self._categorial_bar = jnp.expand_dims(self.categorial_bar,axis=0)
+        self.delta_bar = jax.device_put((self.categorial_max - self.categorial_min)/(self.categorial_bar_n - 1))
+        
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
         print(jax.tree_map(lambda x: x.shape, model_param))
@@ -69,7 +78,9 @@ class DQN(Q_Network_Family):
         return self.model.apply(params, key, self.preproc.apply(params, key, obses))
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
-        return jnp.expand_dims(jnp.argmax(self.get_q(params,convert_jax(obses),key),axis=1),axis=1)
+        return jnp.expand_dims(jnp.argmax(
+               jnp.sum(self.get_q(params,convert_jax(obses),key)*self.categorial_bar,axis=2)
+               ,axis=1),axis=1)
     
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
@@ -113,15 +124,19 @@ class DQN(Q_Network_Family):
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)
         if self.double_q:
-            next_actions = jnp.expand_dims(jnp.argmax(self.get_q(params,nxtobses,key),axis=1),axis=1)
+            next_actions = jnp.expand_dims(jnp.argmax(
+                            jnp.sum(self.get_q(params,nxtobses,key)*self.categorial_bar,axis=2)
+                            ,axis=1),axis=(1,2))
         else:
-            next_actions = jnp.expand_dims(jnp.argmax(next_q,axis=1),axis=1)
-            
+            next_actions = jnp.expand_dims(jnp.argmax(
+                            jnp.sum(next_q*self.categorial_bar,axis=2)
+                            ,axis=1),axis=(1,2))
+        next_distribution = jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))
         if self.munchausen:
             logsum = jax.nn.logsumexp((next_q - jnp.max(next_q,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
             tau_log_pi_next = next_q - jnp.max(next_q, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum
             pi_target = jax.nn.softmax(next_q/self.munchausen_entropy_tau, axis=1)
-            next_vals = jnp.sum(pi_target * not_dones * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next), axis=1, keepdims=True)
+            next_vals = jnp.sum(pi_target * not_dones * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next), axis=1)
             
             q_k_targets = self.get_q(target_params,obses,key)
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
@@ -131,10 +146,10 @@ class DQN(Q_Network_Family):
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
-            next_vals = not_dones * jnp.take_along_axis(next_q, next_actions, axis=1)
-        return jax.lax.stop_gradient((next_vals * self._gamma) + rewards)
+            next_vals = not_dones * self.categorial_bar
+        return jax.lax.stop_gradient(next_distribution), jax.lax.stop_gradient((next_vals * self._gamma) + rewards)
 
     
-    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DQN",
+    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="C51",
               reset_num_timesteps=True, replay_wrapper=None):
         super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)
