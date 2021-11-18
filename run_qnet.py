@@ -6,7 +6,6 @@ from haiku_baselines.DQN.dqn import DQN
 from mlagents_envs.environment import UnityEnvironment,ActionTuple
 from mlagents_envs.side_channel.engine_configuration_channel import EngineConfigurationChannel
 from mlagents_envs.side_channel.environment_parameters_channel import EnvironmentParametersChannel
-import minatar
 
 def is_minatar(str):
     spl = str.split("_")
@@ -51,6 +50,7 @@ if __name__ == "__main__":
     else:
         isminatar, env_name_ = is_minatar(env_name)
         if isminatar:
+            import minatar
             env = minatar.Environment(env_name_)
             cnn_mode = 'minimum'
             env_type = "minatar"
