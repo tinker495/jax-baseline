@@ -243,8 +243,6 @@ class Q_Network_Family(object):
             done = terminal
             if "TimeLimit.truncated" in info:
                 done = not info["TimeLimit.truncated"]
-            print(state[0].shape)
-            print(next_state[0].shape)
             self.replay_buffer.add(state, actions[0], reward, next_state, done, 0, terminal)
             self.scores[0] += reward
             state = next_state
@@ -255,7 +253,7 @@ class Q_Network_Family(object):
                     self.summary.add_scalar("env/episode len",self.eplen[0],steps)
                     self.summary.add_scalar("env/time over",float(not done),steps)
                 self.scores[0] = 0
-                state = self.env.reset()
+                state = convert_states([np.expand_dims(self.env.reset(),axis=0)])
                 
             if steps > self.learning_starts and steps % self.train_freq == 0:
                 befor_train = False
