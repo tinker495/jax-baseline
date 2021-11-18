@@ -9,7 +9,7 @@ setup(
         'gym',
         'box2d',
         'box2d-py',
-        'git://github.com/kenjyoung/MinAtar.git#egg=MinAtar',
+        '-e git://github.com/kenjyoung/MinAtar.git#egg=MinAtar',
         'dm-haiku',
         'optax',
         'numpy',
