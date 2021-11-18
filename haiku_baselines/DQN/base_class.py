@@ -294,7 +294,7 @@ class Q_Network_Family(object):
                     self.summary.add_scalar("env/time over",0,steps)
                 self.scores[0] = 0
                 self.env.reset()
-                state = np.expand_dims(self.env.state(), axis=0)
+                state = convert_states([np.expand_dims(self.env.state(), axis=0)])
                 
             if steps > self.learning_starts and steps % self.train_freq == 0:
                 befor_train = False
