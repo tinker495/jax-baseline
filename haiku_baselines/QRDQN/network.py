@@ -30,7 +30,7 @@ class Model(hk.Module):
                 ]
                 )(feature)
             q = hk.Reshape((self.action_size[0],self.support_n))(q_net)
-            return jax.nn.softmax(q,axis=2)
+            return q
         else:
             q_net = hk.Sequential(
                 [
@@ -40,4 +40,4 @@ class Model(hk.Module):
             v = hk.Reshape((1,self.support_n))(self.layer(self.support_n)(q_net))
             a = hk.Reshape((self.action_size[0],self.support_n))(self.layer(self.action_size[0]*self.support_n)(q_net))
             q = v + (a - jnp.mean(a, axis=1, keepdims=True))
-            return jax.nn.softmax(q,axis=2) 
+            return q

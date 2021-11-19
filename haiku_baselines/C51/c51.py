@@ -116,7 +116,7 @@ class C51(Q_Network_Family):
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
-            vals = jnp.clip(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1),1e-3,1.0)
+            vals = jnp.clip(jnp.squeeze(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)),1e-3,1.0)
             new_priorities = jnp.sum(-target_distribution * jnp.log(vals),axis=1) + self.prioritized_replay_eps
         return params, target_params, opt_state, loss, jnp.mean(jnp.sum(target_distribution*self.categorial_bar,axis=1)), new_priorities
     
