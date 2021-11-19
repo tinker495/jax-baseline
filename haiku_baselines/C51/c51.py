@@ -71,11 +71,11 @@ class C51(Q_Network_Family):
         print("loss : mse")
         print("-------------------------------------------------")
 
-        #self.get_q = jax.jit(self.get_q)
-        #self._get_actions = jax.jit(self._get_actions)
-        #self._loss = jax.jit(self._loss)
-        #self._target = jax.jit(self._target)
-        #self._train_step = jax.jit(self._train_step)
+        self.get_q = jax.jit(self.get_q)
+        self._get_actions = jax.jit(self._get_actions)
+        self._loss = jax.jit(self._loss)
+        self._target = jax.jit(self._target)
+        self._train_step = jax.jit(self._train_step)
     
     def get_q(self, params, obses, key = None) -> jnp.ndarray:
         return self.model.apply(params, key, self.preproc.apply(params, key, obses))
@@ -110,8 +110,6 @@ class C51(Q_Network_Family):
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=-1); not_dones = 1.0 - dones
         target_distribution = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key)
-        print(target_distribution)
-        print(target_distribution.shape)
         loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, target_distribution, weights, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
         params = optax.apply_updates(params, updates)
