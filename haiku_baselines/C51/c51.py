@@ -167,7 +167,7 @@ class C51(Q_Network_Family):
         print(rewards[0])
         print(not_dones[0])
         print(target_distribution[0])
-        print(jnp.sum(target_distribution*self.categorial_bar)[0])
+        print(jnp.sum(target_distribution*self.categorial_bar,axis=1)[0])
         return jax.lax.stop_gradient(target_distribution)
 
     
