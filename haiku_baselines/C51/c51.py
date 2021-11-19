@@ -62,6 +62,9 @@ class C51(Q_Network_Family):
         self._categorial_bar = jnp.expand_dims(self.categorial_bar,axis=0)
         self.delta_bar = jax.device_put((self.categorial_max - self.categorial_min)/(self.categorial_bar_n - 1))
         
+        offset = jnp.expand_dims(jnp.linspace(0, (self.batch_size - 1) * self.categorial_bar_n, self.batch_size),axis=-1)
+        self.offset = jnp.broadcast_to(offset,(self.batch_size, self.categorial_bar_n))
+        
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
         print(jax.tree_map(lambda x: x.shape, model_param))
@@ -79,7 +82,7 @@ class C51(Q_Network_Family):
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         return jnp.expand_dims(jnp.argmax(
-               jnp.sum(self.get_q(params,convert_jax(obses),key)*self.categorial_bar,axis=2)
+               jnp.sum(self.get_q(params,convert_jax(obses),key)*self._categorial_bar,axis=2)
                ,axis=1),axis=1)
     
     def train_step(self, steps, gradient_steps):
@@ -105,49 +108,62 @@ class C51(Q_Network_Family):
 
     def _train_step(self, params, target_params, opt_state, steps, key, 
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
-        obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = actions.astype(jnp.int32); not_dones = 1.0 - dones
-        targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key)
-        loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights, key)
+        obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=-1); not_dones = 1.0 - dones
+        target_distribution = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key)
+        loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, target_distribution, weights, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
-            vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
-            new_priorities = jnp.squeeze(jnp.abs(targets - vals)) + self.prioritized_replay_eps
-        return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
+            vals = jnp.clip(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1),1e-3,1.0)
+            new_priorities = jnp.sum(-target_distribution * jnp.log(vals),axis=1) + self.prioritized_replay_eps
+        return params, target_params, opt_state, loss, jnp.mean(target_distribution*self.categorial_bar), new_priorities
     
-    def _loss(self, params, obses, actions, targets, weights, key):
-        vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
-        return jnp.mean(weights*jnp.squeeze(jnp.square(vals - targets)))
+    def _loss(self, params, obses, actions, target_distribution, weights, key):
+        distribution = jnp.clip(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1),1e-3,1.0)
+        return jnp.mean(jnp.sum(-target_distribution * jnp.log(distribution),axis=1)* weights)
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)
         if self.double_q:
             next_actions = jnp.expand_dims(jnp.argmax(
-                            jnp.sum(self.get_q(params,nxtobses,key)*self.categorial_bar,axis=2)
-                            ,axis=1),axis=(1,2))
+                            jnp.sum(self.get_q(params,nxtobses,key)*self._categorial_bar,axis=2)
+                            ,axis=1,keepdims=True),axis=-1)
         else:
             next_actions = jnp.expand_dims(jnp.argmax(
-                            jnp.sum(next_q*self.categorial_bar,axis=2)
-                            ,axis=1),axis=(1,2))
+                            jnp.sum(next_q*self._categorial_bar,axis=2)
+                            ,axis=1,keepdims=True),axis=-1)
         next_distribution = jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))
+        
         if self.munchausen:
-            logsum = jax.nn.logsumexp((next_q - jnp.max(next_q,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
-            tau_log_pi_next = next_q - jnp.max(next_q, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum
-            pi_target = jax.nn.softmax(next_q/self.munchausen_entropy_tau, axis=1)
-            next_vals = jnp.sum(pi_target * not_dones * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next), axis=1)
+            next_q_mean = next_q*self.categorial_bar
+            logsum = jax.nn.logsumexp((next_q_mean - jnp.max(next_q_mean,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
+            tau_log_pi_next = next_q_mean - jnp.max(next_q_mean, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum
+            pi_target = jax.nn.softmax(next_q_mean/self.munchausen_entropy_tau, axis=1)
+            next_vals = not_dones * (self.categorial_bar - jnp.sum(pi_target * tau_log_pi_next, axis=1, keepdims=True))
             
-            q_k_targets = self.get_q(target_params,obses,key)
+            q_k_targets = jnp.mean(self.get_q(target_params,obses,key)*self.categorial_bar,axis=2)
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
             logsum = jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1, keepdims=True)
             log_pi = q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum
-            munchausen_addon = jnp.take_along_axis(log_pi,actions,axis=1)
+            munchausen_addon = jnp.take_along_axis(log_pi,jnp.squeeze(actions),axis=1)
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
             next_vals = not_dones * self.categorial_bar
-        return jax.lax.stop_gradient(next_distribution), jax.lax.stop_gradient((next_vals * self._gamma) + rewards)
+        
+        Tz = jnp.clip((next_vals * self._gamma) + rewards, self.categorial_min,self.categorial_max)
+        C51_b = (Tz - self.categorial_min)/self.delta_bar
+        C51_L = jnp.floor(C51_b).astype(jnp.int32)
+        C51_H = jnp.ceil(C51_b).astype(jnp.int32)
+        C51_L[ (C51_H > 0)               * (C51_L == C51_H)] -= 1
+        C51_H[ (C51_L < (self.categorial_bar_n - 1)) * (C51_L == C51_H)] += 1
+        target_distribution = jnp.zeros((self.batch_size*self.categorial_bar_n))
+        target_distribution = target_distribution.at[jnp.reshape(C51_L + self.offset,(-1))].add(jnp.reshape(next_distribution*(C51_H.astype(jnp.float32) - C51_b),(-1)))
+        target_distribution = target_distribution.at[jnp.reshape(C51_H + self.offset,(-1))].add(jnp.reshape(next_distribution*(C51_b - C51_L.astype(jnp.float32)),(-1)))
+        target_distribution = jnp.reshape(target_distribution,(self.batch_size,self.categorial_bar_n))
+        return jax.lax.stop_gradient(target_distribution)
 
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="C51",

@@ -3,6 +3,7 @@ import argparse
 import gym
 
 from haiku_baselines.DQN.dqn import DQN
+from haiku_baselines.C51.c51 import C51
 from mlagents_envs.environment import UnityEnvironment,ActionTuple
 from mlagents_envs.side_channel.engine_configuration_channel import EngineConfigurationChannel
 from mlagents_envs.side_channel.environment_parameters_channel import EnvironmentParametersChannel
@@ -66,6 +67,12 @@ if __name__ == "__main__":
         agent = DQN(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dualing_model = args.dualing,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)
+    elif args.algo == "C51":
+        agent = C51(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
+                    prioritized_replay = args.per, double_q = args.double, dualing_model = args.dualing,
+                    param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
+                    categorial_max = args.max, categorial_min = args.min,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)
 
     agent.learn(int(args.steps))
