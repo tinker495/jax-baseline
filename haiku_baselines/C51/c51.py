@@ -71,11 +71,11 @@ class C51(Q_Network_Family):
         print("loss : mse")
         print("-------------------------------------------------")
 
-        self.get_q = jax.jit(self.get_q)
-        self._get_actions = jax.jit(self._get_actions)
-        self._loss = jax.jit(self._loss)
-        self._target = jax.jit(self._target)
-        self._train_step = jax.jit(self._train_step)
+        #self.get_q = jax.jit(self.get_q)
+        #self._get_actions = jax.jit(self._get_actions)
+        #self._loss = jax.jit(self._loss)
+        #self._target = jax.jit(self._target)
+        #self._train_step = jax.jit(self._train_step)
     
     def get_q(self, params, obses, key = None) -> jnp.ndarray:
         return self.model.apply(params, key, self.preproc.apply(params, key, obses))
@@ -122,7 +122,7 @@ class C51(Q_Network_Family):
     
     def _loss(self, params, obses, actions, target_distribution, weights, key):
         distribution = jnp.clip(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1),1e-5,1.0)
-        return jnp.mean(jnp.sum(-target_distribution * jnp.log(distribution),axis=-1,keepdims=True)* weights)
+        return jnp.mean(jnp.sum(-target_distribution * jnp.log(distribution),axis=1)* weights)
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)
