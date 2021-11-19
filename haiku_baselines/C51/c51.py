@@ -129,11 +129,11 @@ class C51(Q_Network_Family):
         if self.double_q:
             next_actions = jnp.expand_dims(jnp.argmax(
                             jnp.sum(self.get_q(params,nxtobses,key)*self._categorial_bar,axis=2)
-                            ,axis=1,keepdims=True),axis=-1)
+                            ,axis=1),axis=(1,2))
         else:
             next_actions = jnp.expand_dims(jnp.argmax(
                             jnp.sum(next_q*self._categorial_bar,axis=2)
-                            ,axis=1,keepdims=True),axis=-1)
+                            ,axis=1),axis=(1,2))
         next_distribution = jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))
         
         if self.munchausen:
