@@ -121,7 +121,9 @@ class C51(Q_Network_Family):
         return params, target_params, opt_state, loss, jnp.mean(jnp.sum(target_distribution*self.categorial_bar,axis=1)), new_priorities
     
     def _loss(self, params, obses, actions, target_distribution, weights, key):
-        distribution = jnp.clip(jnp.squeeze(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)),1e-5,1.0)
+        distribution = jnp.clip(
+                        jnp.squeeze(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1))
+                        ,1e-5,1.0)
         return jnp.mean(jnp.sum(-target_distribution * jnp.log(distribution),axis=1)* weights)
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
