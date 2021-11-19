@@ -110,8 +110,6 @@ class C51(Q_Network_Family):
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=-1); not_dones = 1.0 - dones
         target_distribution = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key)
-        print(jnp.sum(target_distribution,axis=1)[0])
-        print(target_distribution.shape)
         loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, target_distribution, weights, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
         params = optax.apply_updates(params, updates)
