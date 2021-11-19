@@ -63,7 +63,7 @@ class C51(Q_Network_Family):
         self.delta_bar = jax.device_put((self.categorial_max - self.categorial_min)/(self.categorial_bar_n - 1))
         
         offset = jnp.expand_dims(jnp.linspace(0, (self.batch_size - 1) * self.categorial_bar_n, self.batch_size),axis=-1)
-        self.offset = jnp.broadcast_to(offset,(self.batch_size, self.categorial_bar_n))
+        self.offset = jnp.broadcast_to(offset,(self.batch_size, self.categorial_bar_n)).astype(jnp.int32)
         
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
