@@ -29,7 +29,7 @@ class Model(hk.Module):
                     self.layer(self.action_size[0]*self.categorial_bar_n)
                 ]
                 )(feature)
-            q = jnp.reshape(q_net,(-1,self.action_size[0],self.categorial_bar_n))
+            q = hk.Reshape((self.action_size[0],self.categorial_bar_n))(q_net)
             return jax.nn.softmax(q,axis=2)
         else:
             q_net = hk.Sequential(
@@ -37,7 +37,7 @@ class Model(hk.Module):
                     jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
                 ]
                 )(feature)
-            v = jnp.reshape(self.layer(self.categorial_bar_n)(q_net),(-1,1,self.categorial_bar_n))
-            a = jnp.reshape(self.layer(self.action_size[0]*self.categorial_bar_n)(q_net),(-1,self.action_size[0],self.categorial_bar_n))
+            v = hk.Reshape((1,self.categorial_bar_n))(self.layer(self.categorial_bar_n)(q_net))
+            a = hk.Reshape((self.action_size[0],self.categorial_bar_n))(self.layer(self.action_size[0]*self.categorial_bar_n)(q_net))
             q = v + (a - jnp.mean(a, axis=1, keepdims=True))
             return jax.nn.softmax(q,axis=2) 
