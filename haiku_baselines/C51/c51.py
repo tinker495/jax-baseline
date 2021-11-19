@@ -141,7 +141,7 @@ class C51(Q_Network_Family):
             logsum = jax.nn.logsumexp((next_q_mean - jnp.max(next_q_mean,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
             tau_log_pi_next = next_q_mean - jnp.max(next_q_mean, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum
             pi_target = jax.nn.softmax(next_q_mean/self.munchausen_entropy_tau, axis=1)
-            next_vals = not_dones * (self.categorial_bar - jnp.sum(pi_target * tau_log_pi_next, axis=1, keepdims=True))
+            next_categorial = not_dones * (self.categorial_bar - jnp.sum(pi_target * tau_log_pi_next, axis=1, keepdims=True))
             
             q_k_targets = jnp.mean(self.get_q(target_params,obses,key)*self.categorial_bar,axis=2)
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
@@ -151,9 +151,9 @@ class C51(Q_Network_Family):
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
-            next_vals = not_dones * self.categorial_bar
-        
-        Tz = jnp.clip((next_vals * self._gamma) + rewards, self.categorial_min,self.categorial_max)
+            next_categorial = not_dones * self.categorial_bar
+        target_categorial = (next_categorial * self._gamma) + rewards
+        Tz = jnp.clip((target_categorial * self._gamma) + rewards, self.categorial_min,self.categorial_max)
         C51_b = ((Tz - self.categorial_min)/self.delta_bar).astype(jnp.float32)
         C51_L = jnp.floor(C51_b).astype(jnp.int32)
         C51_H = jnp.ceil(C51_b).astype(jnp.int32)
