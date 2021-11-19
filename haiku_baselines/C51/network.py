@@ -38,6 +38,6 @@ class Model(hk.Module):
                 ]
                 )(feature)
             v = jnp.reshape(self.layer(self.categorial_bar_n)(q_net),(-1,1,self.categorial_bar_n))
-            a = jnp.reshape(self.layer(self.action_size[0]*self.categorial_bar_n)(q_net),(-1,1,self.categorial_bar_n))
+            a = jnp.reshape(self.layer(self.action_size[0]*self.categorial_bar_n)(q_net),(-1,self.action_size[0],self.categorial_bar_n))
             q = v + (a - jnp.mean(a, axis=1, keepdims=True))
             return jax.nn.softmax(q,axis=2) 
