@@ -154,7 +154,7 @@ class C51(Q_Network_Family):
             next_vals = not_dones * self.categorial_bar
         
         Tz = jnp.clip((next_vals * self._gamma) + rewards, self.categorial_min,self.categorial_max)
-        C51_b = (Tz - self.categorial_min)/self.delta_bar
+        C51_b = ((Tz - self.categorial_min)/self.delta_bar).astype(jnp.float32)
         C51_L = jnp.floor(C51_b).astype(jnp.int32)
         C51_H = jnp.ceil(C51_b).astype(jnp.int32)
         C51_L[ (C51_H > 0)               * (C51_L == C51_H)] -= 1
