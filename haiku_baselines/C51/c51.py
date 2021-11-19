@@ -157,8 +157,8 @@ class C51(Q_Network_Family):
         C51_b = ((Tz - self.categorial_min)/self.delta_bar).astype(jnp.float32)
         C51_L = jnp.floor(C51_b).astype(jnp.int32)
         C51_H = jnp.ceil(C51_b).astype(jnp.int32)
-        C51_L[ (C51_H > 0)               * (C51_L == C51_H)] -= 1
-        C51_H[ (C51_L < (self.categorial_bar_n - 1)) * (C51_L == C51_H)] += 1
+        C51_L = C51_L.at[(C51_H > 0) * (C51_L == C51_H)].add(-1)
+        C51_H = C51_H.at[ (C51_L < (self.categorial_bar_n - 1)) * (C51_L == C51_H)].add(1)
         target_distribution = jnp.zeros((self.batch_size*self.categorial_bar_n))
         target_distribution = target_distribution.at[jnp.reshape(C51_L + self.offset,(-1))].add(jnp.reshape(next_distribution*(C51_H.astype(jnp.float32) - C51_b),(-1)))
         target_distribution = target_distribution.at[jnp.reshape(C51_H + self.offset,(-1))].add(jnp.reshape(next_distribution*(C51_b - C51_L.astype(jnp.float32)),(-1)))
