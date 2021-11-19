@@ -118,7 +118,7 @@ class C51(Q_Network_Family):
         if self.prioritized_replay:
             vals = jnp.clip(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1),1e-3,1.0)
             new_priorities = jnp.sum(-target_distribution * jnp.log(vals),axis=1) + self.prioritized_replay_eps
-        return params, target_params, opt_state, loss, jnp.mean(target_distribution*self.categorial_bar), new_priorities
+        return params, target_params, opt_state, loss, jnp.sum(target_distribution*self.categorial_bar), new_priorities
     
     def _loss(self, params, obses, actions, target_distribution, weights, key):
         distribution = jnp.clip(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1),1e-3,1.0)
@@ -137,13 +137,13 @@ class C51(Q_Network_Family):
         next_distribution = jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))
         
         if self.munchausen:
-            next_q_mean = next_q*self.categorial_bar
+            next_q_mean = jnp.sum(next_q*self.categorial_bar,axis=2)
             logsum = jax.nn.logsumexp((next_q_mean - jnp.max(next_q_mean,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
             tau_log_pi_next = next_q_mean - jnp.max(next_q_mean, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum
             pi_target = jax.nn.softmax(next_q_mean/self.munchausen_entropy_tau, axis=1)
             next_categorial = not_dones * (self.categorial_bar - jnp.sum(pi_target * tau_log_pi_next, axis=1, keepdims=True))
             
-            q_k_targets = jnp.mean(self.get_q(target_params,obses,key)*self.categorial_bar,axis=2)
+            q_k_targets = jnp.sum(self.get_q(target_params,obses,key)*self.categorial_bar,axis=2)
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
             logsum = jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1, keepdims=True)
             log_pi = q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum
