@@ -147,7 +147,7 @@ class C51(Q_Network_Family):
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
             logsum = jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1, keepdims=True)
             log_pi = q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum
-            munchausen_addon = jnp.take_along_axis(log_pi,jnp.squeeze(actions),axis=1)
+            munchausen_addon = jnp.take_along_axis(log_pi,jnp.squeeze(actions,axis=2),axis=1)
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
