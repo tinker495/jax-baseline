@@ -30,7 +30,7 @@ class Model(hk.Module):
                 ]
                 )(feature)
             q = jnp.reshape(q_net,(-1,self.action_size[0],self.categorial_bar_n))
-            return jnp.nn.softmax(q,axis=2)
+            return jax.nn.softmax(q,axis=2)
         else:
             q_net = hk.Sequential(
                 [
@@ -40,4 +40,4 @@ class Model(hk.Module):
             v = jnp.reshape(self.layer(self.categorial_bar_n)(q_net),(-1,1,self.categorial_bar_n))
             a = jnp.reshape(self.layer(self.action_size[0]*self.categorial_bar_n)(q_net),(-1,1,self.categorial_bar_n))
             q = v + (a - jnp.mean(a, axis=1, keepdims=True))
-            return jnp.nn.softmax(q,axis=2) 
+            return jax.nn.softmax(q,axis=2) 
