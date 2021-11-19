@@ -71,11 +71,11 @@ class C51(Q_Network_Family):
         print("loss : mse")
         print("-------------------------------------------------")
 
-        self.get_q = jax.jit(self.get_q)
-        self._get_actions = jax.jit(self._get_actions)
-        self._loss = jax.jit(self._loss)
-        self._target = jax.jit(self._target)
-        self._train_step = jax.jit(self._train_step)
+        #self.get_q = jax.jit(self.get_q)
+        #self._get_actions = jax.jit(self._get_actions)
+        #self._loss = jax.jit(self._loss)
+        #self._target = jax.jit(self._target)
+        #self._train_step = jax.jit(self._train_step)
     
     def get_q(self, params, obses, key = None) -> jnp.ndarray:
         return self.model.apply(params, key, self.preproc.apply(params, key, obses))
@@ -163,6 +163,11 @@ class C51(Q_Network_Family):
         target_distribution = target_distribution.at[jnp.reshape(C51_L + self.offset,(-1))].add(jnp.reshape(next_distribution*(C51_H.astype(jnp.float32) - C51_b),(-1)))
         target_distribution = target_distribution.at[jnp.reshape(C51_H + self.offset,(-1))].add(jnp.reshape(next_distribution*(C51_b - C51_L.astype(jnp.float32)),(-1)))
         target_distribution = jnp.reshape(target_distribution,(self.batch_size,self.categorial_bar_n))
+        
+        print(rewards[0])
+        print(not_dones[0])
+        print(target_distribution[0])
+        print(jnp.sum(target_distribution*self.categorial_bar)[0])
         return jax.lax.stop_gradient(target_distribution)
 
     
