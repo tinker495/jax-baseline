@@ -16,12 +16,14 @@ class ReplayBuffer(object):
         n_s = dict()
         if self.n_step:
             n_s = {
-             'Nstep':{"size": n_step,
-                    "gamma": gamma,
+                'Nstep':
+                    {
+                    "size": n_step,
                     "rew": "reward",
+                    "gamma": gamma,
                     "next": list(self.nextobsdict.keys())[0]
                     }
-             }
+                }
         self.buffer = cpprb.ReplayBuffer(size,
                     env_dict={**self.obsdict,
                         "action": {"shape": action_space},
