@@ -79,6 +79,8 @@ class ReplayBuffer(object):
             )
             ])
             )
+        
+        #self._add = jax.jit(self._add)
             
     @property
     def __len__(self) -> int:
@@ -111,6 +113,7 @@ class ReplayBuffer(object):
         next_idxs = jnp.arange(self._next_idx,self._next_idx+self.worker_size,dtype=jnp.int32) % self._maxsize
         self._next_idx = (self._next_idx + self.worker_size) % self._maxsize
         self._len = jnp.where(self._len + self.worker_size >= self._maxsize, self._maxsize, self._len + self.worker_size)
+        episode_keys = None
         if self.n_step_method:
             episode_keys = jnp.array(self.worker_range + self.worker_size*self.worker_ep,dtype=jnp.int32)
             steps = jnp.zeros((self.worker_size),dtype=jnp.int32)
