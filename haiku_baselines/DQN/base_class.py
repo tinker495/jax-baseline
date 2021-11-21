@@ -105,9 +105,9 @@ class Q_Network_Family(object):
         
     def get_memory_setup(self):
         if not self.prioritized_replay:
-            self.replay_buffer = ReplayBuffer(self.buffer_size,self.observation_space,self.worker_size,self.action_size,self.n_step,self.gamma)
+            self.replay_buffer = ReplayBuffer(self.buffer_size,self.observation_space, self.worker_size, 1,self.n_step, self.gamma)
         else:
-            self.replay_buffer = PrioritizedReplayBuffer(self.buffer_size,self.observation_space,self.prioritized_replay_alpha,self.n_step,self.gamma)
+            self.replay_buffer = PrioritizedReplayBuffer(self.buffer_size,self.observation_space,self.prioritized_replay_alpha, self.worker_size, 1, self.n_step, self.gamma)
     
     def setup_model(self):
         pass
@@ -207,7 +207,7 @@ class Q_Network_Family(object):
                 terminal[term_ids] = True
                 reward[term_ids] = term_rewards
             self.scores += reward
-            self.replay_buffer.add(old_obses, actions, reward, nxtobs, done, 0, terminal)
+            self.replay_buffer.add(old_obses, actions, reward, nxtobs, done, terminal)
             if term_on:
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", np.mean(self.scores[term_ids]), steps)
@@ -244,7 +244,7 @@ class Q_Network_Family(object):
             done = terminal
             if "TimeLimit.truncated" in info:
                 done = not info["TimeLimit.truncated"]
-            self.replay_buffer.add(state, actions[0], reward, next_state, done, 0, terminal)
+            self.replay_buffer.add(state, actions[0], reward, next_state, done, terminal)
             self.scores[0] += reward
             state = next_state
             if terminal:

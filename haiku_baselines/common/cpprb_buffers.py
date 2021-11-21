@@ -6,7 +6,7 @@ import cpprb
 
 class ReplayBuffer(object):
     
-    def __init__(self, size: int, observation_space: list, action_space = 1, n_step=1,gamma=0.99):
+    def __init__(self, size: int, observation_space: list, worker_size = 1,action_space = 1, n_step=1, gamma=0.99):
         self.max_size = size
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o})
                             for idx,o in enumerate(observation_space))
@@ -48,7 +48,7 @@ class ReplayBuffer(object):
     def is_full(self) -> int:
         return len(self) == self.max_size
 
-    def add(self, obs_t, action, reward, nxtobs_t, done, worker=0, terminal=False):
+    def add(self, obs_t, action, reward, nxtobs_t, done, terminal=False):
         obsdict = dict(zip(self.obsdict.keys(),obs_t))
         nextobsdict = dict(zip(self.nextobsdict.keys(),nxtobs_t))
         self.buffer.add(**obsdict,action=action,reward=reward,**nextobsdict,done=done)
@@ -66,7 +66,7 @@ class ReplayBuffer(object):
                 }
         
 class PrioritizedReplayBuffer(ReplayBuffer):
-    def __init__(self, size: int, observation_space: list, alpha: float, action_space = 1, n_step=1,gamma=0.99):
+    def __init__(self, size: int, observation_space: list, alpha: float, worker_size = 1,action_space = 1, n_step=1, gamma=0.99):
         self.max_size = size
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype":np.uint8} if len(o) >= 3 else {"shape": o})
                             for idx,o in enumerate(observation_space))
