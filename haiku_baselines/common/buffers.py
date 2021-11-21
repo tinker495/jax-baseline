@@ -80,7 +80,8 @@ class ReplayBuffer(object):
             ])
             )
         
-        #self._add = jax.jit(self._add)
+        self.add = jax.jit(self.add)
+        self._add = jax.jit(self._add)
             
     @property
     def __len__(self) -> int:
