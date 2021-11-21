@@ -166,7 +166,7 @@ class ReplayBuffer(object):
                 'dones'     : self._storage['dones'][idxes]
                     }
 
-    def sample(self, batch_size: int, key: jnp.ndarray):
+    def sample(self, batch_size: int):
         """
         Sample a batch of experiences.
 
@@ -181,5 +181,6 @@ class ReplayBuffer(object):
             - done_mask: (numpy bool) done_mask[i] = 1 if executing act_batch[i] resulted in the end of an episode
                 and 0 otherwise.
         """
-        idxes = jnp.random.random(key, (batch_size), 0, self._len - 1)
+        idxes = np.random.randint(0, self._len - 1,(batch_size,))
+        #jax.random.randint(key, (batch_size), )
         return self._encode_sample(idxes)
