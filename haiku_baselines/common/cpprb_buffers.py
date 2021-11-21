@@ -19,7 +19,7 @@ class ReplayBuffer(object):
              'Nstep':{"size": n_step,
                     "gamma": gamma,
                     "rew": "reward",
-                    "next": list(self.nextobsdict.keys())
+                    "next": list(self.nextobsdict.keys())[0]
                     }
              }
         self.buffer = cpprb.ReplayBuffer(size,
