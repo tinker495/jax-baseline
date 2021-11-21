@@ -114,6 +114,7 @@ class ReplayBuffer(object):
         self._next_idx = (self._next_idx + self.worker_size) % self._maxsize
         self._len = jnp.where(self._len + self.worker_size >= self._maxsize, self._maxsize, self._len + self.worker_size)
         episode_keys = None
+        steps = None
         if self.n_step_method:
             episode_keys = jnp.array(self.worker_range + self.worker_size*self.worker_ep,dtype=jnp.int32)
             steps = jnp.zeros((self.worker_size),dtype=jnp.int32)
