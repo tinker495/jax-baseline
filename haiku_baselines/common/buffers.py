@@ -48,7 +48,7 @@ class ReplayBuffer(object):
             )
             ,
             (
-                'actions', jnp.zeros((self._maxsize,self.action_space),dtype=jnp.float32)
+                'actions', jnp.zeros((self._maxsize,*self.action_space),dtype=jnp.float32)
             )]
             +
             [(
