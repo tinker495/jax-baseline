@@ -19,7 +19,7 @@ class ReplayBuffer(object):
                 'Nstep':
                     {
                     "size": n_step,
-                    "rew": "reward",
+                    "rew": "rew",
                     "gamma": gamma,
                     "next": "nextobs0"  #list(self.nextobsdict.keys())[0]
                     }
@@ -27,7 +27,7 @@ class ReplayBuffer(object):
         self.buffer = cpprb.ReplayBuffer(size,
                     env_dict={**self.obsdict,
                         "action": {"shape": action_space},
-                        "reward": {},
+                        "rew": {},
                         **self.nextobsdict,
                         "done": {}
                     },
@@ -53,7 +53,7 @@ class ReplayBuffer(object):
     def add(self, obs_t, action, reward, nxtobs_t, done, terminal=False):
         obsdict = dict(zip(self.obsdict.keys(),obs_t))
         nextobsdict = dict(zip(self.nextobsdict.keys(),nxtobs_t))
-        self.buffer.add(**obsdict,action=action,reward=reward,**nextobsdict,done=done)
+        self.buffer.add(**obsdict,action=action,rew=reward,**nextobsdict,done=done)
         #if self.n_step and terminal:
         #    self.buffer.on_episode_end()
 
@@ -62,7 +62,7 @@ class ReplayBuffer(object):
         return {
             'obses'     : [smpl[o] for o in self.obsdict.keys()],
             'actions'   : smpl['action'],
-            'rewards'   : smpl['reward'],
+            'rewards'   : smpl['rew'],
             'nxtobses'  : [smpl[no] for no in self.nextobsdict.keys()],
             'dones'     : smpl['done']
                 }
@@ -80,14 +80,14 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             n_s = {
              'Nstep':{"size": n_step,
                     "gamma": gamma,
-                    "rew": "reward",
+                    "rew": "rew",
                     "next": list(self.nextobsdict.keys())
                     }
              }
         self.buffer = cpprb.PrioritizedReplayBuffer(size,
                     env_dict={**self.obsdict,
                         "action": {"shape": action_space},
-                        "reward": {},
+                        "rew": {},
                         **self.nextobsdict,
                         "done": {}
                     },
@@ -99,7 +99,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         return {
             'obses'     : [smpl[o] for o in self.obsdict.keys()],
             'actions'   : smpl['action'],
-            'rewards'   : smpl['reward'],
+            'rewards'   : smpl['rew'],
             'nxtobses'  : [smpl[no] for no in self.nextobsdict.keys()],
             'dones'     : smpl['done'],
             'weights'   : smpl['weights'],
