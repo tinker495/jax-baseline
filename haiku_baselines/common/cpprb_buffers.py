@@ -13,17 +13,14 @@ class ReplayBuffer(object):
         self.nextobsdict = dict(("nextobs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o})
                             for idx,o in enumerate(observation_space))
         self.n_step = n_step > 1
-        n_s = dict()
+        n_s = None
         if self.n_step:
             n_s = {
-                'Nstep':
-                    {
                     "size": n_step,
                     "rew": "reward",
                     "gamma": gamma,
                     "next": list(self.nextobsdict.keys())[0]
                     }
-                }
         self.buffer = cpprb.ReplayBuffer(size,
                     env_dict={**self.obsdict,
                         "action": {"shape": action_space},
@@ -31,7 +28,7 @@ class ReplayBuffer(object):
                         **self.nextobsdict,
                         "done": {}
                     },
-                    **n_s)
+                    Nstep=n_s)
 
     def __len__(self) -> int:
         return len(self.buffer)
@@ -54,8 +51,8 @@ class ReplayBuffer(object):
         obsdict = dict(zip(self.obsdict.keys(),obs_t))
         nextobsdict = dict(zip(self.nextobsdict.keys(),nxtobs_t))
         self.buffer.add(**obsdict,action=action,reward=reward,**nextobsdict,done=done)
-        #if self.n_step and terminal:
-        #    self.buffer.on_episode_end()
+        if self.n_step and terminal:
+            self.buffer.on_episode_end()
 
     def sample(self, batch_size: int):
         smpl = self.buffer.sample(batch_size)
