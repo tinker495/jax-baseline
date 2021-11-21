@@ -38,7 +38,6 @@ class ReplayBuffer(object):
         self.nextobsdict = dict(("nextobs{}".format(idx),{"shape": o,"dtype": jnp.uint8} if len(o) >= 3 else {"shape": o})
                             for idx,o in enumerate(observation_space))
         self._storage = dict(
-            *(
             [(
                 key, jnp.zeros((self._maxsize,*self.obsdict[key]["shape"]),dtype=self.obsdict[key]['dtype'] if 'dtype' in self.obsdict[key] else jnp.float32)
             )   for key in self.obsdict]
@@ -58,7 +57,6 @@ class ReplayBuffer(object):
                 'dones', jnp.zeros((self._maxsize,1),dtype=jnp.float32)
             )]
             )
-            )
         self.episodes = None
         self.worker_ep = None
         self.worker_range = None
@@ -67,7 +65,7 @@ class ReplayBuffer(object):
             self.worker_ep = jnp.zeros(worker_size)
             self.worker_range = jnp.arange(0,worker_size)
             self._storage.update(
-            dict(*([
+            dict([
             (
                 'episode', jnp.zeros((self._maxsize,1),dtype=jnp.int32)
             )
@@ -79,7 +77,7 @@ class ReplayBuffer(object):
             (
                 'terminal', jnp.zeros((self._maxsize,1),dtype=jnp.int32)
             )
-            ]))
+            ])
             )
             
     @property
