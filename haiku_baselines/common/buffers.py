@@ -37,6 +37,9 @@ class ReplayBuffer(object):
                             for idx,o in enumerate(observation_space))
         self.nextobsdict = dict(("nextobs{}".format(idx),{"shape": o,"dtype": jnp.uint8} if len(o) >= 3 else {"shape": o})
                             for idx,o in enumerate(observation_space))
+        [(
+            key, jnp.zeros((self._maxsize,*state["shape"]),dtype=state['dtype'] if 'dtype' in state else jnp.float32)
+        )   for key, state in self.obsdict]
         self._storage = dict(
             *(
             [(
@@ -181,6 +184,5 @@ class ReplayBuffer(object):
             - done_mask: (numpy bool) done_mask[i] = 1 if executing act_batch[i] resulted in the end of an episode
                 and 0 otherwise.
         """
-        idxes = np.random.randint(0, self._len - 1,(batch_size,))
-        #jax.random.randint(key, (batch_size), )
+        idxes = np.random.randint(0, self._len - 1,(batch_size,)) #jax.random.randint(key, (batch_size), )
         return self._encode_sample(idxes)
