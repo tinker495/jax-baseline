@@ -131,10 +131,12 @@ class ReplayBuffer(object):
         self._storage, self.worker_ep = self._add(self._storage, self.worker_ep, next_idxs, episode_keys, steps, obs_t, action, reward, nxtobs_t, done, terminal)
         
     def _add(self, storage, worker_ep, next_idxs, episode_keys, steps, obs_t, action, reward, nxtobs_t, done, terminal):
-        obses_dicts = dict(zip(self.obsdict.keys(),obs_t) +\
-                           zip(self.nextobsdict.keys(),nxtobs_t))
-        for k,data in obses_dicts:
-            storage[k].at[next_idxs].set(data)
+        obses_dicts = dict(zip(self.obsdict.keys(),obs_t))
+        nxtobses_dicts = dict(zip(self.nextobsdict.keys(),nxtobs_t))
+        for k in obses_dicts:
+            storage[k].at[next_idxs].set(obses_dicts[k])
+        for k in nxtobses_dicts:
+            storage[k].at[next_idxs].set(nxtobses_dicts[k])
         storage['actions'].at[next_idxs].set(action)
         storage['rewards'].at[next_idxs].set(reward)
         storage['dones'].at[next_idxs].set(done)
