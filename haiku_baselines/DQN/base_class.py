@@ -8,8 +8,8 @@ from tqdm.auto import trange
 from collections import deque
 
 from haiku_baselines.common.base_classes import TensorboardWriter
-from haiku_baselines.common.buffers import ReplayBuffer
-#from haiku_baselines.common.cpprb_buffers import ReplayBuffer, PrioritizedReplayBuffer
+#from haiku_baselines.common.buffers import ReplayBuffer
+from haiku_baselines.common.cpprb_buffers import ReplayBuffer, PrioritizedReplayBuffer
 from haiku_baselines.common.schedules import LinearSchedule
 from haiku_baselines.common.utils import convert_states
 
