@@ -134,16 +134,16 @@ class ReplayBuffer(object):
         obses_dicts = dict(zip(self.obsdict.keys(),obs_t))
         nxtobses_dicts = dict(zip(self.nextobsdict.keys(),nxtobs_t))
         for k in obses_dicts:
-            storage[k].at[next_idxs].set(obses_dicts[k])
+            storage = storage[k].at[next_idxs].set(obses_dicts[k])
         for k in nxtobses_dicts:
-            storage[k].at[next_idxs].set(nxtobses_dicts[k])
-        storage['actions'].at[next_idxs].set(action)
-        storage['rewards'].at[next_idxs].set(reward)
-        storage['dones'].at[next_idxs].set(done)
+            storage = storage[k].at[next_idxs].set(nxtobses_dicts[k])
+        storage = storage['actions'].at[next_idxs].set(action)
+        storage = storage['rewards'].at[next_idxs].set(reward)
+        storage = storage['dones'].at[next_idxs].set(done)
         if self.n_step_method:
-            storage['episode'].at[next_idxs].set(episode_keys)
-            storage['steps'].at[next_idxs].set(steps)
-            storage['terminal'].at[next_idxs].set(terminal)
+            storage = storage['episode'].at[next_idxs].set(episode_keys)
+            storage = storage['steps'].at[next_idxs].set(steps)
+            storage = storage['terminal'].at[next_idxs].set(terminal)
             worker_ep = jnp.where(terminal > 0, worker_ep + 1, worker_ep)
         return storage, worker_ep
     
