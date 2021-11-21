@@ -52,8 +52,8 @@ class ReplayBuffer(object):
             )]
             +
             [(
-                key, jnp.zeros((self._maxsize,*state["shape"]),dtype=state['dtype'] if 'dtype' in state else jnp.float32)
-            )   for key,state in self.nextobsdict]
+                key, jnp.zeros((self._maxsize,*self.nextobsdict[key]["shape"]),dtype=self.nextobsdict[key]['dtype'] if 'dtype' in self.nextobsdict[key] else jnp.float32)
+            )   for key in self.nextobsdict]
             +[(
                 'dones', jnp.zeros((self._maxsize,1),dtype=jnp.float32)
             )]
