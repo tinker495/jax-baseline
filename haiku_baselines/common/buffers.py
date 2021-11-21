@@ -37,15 +37,11 @@ class ReplayBuffer(object):
                             for idx,o in enumerate(observation_space))
         self.nextobsdict = dict(("nextobs{}".format(idx),{"shape": o,"dtype": jnp.uint8} if len(o) >= 3 else {"shape": o})
                             for idx,o in enumerate(observation_space))
-        print(self.obsdict)
-        [(
-            key, jnp.zeros((self._maxsize,*state["shape"]),dtype=state['dtype'] if 'dtype' in state else jnp.float32)
-        )   for key, state in self.obsdict]
         self._storage = dict(
             *(
             [(
-                key, jnp.zeros((self._maxsize,*state["shape"]),dtype=state['dtype'] if 'dtype' in state else jnp.float32)
-            )   for key, state in self.obsdict]
+                key, jnp.zeros((self._maxsize,*self.obsdict[key]["shape"]),dtype=self.obsdict[key]['dtype'] if 'dtype' in self.obsdict[key] else jnp.float32)
+            )   for key in self.obsdict]
             +
             [(
                 'rewards', jnp.zeros((self._maxsize,1),dtype=jnp.float32)
