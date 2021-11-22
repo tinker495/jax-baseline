@@ -72,15 +72,14 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         self.nextobsdict = dict(("nextobs{}".format(idx),{"shape": o,"dtype":np.uint8} if len(o) >= 3 else {"shape": o})
                             for idx,o in enumerate(observation_space))
         self.n_step = n_step > 1
-        n_s = dict()
+        n_s = None
         if self.n_step:
             n_s = {
-             'Nstep':{"size": n_step,
-                    "gamma": gamma,
+                    "size": n_step,
                     "rew": "reward",
-                    "next": list(self.nextobsdict.keys())
+                    "gamma": gamma,
+                    "next": list(self.nextobsdict.keys())[0]
                     }
-             }
         self.buffer = cpprb.PrioritizedReplayBuffer(size,
                     env_dict={**self.obsdict,
                         "action": {"shape": action_space},
