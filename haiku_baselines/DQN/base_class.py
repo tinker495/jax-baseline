@@ -123,35 +123,12 @@ class Q_Network_Family(object):
     def _get_actions(self, params, obses) -> np.ndarray:
         pass
     
-    def _actions(self, obs, epsilon, befor_train, params, key):
-        if befor_train:
-            return jax.random.choice(key,self.action_size[0],(self.worker_size,1))
-        else:
-            if self.param_noise:
-                return self._get_actions(params,obs,key)
-            else:
-                return jnp.where(jax.random.uniform(key) < epsilon,
-                                jax.random.choice(key,self.action_size[0],(self.worker_size,1)),
-                                self._get_actions(params,obs,key))
-
-        '''
-            return jnp.where(jax.random.uniform(key) < epsilon)
-            return jax.lax.cond(jax.random.uniform(key) < epsilon and not self.param_noise,
-                            lambda params,obs,key: jax.random.choice(key,self.action_size[0],(self.worker_size,1)),
-                            lambda params,obs,key: self._get_actions(params,obs,key),
-                            (params,obs,key))
-        '''
-    
     def actions(self,obs,epsilon,befor_train):
-        return np.asarray(self._actions(obs, epsilon, befor_train, self.params, self.update_key()[0]))
-        
-        '''
         if (epsilon <= np.random.uniform(0,1) or self.param_noise) and not befor_train:
             actions = np.asarray(self._get_actions(self.params,obs,self.update_key()[0] if self.param_noise else None))
         else:
             actions = np.random.choice(self.action_size[0], [self.worker_size,1])
         return actions
-        '''
 
         
     def learn(self, total_timesteps, callback=None, log_interval=1000, tb_log_name="Q_network",
