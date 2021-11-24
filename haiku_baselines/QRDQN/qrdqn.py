@@ -43,7 +43,7 @@ class QRDQN(Q_Network_Family):
             del self.policy_kwargs['cnn_mode']
         self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
         self.model = hk.transform(lambda x: Model(self.action_size,
-                           dualing=self.dualing_model,noisy=self.param_noise,
+                           dualing=self.dualing_model,noisy=self.param_noise,support_n=self.n_support
                            **self.policy_kwargs)(x))
         pre_param = self.preproc.init(keys[0],
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
