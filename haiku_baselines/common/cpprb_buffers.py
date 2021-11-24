@@ -88,7 +88,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                         "done": {}
                     },
                     alpha=alpha,
-                    **n_s)
+                    Nstep=n_s)
 
     def sample(self, batch_size: int, beta=0.5):
         smpl = self.buffer.sample(batch_size, beta)
