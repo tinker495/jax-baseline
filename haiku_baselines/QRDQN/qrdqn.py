@@ -66,11 +66,11 @@ class QRDQN(Q_Network_Family):
         print("loss : mse")
         print("-------------------------------------------------")
 
-        #self.get_q = jax.jit(self.get_q)
-        #self._get_actions = jax.jit(self._get_actions)
-        #self._loss = jax.jit(self._loss)
-        #self._target = jax.jit(self._target)
-        #self._train_step = jax.jit(self._train_step)
+        self.get_q = jax.jit(self.get_q)
+        self._get_actions = jax.jit(self._get_actions)
+        self._loss = jax.jit(self._loss)
+        self._target = jax.jit(self._target)
+        self._train_step = jax.jit(self._train_step)
     
     def get_q(self, params, obses, key = None) -> jnp.ndarray:
         return self.model.apply(params, key, self.preproc.apply(params, key, obses))
@@ -118,11 +118,6 @@ class QRDQN(Q_Network_Family):
         vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1) # batch x support x 2 or 1
         theta_loss_tile = jnp.tile(jnp.reshape(vals,(-1,1,self.n_support,self.dual_axis)),(1,self.n_support*self.dual_axis,1,1)) 
         logit_valid_tile = jnp.tile(jnp.reshape(targets,(-1,self.n_support*self.dual_axis,1,1)),(1,1,self.n_support,self.dual_axis))
-        print(vals.shape)
-        print(targets.shape)
-        print(theta_loss_tile.shape)
-        print(logit_valid_tile.shape)
-        print(weights.shape)
         error = theta_loss_tile - logit_valid_tile
         abs_x = jnp.abs(error)
         quadratic = jnp.minimum(abs_x, self.delta)
