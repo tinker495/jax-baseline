@@ -104,8 +104,6 @@ class QRDQN(Q_Network_Family):
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=(2,3))
         rewards = jnp.expand_dims(rewards, axis=2);  not_dones = jnp.expand_dims(1.0 - dones, axis=2)
-        print(rewards.shape)
-        print(not_dones.shape)
         targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key)
         (loss,abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
@@ -119,7 +117,7 @@ class QRDQN(Q_Network_Family):
     def _loss(self, params, obses, actions, targets, weights, key):
         vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1) # batch x support x 2 or 1
         theta_loss_tile = jnp.tile(jnp.reshape(vals,(-1,1,self.n_support,self.dual_axis)),(1,self.n_support*self.dual_axis,1,1)) 
-        logit_valid_tile = jnp.tile(jnp.reshape(targets,(-1,self.n_support*self.dual_axis,1,1)),(1,1,self.n_support,1))
+        logit_valid_tile = jnp.tile(jnp.reshape(targets,(-1,self.n_support*self.dual_axis,1,1)),(1,1,self.n_support,self.dual_axis))
         print(vals.shape)
         print(targets.shape)
         print(theta_loss_tile.shape)
