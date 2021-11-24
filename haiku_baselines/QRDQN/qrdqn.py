@@ -122,13 +122,14 @@ class QRDQN(Q_Network_Family):
         print(targets.shape)
         print(theta_loss_tile.shape)
         print(logit_valid_tile.shape)
+        print(weights.shape)
         error = theta_loss_tile - logit_valid_tile
         abs_x = jnp.abs(error)
         quadratic = jnp.minimum(abs_x, self.delta)
         linear = abs_x - quadratic
         huber = 0.5 * quadratic**2 + self.delta * linear
         mul = jax.lax.stop_gradient(jnp.where(error < 0, 1 - self.quantile, self.quantile))
-        loss = jnp.sum(jnp.mean(huber*mul,axis=1),axis=1)
+        loss = jnp.sum(jnp.mean(huber*mul,axis=1),axis=(1,2))
         return jnp.mean(weights*loss), loss
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
