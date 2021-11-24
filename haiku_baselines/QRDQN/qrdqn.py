@@ -104,6 +104,8 @@ class QRDQN(Q_Network_Family):
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=(2,3))
         rewards = jnp.expand_dims(rewards, axis=2);  not_dones = jnp.expand_dims(1.0 - dones, axis=2)
+        print(rewards.shape)
+        print(not_dones.shape)
         targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key)
         (loss,abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
