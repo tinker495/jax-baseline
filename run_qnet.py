@@ -36,6 +36,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument('--max', type=float, default=250, help='c51 max')
     parser.add_argument('--min', type=float, default=-250, help='c51 min')
+    parser.add_argument('--n_support', type=int,default=200, help='n_support for QRDQN,IQN,FQF')
     parser.add_argument('--CVaR', type=float, default=1.0, help='IQN risk avoiding factor')
     parser.add_argument('--node', type=int,default=256, help='network node number')
     parser.add_argument('--hidden_n', type=int,default=2, help='hidden layer number')
@@ -74,6 +75,12 @@ if __name__ == "__main__":
                     prioritized_replay = args.per, double_q = args.double, dualing_model = args.dualing,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
                     categorial_max = args.max, categorial_min = args.min,
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)
+    elif args.algo == "QRDQN":
+        agent = QRDQN(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
+                    prioritized_replay = args.per, double_q = args.double, dualing_model = args.dualing, 
+                    param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
+                    n_support = args.n_support,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)
 
     agent.learn(int(args.steps))
