@@ -123,8 +123,8 @@ class Q_Network_Family(object):
     def _get_actions(self, params, obses) -> np.ndarray:
         pass
     
-    def _actions(self, obs, epsilon, befor_train, params, key):
-        return jax.lax.cond(befor_train == 1 or (jax.random.uniform(key) < epsilon and not self.param_noise),
+    def _actions(self, obs, epsilon, params, key):
+        return jax.lax.cond((jax.random.uniform(key) < epsilon and not self.param_noise),
                             lambda params,obs,key: jax.random.choice(key,self.action_size[0],(self.worker_size,1)),
                             lambda params,obs,key: self._get_actions(params,obs,key),
                             (params,obs,key))
@@ -138,7 +138,7 @@ class Q_Network_Family(object):
         '''
     
     def actions(self,obs,epsilon,befor_train):
-        return np.asarray(self._actions(obs, epsilon, int(befor_train), self.params, self.update_key()[0]))
+        return np.asarray(self._actions(obs, epsilon, self.params, self.update_key()[0]))
         
         '''
         if (epsilon <= np.random.uniform(0,1) or self.param_noise) and not befor_train:
