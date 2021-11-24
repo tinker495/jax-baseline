@@ -124,12 +124,18 @@ class Q_Network_Family(object):
         pass
     
     def _actions(self, obs, epsilon, befor_train, params, key):
-        return jax.lax.cond(befor_train,
+        return jax.lax.cond(befor_train or (jax.random.uniform(key) < epsilon and not self.params),
                             lambda params,obs,key: jax.random.choice(key,self.action_size[0],(self.worker_size,1)),
-                            lambda params,obs,key: jax.lax.cond(jax.random.uniform(key) < epsilon or self.params,
+                            lambda params,obs,key: self._get_actions(params,obs,key),
+                            (params,obs,key))
+        '''
+        return jax.lax.cond(befor_train or ( or self.params),
+                            lambda params,obs,key: jax.random.choice(key,self.action_size[0],(self.worker_size,1)),
+                            lambda params,obs,key: jax.lax.cond(jax.random.uniform(key) < epsilon ,
                                     lambda params,obs,key: self._get_actions(params,obs,key),
                                     lambda params,obs,key: jax.random.choice(key,self.action_size[0],(self.worker_size,1)), (params,obs,key))
                             ,(params,obs,key))
+        '''
     
     def actions(self,obs,epsilon,befor_train):
         return np.asarray(self._actions(obs, epsilon, befor_train, self.params, self.update_key()[0]))
