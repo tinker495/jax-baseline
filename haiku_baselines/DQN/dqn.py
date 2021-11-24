@@ -96,19 +96,19 @@ class DQN(Q_Network_Family):
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = actions.astype(jnp.int32); not_dones = 1.0 - dones
         targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key)
-        loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights, key)
+        (loss,abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
-            vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
-            new_priorities = jnp.squeeze(jnp.abs(targets - vals)) + self.prioritized_replay_eps
+            new_priorities = abs_error + self.prioritized_replay_eps
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, key):
         vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
-        return jnp.mean(weights*jnp.squeeze(jnp.square(vals - targets)))
+        error = jnp.squeeze(vals - targets)
+        return jnp.mean(weights*jnp.square(error)), jnp.abs(error)
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)

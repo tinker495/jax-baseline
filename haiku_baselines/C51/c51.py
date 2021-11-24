@@ -110,21 +110,21 @@ class C51(Q_Network_Family):
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=2); not_dones = 1.0 - dones
         target_distribution = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key)
-        loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, target_distribution, weights, key)
+        (loss,abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, target_distribution, weights, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
-            vals = jnp.clip(jnp.squeeze(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)),1e-3,1.0)
-            new_priorities = jnp.sum(-target_distribution * jnp.log(vals),axis=1) + self.prioritized_replay_eps
+            new_priorities = abs_error + self.prioritized_replay_eps
         return params, target_params, opt_state, loss, jnp.mean(jnp.sum(target_distribution*self.categorial_bar,axis=1)), new_priorities
     
     def _loss(self, params, obses, actions, target_distribution, weights, key):
         distribution = jnp.clip(
                         jnp.squeeze(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1))
                         ,1e-5,1.0)
-        return jnp.mean(jnp.sum(-target_distribution * jnp.log(distribution),axis=1)* weights)
+        loss = jnp.sum(-target_distribution * jnp.log(distribution),axis=1)
+        return jnp.mean(loss* weights), loss
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)

@@ -10,7 +10,7 @@ from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import hard_update, convert_jax
 
 class QRDQN(Q_Network_Family):
-    def __init__(self, env, gamma=0.99, learning_rate=5e-4, buffer_size=50000, exploration_fraction=0.3,
+    def __init__(self, env, gamma=0.99, learning_rate=5e-4, buffer_size=50000, exploration_fraction=0.3, n_support = 200,
                  exploration_final_eps=0.02, exploration_initial_eps=1.0, train_freq=1, gradient_steps=1, batch_size=32, double_q=True,
                  dualing_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, prioritized_replay=False,
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
@@ -23,6 +23,9 @@ class QRDQN(Q_Network_Family):
                  prioritized_replay_alpha, prioritized_replay_beta0, prioritized_replay_eps, 
                  param_noise, munchausen, log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
                  full_tensorboard_log, seed)
+        
+        self.n_support = n_support
+        self.delta = 0.1
         
         if _init_setup_model:
             self.setup_model() 
@@ -53,6 +56,10 @@ class QRDQN(Q_Network_Family):
         self.optimizer = optax.adamw(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
         
+        self.quantile = jnp.reshape(jnp.arange(0.5 / self.n_support, 1.0, 1.0/self.n_support,dtype=jnp.float32),(1,1,self.n_support,1))
+        self.dual_axis = 2 if self.dualing_model else 1
+        #torch.arange(0.5 / self.n_support,1, 1 / self.n_support).to(self.device).view(1,1,self.n_support)
+        
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
         print(jax.tree_map(lambda x: x.shape, model_param))
@@ -70,11 +77,10 @@ class QRDQN(Q_Network_Family):
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         return jnp.expand_dims(jnp.argmax(
-               jnp.mean(self.get_q(params,convert_jax(obses),key),axis=2)
+               jnp.mean(self.get_q(params,convert_jax(obses),key),axis=(2,3))
                ,axis=1),axis=1)
     
     def train_step(self, steps, gradient_steps):
-        # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
             if self.prioritized_replay:
                 data = self.replay_buffer.sample(self.batch_size,self.prioritized_replay_beta0)
@@ -96,40 +102,50 @@ class QRDQN(Q_Network_Family):
 
     def _train_step(self, params, target_params, opt_state, steps, key, 
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
-        obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=2); not_dones = 1.0 - dones
+        obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=(2,3))
+        rewards = jnp.expand_dims(rewards, axis=2);  not_dones = jnp.expand_dims(1.0 - dones, axis=2)
         targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key)
-        loss, grad = jax.value_and_grad(self._loss)(params, obses, actions, targets, weights, key)
+        (loss,abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
-            vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
-            new_priorities = jnp.squeeze(jnp.abs(targets - vals)) + self.prioritized_replay_eps
+            new_priorities = abs_error + self.prioritized_replay_eps
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, key):
-        vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
-        return jnp.mean(weights*jnp.squeeze(jnp.square(vals - targets)))
+        vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1) # batch x support x 2 or 1
+        theta_loss_tile = jnp.tile(jnp.reshape(vals,(-1,1,self.n_support,self.dual_axis)),(1,self.n_support*self.dual_axis,1,1)) 
+        logit_valid_tile = jnp.tile(jnp.reshape(targets,(-1,self.n_support*self.dual_axis,1,1)),(1,1,self.n_support,1))
+        error = theta_loss_tile - logit_valid_tile
+        abs_x = jnp.abs(error)
+        quadratic = jnp.minimum(abs_x, self.delta)
+        linear = abs_x - quadratic
+        huber = 0.5 * quadratic**2 + self.delta * linear
+        mul = jax.lax.stop_gradient(jnp.where(error < 0, 1 - self.quantile, self.quantile))
+        loss = jnp.sum(jnp.mean(huber*mul,axis=1),axis=1)
+        return jnp.mean(weights*loss), loss
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)
         if self.double_q:
-            next_actions = jnp.expand_dims(jnp.argmax(self.get_q(params,nxtobses,key),axis=1),axis=1)
+            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,key),axis=(2,3)),axis=1),axis=(1,2,3))
         else:
-            next_actions = jnp.expand_dims(jnp.argmax(next_q,axis=1),axis=1)
+            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(next_q,axis=(2,3)),axis=1),axis=(1,2,3))
             
         if self.munchausen:
-            logsum = jax.nn.logsumexp((next_q - jnp.max(next_q,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
-            tau_log_pi_next = next_q - jnp.max(next_q, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum
-            pi_target = jax.nn.softmax(next_q/self.munchausen_entropy_tau, axis=1)
+            next_q_mean = jnp.mean(next_q,axis=(2,3))
+            logsum = jax.nn.logsumexp((next_q_mean - jnp.max(next_q_mean,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
+            tau_log_pi_next = jnp.expand_dims(next_q_mean - jnp.max(next_q_mean, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum,axis=2)
+            pi_target = jnp.expand_dims(jax.nn.softmax(next_q_mean/self.munchausen_entropy_tau, axis=1),axis=2)
             next_vals = jnp.sum(pi_target * not_dones * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next), axis=1, keepdims=True)
             
-            q_k_targets = self.get_q(target_params,obses,key)
+            q_k_targets = jnp.mean(self.get_q(target_params,obses,key),axis=(2,3))
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
             logsum = jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1, keepdims=True)
             log_pi = q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum
-            munchausen_addon = jnp.take_along_axis(log_pi,actions,axis=1)
+            munchausen_addon = jnp.take_along_axis(log_pi,jnp.squeeze(actions,axis=2),axis=1)
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
