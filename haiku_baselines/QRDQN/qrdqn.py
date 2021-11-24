@@ -145,7 +145,7 @@ class QRDQN(Q_Network_Family):
             logsum = jax.nn.logsumexp((next_q_mean - jnp.max(next_q_mean,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
             tau_log_pi_next = jnp.expand_dims(next_q_mean - jnp.max(next_q_mean, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum,axis=2)
             pi_target = jnp.expand_dims(jax.nn.softmax(next_q_mean/self.munchausen_entropy_tau, axis=1),axis=2)
-            next_vals = jnp.sum(pi_target * not_dones * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next), axis=1, keepdims=True)
+            next_vals = jnp.sum(pi_target * not_dones * (jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1),axis=1) - tau_log_pi_next), axis=1, keepdims=True)
             
             q_k_targets = jnp.mean(self.get_q(target_params,obses,key),axis=(2,3))
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
@@ -155,7 +155,7 @@ class QRDQN(Q_Network_Family):
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
-            next_vals = not_dones * jnp.take_along_axis(next_q, next_actions, axis=1)
+            next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1),axis=1)
         return jax.lax.stop_gradient((next_vals * self._gamma) + rewards)
 
     
