@@ -63,9 +63,6 @@ class Q_Network_Family(object):
         self.get_env_setup()
         self.get_memory_setup()
         
-        self._actions = jax.jit(self._actions, static_argnums=(2,))
-        
-        
     def get_env_setup(self):
         print("----------------------env------------------------")
         if isinstance(self.env,UnityEnvironment):

@@ -4,6 +4,7 @@ import gym
 
 from haiku_baselines.DQN.dqn import DQN
 from haiku_baselines.C51.c51 import C51
+from haiku_baselines.QRDQN.qrdqn import QRDQN
 from mlagents_envs.environment import UnityEnvironment,ActionTuple
 from mlagents_envs.side_channel.engine_configuration_channel import EngineConfigurationChannel
 from mlagents_envs.side_channel.environment_parameters_channel import EnvironmentParametersChannel
