@@ -5,9 +5,6 @@ import gym
 from haiku_baselines.DQN.dqn import DQN
 from haiku_baselines.C51.c51 import C51
 from haiku_baselines.QRDQN.qrdqn import QRDQN
-from mlagents_envs.environment import UnityEnvironment,ActionTuple
-from mlagents_envs.side_channel.engine_configuration_channel import EngineConfigurationChannel
-from mlagents_envs.side_channel.environment_parameters_channel import EnvironmentParametersChannel
 
 def is_minatar(str):
     spl = str.split("_")
@@ -44,6 +41,10 @@ if __name__ == "__main__":
     env_name = args.env
     cnn_mode = "normal"
     if os.path.exists(env_name):
+        from mlagents_envs.environment import UnityEnvironment
+        from mlagents_envs.side_channel.engine_configuration_channel import EngineConfigurationChannel
+        from mlagents_envs.side_channel.environment_parameters_channel import EnvironmentParametersChannel
+        
         engine_configuration_channel = EngineConfigurationChannel()
         channel = EnvironmentParametersChannel()
         engine_configuration_channel.set_configuration_parameters(time_scale=12.0,capture_frame_rate=50)
@@ -58,7 +59,13 @@ if __name__ == "__main__":
             cnn_mode = 'minimum'
             env_type = "minatar"
         else:
-            env = gym.make(env_name_)
+            from haiku_baselines.common.atari_wrappers import make_atari,wrap_deepmind,get_env_type
+            env_type, env_id = get_env_type(env_name_)
+            if env_type == 'atari':
+                env = make_atari(env_id)
+                env = wrap_deepmind(env, frame_stack=True)
+            else:
+                env = gym.make(env_name_)
             env_type = "gym"
     
     policy_kwargs = {'node': args.node,
