@@ -7,7 +7,7 @@ setup(
         'requests',
         'mlagents_envs==0.27.0',
         'gym',
-        'gym[atari]',
+        'gym[atari,accept-rom-license]',
         'box2d',
         'box2d-py',
         'dm-haiku',
