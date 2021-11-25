@@ -35,6 +35,20 @@ class Model(hk.Module):
                     jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
                 ]
                 )(feature)
-            v = self.layer(1)(q_net)
-            a = self.layer(self.action_size[0])(q_net)
+            v = hk.Sequential(
+                [
+                    jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
+                ] + 
+                [
+                    self.layer(1)
+                ]
+                )(feature)
+            a = hk.Sequential(
+                [
+                    jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
+                ] + 
+                [
+                    self.layer(self.action_size[0])
+                ]
+                )(feature)
             return v + (a - jnp.mean(a, axis=1, keepdims=True))  

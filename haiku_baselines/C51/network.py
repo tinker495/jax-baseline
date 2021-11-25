@@ -21,23 +21,34 @@ class Model(hk.Module):
         
     def __call__(self,feature: jnp.ndarray) -> jnp.ndarray:
         if not self.dualing:
-            q_net = hk.Sequential(
+            q = hk.Sequential(
                 [
                     jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
                 ] + 
                 [
-                    self.layer(self.action_size[0]*self.categorial_bar_n)
+                    self.layer(self.action_size[0]*self.categorial_bar_n),
+                    hk.Reshape((self.action_size[0],self.categorial_bar_n))
                 ]
                 )(feature)
-            q = hk.Reshape((self.action_size[0],self.categorial_bar_n))(q_net)
             return jax.nn.softmax(q,axis=2)
         else:
-            q_net = hk.Sequential(
+            v = hk.Sequential(
                 [
                     jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
+                ] + 
+                [
+                    self.layer(self.categorial_bar_n),
+                    hk.Reshape((1,self.categorial_bar_n))
                 ]
                 )(feature)
-            v = hk.Reshape((1,self.categorial_bar_n))(self.layer(self.categorial_bar_n)(q_net))
-            a = hk.Reshape((self.action_size[0],self.categorial_bar_n))(self.layer(self.action_size[0]*self.categorial_bar_n)(q_net))
+            a = hk.Sequential(
+                [
+                    jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
+                ] + 
+                [
+                    self.layer(self.action_size[0]*self.categorial_bar_n),
+                    hk.Reshape((self.action_size[0],self.categorial_bar_n))
+                ]
+                )(feature)
             q = v + (a - jnp.mean(a, axis=1, keepdims=True))
             return jax.nn.softmax(q,axis=2) 
