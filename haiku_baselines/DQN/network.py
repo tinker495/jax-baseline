@@ -30,11 +30,6 @@ class Model(hk.Module):
                 )(feature)
             return q_net
         else:
-            q_net = hk.Sequential(
-                [
-                    jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
-                ]
-                )(feature)
             v = hk.Sequential(
                 [
                     jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
