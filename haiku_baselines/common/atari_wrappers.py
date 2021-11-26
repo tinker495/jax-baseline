@@ -287,11 +287,6 @@ def wrap_deepmind(env, episode_life=True, clip_rewards=True, frame_stack=False, 
 
 def get_env_type(env_id):
     _game_envs = defaultdict(set)
-    for env in gym.envs.registry.all():
-        # TODO: solve this with regexes
-        env_type = env.entry_point.split(':')[0].split('.')[-1]
-        _game_envs[env_type].add(env.id)
-
     # Re-parse the gym registry, since we could have new envs since last time.
     for env in gym.envs.registry.all():
         env_type = env.entry_point.split(':')[0].split('.')[-1]
