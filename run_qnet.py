@@ -20,7 +20,7 @@ if __name__ == "__main__":
     parser.add_argument('--gamma', type=float, default=0.99, help='gamma')
     parser.add_argument('--target_update', type=int, default=2000, help='target update intervals')
     parser.add_argument('--batch', type=int, default=64, help='batch size')
-    parser.add_argument('--buffer_size', type=float, default=50000, help='buffer_size')
+    parser.add_argument('--buffer_size', type=float, default=100000, help='buffer_size')
     parser.add_argument('--double', action='store_true')
     parser.add_argument('--dualing',action='store_true')
     parser.add_argument('--per', action='store_true')
