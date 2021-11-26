@@ -103,7 +103,7 @@ class QRDQN(Q_Network_Family):
     def _train_step(self, params, target_params, opt_state, steps, key, 
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=(2,3))
-        rewards = jnp.expand_dims(rewards, axis=2);  not_dones = jnp.expand_dims(1.0 - dones, axis=2)
+        not_dones = jnp.expand_dims(1.0 - dones, axis=2)
         targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key)
         (loss,abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
@@ -115,16 +115,16 @@ class QRDQN(Q_Network_Family):
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, key):
-        vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1) # batch x support x 2 or 1
-        theta_loss_tile = jnp.tile(jnp.reshape(vals,(-1,1,self.n_support,self.dual_axis)),(1,self.n_support*self.dual_axis,1,1)) 
-        logit_valid_tile = jnp.tile(jnp.reshape(targets,(-1,self.n_support*self.dual_axis,1,1)),(1,1,self.n_support,self.dual_axis))
+        vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)  # batch x 1 x support x dual_axis
+        theta_loss_tile = vals
+        logit_valid_tile = jnp.expand_dims(targets,axis=(2,3))
         error = theta_loss_tile - logit_valid_tile
         abs_x = jnp.abs(error)
         quadratic = jnp.minimum(abs_x, self.delta)
         linear = abs_x - quadratic
         huber = 0.5 * quadratic**2 + self.delta * linear
         mul = jax.lax.stop_gradient(jnp.where(error < 0, 1 - self.quantile, self.quantile))
-        loss = jnp.sum(jnp.mean(huber*mul,axis=1),axis=(1,2))
+        loss = jnp.mean(jnp.mean(huber*mul,axis=1),axis=(1,2))
         return jnp.mean(weights*loss), loss
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
@@ -149,8 +149,9 @@ class QRDQN(Q_Network_Family):
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
-            next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1),axis=1)
-        return jax.lax.stop_gradient((next_vals * self._gamma) + rewards)
+            next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1),axis=1) # batch x support x dual_axis
+        next_vals = jnp.reshape(next_vals, (-1,self.n_support*self.dual_axis))
+        return jax.lax.stop_gradient((next_vals * self._gamma) + rewards) # batch x (support x dual_axis)
 
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="QRDQN",
