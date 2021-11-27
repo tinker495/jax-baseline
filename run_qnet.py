@@ -37,6 +37,7 @@ if __name__ == "__main__":
     parser.add_argument('--CVaR', type=float, default=1.0, help='IQN risk avoiding factor')
     parser.add_argument('--node', type=int,default=256, help='network node number')
     parser.add_argument('--hidden_n', type=int,default=2, help='hidden layer number')
+    parser.add_argument('--final_eps', type=float,default=0.1, help='final epsilon')
     args = parser.parse_args() 
     env_name = args.env
     cnn_mode = "normal"
@@ -74,18 +75,18 @@ if __name__ == "__main__":
         
     if args.algo == "DQN":
         agent = DQN(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
-                    prioritized_replay = args.per, double_q = args.double, dualing_model = args.dualing,
+                    prioritized_replay = args.per, double_q = args.double, dualing_model = args.dualing, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)
     elif args.algo == "C51":
         agent = C51(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
-                    prioritized_replay = args.per, double_q = args.double, dualing_model = args.dualing,
+                    prioritized_replay = args.per, double_q = args.double, dualing_model = args.dualing, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
                     categorial_max = args.max, categorial_min = args.min,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)
     elif args.algo == "QRDQN":
         agent = QRDQN(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
-                    prioritized_replay = args.per, double_q = args.double, dualing_model = args.dualing, 
+                    prioritized_replay = args.per, double_q = args.double, dualing_model = args.dualing, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
                     n_support = args.n_support,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)
