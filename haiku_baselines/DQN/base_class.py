@@ -269,7 +269,7 @@ class Q_Network_Family(object):
                 
     def learn_minatar(self, pbar, callback=None, log_interval=100):
         self.env.reset()
-        state = [np.expand_dims(self.env.state(), axis=0)]
+        state = convert_states([np.expand_dims(self.env.state(), axis=0)])
         self.scores = np.zeros([self.worker_size])
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
@@ -280,7 +280,7 @@ class Q_Network_Family(object):
             update_eps = self.exploration.value(steps)
             actions = self.actions(state,update_eps,befor_train)
             reward, terminal = self.env.act(actions[0][0])
-            next_state = [np.expand_dims(self.env.state(), axis=0)]
+            next_state = convert_states([np.expand_dims(self.env.state(), axis=0)])
             self.replay_buffer.add(state, actions[0], reward, next_state, terminal, terminal)
             self.scores[0] += reward
             state = next_state
@@ -293,7 +293,7 @@ class Q_Network_Family(object):
                 self.scores[0] = 0
                 self.eplen[0] = 0
                 self.env.reset()
-                state = [np.expand_dims(self.env.state(), axis=0)]
+                state = convert_states([np.expand_dims(self.env.state(), axis=0)])
                 
             if steps > self.learning_starts and steps % self.train_freq == 0:
                 befor_train = False
