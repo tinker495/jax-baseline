@@ -293,7 +293,7 @@ class Q_Network_Family(object):
                 self.scores[0] = 0
                 self.eplen[0] = 0
                 self.env.reset()
-                state = convert_states([np.expand_dims(self.env.state(), axis=0)])
+                state = [np.expand_dims(self.env.state(), axis=0)]
                 
             if steps > self.learning_starts and steps % self.train_freq == 0:
                 befor_train = False
