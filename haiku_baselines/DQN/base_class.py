@@ -228,7 +228,7 @@ class Q_Network_Family(object):
                 self.lossque.append(loss)
         
     def learn_gym(self, pbar, callback=None, log_interval=100):
-        state = convert_states([np.expand_dims(self.env.reset(),axis=0)])
+        state = [np.expand_dims(self.env.reset(),axis=0)]
         self.scores = np.zeros([self.worker_size])
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
@@ -239,7 +239,7 @@ class Q_Network_Family(object):
             update_eps = self.exploration.value(steps)
             actions = self.actions(state,update_eps,befor_train)
             next_state, reward, terminal, info = self.env.step(actions[0][0])
-            next_state = convert_states([np.expand_dims(next_state,axis=0)])
+            next_state = [np.expand_dims(next_state,axis=0)]
             done = terminal
             if "TimeLimit.truncated" in info:
                 done = not info["TimeLimit.truncated"]
@@ -254,7 +254,7 @@ class Q_Network_Family(object):
                     self.summary.add_scalar("env/time over",float(not done),steps)
                 self.scores[0] = 0
                 self.eplen[0] = 0
-                state = convert_states([np.expand_dims(self.env.reset(),axis=0)])
+                state = [np.expand_dims(self.env.reset(),axis=0)]
                 
             if steps > self.learning_starts and steps % self.train_freq == 0:
                 befor_train = False
@@ -269,7 +269,7 @@ class Q_Network_Family(object):
                 
     def learn_minatar(self, pbar, callback=None, log_interval=100):
         self.env.reset()
-        state = convert_states([np.expand_dims(self.env.state(), axis=0)])
+        state = [np.expand_dims(self.env.state(), axis=0)]
         self.scores = np.zeros([self.worker_size])
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
@@ -280,7 +280,7 @@ class Q_Network_Family(object):
             update_eps = self.exploration.value(steps)
             actions = self.actions(state,update_eps,befor_train)
             reward, terminal = self.env.act(actions[0][0])
-            next_state = convert_states([np.expand_dims(self.env.state(), axis=0)])
+            next_state = [np.expand_dims(self.env.state(), axis=0)]
             self.replay_buffer.add(state, actions[0], reward, next_state, terminal, terminal)
             self.scores[0] += reward
             state = next_state
