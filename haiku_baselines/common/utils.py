@@ -23,4 +23,4 @@ def convert_states(obs : List):
 
 @jax.jit
 def convert_jax(obs : List):
-  return [jax.device_get(o).astype(jnp.float32)/255.0 if len(o.shape) >= 4 else jax.device_get(o) for o in obs]
+  return [jax.device_get(o).astype(jnp.float32)*(1.0/255.0) if len(o.shape) >= 4 else jax.device_get(o) for o in obs]
