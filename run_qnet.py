@@ -60,11 +60,11 @@ if __name__ == "__main__":
             cnn_mode = 'minimum'
             env_type = "minatar"
         else:
-            from haiku_baselines.common.atari_wrappers import make_atari,wrap_deepmind,get_env_type
+            from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
             env_type, env_id = get_env_type(env_name_)
             if env_type == 'atari':
-                env = make_atari(env_name_)
-                env = wrap_deepmind(env, frame_stack=True)
+                env = make_wrap_atari(env_name_)
+                #env = wrap_deepmind(env, frame_stack=True)
             else:
                 env = gym.make(env_name_)
             env_type = "gym"
