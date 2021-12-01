@@ -123,7 +123,7 @@ class QRDQN(Q_Network_Family):
                 (jnp.abs(error) > self.delta).astype(jnp.float32) *
                 self.delta * (jnp.abs(error) - 0.5 * self.delta))
         mul = jnp.abs(self.quantile - (error < 0).astype(jnp.float32))
-        loss = jnp.sum(jnp.mean(huber*mul,axis=2),axis=1)
+        loss = jnp.sum(jnp.mean(huber*mul,axis=1),axis=1)
         return jnp.mean(weights*loss), loss
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
