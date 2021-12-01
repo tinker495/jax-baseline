@@ -60,7 +60,6 @@ class QRDQN(Q_Network_Family):
         if self.dualing_model:
             self.quantile = jnp.tile(self.quantile,(1,1,2))
         self.quantile = jax.device_put(self.quantile)
-        #torch.arange(0.5 / self.n_support,1, 1 / self.n_support).to(self.device).view(1,1,self.n_support)
         
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
