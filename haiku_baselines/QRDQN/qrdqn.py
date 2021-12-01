@@ -56,8 +56,10 @@ class QRDQN(Q_Network_Family):
         self.optimizer = optax.adamw(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
         
-        self.quantile = jnp.reshape(jnp.arange(0.5 / self.n_support, 1.0, 1.0/self.n_support,dtype=jnp.float32),(1,1,self.n_support,1))
-        self.dual_axis = 2 if self.dualing_model else 1
+        self.quantile = jnp.reshape(jnp.arange(0.5 / self.n_support, 1.0, 1.0/self.n_support,dtype=jnp.float32),(1,1,self.n_support))
+        if self.dualing_model:
+            self.quantile = jnp.tile(self.quantile,(1,1,2))
+        self.quantile = jax.device_put(self.quantile)
         #torch.arange(0.5 / self.n_support,1, 1 / self.n_support).to(self.device).view(1,1,self.n_support)
         
         print("----------------------model----------------------")
@@ -114,9 +116,8 @@ class QRDQN(Q_Network_Family):
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, key):
-        vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)  # batch x 1 x (support x dual_axis)
-        theta_loss_tile = vals
-        logit_valid_tile = jnp.expand_dims(targets,axis=(2,3))
+        theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)  # batch x 1 x (support x dual_axis)
+        logit_valid_tile = jnp.expand_dims(targets,axis=2)
         error = theta_loss_tile - logit_valid_tile
         abs_x = jnp.abs(error)
         quadratic = jnp.minimum(abs_x, self.delta)
@@ -136,9 +137,9 @@ class QRDQN(Q_Network_Family):
         if self.munchausen:
             next_q_mean = jnp.mean(next_q,axis=2)
             logsum = jax.nn.logsumexp((next_q_mean - jnp.max(next_q_mean,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
-            tau_log_pi_next = next_q_mean - jnp.max(next_q_mean, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum
-            pi_target = jax.nn.softmax(next_q_mean/self.munchausen_entropy_tau, axis=1)
-            next_vals = jnp.sum((pi_target * (jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1)) - tau_log_pi_next)) * not_dones, axis=1, keepdims=True)
+            tau_log_pi_next = jnp.expand_dims(next_q_mean - jnp.max(next_q_mean, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum,axis=2)
+            pi_target = jnp.expand_dims(jax.nn.softmax(next_q_mean/self.munchausen_entropy_tau, axis=1),axis=2)
+            next_vals = jnp.sum((pi_target * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next)), axis=1) * not_dones
             
             q_k_targets = jnp.mean(self.get_q(target_params,obses,key),axis=2)
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
