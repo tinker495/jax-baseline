@@ -148,7 +148,7 @@ class QRDQN(Q_Network_Family):
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
-            next_vals = not_dones * jnp.take_along_axis(next_q, next_actions, axis=1) # batch x (support x dual_axis)
+            next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1),axis=1) # batch x (support x dual_axis)
         return jax.lax.stop_gradient((next_vals * self._gamma) + rewards) # batch x (support x dual_axis)
 
     
