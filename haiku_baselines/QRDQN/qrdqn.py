@@ -78,7 +78,7 @@ class QRDQN(Q_Network_Family):
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         return jnp.expand_dims(jnp.argmax(
-               jnp.mean(self.get_q(params,convert_jax(obses),key),axis=(2,3))
+               jnp.mean(self.get_q(params,convert_jax(obses),key),axis=2)
                ,axis=1),axis=1)
     
     def train_step(self, steps, gradient_steps):
