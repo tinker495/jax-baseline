@@ -116,8 +116,8 @@ class QRDQN(Q_Network_Family):
     
     def _loss(self, params, obses, actions, targets, weights, key):
         theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)  # batch x 1 x (support x dual_axis)
-        logit_valid_tile = jnp.expand_dims(targets,axis=2)
-        error = theta_loss_tile - logit_valid_tile
+        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x (support x dual_axis) x 1
+        error = theta_loss_tile - logit_valid_tile                                              # batch x (support x dual_axis) x (support x dual_axis)
         abs_x = jnp.abs(error)
         quadratic = jnp.minimum(abs_x, self.delta)
         linear = abs_x - quadratic
