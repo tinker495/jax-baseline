@@ -123,7 +123,7 @@ class QRDQN(Q_Network_Family):
         linear = abs_x - quadratic
         huber = 0.5 * quadratic**2 + self.delta * linear
         mul = jax.lax.stop_gradient(jnp.where(error < 0, 1 - self.quantile, self.quantile))
-        loss = jnp.mean(jnp.mean(huber*mul,axis=1),axis=(1,2))
+        loss = jnp.sum(jnp.mean(huber*mul,axis=1),axis=1)
         return jnp.mean(weights*loss), loss
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
