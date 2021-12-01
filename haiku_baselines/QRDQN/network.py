@@ -27,7 +27,7 @@ class Model(hk.Module):
                 ] + 
                 [
                     self.layer(self.action_size[0]*self.support_n),
-                    hk.Reshape((self.action_size[0],self.support_n,1))
+                    hk.Reshape((self.action_size[0],self.support_n))
                 ]
                 )(feature)
             return q_net
@@ -39,18 +39,18 @@ class Model(hk.Module):
                 ] +
                 [
                     self.layer(self.support_n),
-                    hk.Reshape((1,self.support_n,1))
+                    hk.Reshape((1,self.support_n))
                 ]
                 )(feature),
-                (1,self.action_size[0],1,1))
+                (1,self.action_size[0],1))
             a = hk.Sequential(
                 [
                     jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
                 ] +
                 [
                     self.layer(self.action_size[0]*self.support_n),
-                    hk.Reshape((self.action_size[0],self.support_n,1))
+                    hk.Reshape((self.action_size[0],self.support_n))
                 ]
                 )(feature)
-            q = jnp.concatenate([v,a],axis=3)
+            q = jnp.concatenate([v,a],axis=2)
             return q

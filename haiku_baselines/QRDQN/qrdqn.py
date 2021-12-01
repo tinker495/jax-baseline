@@ -102,8 +102,7 @@ class QRDQN(Q_Network_Family):
 
     def _train_step(self, params, target_params, opt_state, steps, key, 
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
-        obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=(2,3))
-        not_dones = jnp.expand_dims(1.0 - dones, axis=2)
+        obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=2); not_dones = 1.0 - dones
         targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key)
         (loss,abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params)
@@ -115,7 +114,7 @@ class QRDQN(Q_Network_Family):
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, key):
-        vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)  # batch x 1 x support x dual_axis
+        vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)  # batch x 1 x (support x dual_axis)
         theta_loss_tile = vals
         logit_valid_tile = jnp.expand_dims(targets,axis=(2,3))
         error = theta_loss_tile - logit_valid_tile
@@ -130,27 +129,26 @@ class QRDQN(Q_Network_Family):
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)
         if self.double_q:
-            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,key),axis=(2,3)),axis=1),axis=(1,2,3))
+            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,key),axis=2),axis=1),axis=(1,2))
         else:
-            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(next_q,axis=(2,3)),axis=1),axis=(1,2,3))
+            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(next_q,axis=2),axis=1),axis=(1,2))
             
         if self.munchausen:
-            next_q_mean = jnp.mean(next_q,axis=(2,3))
+            next_q_mean = jnp.mean(next_q,axis=2)
             logsum = jax.nn.logsumexp((next_q_mean - jnp.max(next_q_mean,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
-            tau_log_pi_next = jnp.expand_dims(next_q_mean - jnp.max(next_q_mean, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum,axis=2)
-            pi_target = jnp.expand_dims(jax.nn.softmax(next_q_mean/self.munchausen_entropy_tau, axis=1),axis=2)
-            next_vals = jnp.sum(pi_target * not_dones * (jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1),axis=1) - tau_log_pi_next), axis=1, keepdims=True)
+            tau_log_pi_next = next_q_mean - jnp.max(next_q_mean, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum
+            pi_target = jax.nn.softmax(next_q_mean/self.munchausen_entropy_tau, axis=1)
+            next_vals = jnp.sum((pi_target * (jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1)) - tau_log_pi_next)) * not_dones, axis=1, keepdims=True)
             
-            q_k_targets = jnp.mean(self.get_q(target_params,obses,key),axis=(2,3))
+            q_k_targets = jnp.mean(self.get_q(target_params,obses,key),axis=2)
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
             logsum = jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1, keepdims=True)
             log_pi = q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum
-            munchausen_addon = jnp.take_along_axis(log_pi,jnp.squeeze(actions,axis=2),axis=1)
+            munchausen_addon = jnp.take_along_axis(log_pi,actions,axis=1)
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
-            next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1),axis=1) # batch x support x dual_axis
-        next_vals = jnp.reshape(next_vals, (-1,self.n_support*self.dual_axis))
+            next_vals = not_dones * jnp.take_along_axis(next_q, next_actions, axis=1) # batch x (support x dual_axis)
         return jax.lax.stop_gradient((next_vals * self._gamma) + rewards) # batch x (support x dual_axis)
 
     

@@ -143,7 +143,7 @@ class C51(Q_Network_Family):
             logsum = jax.nn.logsumexp((next_q_mean - jnp.max(next_q_mean,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
             tau_log_pi_next = next_q_mean - jnp.max(next_q_mean, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum
             pi_target = jax.nn.softmax(next_q_mean/self.munchausen_entropy_tau, axis=1)
-            next_categorial = not_dones * (self.categorial_bar - jnp.sum(pi_target * tau_log_pi_next, axis=1, keepdims=True))
+            next_categorial = (self.categorial_bar - jnp.sum(pi_target * tau_log_pi_next, axis=1, keepdims=True)) * not_dones
             
             q_k_targets = jnp.sum(self.get_q(target_params,obses,key)*self.categorial_bar,axis=2)
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
