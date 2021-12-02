@@ -17,7 +17,7 @@ from mlagents_envs.environment import UnityEnvironment, ActionTuple
 import minatar
 
 class Q_Network_Family(object):
-    def __init__(self, env, gamma=0.99, learning_rate=5e-4, buffer_size=50000, exploration_fraction=0.3,
+    def __init__(self, env, gamma=0.99, learning_rate=5e-5, buffer_size=50000, exploration_fraction=0.3,
                  exploration_final_eps=0.02, exploration_initial_eps=1.0, train_freq=1, gradient_steps=1, batch_size=32, double_q=True,
                  dualing_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, prioritized_replay=False,
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
