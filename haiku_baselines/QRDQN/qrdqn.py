@@ -51,10 +51,10 @@ class QRDQN(Q_Network_Family):
         self.optimizer = optax.adam(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
         
-        self.quantile = jnp.reshape(jnp.arange(0.5 / self.n_support, 1.0, 1.0/self.n_support,dtype=jnp.float32),(1,1,self.n_support))
+        self.quantile = jnp.arange(0.5 / self.n_support, 1.0, 1.0/self.n_support,dtype=jnp.float32)
         if self.dualing_model:
-            self.quantile = jnp.tile(self.quantile,(1,1,2))
-        self.quantile = jax.device_put(self.quantile)
+            self.quantile = jnp.tile(self.quantile,(2))
+        self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))
         
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
