@@ -214,7 +214,7 @@ class FrameStack(gym.Wrapper):
 
     def _get_ob(self):
         assert len(self.frames) == self.k
-        return np.array(np.concatenate(self.frames, axis=-1), copy=True)
+        return np.array(np.concatenate(self.frames, axis=-1)).astype(np.uint8)
 
 class ScaledFloatFrame(gym.ObservationWrapper):
     def __init__(self, env):
@@ -290,7 +290,7 @@ def wrap_deepmind(env, episode_life=True, clip_rewards=False, frame_stack=False,
 def make_wrap_atari(env_id='Breakout-v0', clip_rewards=False):
 	#env = gym.make(env_id)
 	env = make_atari(env_id)
-	return wrap_deepmind(env, clip_rewards=clip_rewards, frame_stack=True, scale=True)
+	return wrap_deepmind(env, clip_rewards=clip_rewards, frame_stack=True)
 
 def get_env_type(env_id):
     _game_envs = defaultdict(set)
