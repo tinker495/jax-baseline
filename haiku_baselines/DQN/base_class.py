@@ -181,7 +181,7 @@ class Q_Network_Family(object):
             self.env.set_actions(self.group_name, action_tuple)
             self.env.step()
             
-            if steps > self.learning_starts and steps % self.train_freq == 0:
+            if steps > self.learning_starts and steps % self.train_freq == 0: #train in step the environments
                 befor_train = False
                 loss = self.train_step(steps,self.gradient_steps)
                 self.lossque.append(loss)
