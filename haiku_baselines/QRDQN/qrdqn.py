@@ -36,7 +36,6 @@ class QRDQN(Q_Network_Family):
         return keys[1:]
             
     def setup_model(self):
-        keys = self.update_key(2)
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
         if 'cnn_mode' in self.policy_kwargs.keys():
             cnn_mode = self.policy_kwargs['cnn_mode']
@@ -45,9 +44,9 @@ class QRDQN(Q_Network_Family):
         self.model = hk.transform(lambda x: Model(self.action_size,
                            dualing=self.dualing_model,noisy=self.param_noise,support_n=self.n_support,
                            **self.policy_kwargs)(x))
-        pre_param = self.preproc.init(keys[0],
+        pre_param = self.preproc.init(hk.next_rng_key(),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
-        model_param = self.model.init(keys[1],
+        model_param = self.model.init(hk.next_rng_key(),
                             self.preproc.apply(pre_param, 
                             None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]))
         self.params = hk.data_structures.merge(pre_param, model_param)
@@ -64,7 +63,7 @@ class QRDQN(Q_Network_Family):
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
         print(jax.tree_map(lambda x: x.shape, model_param))
-        print("loss : mse")
+        print("loss : quaile_huber_loss")
         print("-------------------------------------------------")
 
         self.get_q = jax.jit(self.get_q)
@@ -90,7 +89,7 @@ class QRDQN(Q_Network_Family):
             
             self.params, self.target_params, self.opt_state, loss, t_mean, new_priorities = \
                 self._train_step(self.params, self.target_params, self.opt_state, steps, 
-                                 self.update_key()[0] if self.param_noise else None,**data)
+                                 hk.next_rng_key() if self.param_noise else None,**data)
             
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data['indexes'], new_priorities)

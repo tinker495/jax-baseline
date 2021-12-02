@@ -33,7 +33,6 @@ class DQN(Q_Network_Family):
         return keys[1:]
             
     def setup_model(self):
-        keys = self.update_key(2)
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
         if 'cnn_mode' in self.policy_kwargs.keys():
             cnn_mode = self.policy_kwargs['cnn_mode']
@@ -42,9 +41,9 @@ class DQN(Q_Network_Family):
         self.model = hk.transform(lambda x: Model(self.action_size,
                            dualing=self.dualing_model,noisy=self.param_noise,
                            **self.policy_kwargs)(x))
-        pre_param = self.preproc.init(keys[0],
+        pre_param = self.preproc.init(hk.next_rng_key(),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
-        model_param = self.model.init(keys[1],
+        model_param = self.model.init(hk.next_rng_key(),
                             self.preproc.apply(pre_param, 
                             None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]))
         self.params = hk.data_structures.merge(pre_param, model_param)
