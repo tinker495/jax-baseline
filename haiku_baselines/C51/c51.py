@@ -50,7 +50,7 @@ class C51(Q_Network_Family):
         self.params = hk.data_structures.merge(pre_param, model_param)
         self.target_params = self.params
         
-        self.optimizer = optax.adamw(self.learning_rate)
+        self.optimizer = optax.adam(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
         
         self.categorial_bar = jnp.expand_dims(jnp.linspace(self.categorial_min, self.categorial_max, self.categorial_bar_n),axis=0)
@@ -108,7 +108,7 @@ class C51(Q_Network_Family):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=2); not_dones = 1.0 - dones
         target_distribution = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key)
         (loss,abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, target_distribution, weights, key)
-        updates, opt_state = self.optimizer.update(grad, opt_state, params)
+        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
