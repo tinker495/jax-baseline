@@ -62,6 +62,7 @@ class Q_Network_Family(object):
         
         self.get_env_setup()
         self.get_memory_setup()
+        self.update_key = jax.jit(self.update_key)
         
     def get_env_setup(self):
         print("----------------------env------------------------")
@@ -111,8 +112,11 @@ class Q_Network_Family(object):
     def setup_model(self):
         pass
     
-    def update_key(self,num=1):
-        pass
+    def update_key(self,key,num=1):                
+        if self.param_noise:
+            return jax.random.split(self.key, num+1)
+        else:
+            return (key, None)
     
     def _train_step(self, steps):
         pass
@@ -122,7 +126,8 @@ class Q_Network_Family(object):
     
     def actions(self,obs,epsilon,befor_train):
         if (epsilon <= np.random.uniform(0,1) or self.param_noise) and not befor_train:
-            actions = np.asarray(self._get_actions(self.params,obs,hk.next_rng_key() if self.param_noise else None))
+            self.key, subkey = self.update_key(self.key)
+            actions = np.asarray(self._get_actions(self.params,obs,subkey))
         else:
             actions = np.random.choice(self.action_size[0], [self.worker_size,1])
         return actions
