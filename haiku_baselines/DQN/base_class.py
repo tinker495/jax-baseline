@@ -181,6 +181,11 @@ class Q_Network_Family(object):
             self.env.set_actions(self.group_name, action_tuple)
             self.env.step()
             
+            if steps > self.learning_starts and steps % self.train_freq == 0:
+                befor_train = False
+                loss = self.train_step(steps,self.gradient_steps)
+                self.lossque.append(loss)
+            
             dec, term = self.env.get_steps(self.group_name)
             term_ids = list(term.agent_id)
             term_obses = convert_states(term.obs)
@@ -226,11 +231,6 @@ class Q_Network_Family(object):
                                     np.mean(self.scoreque),update_eps,np.mean(self.lossque)
                                     )
                                     )
-            
-            if steps > self.learning_starts and steps % self.train_freq == 0:
-                befor_train = False
-                loss = self.train_step(steps,self.gradient_steps)
-                self.lossque.append(loss)
         
     def learn_gym(self, pbar, callback=None, log_interval=100):
         state = [np.expand_dims(self.env.reset(),axis=0)]
