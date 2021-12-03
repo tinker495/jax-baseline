@@ -27,7 +27,7 @@ class IQN(Q_Network_Family):
         self.n_support = n_support
         self.delta = delta
         
-        self._sample_quantiles = jax.jit(self._sample_quantiles)
+        #self._sample_quantiles = jax.jit(self._sample_quantiles)
         
         if _init_setup_model:
             self.setup_model() 
@@ -75,7 +75,7 @@ class IQN(Q_Network_Family):
                jnp.mean(self.get_q(params,convert_jax(obses),key, tau),axis=2)
                ,axis=1),axis=1)
         
-    def update_key(self,key,num=1):                
+    def update_key(self,key,num=1):
         return jax.random.split(key, num+1)
         
     def _sample_quantiles(self,key,batch_size,quantile_size):
