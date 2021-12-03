@@ -50,7 +50,7 @@ class C51(Q_Network_Family):
         self.params = hk.data_structures.merge(pre_param, model_param)
         self.target_params = self.params
         
-        self.optimizer = optax.adam(self.learning_rate)
+        self.optimizer = optax.rmsprop(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
         
         self.categorial_bar = jnp.expand_dims(jnp.linspace(self.categorial_min, self.categorial_max, self.categorial_bar_n),axis=0)
