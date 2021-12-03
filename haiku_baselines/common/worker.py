@@ -45,7 +45,7 @@ class gymMultiworker(Multiworker):
         rewards = np.stack(rewards,axis=0)
         dones = np.stack(dones,axis=0)
         terminals = np.stack(terminals,axis=0)
-        if len(end_states) > 0:
+        if len(end_states):
             end_states = np.stack(end_states,axis=0)
             end_idx = np.stack(end_idx,axis=0)
         else:
@@ -66,6 +66,7 @@ class gymRayworker:
     def get_reset(self):
         return self.env.reset(),None,0,False,False
     
+    @property
     def get_info(self):
         return {'observation_space' : self.env.observation_space, 
                 'action_space' : self.env.action_space,
