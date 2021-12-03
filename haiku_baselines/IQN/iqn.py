@@ -71,7 +71,7 @@ class IQN(Q_Network_Family):
         key, subkey = jax.random.split(key)
         tau = jax.random.uniform(subkey,(self.worker_size,self.n_support))
         return jnp.expand_dims(jnp.argmax(
-               jnp.mean(self.get_q(params,convert_jax(obses),key, tau),axis=2)
+               jnp.mean(self.get_q(params,convert_jax(obses),tau,key),axis=2)
                ,axis=1),axis=1)
         
     def update_key(self,key,num=1):
