@@ -9,8 +9,6 @@ import ray
 
 from abc import ABC
 
-ray.init()
-
 class Multiworker(ABC):
     def __init__(self,env_id, worker_num = 8):
         pass
@@ -23,6 +21,7 @@ class Multiworker(ABC):
 
 class gymMultiworker(Multiworker):
     def __init__(self,env_id, worker_num = 8):
+        ray.init()
         self.env_id = env_id
         self.worker_num = worker_num
         self.workers = [gymRayworker.remote(env_id) for _ in range(worker_num)]
