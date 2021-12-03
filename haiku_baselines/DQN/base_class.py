@@ -89,15 +89,6 @@ class Q_Network_Family(object):
             self.worker_size = 1
             self.env_type = "gym"
             
-        elif isinstance(self.env,minatar.Environment):
-            print("minatar environmet")
-            action_space = self.env.num_actions()
-            observation_space = self.env.state_shape()
-            self.observation_space = [observation_space]
-            self.action_size = [action_space]
-            self.worker_size = 1
-            self.env_type = "minatar"
-            
         elif isinstance(self.env,gymMultiworker):
             print("gymMultiworker")
             env_info = self.env.env_info
@@ -165,8 +156,6 @@ class Q_Network_Family(object):
                 self.learn_unity(pbar, callback, log_interval)
             if self.env_type == "gym":
                 self.learn_gym(pbar, callback, log_interval)
-            if self.env_type == "minatar":
-                self.learn_minatar(pbar, callback, log_interval)
             if self.env_type == "gymMultiworker":
                 self.learn_gymMultiworker(pbar, callback, log_interval)
 
@@ -314,45 +303,6 @@ class Q_Network_Family(object):
             self.replay_buffer.add([state], actions, rewards, [nxtstates], dones, terminals)
             self.scores += rewards
             state = next_states
-            
-            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
-                pbar.set_description("score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(
-                                    np.mean(self.scoreque),update_eps,np.mean(self.lossque)
-                                    )
-                                    )
-                
-    def learn_minatar(self, pbar, callback=None, log_interval=100):
-        self.env.reset()
-        state = convert_states([np.expand_dims(self.env.state(), axis=0)])
-        self.scores = np.zeros([self.worker_size])
-        self.eplen = np.zeros([self.worker_size])
-        self.scoreque = deque(maxlen=10)
-        self.lossque = deque(maxlen=10)
-        befor_train = True
-        for steps in pbar:
-            self.eplen += 1
-            update_eps = self.exploration.value(steps)
-            actions = self.actions(state,update_eps,befor_train)
-            reward, terminal = self.env.act(actions[0][0])
-            next_state = convert_states([np.expand_dims(self.env.state(), axis=0)])
-            self.replay_buffer.add(state, actions[0], reward, next_state, terminal, terminal)
-            self.scores[0] += reward
-            state = next_state
-            if terminal:
-                self.scoreque.append(self.scores[0])
-                if self.summary:
-                    self.summary.add_scalar("env/episode_reward", self.scores[0], steps)
-                    self.summary.add_scalar("env/episode len",self.eplen[0],steps)
-                    self.summary.add_scalar("env/time over",0,steps)
-                self.scores[0] = 0
-                self.eplen[0] = 0
-                self.env.reset()
-                state = convert_states([np.expand_dims(self.env.state(), axis=0)])
-                
-            if steps > self.learning_starts and steps % self.train_freq == 0:
-                befor_train = False
-                loss = self.train_step(steps,self.gradient_steps)
-                self.lossque.append(loss)
             
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description("score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(

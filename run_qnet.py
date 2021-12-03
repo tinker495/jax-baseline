@@ -7,13 +7,6 @@ from haiku_baselines.C51.c51 import C51
 from haiku_baselines.QRDQN.qrdqn import QRDQN
 from haiku_baselines.IQN.iqn import IQN
 
-def is_minatar(str):
-    spl = str.split("_")
-    if (spl[0] == "minatar"):
-        return True, "_".join(spl[1:])
-    else:
-        return False, str
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default="Cartpole-v1", help='environment')
@@ -39,6 +32,7 @@ if __name__ == "__main__":
     parser.add_argument('--node', type=int,default=256, help='network node number')
     parser.add_argument('--hidden_n', type=int,default=2, help='hidden layer number')
     parser.add_argument('--final_eps', type=float,default=0.1, help='final epsilon')
+    parser.add_argument('--worker', type=int,default=1, help='gym_worker_size')
     args = parser.parse_args() 
     env_name = args.env
     cnn_mode = "normal"
@@ -54,20 +48,18 @@ if __name__ == "__main__":
         env_name = env_name.split('/')[-1].split('.')[0]
         env_type = "unity"
     else:
-        isminatar, env_name_ = is_minatar(env_name)
-        if isminatar:
-            import minatar
-            env = minatar.Environment(env_name_)
-            cnn_mode = 'minimum'
-            env_type = "minatar"
+        if args.worker > 1:
+            from haiku_baselines.common.worker import gymMultiworker
+            env = gymMultiworker(env_name, worker_num = args.worker)
         else:
             from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
-            env_type, env_id = get_env_type(env_name_)
+            env_type, env_id = get_env_type(env_name)
             if env_type == 'atari':
-                env = make_wrap_atari(env_name_)
+                env = make_wrap_atari(env_name)
             else:
-                env = gym.make(env_name_)
-            env_type = "gym"
+                env = gym.make(env_name)
+        env_type = "gym"
+
     
     policy_kwargs = {'node': args.node,
                      'hidden_n': args.hidden_n,
