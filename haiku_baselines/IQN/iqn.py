@@ -33,8 +33,8 @@ class IQN(Q_Network_Family):
             self.setup_model() 
             
     def setup_model(self):
-        self.key, tau = self._sample_quantiles(self.key,1,self.n_support)
-        self.key, subkey1, subkey2 = jax.random.split(self.key,3)
+        self.key, subkey1, subkey2, subkeytau = jax.random.split(self.key,4)
+        tau = jax.random.uniform(subkeytau,(1,self.n_support))
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
         if 'cnn_mode' in self.policy_kwargs.keys():
             cnn_mode = self.policy_kwargs['cnn_mode']
@@ -70,17 +70,14 @@ class IQN(Q_Network_Family):
         return self.model.apply(params, key, self.preproc.apply(params, key, obses), tau)
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
-        key, tau = self._sample_quantiles(key,self.worker_size,self.n_support)
+        key, subkey = jax.random.split(key)
+        tau = jax.random.uniform(subkey,(self.worker_size,self.n_support))
         return jnp.expand_dims(jnp.argmax(
                jnp.mean(self.get_q(params,convert_jax(obses),key, tau),axis=2)
                ,axis=1),axis=1)
         
     def update_key(self,key,num=1):
         return jax.random.split(key, num+1)
-        
-    def _sample_quantiles(self,key,batch_size,quantile_size):
-        key, subkey = jax.random.split(key)
-        return key, jax.random.uniform(subkey,(batch_size,quantile_size))
     
     def train_step(self, steps, gradient_steps):
         for _ in range(gradient_steps):
@@ -107,8 +104,9 @@ class IQN(Q_Network_Family):
     def _train_step(self, params, target_params, opt_state, steps, key, 
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=2); not_dones = 1.0 - dones
-        key, tau = self._sample_quantiles(key,self.batch_size,self.n_support)
-        key, target_tau = self._sample_quantiles(key,self.batch_size,self.n_support)
+        key, subkey1, subkey2 = jax.random.split(key,3)
+        tau = jax.random.uniform(subkey1,(self.worker_size,self.n_support))
+        target_tau = jax.random.uniform(subkey2,(self.worker_size,self.n_support))
         targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, target_tau, key)
         (loss,abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, tau, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
