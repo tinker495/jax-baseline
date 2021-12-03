@@ -49,7 +49,8 @@ class gymMultiworker(Multiworker):
             end_states = np.stack(end_states,axis=0)
             end_idx = np.stack(end_idx,axis=0)
         else:
-            end_states = np.zeros
+            end_states = None
+            end_idx = None
         return states,rewards,dones,terminals,end_states,end_idx
 
 @ray.remote
