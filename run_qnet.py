@@ -64,7 +64,6 @@ if __name__ == "__main__":
             env_type, env_id = get_env_type(env_name_)
             if env_type == 'atari':
                 env = make_wrap_atari(env_name_)
-                #env = wrap_deepmind(env, frame_stack=True)
             else:
                 env = gym.make(env_name_)
             env_type = "gym"
