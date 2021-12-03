@@ -8,10 +8,10 @@ from tqdm.auto import trange
 from collections import deque
 
 from haiku_baselines.common.base_classes import TensorboardWriter
-#from haiku_baselines.common.buffers import ReplayBuffer
 from haiku_baselines.common.cpprb_buffers import ReplayBuffer, PrioritizedReplayBuffer
 from haiku_baselines.common.schedules import LinearSchedule
 from haiku_baselines.common.utils import convert_states
+from haiku_baselines.common.worker import gymMultiworker
 
 from mlagents_envs.environment import UnityEnvironment, ActionTuple
 import minatar
@@ -97,6 +97,14 @@ class Q_Network_Family(object):
             self.action_size = [action_space]
             self.worker_size = 1
             self.env_type = "minatar"
+            
+        elif isinstance(self.env,gymMultiworker):
+            print("gymMultiworker")
+            env_info = self.env.env_info
+            self.observation_space = [list(env_info['observation_space'].shape)]
+            self.action_size = [env_info['action_space'].n]
+            self.worker_size = self.env.worker_num
+            self.env_type = "gymMultiworker"
     
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
@@ -159,6 +167,8 @@ class Q_Network_Family(object):
                 self.learn_gym(pbar, callback, log_interval)
             if self.env_type == "minatar":
                 self.learn_minatar(pbar, callback, log_interval)
+            if self.env_type == "gymMultiworker":
+                self.learn_gymMultiworker(pbar, callback, log_interval)
 
     
     def learn_unity(self, pbar, callback=None, log_interval=100):
@@ -266,6 +276,48 @@ class Q_Network_Family(object):
                 loss = self.train_step(steps,self.gradient_steps)
                 self.lossque.append(loss)
             
+            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
+                pbar.set_description("score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(
+                                    np.mean(self.scoreque),update_eps,np.mean(self.lossque)
+                                    )
+                                    )
+                
+    def learn_gymMultiworker(self, pbar, callback=None, log_interval=100):
+        state,_,_,_,_,_ = self.env.get_steps()
+        self.scores = np.zeros([self.worker_size])
+        self.eplen = np.zeros([self.worker_size])
+        self.scoreque = deque(maxlen=10)
+        self.lossque = deque(maxlen=10)
+        befor_train = True
+        for steps in pbar:
+            self.eplen += 1
+            update_eps = self.exploration.value(steps)
+            actions = self.actions(state,update_eps,befor_train)
+            self.env.step(actions)
+
+            if steps > self.learning_starts and steps % self.train_freq == 0:
+                befor_train = False
+                loss = self.train_step(steps,self.gradient_steps)
+                self.lossque.append(loss)
+            
+            next_state, reward, terminal, info = self.env.get_steps()
+            next_state = [np.expand_dims(next_state,axis=0)]
+            done = terminal
+            if "TimeLimit.truncated" in info:
+                done = not info["TimeLimit.truncated"]
+            self.replay_buffer.add(state, actions, reward, next_state, done, terminal)
+            self.scores[0] += reward
+            state = next_state
+            if terminal:
+                self.scoreque.append(self.scores[0])
+                if self.summary:
+                    self.summary.add_scalar("env/episode_reward", self.scores[0], steps)
+                    self.summary.add_scalar("env/episode len",self.eplen[0],steps)
+                    self.summary.add_scalar("env/time over",float(not done),steps)
+                self.scores[0] = 0
+                self.eplen[0] = 0
+                state = [np.expand_dims(self.env.reset(),axis=0)]
+                
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description("score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(
                                     np.mean(self.scoreque),update_eps,np.mean(self.lossque)

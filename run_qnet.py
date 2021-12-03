@@ -34,7 +34,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument('--max', type=float, default=250, help='c51 max')
     parser.add_argument('--min', type=float, default=-250, help='c51 min')
-    parser.add_argument('--n_support', type=int,default=200, help='n_support for QRDQN,IQN,FQF')
+    parser.add_argument('--n_support', type=int,default=32, help='n_support for QRDQN,IQN,FQF')
     parser.add_argument('--CVaR', type=float, default=1.0, help='IQN risk avoiding factor')
     parser.add_argument('--node', type=int,default=256, help='network node number')
     parser.add_argument('--hidden_n', type=int,default=2, help='hidden layer number')
