@@ -27,8 +27,6 @@ class IQN(Q_Network_Family):
         self.n_support = n_support
         self.delta = delta
         
-        #self._sample_quantiles = jax.jit(self._sample_quantiles)
-        
         if _init_setup_model:
             self.setup_model() 
             
