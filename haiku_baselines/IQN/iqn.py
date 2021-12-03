@@ -38,9 +38,9 @@ class IQN(Q_Network_Family):
             cnn_mode = self.policy_kwargs['cnn_mode']
             del self.policy_kwargs['cnn_mode']
         self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
-        self.model = hk.transform(lambda x: Model(self.action_size,
+        self.model = hk.transform(lambda x,tau: Model(self.action_size,
                            dualing=self.dualing_model,noisy=self.param_noise,
-                           **self.policy_kwargs)(x))
+                           **self.policy_kwargs)(x,tau))
         pre_param = self.preproc.init(subkey1,
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         model_param = self.model.init(subkey2,
