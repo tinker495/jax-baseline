@@ -14,7 +14,6 @@ from haiku_baselines.common.utils import convert_states
 from haiku_baselines.common.worker import gymMultiworker
 
 from mlagents_envs.environment import UnityEnvironment, ActionTuple
-import minatar
 
 class Q_Network_Family(object):
     def __init__(self, env, gamma=0.99, learning_rate=5e-5, buffer_size=50000, exploration_fraction=0.3,
