@@ -103,8 +103,8 @@ class IQN(Q_Network_Family):
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=2); not_dones = 1.0 - dones
         key, subkey1, subkey2 = jax.random.split(key,3)
-        tau = jax.random.uniform(subkey1,(self.worker_size,self.n_support))
-        target_tau = jax.random.uniform(subkey2,(self.worker_size,self.n_support))
+        tau = jax.random.uniform(subkey1,(self.batch_size,self.n_support))
+        target_tau = jax.random.uniform(subkey2,(self.batch_size,self.n_support))
         targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, target_tau, key)
         (loss,abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, tau, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
