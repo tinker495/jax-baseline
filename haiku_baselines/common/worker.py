@@ -32,8 +32,8 @@ class gymMultiworker(Multiworker):
         
     def get_steps(self):
         states = []; rewards =[]; dones = []; terminals = []; end_states = []; end_idx = [];
-        for idx,s in enumerate(self.steps):
-            state, end_state, reward, done, terminal = ray.get(s)
+        for idx,data in enumerate(ray.get(self.steps)):
+            state, end_state, reward, done, terminal = data
             states.append(state)
             rewards.append(reward)
             dones.append(done)

@@ -292,7 +292,7 @@ class Q_Network_Family(object):
         for steps in pbar:
             self.eplen += 1
             update_eps = self.exploration.value(steps)
-            actions = self.actions(state,update_eps,befor_train)
+            actions = self.actions([state],update_eps,befor_train)
             self.env.step(actions)
 
             if steps > self.learning_starts and steps % self.train_freq == 0:
@@ -300,24 +300,21 @@ class Q_Network_Family(object):
                 loss = self.train_step(steps,self.gradient_steps)
                 self.lossque.append(loss)
             
-            next_state, reward, terminal, info = self.env.get_steps()
-            next_state = [np.expand_dims(next_state,axis=0)]
-            done = terminal
-            if "TimeLimit.truncated" in info:
-                done = not info["TimeLimit.truncated"]
-            self.replay_buffer.add(state, actions, reward, next_state, done, terminal)
-            self.scores[0] += reward
-            state = next_state
-            if terminal:
-                self.scoreque.append(self.scores[0])
+            next_states,rewards,dones,terminals,end_states,end_idx = self.env.get_steps()
+            nxtstates = np.copy(next_states)
+            if end_states is not None:
+                nxtstates[end_idx] = end_states
                 if self.summary:
-                    self.summary.add_scalar("env/episode_reward", self.scores[0], steps)
-                    self.summary.add_scalar("env/episode len",self.eplen[0],steps)
-                    self.summary.add_scalar("env/time over",float(not done),steps)
-                self.scores[0] = 0
-                self.eplen[0] = 0
-                state = [np.expand_dims(self.env.reset(),axis=0)]
-                
+                    self.summary.add_scalar("env/episode_reward", np.mean(self.scores[end_idx]), steps)
+                    self.summary.add_scalar("env/episode len",np.mean(self.eplen[end_idx]),steps)
+                    self.summary.add_scalar("env/time over",np.mean(1 - dones[end_idx].astype(np.float32)),steps)
+                self.scoreque.extend(self.scores[end_idx])
+                self.scores[end_idx] = 0
+                self.eplen[end_idx] = 0
+            self.replay_buffer.add([state], actions, rewards, [nxtstates], dones, terminals)
+            self.scores += rewards
+            state = next_states
+            
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description("score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(
                                     np.mean(self.scoreque),update_eps,np.mean(self.lossque)
