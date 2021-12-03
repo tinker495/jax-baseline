@@ -292,6 +292,8 @@ class Q_Network_Family(object):
             next_states,rewards,dones,terminals,end_states,end_idx = self.env.get_steps()
             nxtstates = np.copy(next_states)
             if end_states is not None:
+                print(nxtstates.shape)
+                print(end_states.shape)
                 nxtstates[end_idx] = end_states
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", np.mean(self.scores[end_idx]), steps)

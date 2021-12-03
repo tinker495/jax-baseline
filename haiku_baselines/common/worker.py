@@ -9,6 +9,8 @@ import ray
 
 from abc import ABC
 
+ray.init()
+
 class Multiworker(ABC):
     def __init__(self,env_id, worker_num = 8):
         pass
