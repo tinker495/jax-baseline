@@ -114,7 +114,7 @@ class Q_Network_Family(object):
     
     def update_key(self,key,num=1):                
         if self.param_noise:
-            return jax.random.split(self.key, num+1)
+            return jax.random.split(key, num+1)
         else:
             return (key, None)
     
