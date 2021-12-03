@@ -21,7 +21,7 @@ class Multiworker(ABC):
 
 class gymMultiworker(Multiworker):
     def __init__(self,env_id, worker_num = 8):
-        ray.init()
+        ray.init(num_cpus=12)
         self.env_id = env_id
         self.worker_num = worker_num
         self.workers = [gymRayworker.remote(env_id) for _ in range(worker_num)]
