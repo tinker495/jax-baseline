@@ -12,14 +12,14 @@ from haiku_baselines.common.utils import hard_update, convert_jax
 class IQN(Q_Network_Family):
     def __init__(self, env, gamma=0.99, learning_rate=5e-5, buffer_size=100000, exploration_fraction=0.3, n_support = 32, delta = 0.1,
                  exploration_final_eps=0.02, exploration_initial_eps=1.0, train_freq=1, gradient_steps=1, batch_size=32, double_q=True,
-                 dualing_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, prioritized_replay=False,
+                 dueling_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, prioritized_replay=False,
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
                  param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None):
         
         super(IQN, self).__init__(env, gamma, learning_rate, buffer_size, exploration_fraction,
                  exploration_final_eps, exploration_initial_eps, train_freq, gradient_steps, batch_size, double_q,
-                 dualing_model, n_step, learning_starts, target_network_update_freq, prioritized_replay,
+                 dueling_model, n_step, learning_starts, target_network_update_freq, prioritized_replay,
                  prioritized_replay_alpha, prioritized_replay_beta0, prioritized_replay_eps, 
                  param_noise, munchausen, log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
                  full_tensorboard_log, seed)
@@ -39,7 +39,7 @@ class IQN(Q_Network_Family):
             del self.policy_kwargs['cnn_mode']
         self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
         self.model = hk.transform(lambda x,tau: Model(self.action_size,
-                           dualing=self.dualing_model,noisy=self.param_noise,
+                           dueling=self.dueling_model,noisy=self.param_noise,
                            **self.policy_kwargs)(x,tau))
         pre_param = self.preproc.init(subkey1,
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
@@ -123,7 +123,7 @@ class IQN(Q_Network_Family):
                 0.5 * error ** 2 +
                 (jnp.abs(error) > self.delta).astype(jnp.float32) *
                 self.delta * (jnp.abs(error) - 0.5 * self.delta))
-        if self.dualing_model:
+        if self.dueling_model:
             tau = jnp.tile(tau,(1,2))
         mul = jnp.abs(jnp.expand_dims(tau,axis=1) - (error < 0).astype(jnp.float32))
         loss = jnp.sum(jnp.mean(mul*huber,axis=1),axis=1)

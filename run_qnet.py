@@ -16,7 +16,7 @@ if __name__ == "__main__":
     parser.add_argument('--batch', type=int, default=64, help='batch size')
     parser.add_argument('--buffer_size', type=float, default=100000, help='buffer_size')
     parser.add_argument('--double', action='store_true')
-    parser.add_argument('--dualing',action='store_true')
+    parser.add_argument('--dueling',action='store_true')
     parser.add_argument('--per', action='store_true')
     parser.add_argument('--noisynet', action='store_true')
     parser.add_argument('--n_step', type=int, default=1, help='n step setting when n > 1 is n step td method')
@@ -67,24 +67,24 @@ if __name__ == "__main__":
         
     if args.algo == "DQN":
         agent = DQN(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
-                    prioritized_replay = args.per, double_q = args.double, dualing_model = args.dualing, exploration_final_eps = args.final_eps,
+                    prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)
     elif args.algo == "C51":
         agent = C51(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
-                    prioritized_replay = args.per, double_q = args.double, dualing_model = args.dualing, exploration_final_eps = args.final_eps,
+                    prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
                     categorial_max = args.max, categorial_min = args.min,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)
     elif args.algo == "QRDQN":
         agent = QRDQN(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
-                    prioritized_replay = args.per, double_q = args.double, dualing_model = args.dualing, exploration_final_eps = args.final_eps,
+                    prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
                     n_support = args.n_support,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)
     elif args.algo == "IQN":
         agent = IQN(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
-                    prioritized_replay = args.per, double_q = args.double, dualing_model = args.dualing, exploration_final_eps = args.final_eps,
+                    prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
                     n_support = args.n_support,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)

@@ -6,20 +6,20 @@ from haiku_baselines.common.layers import NoisyLinear
 
 
 class Model(hk.Module):
-    def __init__(self,action_size,node=256,hidden_n=2,noisy=False,dualing=False):
+    def __init__(self,action_size,node=256,hidden_n=2,noisy=False,dueling=False):
         super(Model, self).__init__()
         self.action_size = action_size
         self.node = node
         self.hidden_n = hidden_n
         self.noisy = noisy
-        self.dualing = dualing
+        self.dueling = dueling
         if not noisy:
             self.layer = hk.Linear
         else:
             self.layer = NoisyLinear
         
     def __call__(self,feature: jnp.ndarray) -> jnp.ndarray:
-        if not self.dualing:
+        if not self.dueling:
             q_net = hk.Sequential(
                 [
                     jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)

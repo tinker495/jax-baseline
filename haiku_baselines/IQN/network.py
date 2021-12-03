@@ -6,13 +6,13 @@ from haiku_baselines.common.layers import NoisyLinear
 
 
 class Model(hk.Module):
-    def __init__(self,action_size,node=256,hidden_n=2,noisy=False,dualing=False):
+    def __init__(self,action_size,node=256,hidden_n=2,noisy=False,dueling=False):
         super(Model, self).__init__()
         self.action_size = action_size
         self.node = node
         self.hidden_n = hidden_n
         self.noisy = noisy
-        self.dualing = dualing
+        self.dueling = dueling
         if not noisy:
             self.layer = hk.Linear
         else:
@@ -27,7 +27,7 @@ class Model(hk.Module):
         costau = jnp.reshape(jnp.cos(jnp.expand_dims(tau,axis=2)*self.pi_mtx),(feature_shape[0]*quaitle_shape[1],128))                      # [ (batch x tau ) x 128 ]
         quantile_embedding = hk.Sequential([self.layer(feature_shape[-1]),jax.nn.relu])(costau)                                             # [ (batch x tau ) x feature ]
         mul_embedding = feature_tile*quantile_embedding
-        if not self.dualing:
+        if not self.dueling:
             q_net = jnp.swapaxes(jnp.reshape(
                 hk.Sequential(
                 [
