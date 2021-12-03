@@ -33,7 +33,7 @@ class IQN(Q_Network_Family):
             self.setup_model() 
             
     def setup_model(self):
-        self.key,tau = self._sample_quantiles(self.key,1,self.n_support)
+        self.key, tau = self._sample_quantiles(self.key,1,self.n_support)
         self.key, subkey1, subkey2 = jax.random.split(self.key,3)
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
         if 'cnn_mode' in self.policy_kwargs.keys():
