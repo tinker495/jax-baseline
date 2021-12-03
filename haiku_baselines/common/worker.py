@@ -64,7 +64,7 @@ class gymRayworker:
             self.env = gym.make(self.env_id)
         
     def get_reset(self):
-        return self.env.reset(),None,None,None,None
+        return self.env.reset(),None,0,False,False
     
     def get_info(self):
         return {'observation_space' : self.env.observation_space, 
