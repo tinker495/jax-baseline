@@ -46,8 +46,8 @@ class IQN(Q_Network_Family):
         pre_param = self.preproc.init(subkey1,
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         model_param = self.model.init(subkey2,
-                            self.preproc.apply(pre_param, 
-                            None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]), tau)
+                            (self.preproc.apply(pre_param, 
+                            None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]), tau))
         self.params = hk.data_structures.merge(pre_param, model_param)
         self.target_params = self.params
         

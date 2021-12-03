@@ -13,6 +13,7 @@ setup(
         'dm-haiku',
         'optax',
         'numpy',
+        'ray',
         'cpprb',
         'tensorboardX',
         'importlib; python_version >= "3.5"',
