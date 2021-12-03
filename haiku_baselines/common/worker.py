@@ -39,7 +39,7 @@ class gymMultiworker(Multiworker):
             rewards.append(reward)
             dones.append(done)
             terminals.append(terminal)
-            if end_states is not None:
+            if end_state is not None:
                 end_states.append(end_state)
                 end_idx.append(idx)
         states = np.stack(states,axis=0)
