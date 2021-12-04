@@ -140,7 +140,7 @@ class QRDQN(Q_Network_Family):
             q_k_targets = jnp.mean(self.get_q(target_params,obses,key),axis=2)
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
             logsum = jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1, keepdims=True)
-            log_pi = q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum
+            log_pi = jnp.expand_dims(q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum,axis=2)
             munchausen_addon = jnp.take_along_axis(log_pi,actions,axis=1)
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)

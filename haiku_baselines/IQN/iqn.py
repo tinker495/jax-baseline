@@ -143,10 +143,10 @@ class IQN(Q_Network_Family):
             pi_target = jnp.expand_dims(jax.nn.softmax(next_q_mean/self.munchausen_entropy_tau, axis=1),axis=2)
             next_vals = jnp.sum((pi_target * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next)), axis=1) * not_dones
             
-            q_k_targets = jnp.mean(self.get_q(target_params,obses,key),axis=2)
+            q_k_targets = jnp.mean(self.get_q(target_params,obses,target_tau,key),axis=2)
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
             logsum = jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1, keepdims=True)
-            log_pi = q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum
+            log_pi = jnp.expand_dims(q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum,axis=2)
             munchausen_addon = jnp.take_along_axis(log_pi,actions,axis=1)
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
