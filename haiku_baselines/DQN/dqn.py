@@ -45,7 +45,7 @@ class DQN(Q_Network_Family):
         self.params = hk.data_structures.merge(pre_param, model_param)
         self.target_params = self.params
         
-        self.optimizer = optax.adamw(self.learning_rate)
+        self.optimizer = optax.rmsprop(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
         
         print("----------------------model----------------------")
