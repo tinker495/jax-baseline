@@ -52,6 +52,10 @@ class IQN(Q_Network_Family):
         self.optimizer = optax.adamw(self.learning_rate,eps=1e-2/self.batch_size)
         self.opt_state = self.optimizer.init(self.params)
         
+        self.tile_n = self.n_support
+        if self.double_q:
+            self.tile_n = self.tile_n*2
+        
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
         print(jax.tree_map(lambda x: x.shape, model_param))
@@ -116,8 +120,8 @@ class IQN(Q_Network_Family):
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, tau, key):
-        theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, tau, key), actions, axis=1)  # batch x 1 x (support x dual_axis)
-        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x (support x dual_axis) x 1
+        theta_loss_tile = jnp.tile(jnp.take_along_axis(self.get_q(params, obses, tau, key), actions, axis=1),(1,self.tile_n,1)) # batch x (support x dual_axis) x (support x dual_axis)
+        logit_valid_tile = jnp.tile(jnp.expand_dims(targets,axis=2),(1,1,self.tile_n))                                          # batch x (support x dual_axis) x (support x dual_axis)
         error = logit_valid_tile - theta_loss_tile                                              # batch x (support x dual_axis) x (support x dual_axis)
         huber = ((jnp.abs(error) <= self.delta).astype(jnp.float32) *
                 0.5 * error ** 2 +
@@ -125,7 +129,8 @@ class IQN(Q_Network_Family):
                 self.delta * (jnp.abs(error) - 0.5 * self.delta))
         if self.dueling_model:
             tau = jnp.tile(tau,(1,2))
-        mul = jnp.abs(jnp.expand_dims(tau,axis=1) - (error < 0).astype(jnp.float32))
+        tau = jnp.tile(jnp.expand_dims(tau,axis=1),(1,self.tile_n,1))
+        mul = jnp.abs(tau - (error < 0).astype(jnp.float32))
         loss = jnp.sum(jnp.mean(mul*huber,axis=1),axis=1)
         return jnp.mean(weights*loss), loss
     
