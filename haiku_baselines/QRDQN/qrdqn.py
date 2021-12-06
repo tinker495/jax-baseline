@@ -51,10 +51,10 @@ class QRDQN(Q_Network_Family):
         self.optimizer = optax.adamw(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
         
-        self.quantile = jnp.arange(0.5 / self.n_support, 1.0, 1.0/self.n_support,dtype=jnp.float32)
+        self.quantile = jnp.arange(0.5 / self.n_support, 1.0, 1.0/self.n_support,dtype=jnp.float32) # [support]
         if self.dueling_model:
-            self.quantile = jnp.tile(self.quantile,(2))
-        self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))
+            self.quantile = jnp.tile(self.quantile,(2))                                             # [(support x dual_axis)]
+        self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                   # [1 x 1 x (support x dual_axis)]
         
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
@@ -145,7 +145,7 @@ class QRDQN(Q_Network_Family):
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
-            next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1),axis=1) # batch x (support x dual_axis)
+            next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1)) # batch x (support x dual_axis)
         return jax.lax.stop_gradient((next_vals * self._gamma) + rewards) # batch x (support x dual_axis)
 
     
