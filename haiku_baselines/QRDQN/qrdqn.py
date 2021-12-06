@@ -54,7 +54,9 @@ class QRDQN(Q_Network_Family):
         self.quantile = jnp.arange(0.5 / self.n_support, 1.0, 1.0/self.n_support,dtype=jnp.float32) # [support]
         if self.dueling_model:
             self.quantile = jnp.tile(self.quantile,(2))                                             # [(support x dual_axis)]
-        self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                   # [1 x 1 x (support x dual_axis)]
+        self.quantile = jnp.expand_dims(self.quantile,axis=(0,1))                                   # [1 x 1 x (support x dual_axis)]
+        self.tile_n = self.quantile.shape[2]                                                        # (support x dual_axis)
+        self.quantile = jax.device_put(jnp.tile(self.quantile,(1,self.tile_n,1)))                   # [1 x (support x dual_axis) x (support x dual_axis)]
         
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
@@ -112,8 +114,8 @@ class QRDQN(Q_Network_Family):
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, key):
-        theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)  # batch x 1 x (support x dual_axis)
-        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x (support x dual_axis) x 1
+        theta_loss_tile = jnp.tile(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1),(1,self.tile_n,1))  # batch x 1 x (support x dual_axis)
+        logit_valid_tile = jnp.tile(jnp.expand_dims(targets,axis=2),(1,1,self.tile_n))                                      # batch x (support x dual_axis) x 1
         error = logit_valid_tile - theta_loss_tile                                              # batch x (support x dual_axis) x (support x dual_axis)
         huber = ((jnp.abs(error) <= self.delta).astype(jnp.float32) *
                 0.5 * error ** 2 +
