@@ -23,7 +23,7 @@ class Model(hk.Module):
         if not self.dueling:
             q_net = hk.Sequential(
                 [
-                    jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
+                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
                 ] + 
                 [
                     self.layer(self.action_size[0]*self.support_n),
@@ -35,7 +35,7 @@ class Model(hk.Module):
             v = jnp.tile(
                 hk.Sequential(
                 [
-                    jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
+                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
                 ] +
                 [
                     self.layer(self.support_n),
@@ -45,7 +45,7 @@ class Model(hk.Module):
                 (1,self.action_size[0],1))
             a = hk.Sequential(
                 [
-                    jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
+                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
                 ] +
                 [
                     self.layer(self.action_size[0]*self.support_n),

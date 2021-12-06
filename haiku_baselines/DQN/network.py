@@ -22,7 +22,7 @@ class Model(hk.Module):
         if not self.dueling:
             q_net = hk.Sequential(
                 [
-                    jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
+                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
                 ] + 
                 [
                     self.layer(self.action_size[0])
@@ -32,7 +32,7 @@ class Model(hk.Module):
         else:
             v = hk.Sequential(
                 [
-                    jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
+                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
                 ] + 
                 [
                     self.layer(1)
@@ -40,7 +40,7 @@ class Model(hk.Module):
                 )(feature)
             a = hk.Sequential(
                 [
-                    jax.nn.relu if i%2 == 1 else self.layer(self.node) for i in range(2*self.hidden_n)
+                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
                 ] + 
                 [
                     self.layer(self.action_size[0])

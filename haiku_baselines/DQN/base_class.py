@@ -157,7 +157,6 @@ class Q_Network_Family(object):
                 self.learn_gym(pbar, callback, log_interval)
             if self.env_type == "gymMultiworker":
                 self.learn_gymMultiworker(pbar, callback, log_interval)
-
     
     def learn_unity(self, pbar, callback=None, log_interval=100):
         self.env.reset()
@@ -308,3 +307,12 @@ class Q_Network_Family(object):
                                     np.mean(self.scoreque),update_eps,np.mean(self.lossque)
                                     )
                                     )
+    
+    def test(self, episode = 10, tb_log_name="Q_network"):
+        pass
+    
+    def test_unity(self, episode, tb_log_name):
+        pass
+    
+    def test_gym(self, episode, tb_log_name):
+        pass
