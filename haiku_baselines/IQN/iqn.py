@@ -49,7 +49,7 @@ class IQN(Q_Network_Family):
         self.params = hk.data_structures.merge(pre_param, model_param)
         self.target_params = self.params
         
-        self.optimizer = optax.rmsprop(self.learning_rate)
+        self.optimizer = optax.adamw(self.learning_rate,eps=1e-2/self.batch_size)
         self.opt_state = self.optimizer.init(self.params)
         
         print("----------------------model----------------------")
