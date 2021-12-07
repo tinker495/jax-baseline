@@ -14,6 +14,7 @@ setup(
         'optax',
         'numpy',
         'ray',
+        'colabgymrender',
         'cpprb',
         'tensorboardX',
         'importlib; python_version >= "3.5"',

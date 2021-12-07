@@ -7,7 +7,7 @@ import numpy as np
 from tqdm.auto import trange
 from collections import deque
 
-from haiku_baselines.common.base_classes import TensorboardWriter
+from haiku_baselines.common.base_classes import TensorboardWriter, save, restore
 from haiku_baselines.common.cpprb_buffers import ReplayBuffer, PrioritizedReplayBuffer
 from haiku_baselines.common.schedules import LinearSchedule
 from haiku_baselines.common.utils import convert_states
@@ -58,10 +58,17 @@ class Q_Network_Family(object):
         
         self.params = None
         self.target_params = None
+        self.save_path = None
         
         self.get_env_setup()
         self.get_memory_setup()
         self.update_key = jax.jit(self.update_key)
+        
+    def save_params(self, path):
+        save(path, self.params)
+            
+    def load_params(self, path):
+        self.params = self.target_params = restore(path)
         
     def get_env_setup(self):
         print("----------------------env------------------------")
@@ -150,13 +157,14 @@ class Q_Network_Family(object):
                                                 initial_p=self.exploration_initial_eps,
                                                 final_p=self.exploration_final_eps)
         pbar = trange(total_timesteps, miniters=log_interval)
-        with TensorboardWriter(self.tensorboard_log, tb_log_name) as self.summary:
+        with TensorboardWriter(self.tensorboard_log, tb_log_name) as (self.summary, self.save_path):
             if self.env_type == "unity":
                 self.learn_unity(pbar, callback, log_interval)
             if self.env_type == "gym":
                 self.learn_gym(pbar, callback, log_interval)
             if self.env_type == "gymMultiworker":
                 self.learn_gymMultiworker(pbar, callback, log_interval)
+            self.save_params(self.save_path)
     
     def learn_unity(self, pbar, callback=None, log_interval=100):
         self.env.reset()
@@ -308,11 +316,13 @@ class Q_Network_Family(object):
                                     )
                                     )
     
-    def test(self, episode = 10, tb_log_name="Q_network"):
+    def test(self, episode = 10, tb_log_name=None):
         pass
     
-    def test_unity(self, episode, tb_log_name):
+    def test_unity(self, episode,directory):
         pass
     
-    def test_gym(self, episode, tb_log_name):
+    def test_gym(self, episode,directory):
+        from colabgymrender.recorder import Recorder
+        Render_env = Recorder(self.env, directory)
         pass
