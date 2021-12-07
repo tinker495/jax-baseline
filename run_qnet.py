@@ -33,6 +33,7 @@ if __name__ == "__main__":
     parser.add_argument('--hidden_n', type=int,default=2, help='hidden layer number')
     parser.add_argument('--final_eps', type=float,default=0.1, help='final epsilon')
     parser.add_argument('--worker', type=int,default=1, help='gym_worker_size')
+    parser.add_argument('--optimizer', type=str,default='adam', help='optimaizer')
     args = parser.parse_args() 
     env_name = args.env
     cnn_mode = "normal"

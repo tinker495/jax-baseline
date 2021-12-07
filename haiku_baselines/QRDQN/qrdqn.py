@@ -48,7 +48,7 @@ class QRDQN(Q_Network_Family):
         self.params = hk.data_structures.merge(pre_param, model_param)
         self.target_params = self.params
         
-        self.optimizer = optax.rmsprop(self.learning_rate,eps=1e-2/self.batch_size)
+        self.optimizer = optax.adamw(self.learning_rate,eps=1e-2/self.batch_size)
         self.opt_state = self.optimizer.init(self.params)
         
         self.quantile = jnp.arange(0.5 / self.n_support, 1.0, 1.0/self.n_support,dtype=jnp.float32) # [support]

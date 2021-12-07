@@ -4,6 +4,8 @@ import numpy as np
 import jax
 import pickle
 
+import optax
+
 from tensorboardX import SummaryWriter
     
 class TensorboardWriter:
@@ -67,3 +69,11 @@ def restore(ckpt_dir):
         flat_state = [np.load(f) for _ in leaves]
 
     return jax.tree_unflatten(treedef, flat_state)
+
+def select_optimizer(optim_str, rl, eps):
+    if optim_str == 'adam':
+        return optax.adam(rl,eps=eps)
+    elif optim_str == 'adamw':
+        return optax.adamw(rl,eps=eps)
+    elif optim_str == 'rmsprop':
+        return optax.rmsprop(rl,eps=eps)
