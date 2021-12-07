@@ -204,17 +204,17 @@ class FrameStack(gym.Wrapper):
     def reset(self):
         ob = self.env.reset()
         for _ in range(self.k):
-            self.frames.append(ob)
+            self.frames.append(np.array(ob,copy=True))
         return self._get_ob()
 
     def step(self, action):
         ob, reward, done, info = self.env.step(action)
-        self.frames.append(ob)
+        self.frames.append(np.array(ob,copy=True))
         return self._get_ob(), reward, done, info
 
     def _get_ob(self):
         assert len(self.frames) == self.k
-        return np.array(np.concatenate(self.frames, axis=-1)).astype(np.uint8)
+        return np.array(np.concatenate(self.frames, axis=-1),copy=True).astype(np.uint8)
 
 class ScaledFloatFrame(gym.ObservationWrapper):
     def __init__(self, env):
