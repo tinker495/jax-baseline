@@ -50,7 +50,7 @@ if __name__ == "__main__":
                      'cnn_mode': cnn_mode}
         
     if args.algo == "DQN":
-        agent = DQN(env, dueling_model = args.dueling, param_noise = args.noisynet,, policy_kwargs=policy_kwargs)
+        agent = DQN(env, dueling_model = args.dueling, param_noise = args.noisynet, policy_kwargs=policy_kwargs)
     elif args.algo == "C51":
         agent = C51(env, dueling_model = args.dueling, param_noise = args.noisynet,
                     categorial_max = args.max, categorial_min = args.min, policy_kwargs=policy_kwargs)
