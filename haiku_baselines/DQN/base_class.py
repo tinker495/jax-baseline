@@ -340,4 +340,3 @@ class Q_Network_Family(object):
                 state = [np.expand_dims(observation,axis=0)]
                 episode_rew += reward
             print("episod reward :", episode_rew)
-        Render_env.play()
