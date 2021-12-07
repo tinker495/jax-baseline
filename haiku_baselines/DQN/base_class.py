@@ -317,7 +317,12 @@ class Q_Network_Family(object):
                                     )
     
     def test(self, episode = 10, tb_log_name=None):
-        pass
+        if tb_log_name is None:
+            tb_log_name = self.save_path
+        
+        directory = tb_log_name
+        if self.env_type == "gym":
+            self.test_gym(episode, directory)
     
     def test_unity(self, episode,directory):
         pass
@@ -325,4 +330,11 @@ class Q_Network_Family(object):
     def test_gym(self, episode,directory):
         from colabgymrender.recorder import Recorder
         Render_env = Recorder(self.env, directory)
-        pass
+        for i in range(episode):
+            state = [np.expand_dims(Render_env.reset(),axis=0)]
+            terminal = False
+            while not terminal:
+                actions = self.actions(state,0,False)
+                observation, reward, terminal, info = Render_env.step(actions[0][0])
+                state = [np.expand_dims(observation,axis=0)]
+        Render_env.play()
