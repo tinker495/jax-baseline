@@ -7,7 +7,7 @@ import numpy as np
 from tqdm.auto import trange
 from collections import deque
 
-from haiku_baselines.common.base_classes import TensorboardWriter, save, restore
+from haiku_baselines.common.base_classes import TensorboardWriter, save, restore, select_optimizer
 from haiku_baselines.common.cpprb_buffers import ReplayBuffer, PrioritizedReplayBuffer
 from haiku_baselines.common.schedules import LinearSchedule
 from haiku_baselines.common.utils import convert_states
@@ -21,7 +21,7 @@ class Q_Network_Family(object):
                  dueling_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, prioritized_replay=False,
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
                  param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
-                 full_tensorboard_log=False, seed=None):
+                 full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
         self.env = env
         self.log_interval = log_interval
@@ -59,6 +59,7 @@ class Q_Network_Family(object):
         self.params = None
         self.target_params = None
         self.save_path = None
+        self.optimizer = select_optimizer(optimizer,self.learning_rate,1e-2/self.batch_size)
         
         self.get_env_setup()
         self.get_memory_setup()

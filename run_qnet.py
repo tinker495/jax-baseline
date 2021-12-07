@@ -70,25 +70,25 @@ if __name__ == "__main__":
         agent = DQN(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
-                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     elif args.algo == "C51":
         agent = C51(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
                     categorial_max = args.max, categorial_min = args.min,
-                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     elif args.algo == "QRDQN":
         agent = QRDQN(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
                     n_support = args.n_support,
-                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     elif args.algo == "IQN":
         agent = IQN(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen,
                     n_support = args.n_support,
-                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs)
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
 
 
     agent.learn(int(args.steps))
