@@ -51,6 +51,7 @@ if __name__ == "__main__":
     else:
         if args.worker > 1:
             from haiku_baselines.common.worker import gymMultiworker
+            import gym_slide
             env = gymMultiworker(env_name, worker_num = args.worker)
         else:
             from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
