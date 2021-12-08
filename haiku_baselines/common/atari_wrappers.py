@@ -307,6 +307,6 @@ def get_env_type(env_id):
                 break
         if ':' in env_id:
             env_type = re.sub(r':.*', '', env_id)
-        assert env_type is not None, 'env_id {},{} is not recognized in env types {}'.format(env_id, env_type ,_game_envs.keys())
+        #assert env_type is not None, 'env_id {},{} is not recognized in env types {}'.format(env_id, env_type ,_game_envs.keys())
 
     return env_type, env_id
