@@ -36,6 +36,12 @@ def visual_embedding(mode="simple"):
                     hk.Conv2D(16, kernel_shape=[3, 3], stride=[1, 1], padding='VALID'), jax.nn.relu,
                     hk.Flatten()
                     ])(x)
+    elif mode == 'slide':
+        net_fn = lambda x: hk.Sequential([
+                    hk.Conv2D(64, kernel_shape=[3, 3], stride=[1, 1], padding='SAME'), jax.nn.relu,
+                    hk.Conv2D(256, kernel_shape=[3, 3], stride=[1, 1], padding='SAME'), jax.nn.relu,
+                    hk.Flatten()
+                    ])(x)
     elif mode == "none":
         net_fn = hk.Flatten()
     return net_fn
