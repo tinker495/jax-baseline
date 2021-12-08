@@ -59,6 +59,7 @@ if __name__ == "__main__":
             if env_type == 'atari':
                 env = make_wrap_atari(env_name)
             else:
+                cnn_mode = "minimum"
                 env = gym.make(env_name)
         env_type = "gym"
 
