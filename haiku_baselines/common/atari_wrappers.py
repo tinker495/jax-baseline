@@ -204,17 +204,17 @@ class FrameStack(gym.Wrapper):
     def reset(self):
         ob = self.env.reset()
         for _ in range(self.k):
-            self.frames.append(np.array(ob,copy=True))
+            self.frames.append(ob,copy=True)
         return self._get_ob()
 
     def step(self, action):
         ob, reward, done, info = self.env.step(action)
-        self.frames.append(np.array(ob,copy=True))
+        self.frames.append(ob)
         return self._get_ob(), reward, done, info
 
     def _get_ob(self):
         assert len(self.frames) == self.k
-        return np.array(np.concatenate(self.frames, axis=-1),copy=True).astype(np.uint8)
+        return np.concatenate(list(self.frames), axis=-1).astype(np.uint8)
 
 class ScaledFloatFrame(gym.ObservationWrapper):
     def __init__(self, env):
@@ -266,8 +266,6 @@ def make_atari(env_id, max_episode_steps=None):
     if 'NoFrameskip' in env.spec.id:
         env = NoopResetEnv(env, noop_max=30)
         env = MaxAndSkipEnv(env, skip=4)
-    if max_episode_steps is not None:
-        env = TimeLimit(env, max_episode_steps=max_episode_steps)
     return env
 
 def wrap_deepmind(env, episode_life=True, clip_rewards=False, frame_stack=False, scale=False):
