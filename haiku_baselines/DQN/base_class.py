@@ -130,8 +130,8 @@ class Q_Network_Family(object):
     def _get_actions(self, params, obses) -> np.ndarray:
         pass
     
-    def actions(self,obs,epsilon,befor_train):
-        if (epsilon <= np.random.uniform(0,1) or self.param_noise) and not befor_train:
+    def actions(self,obs,epsilon):
+        if (epsilon <= np.random.uniform(0,1) or self.param_noise):
             self.key, subkey = self.update_key(self.key)
             actions = np.asarray(self._get_actions(self.params,obs,subkey))
         else:
@@ -175,12 +175,11 @@ class Q_Network_Family(object):
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
         self.lossque = deque(maxlen=10)
-        befor_train = True
         obses = convert_states(dec.obs)
         for steps in pbar:
             self.eplen += 1
             update_eps = self.exploration.value(steps)
-            actions = self.actions(obses,update_eps,befor_train)
+            actions = self.actions(obses,update_eps)
             action_tuple = ActionTuple(discrete=actions)
             old_obses = obses
 
@@ -188,7 +187,6 @@ class Q_Network_Family(object):
             self.env.step()
             
             if steps > self.learning_starts and steps % self.train_freq == 0: #train in step the environments
-                befor_train = False
                 loss = self.train_step(steps,self.gradient_steps)
                 self.lossque.append(loss)
             
@@ -244,11 +242,10 @@ class Q_Network_Family(object):
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
         self.lossque = deque(maxlen=10)
-        befor_train = True
         for steps in pbar:
             self.eplen += 1
             update_eps = self.exploration.value(steps)
-            actions = self.actions(state,update_eps,befor_train)
+            actions = self.actions(state,update_eps)
             next_state, reward, terminal, info = self.env.step(actions[0][0])
             next_state = [np.expand_dims(next_state,axis=0)]
             done = terminal
@@ -268,7 +265,6 @@ class Q_Network_Family(object):
                 state = [np.expand_dims(self.env.reset(),axis=0)]
                 
             if steps > self.learning_starts and steps % self.train_freq == 0:
-                befor_train = False
                 loss = self.train_step(steps,self.gradient_steps)
                 self.lossque.append(loss)
             
@@ -284,15 +280,13 @@ class Q_Network_Family(object):
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
         self.lossque = deque(maxlen=10)
-        befor_train = True
         for steps in pbar:
             self.eplen += 1
             update_eps = self.exploration.value(steps)
-            actions = self.actions([state],update_eps,befor_train)
+            actions = self.actions([state],update_eps)
             self.env.step(actions)
 
             if steps > self.learning_starts and steps % self.train_freq == 0:
-                befor_train = False
                 loss = self.train_step(steps,self.gradient_steps)
                 self.lossque.append(loss)
             
@@ -336,7 +330,7 @@ class Q_Network_Family(object):
             terminal = False
             episode_rew = 0
             while not terminal:
-                actions = self.actions(state,0,False)
+                actions = self.actions(state,0)
                 observation, reward, terminal, info = Render_env.step(actions[0][0])
                 state = [np.expand_dims(observation,axis=0)]
                 episode_rew += reward
