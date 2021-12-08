@@ -204,7 +204,7 @@ class FrameStack(gym.Wrapper):
     def reset(self):
         ob = self.env.reset()
         for _ in range(self.k):
-            self.frames.append(ob,copy=True)
+            self.frames.append(ob)
         return self._get_ob()
 
     def step(self, action):
