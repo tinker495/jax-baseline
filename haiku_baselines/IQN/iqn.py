@@ -73,7 +73,7 @@ class IQN(Q_Network_Family):
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         key, subkey = jax.random.split(key)
-        tau = jax.random.uniform(subkey,(self.worker_size,self.n_support))
+        tau = jax.random.uniform(subkey,(self.n_support,))
         return jnp.expand_dims(jnp.argmax(
                jnp.mean(self.get_q(params,convert_jax(obses),tau,key),axis=2)
                ,axis=1),axis=1)
