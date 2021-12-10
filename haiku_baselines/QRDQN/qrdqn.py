@@ -120,7 +120,7 @@ class QRDQN(Q_Network_Family):
                 0.5 * error ** 2 +
                 (jnp.abs(error) > self.delta).astype(jnp.float32) *
                 self.delta * (jnp.abs(error) - 0.5 * self.delta))
-        mul = jnp.abs(self.quantile - (error < 0).astype(jnp.float32))
+        mul = jax.lax.stop_gradient(jnp.abs(self.quantile - (error < 0).astype(jnp.float32)))
         loss = jnp.sum(jnp.mean(mul*huber,axis=1),axis=1)
         return jnp.mean(weights*loss), loss
     
