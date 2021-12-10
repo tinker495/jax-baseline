@@ -33,7 +33,6 @@ class IQN(Q_Network_Family):
     def setup_model(self):
         self.key, subkey1, subkey2, subkeytau = jax.random.split(self.key,4)
         tau = jax.random.uniform(subkeytau,(self.n_support,))
-        print(tau)
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
         if 'cnn_mode' in self.policy_kwargs.keys():
             cnn_mode = self.policy_kwargs['cnn_mode']
