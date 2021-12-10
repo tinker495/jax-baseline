@@ -30,9 +30,9 @@ class Model(hk.Module):
                                         jax.nn.relu
                                     ]
                                     )(feature)
-        feature_tile = jnp.reshape(jnp.tile(jnp.expand_dims(feature,axis=1),(1,quaitle_shape[1],1)),(feature_shape[0]*quaitle_shape[1],feature_shape[1])) # [ (batch x tau ) x feature ]
-        costau = jnp.reshape(jnp.cos(jnp.expand_dims(tau,axis=2)*self.pi_mtx),(feature_shape[0]*quaitle_shape[1],128))                      # [ (batch x tau ) x 128 ]
-        quantile_embedding = hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau)                                             # [ (batch x tau ) x feature ]
+        feature_tile = jnp.reshape(jnp.tile(jnp.expand_dims(feature_net,axis=1),(1,quaitle_shape[1],1)),(feature_shape[0]*quaitle_shape[1],self.embedding_size)) # [ (batch x tau ) x feature ]
+        costau = jnp.reshape(jnp.cos(jnp.expand_dims(tau,axis=2)*self.pi_mtx),(feature_shape[0]*quaitle_shape[1],128))                          # [ (batch x tau ) x 128 ]
+        quantile_embedding = hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau)                                               # [ (batch x tau ) x feature ]
         mul_embedding = feature_tile*quantile_embedding
         if not self.dueling:
             q_net = jnp.swapaxes(jnp.reshape(
