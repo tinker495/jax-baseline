@@ -36,7 +36,7 @@ class Model(hk.Module):
                              hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau),                      #[ tau x self.embedding_size ]
                              axis=0),                                                                                   #[ 1 x tau x self.embedding_size ]
 
-        mul_embedding = jnp.reshape(feature_tile*quantile_embedding,
+        mul_embedding = jnp.reshape(feature_tile*quantile_embedding,                                                    #[ batch x tau x self.embedding_size ]
                         (feature_shape[0]*quaitle_shape[0],self.embedding_size))                                        #[ (batch x tau) x self.embedding_size ]
         if not self.dueling:
             q_net = jnp.swapaxes(jnp.reshape(
