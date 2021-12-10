@@ -19,7 +19,7 @@ class Model(hk.Module):
             self.layer = NoisyLinear
         self.embedding_size = embedding_size
             
-        self.pi_mtx = jax.lax.stop_gradient(jnp.expand_dims(jnp.pi* np.arange(0,128, dtype=np.float32), axis=(0,1))) # [ 1 x 1 x 128]
+        self.pi_mtx = jax.lax.stop_gradient(jnp.expand_dims(jnp.pi* np.arange(0,128, dtype=np.float32), axis=0)) # [ 1 x 128]
         
     def __call__(self,feature: jnp.ndarray, tau: jnp.ndarray) -> jnp.ndarray:
         feature_shape = feature.shape                                                                                   #[ batch x feature]
@@ -31,12 +31,13 @@ class Model(hk.Module):
                                     ]
                                     )(feature)
         feature_tile = jnp.reshape(
-                        jnp.tile(jnp.expand_dims(feature_net,axis=1),(1,quaitle_shape[0],1)),                           #[ batch x tau x feature]
-                        (feature_shape[0]*quaitle_shape[0],self.embedding_size))                                        #[ (batch x tau) x feature ]
-        costau = jnp.reshape(
-                    jnp.cos(jnp.expand_dims(tau,axis=(0,2))*self.pi_mtx),                                               #[ 1 x tau x 128]
-                    (quaitle_shape[0],128))                                                                             #[ (batch x tau) x 128 ]
-        #quantile_embedding = hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau)                                               # [ (batch x tau) x feature ]
+                        jnp.tile(jnp.expand_dims(feature_net,axis=1),(1,quaitle_shape[0],1)),                           #[ batch x tau x self.embedding_size]
+                        (feature_shape[0]*quaitle_shape[0],self.embedding_size))                                        #[ (batch x tau) x self.embedding_size ]
+        costau = jnp.cos(jnp.expand_dims(tau,axis=1)*self.pi_mtx),                                                      #[ tau x 128]
+        quantile_embedding = jnp.tile(
+                             hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau),
+                             (feature_shape[0],1)                                                                       # [ (batch x tau) x self.embedding_size ]
+                             )
         mul_embedding = feature_tile*quantile_embedding
         if not self.dueling:
             q_net = jnp.swapaxes(jnp.reshape(
