@@ -50,7 +50,7 @@ class QRDQN(Q_Network_Family):
         
         self.opt_state = self.optimizer.init(self.params)
         
-        self.quantile = jnp.arange(0.5 / self.n_support, 1.0, 1.0/self.n_support,dtype=jnp.float32) # [support]
+        self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support+1)[:1])/2.0 # [support]
         if self.dueling_model:
             self.quantile = jnp.tile(self.quantile,(2))                                             # [(support x dual_axis)]
         self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                   # [1 x 1 x (support x dual_axis)]
