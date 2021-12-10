@@ -30,15 +30,16 @@ class Model(hk.Module):
                                         jax.nn.relu
                                     ]
                                     )(feature)
-        feature_tile = jnp.reshape(
-                        jnp.tile(jnp.expand_dims(feature_net,axis=1),(1,quaitle_shape[0],1)),                           #[ batch x tau x self.embedding_size]
-                        (feature_shape[0]*quaitle_shape[0],self.embedding_size))                                        #[ (batch x tau) x self.embedding_size ]
+        feature_tile = jnp.tile(jnp.expand_dims(feature_net,axis=1),(1,quaitle_shape[0],1))                             #[ batch x tau x self.embedding_size]
         costau = jnp.cos(jnp.expand_dims(tau,axis=1)*self.pi_mtx),                                                      #[ tau x 128]
         quantile_embedding = jnp.tile(
-                             hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau),
-                             (feature_shape[0],1)                                                                       # [ (batch x tau) x self.embedding_size ]
+                             jnp.expand_dims(
+                             hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau),                      #[ tau x self.embedding_size ]
+                             axis=0),                                                                                   #[ 1 x tau x self.embedding_size ]
+                             (feature_shape[0],1,1)                                                                     #[ batch x tau x self.embedding_size ]
                              )
-        mul_embedding = feature_tile*quantile_embedding
+        mul_embedding = jnp.reshape(feature_tile*quantile_embedding,
+                        (feature_shape[0]*quaitle_shape[0],self.embedding_size))                                        #[ (batch x tau) x self.embedding_size ]
         if not self.dueling:
             q_net = jnp.swapaxes(jnp.reshape(
                 hk.Sequential(
