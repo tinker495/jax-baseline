@@ -106,8 +106,8 @@ class IQN(Q_Network_Family):
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=2); not_dones = 1.0 - dones
         key, subkey1, subkey2 = jax.random.split(key,3)
-        tau = jax.random.uniform(subkey1,(self.batch_size,self.n_support))
-        target_tau = jax.random.uniform(subkey2,(self.batch_size,self.n_support))
+        tau = jax.random.uniform(subkey1,(self.n_support))
+        target_tau = jax.random.uniform(subkey2,(self.n_support))
         targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, target_tau, key)
         (loss,abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, tau, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
@@ -127,8 +127,8 @@ class IQN(Q_Network_Family):
                 (jnp.abs(error) > self.delta).astype(jnp.float32) *
                 self.delta * (jnp.abs(error) - 0.5 * self.delta))
         if self.dueling_model:
-            tau = jnp.tile(tau,(1,2))
-        mul = jnp.abs(jnp.expand_dims(tau,axis=1) - (error < 0).astype(jnp.float32))
+            tau = jnp.tile(tau,(2))
+        mul = jnp.abs(jnp.expand_dims(tau,axis=(0,1)) - (error < 0).astype(jnp.float32))
         loss = jnp.sum(jnp.mean(mul*huber,axis=1),axis=1)
         return jnp.mean(weights*loss), loss
     
