@@ -50,7 +50,7 @@ class Model(hk.Module):
                     self.layer(self.action_size[0])
                 ]
                 )(mul_embedding)
-                ,(feature_shape[0],quaitle_shape[1],self.action_size[0])),1,2)
+                ,(feature_shape[0],quaitle_shape[0],self.action_size[0])),1,2)
             return q_net
         else:
             v = jnp.tile(
@@ -64,7 +64,7 @@ class Model(hk.Module):
                     self.layer(1)
                 ]
                 )(mul_embedding)
-                ,(feature_shape[0],quaitle_shape[1],1)),1,2),
+                ,(feature_shape[0],quaitle_shape[0],1)),1,2),
                 (1,self.action_size[0],1))
             a = jnp.swapaxes(jnp.reshape(
                 hk.Sequential(
@@ -75,6 +75,6 @@ class Model(hk.Module):
                     self.layer(self.action_size[0])
                 ]
                 )(mul_embedding)
-                ,(feature_shape[0],quaitle_shape[1],self.action_size[0])),1,2)
+                ,(feature_shape[0],quaitle_shape[0],self.action_size[0])),1,2)
             q = jnp.concatenate([v,a],axis=2)
             return q
