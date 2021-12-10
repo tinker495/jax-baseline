@@ -24,13 +24,15 @@ class Model(hk.Module):
     def __call__(self,feature: jnp.ndarray, tau: jnp.ndarray) -> jnp.ndarray:
         feature_shape = feature.shape                                                                                   #[ batch x feature]
         quaitle_shape = tau.shape                                                                                       #[ tau ]
+        
         feature_net = hk.Sequential(
                                     [
                                         self.layer(self.embedding_size),
                                         jax.nn.relu
                                     ]
                                     )(feature)
-        feature_tile = jnp.tile(jnp.expand_dims(feature_net,axis=1),(1,quaitle_shape[0],1))                             #[ batch x tau x self.embedding_size]
+        feature_tile = jnp.expand_dims(feature_net,axis=1)                                                              #[ batch x 1 x self.embedding_size]
+        
         costau = jnp.cos(jnp.expand_dims(tau,axis=1)*self.pi_mtx)                                                       #[ tau x 128]
         quantile_embedding = jnp.expand_dims(
                              hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau),                      #[ tau x self.embedding_size ]
