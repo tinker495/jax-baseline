@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import haiku as hk
 import numpy as np
 import optax
+from einops import rearrange, reduce, repeat
 
 from haiku_baselines.DQN.base_class import Q_Network_Family
 from haiku_baselines.QRDQN.network import Model
