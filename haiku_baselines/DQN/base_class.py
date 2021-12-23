@@ -63,7 +63,6 @@ class Q_Network_Family(object):
         
         self.get_env_setup()
         self.get_memory_setup()
-        self.update_key = jax.jit(self.update_key)
         
     def save_params(self, path):
         save(path, self.params)
