@@ -10,6 +10,8 @@ setup(
         'gym[atari,accept-rom-license]',
         'box2d',
         'box2d-py',
+        'jax',
+        'einops',
         'dm-haiku',
         'optax',
         'numpy',
