@@ -32,8 +32,7 @@ class IQN(Q_Network_Family):
             self.setup_model() 
             
     def setup_model(self):
-        self.key, subkey1, subkey2, subkeytau = jax.random.split(self.key,4)
-        tau = jax.random.uniform(subkeytau,(self.n_support,))
+        tau = jax.random.uniform(next(self.key_seq),(self.n_support,))
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
         if 'cnn_mode' in self.policy_kwargs.keys():
             cnn_mode = self.policy_kwargs['cnn_mode']
@@ -42,9 +41,9 @@ class IQN(Q_Network_Family):
         self.model = hk.transform(lambda x,tau: Model(self.action_size,
                            dueling=self.dueling_model,noisy=self.param_noise,
                            **self.policy_kwargs)(x,tau))
-        pre_param = self.preproc.init(subkey1,
+        pre_param = self.preproc.init(next(self.key_seq),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
-        model_param = self.model.init(subkey2,
+        model_param = self.model.init(next(self.key_seq),
                             self.preproc.apply(pre_param, 
                             None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]), tau)
         self.params = hk.data_structures.merge(pre_param, model_param)
@@ -87,12 +86,10 @@ class IQN(Q_Network_Family):
                 data = self.replay_buffer.sample(self.batch_size,self.prioritized_replay_beta0)
             else:
                 data = self.replay_buffer.sample(self.batch_size)
-                
-            self.key, subkey = self.update_key(self.key)
             
             self.params, self.target_params, self.opt_state, loss, t_mean, new_priorities = \
                 self._train_step(self.params, self.target_params, self.opt_state, steps, 
-                                 subkey,**data)
+                                 next(self.key_seq) if self.param_noise else None,**data)
             
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data['indexes'], new_priorities)

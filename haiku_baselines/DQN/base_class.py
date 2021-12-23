@@ -27,7 +27,7 @@ class Q_Network_Family(object):
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
-        self.key = jax.random.PRNGKey(self.seed)
+        self.key_seq = hk.PRNGSequence(self.seed)
         
         self.param_noise = param_noise
         self.learning_starts = learning_starts
@@ -118,12 +118,6 @@ class Q_Network_Family(object):
     def setup_model(self):
         pass
     
-    def update_key(self,key,num=1):                
-        if self.param_noise:
-            return jax.random.split(key, num+1)
-        else:
-            return (key, None)
-    
     def _train_step(self, steps):
         pass
     
@@ -132,8 +126,7 @@ class Q_Network_Family(object):
     
     def actions(self,obs,epsilon):
         if (epsilon <= np.random.uniform(0,1) or self.param_noise):
-            self.key, subkey = self.update_key(self.key)
-            actions = np.asarray(self._get_actions(self.params,obs,subkey))
+            actions = np.asarray(self._get_actions(self.params,obs,next(self.key_seq) if self.param_noise else None))
         else:
             actions = np.random.choice(self.action_size[0], [self.worker_size,1])
         return actions
