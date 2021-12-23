@@ -70,15 +70,18 @@ class IQN(Q_Network_Family):
     def get_q(self, params, obses, tau, key = None) -> jnp.ndarray:
         return self.model.apply(params, key, self.preproc.apply(params, key, obses), tau)
         
-    def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
-        key, subkey = jax.random.split(key)
-        tau = jax.random.uniform(subkey,(self.n_support,))
-        return jnp.expand_dims(jnp.argmax(
-               jnp.mean(self.get_q(params,convert_jax(obses),tau,key),axis=2)
-               ,axis=1),axis=1)
+    def actions(self,obs,epsilon):
+        if (epsilon <= np.random.uniform(0,1) or self.param_noise):
+            actions = np.asarray(self._get_actions(self.params,obs,next(self.key_seq)))
+        else:
+            actions = np.random.choice(self.action_size[0], [self.worker_size,1])
+        return actions
         
-    def update_key(self,key,num=1):
-        return jax.random.split(key, num+1)
+    def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
+        tau = jax.random.uniform(key,(self.n_support,))
+        return jnp.expand_dims(jnp.argmax(
+               jnp.mean(self.get_q(params,convert_jax(obses),tau,None),axis=2)
+               ,axis=1),axis=1)
     
     def train_step(self, steps, gradient_steps):
         for _ in range(gradient_steps):
@@ -89,7 +92,7 @@ class IQN(Q_Network_Family):
             
             self.params, self.target_params, self.opt_state, loss, t_mean, new_priorities = \
                 self._train_step(self.params, self.target_params, self.opt_state, steps, 
-                                 next(self.key_seq) if self.param_noise else None,**data)
+                                 next(self.key_seq),**data)
             
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data['indexes'], new_priorities)
