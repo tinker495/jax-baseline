@@ -241,8 +241,8 @@ class Q_Network_Family(object):
             next_state, reward, terminal, info = self.env.step(actions[0][0])
             next_state = [np.expand_dims(next_state,axis=0)]
             done = terminal
-            #if "TimeLimit.truncated" in info:
-            #    done = not info["TimeLimit.truncated"]
+            if "TimeLimit.truncated" in info:
+                done = not info["TimeLimit.truncated"]
             self.replay_buffer.add(state, actions[0], reward, next_state, done, terminal)
             self.scores[0] += reward
             state = next_state
