@@ -111,10 +111,10 @@ class QRDQN(Q_Network_Family):
     def _loss(self, params, obses, actions, targets, weights, key):
         theta_loss_tile = repeat(
                             jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1),
-                            'b o t -> b (o t) t')                                                       # batch x support x support
+                            'b o t -> b (o t) t',t=self.quantile.shape[-1])                                     # batch x support x support
         logit_valid_tile = repeat(targets,
-                            'b t -> b t t')                                                             # batch x support x support
-        error = logit_valid_tile - theta_loss_tile                                                      # batch x support x support
+                            'b t -> b t t',t=self.quantile.shape[-1])                                           # batch x support x support
+        error = logit_valid_tile - theta_loss_tile                                                              # batch x support x support
         huber = ((jnp.abs(error) <= self.delta).astype(jnp.float32) *
                 0.5 * error ** 2 +
                 (jnp.abs(error) > self.delta).astype(jnp.float32) *
