@@ -6,11 +6,11 @@ import optax
 from einops import rearrange, reduce, repeat
 
 from haiku_baselines.DQN.base_class import Q_Network_Family
-from haiku_baselines.IQN.network import Model
-from haiku_baselines.common.Module import PreProcess
+from haiku_baselines.FQF.network import Model
+from haiku_baselines.common.Module import PreProcess, FractionProposal
 from haiku_baselines.common.utils import hard_update, convert_jax
 
-class IQN(Q_Network_Family):
+class FQF(Q_Network_Family):
     def __init__(self, env, gamma=0.99, learning_rate=3e-4, buffer_size=100000, exploration_fraction=0.3, n_support = 32, delta = 1.0,
                  exploration_final_eps=0.02, exploration_initial_eps=1.0, train_freq=1, gradient_steps=1, batch_size=32, double_q=True,
                  dueling_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, prioritized_replay=False,
@@ -18,7 +18,7 @@ class IQN(Q_Network_Family):
                  param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
-        super(IQN, self).__init__(env, gamma, learning_rate, buffer_size, exploration_fraction,
+        super(FQF, self).__init__(env, gamma, learning_rate, buffer_size, exploration_fraction,
                  exploration_final_eps, exploration_initial_eps, train_freq, gradient_steps, batch_size, double_q,
                  dueling_model, n_step, learning_starts, target_network_update_freq, prioritized_replay,
                  prioritized_replay_alpha, prioritized_replay_beta0, prioritized_replay_eps, 
@@ -41,12 +41,16 @@ class IQN(Q_Network_Family):
         self.model = hk.transform(lambda x,tau: Model(self.action_size,
                            dueling=self.dueling_model,noisy=self.param_noise,
                            **self.policy_kwargs)(x,tau))
+        self.fpf = hk.transform(lambda x: FractionProposal(**self.policy_kwargs)(x))
         pre_param = self.preproc.init(next(self.key_seq),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         model_param = self.model.init(next(self.key_seq),
                             self.preproc.apply(pre_param, 
                             None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]), tau)
-        self.params = hk.data_structures.merge(pre_param, model_param)
+        fpf_param = self.fpf.init(next(self.key_seq),
+                            self.preproc.apply(pre_param, 
+                            None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]))
+        self.params = hk.data_structures.merge(pre_param, model_param,fpf_param)
         self.target_params = self.params
         
         self.opt_state = self.optimizer.init(self.params)
@@ -67,20 +71,14 @@ class IQN(Q_Network_Family):
         self._target = jax.jit(self._target)
         self._train_step = jax.jit(self._train_step)
     
-    def get_q(self, params, obses, tau, key = None) -> jnp.ndarray:
-        return self.model.apply(params, key, self.preproc.apply(params, key, obses), tau)
-        
-    def actions(self,obs,epsilon):
-        if (epsilon <= np.random.uniform(0,1) or self.param_noise):
-            actions = np.asarray(self._get_actions(self.params,obs,next(self.key_seq)))
-        else:
-            actions = np.random.choice(self.action_size[0], [self.worker_size,1])
-        return actions
+    def get_q(self, params, feature, tau, key = None) -> jnp.ndarray:
+        return self.model.apply(params, key, feature, tau)
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
-        tau = jax.random.uniform(key,(self.n_support,))
+        feature = self.preproc.apply(params, key, convert_jax(obses))
+        _, tau, _ = self.fpf.apply(params, key, feature)
         return jnp.expand_dims(jnp.argmax(
-               jnp.mean(self.get_q(params,convert_jax(obses),tau,key),axis=2)
+               jnp.mean(self.get_q(params,feature,tau,key),axis=2)
                ,axis=1),axis=1)
     
     def train_step(self, steps, gradient_steps):
@@ -92,7 +90,7 @@ class IQN(Q_Network_Family):
             
             self.params, self.target_params, self.opt_state, loss, t_mean, new_priorities = \
                 self._train_step(self.params, self.target_params, self.opt_state, steps, 
-                                 next(self.key_seq),**data)
+                                 next(self.key_seq) if self.param_noise else None,**data)
             
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data['indexes'], new_priorities)
@@ -106,9 +104,8 @@ class IQN(Q_Network_Family):
     def _train_step(self, params, target_params, opt_state, steps, key, 
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); actions = jnp.expand_dims(actions.astype(jnp.int32),axis=2); not_dones = 1.0 - dones
-        key1, key2 = jax.random.split(key,2)
-        targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key1)
-        (loss,abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key2)
+        targets = self._target(params, target_params, obses, actions, rewards, nxtobses, not_dones, key)
+        (loss,abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
@@ -118,10 +115,11 @@ class IQN(Q_Network_Family):
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, tau, key):
-        tau = jax.random.uniform(key,(self.n_support,))
-        theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, tau, key), actions, axis=1) # batch x 1 x (support x dual_axis)
+        feature = self.preproc.apply(params, key, obses)
+        tau, tau_hats, entropy = self.fpf.apply(params, key, feature)
+        theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, tau_hats, key), actions, axis=1) # batch x 1 x (support x dual_axis)
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                          # batch x (support x dual_axis) x 1
-        error = logit_valid_tile - theta_loss_tile                                                  # batch x (support x dual_axis) x (support x dual_axis)
+        error = logit_valid_tile - theta_loss_tile                                              # batch x (support x dual_axis) x (support x dual_axis)
         huber = ((jnp.abs(error) <= self.delta).astype(jnp.float32) *
                 0.5 * error ** 2 +
                 (jnp.abs(error) > self.delta).astype(jnp.float32) *
@@ -133,7 +131,6 @@ class IQN(Q_Network_Family):
         return jnp.mean(weights*loss), loss
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, target_tau, key):
-        target_tau = jax.random.uniform(key,(self.n_support,))
         next_q = self.get_q(target_params,nxtobses,target_tau,key)
         if self.double_q:
             next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,target_tau,key),axis=2),axis=1),axis=(1,2))
@@ -159,6 +156,6 @@ class IQN(Q_Network_Family):
         return jax.lax.stop_gradient((next_vals * self._gamma) + rewards) # batch x (support x dual_axis)
 
     
-    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="IQN",
+    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="FQF",
               reset_num_timesteps=True, replay_wrapper=None):
         super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)
