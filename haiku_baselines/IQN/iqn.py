@@ -129,7 +129,7 @@ class IQN(Q_Network_Family):
                 self.delta * (jnp.abs(error) - 0.5 * self.delta))
         if self.dueling_model:
             tau = jnp.tile(tau,(2))
-        mul = jnp.abs(jnp.expand_dims(tau,axis=(0,1)) - (error < 0).astype(jnp.float32))
+        mul = jax.lax.stop_gradient(jnp.abs(jnp.expand_dims(tau,axis=(0,1)) - (error < 0).astype(jnp.float32)))
         loss = jnp.sum(jnp.mean(mul*huber,axis=1),axis=1)
         return jnp.mean(weights*loss), loss
     
