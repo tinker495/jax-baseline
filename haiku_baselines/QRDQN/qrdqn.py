@@ -50,10 +50,10 @@ class QRDQN(Q_Network_Family):
         
         self.opt_state = self.optimizer.init(self.params)
         
-        self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support+1)[:1])/2.0 # [support]
+        self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support+1)[:1])/2.0   # [support]
         if self.dueling_model:
-            self.quantile = jnp.tile(self.quantile,(2))                                             # [(support x dual_axis)]
-        self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                   # [1 x 1 x (support x dual_axis)]
+            self.quantile = repeat(self.quantile,'t -> (t d)',d=2)                                                      # [(support x dual_axis)]
+        self.quantile = jax.device_put(rearrange(self.quantile,'t -> o o t',o=1))                                       # [1 x 1 x support]
         
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
@@ -109,14 +109,17 @@ class QRDQN(Q_Network_Family):
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, key):
-        theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)  # batch x 1 x (support x dual_axis)
-        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x (support x dual_axis) x 1
-        error = logit_valid_tile - theta_loss_tile                                              # batch x (support x dual_axis) x (support x dual_axis)
+        theta_loss_tile = repeat(
+                            jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1),
+                            'b o t -> b (o t) t')                                                       # batch x support x support
+        logit_valid_tile = repeat(targets,
+                            'b t -> b t t')                                                             # batch x support x support
+        error = logit_valid_tile - theta_loss_tile                                                      # batch x support x support
         huber = ((jnp.abs(error) <= self.delta).astype(jnp.float32) *
                 0.5 * error ** 2 +
                 (jnp.abs(error) > self.delta).astype(jnp.float32) *
                 self.delta * (jnp.abs(error) - 0.5 * self.delta))
-        mul = jnp.abs(self.quantile - (error < 0).astype(jnp.float32))
+        mul = jax.lax.stop_gradient(jnp.abs(self.quantile - (error < 0).astype(jnp.float32)))
         loss = jnp.sum(jnp.mean(mul*huber,axis=1),axis=1)
         return jnp.mean(weights*loss), loss
     
