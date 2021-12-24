@@ -80,7 +80,7 @@ class IQN(Q_Network_Family):
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         tau = jax.random.uniform(key,(self.n_support,))
         return jnp.expand_dims(jnp.argmax(
-               jnp.mean(self.get_q(params,convert_jax(obses),tau,None),axis=2)
+               jnp.mean(self.get_q(params,convert_jax(obses),tau,key),axis=2)
                ,axis=1),axis=1)
     
     def train_step(self, steps, gradient_steps):
