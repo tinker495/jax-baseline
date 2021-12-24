@@ -47,10 +47,10 @@ class FQF(Q_Network_Family):
         model_param = self.model.init(next(self.key_seq),
                             self.preproc.apply(pre_param, 
                             None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]), tau)
-        fpf_param = self.fpf.init(next(self.key_seq),
+        self.fpf_param = self.fpf.init(next(self.key_seq),
                             self.preproc.apply(pre_param, 
                             None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]))
-        self.params = hk.data_structures.merge(pre_param, model_param,fpf_param)
+        self.params = hk.data_structures.merge(pre_param, model_param)
         self.target_params = self.params
         
         self.opt_state = self.optimizer.init(self.params)
@@ -114,9 +114,9 @@ class FQF(Q_Network_Family):
             new_priorities = abs_error + self.prioritized_replay_eps
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
-    def _loss(self, params, obses, actions, targets, weights, tau, key):
+    def _loss(self, params, fqf_params, obses, actions, targets, weights, key):
         feature = self.preproc.apply(params, key, obses)
-        tau, tau_hats, entropy = self.fpf.apply(params, key, feature)
+        tau, tau_hats, entropy = self.fpf.apply(fqf_params, key, feature)
         theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, tau_hats, key), actions, axis=1) # batch x 1 x (support x dual_axis)
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                          # batch x (support x dual_axis) x 1
         error = logit_valid_tile - theta_loss_tile                                              # batch x (support x dual_axis) x (support x dual_axis)
@@ -125,15 +125,17 @@ class FQF(Q_Network_Family):
                 (jnp.abs(error) > self.delta).astype(jnp.float32) *
                 self.delta * (jnp.abs(error) - 0.5 * self.delta))
         if self.dueling_model:
-            tau = jnp.tile(tau,(2))
-        mul = jax.lax.stop_gradient(jnp.abs(jnp.expand_dims(tau,axis=(0,1)) - (error < 0).astype(jnp.float32)))
+            tau_hats = jnp.tile(tau_hats,(2))
+        mul = jax.lax.stop_gradient(jnp.abs(jnp.expand_dims(tau_hats,axis=(0,1)) - (error < 0).astype(jnp.float32)))
         loss = jnp.sum(jnp.mean(mul*huber,axis=1),axis=1)
         return jnp.mean(weights*loss), loss
     
-    def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, target_tau, key):
-        next_q = self.get_q(target_params,nxtobses,target_tau,key)
+    def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
+        feature = self.preproc.apply(params, key, nxtobses)
+        tau, tau_hats, entropy = self.fpf.apply(params, key, feature)
+        next_q = self.get_q(target_params,self.preproc.apply(target_params, key, nxtobses),tau_hats,key)
         if self.double_q:
-            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,target_tau,key),axis=2),axis=1),axis=(1,2))
+            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(feature,nxtobses,tau_hats,key),axis=2),axis=1),axis=(1,2))
         else:
             next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(next_q,axis=2),axis=1),axis=(1,2))
             
@@ -143,8 +145,10 @@ class FQF(Q_Network_Family):
             tau_log_pi_next = jnp.expand_dims(next_q_mean - jnp.max(next_q_mean, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum,axis=2)
             pi_target = jnp.expand_dims(jax.nn.softmax(next_q_mean/self.munchausen_entropy_tau, axis=1),axis=2)
             next_vals = jnp.sum((pi_target * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next)), axis=1) * not_dones
-            
-            q_k_targets = jnp.mean(self.get_q(target_params,obses,target_tau,key),axis=2)
+
+            feature = self.preproc.apply(params, key, obses)
+            tau, tau_hats, entropy = self.fpf.apply(params, key, feature)
+            q_k_targets = jnp.mean(self.get_q(target_params,self.preproc.apply(target_params, key, obses),tau_hats,key),axis=2)
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
             logsum = jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1, keepdims=True)
             log_pi = jnp.expand_dims(q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum,axis=2)
