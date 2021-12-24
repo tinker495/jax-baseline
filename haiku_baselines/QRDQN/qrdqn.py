@@ -53,7 +53,7 @@ class QRDQN(Q_Network_Family):
         self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support+1)[:1])/2.0   # [support]
         if self.dueling_model:
             self.quantile = repeat(self.quantile,'t -> (t d)',d=2)                                                      # [(support x dual_axis)]
-        self.quantile = jax.device_put(repeat(self.quantile,'t -> o o t',o=1))                                       # [1 x 1 x support]
+        self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                                       # [1 x 1 x support]
         
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
