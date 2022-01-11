@@ -71,7 +71,7 @@ class Deteministic_Policy_Gradient_Family(object):
             self.group_name = group_name
             
             self.observation_space = [list(spec.shape) for spec in group_spec.observation_specs]
-            self.action_size = [branch for branch in group_spec.action_spec.continuous_size]
+            self.action_size = [group_spec.action_spec.continuous_size]
             self.worker_size = len(dec.agent_id)
             self.env_type = "unity"
             
