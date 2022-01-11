@@ -158,7 +158,7 @@ class C51(Q_Network_Family):
         target_distribution = target_distribution.at[jnp.reshape(C51_L + self.offset,(-1))].add(jnp.reshape(next_distribution*(C51_H.astype(jnp.float32) - C51_b),(-1)))
         target_distribution = target_distribution.at[jnp.reshape(C51_H + self.offset,(-1))].add(jnp.reshape(next_distribution*(C51_b - C51_L.astype(jnp.float32)),(-1)))
         target_distribution = jnp.reshape(target_distribution,(self.batch_size,self.categorial_bar_n))
-        return jax.lax.stop_gradient(target_distribution)
+        return target_distribution
 
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="C51",
