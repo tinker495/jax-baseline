@@ -118,14 +118,6 @@ class Deteministic_Policy_Gradient_Family(object):
         
     def learn(self, total_timesteps, callback=None, log_interval=1000, tb_log_name="Q_network",
               reset_num_timesteps=True, replay_wrapper=None):
-        if self.munchausen:
-            tb_log_name = "M-" + tb_log_name
-        if self.param_noise:
-            tb_log_name = "Noisy_" + tb_log_name
-        if self.dueling_model:
-            tb_log_name = "Dueling_" + tb_log_name
-        if self.double_q:
-            tb_log_name = "Double_" + tb_log_name
         if self.n_step_method:
             tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
         if self.prioritized_replay:
