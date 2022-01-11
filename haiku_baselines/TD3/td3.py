@@ -89,7 +89,8 @@ class TD3(Deteministic_Policy_Gradient_Family):
             
         if self.summary and steps % self.log_interval == 0:
             self.summary.add_scalar("loss/qloss", loss, steps)
-            self.summary.add_scalar("loss/targets", t_mean, steps)
+            if t_mean is not None:
+                self.summary.add_scalar("loss/targets", t_mean, steps)
             
         return loss
 
@@ -100,6 +101,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         (critic_loss,abs_error), critic_grad = jax.value_and_grad(self._critic_loss,has_aux = True)(params, obses, actions, targets, weights, key)
         updates, opt_state = self.optimizer.update(critic_grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
+        actor_loss = None
         if bool(step % self.policy_delay == 0):
             actor_loss, actor_grad = jax.value_and_grad(self._actor_loss)(params, obses, key)
             updates, opt_state = self.optimizer.update(actor_grad, opt_state, params=params)
