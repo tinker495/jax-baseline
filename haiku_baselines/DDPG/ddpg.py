@@ -106,7 +106,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         actor_loss, actor_grad = jax.value_and_grad(self._actor_loss)(params, obses, key)
         updates, opt_state = self.optimizer.update(actor_grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = soft_update(params, target_params, steps, self.target_network_update_tau)
+        target_params = soft_update(params, target_params, self.target_network_update_tau)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error + self.prioritized_replay_eps
