@@ -5,31 +5,28 @@ import numpy as np
 import optax
 
 from haiku_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from haiku_baselines.DDPG.network import Actor, Critic
-from haiku_baselines.DDPG.ou_noise import OUNoise
-from haiku_baselines.common.schedules import LinearSchedule
+from haiku_baselines.TD3.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import soft_update, convert_jax
 
-class DDPG(Deteministic_Policy_Gradient_Family):
-    def __init__(self, env, gamma=0.99, learning_rate=3e-4, buffer_size=100000, exploration_fraction=0.3,
-                 exploration_final_eps=0.02, exploration_initial_eps=1.0, train_freq=1, gradient_steps=1, batch_size=32,
+class TD3(Deteministic_Policy_Gradient_Family):
+    def __init__(self, env, gamma=0.99, learning_rate=3e-4, buffer_size=100000,target_action_noise_mul = 1.5, 
+                 action_noise = 0.1, train_freq=1, gradient_steps=1, batch_size=32, policy_delay = 3,
                  n_step = 1, learning_starts=1000, target_network_update_tau=2e-4, prioritized_replay=False,
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
-        super(DDPG, self).__init__(env, gamma, learning_rate, buffer_size, train_freq, gradient_steps, batch_size,
+        super(TD3, self).__init__(env, gamma, learning_rate, buffer_size, train_freq, gradient_steps, batch_size,
                  n_step, learning_starts, target_network_update_tau, prioritized_replay,
                  prioritized_replay_alpha, prioritized_replay_beta0, prioritized_replay_eps,
                  log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
                  full_tensorboard_log, seed, optimizer)
-                
-        self.exploration_final_eps = exploration_final_eps
-        self.exploration_initial_eps = exploration_initial_eps
-        self.exploration_fraction = exploration_fraction
         
-        self.noise = OUNoise(action_size = self.action_size[0], worker_size= self.worker_size)
+        self.action_noise = action_noise
+        self.traget_action_noise = action_noise*target_action_noise_mul
+        self.action_noise_clamp = 0.5 #self.target_action_noise*1.5
+        self.policy_delay = policy_delay
         
         if _init_setup_model:
             self.setup_model() 
@@ -60,19 +57,19 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         print("-------------------------------------------------")
 
         self._get_actions = jax.jit(self._get_actions)
-        self._train_step = jax.jit(self._train_step)
+        self._train_step = jax.jit(self._train_step,static_argnums=1)
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         return self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))) #
     
     def discription(self):
-        return "score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(
-                                    np.mean(self.scoreque), self.epsilon, np.mean(self.lossque)
+        return "score : {:.3f}, loss : {:.3f} |".format(
+                                    np.mean(self.scoreque), np.mean(self.lossque)
                                     )
     
     def actions(self,obs,steps):
-        self.epsilon = self.exploration.value(steps)
-        actions = np.clip(np.asarray(self._get_actions(self.params,obs, None)) + self.noise()*self.epsilon,-1,1)
+        actions = np.clip(np.asarray(self._get_actions(self.params,obs, None)) + 
+                          np.random.normal(0,self.action_noise,size=(self.worker_size,self.action_size[0])),-1,1)
         return actions
     
     def train_step(self, steps, gradient_steps):
@@ -84,7 +81,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                 data = self.replay_buffer.sample(self.batch_size)
             
             self.params, self.target_params, self.opt_state, loss, t_mean, new_priorities = \
-                self._train_step(self.params, self.target_params, self.opt_state, None,
+                self._train_step(self.params, self.target_params, self.opt_state, steps, next(self.key_seq),
                                  **data)
             
             if self.prioritized_replay:
@@ -96,16 +93,17 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             
         return loss
 
-    def _train_step(self, params, target_params, opt_state, key, 
+    def _train_step(self, params, target_params, opt_state, step, key, 
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); not_dones = 1.0 - dones
         targets = self._target(target_params, rewards, nxtobses, not_dones, key)
         (critic_loss,abs_error), critic_grad = jax.value_and_grad(self._critic_loss,has_aux = True)(params, obses, actions, targets, weights, key)
         updates, opt_state = self.optimizer.update(critic_grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        actor_loss, actor_grad = jax.value_and_grad(self._actor_loss)(params, obses, key)
-        updates, opt_state = self.optimizer.update(actor_grad, opt_state, params=params)
-        params = optax.apply_updates(params, updates)
+        if bool(step % self.policy_delay == 0):
+            actor_loss, actor_grad = jax.value_and_grad(self._actor_loss)(params, obses, key)
+            updates, opt_state = self.optimizer.update(actor_grad, opt_state, params=params)
+            params = optax.apply_updates(params, updates)
         target_params = soft_update(params, target_params, self.target_network_update_tau)
         new_priorities = None
         if self.prioritized_replay:
@@ -114,27 +112,27 @@ class DDPG(Deteministic_Policy_Gradient_Family):
     
     def _critic_loss(self, params, obses, actions, targets, weights, key):
         feature = self.preproc.apply(params, key, obses)
-        vals = self.critic.apply(params, key, feature, actions)
-        error = jnp.squeeze(vals - targets)
-        return jnp.mean(weights*jnp.square(error)), jnp.abs(error)
+        q1, q2 = self.critic.apply(params, key, feature, actions)
+        error1 = jnp.squeeze(q1 - targets)
+        error2 = jnp.squeeze(q2 - targets)
+        return jnp.mean(weights*(jnp.square(error1) + jnp.square(error2))), jnp.abs(error1)
     
     def _actor_loss(self, params, obses, key):
         feature = self.preproc.apply(params, key, obses)
         policy = self.actor.apply(params, key, feature)
-        vals = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
+        vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
         return jnp.mean(-vals)
     
     def _target(self, target_params, rewards, nxtobses, not_dones, key):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
-        next_action = self.actor.apply(target_params, key, next_feature)
-        next_q = self.critic.apply(target_params, key, next_feature, next_action)
+        next_action = jnp.clip(
+                      self.actor.apply(target_params, key, next_feature) \
+                      + jnp.clip(self.traget_action_noise*jax.random.normal(key,(self.batch_size,self.action_size[0])),-self.action_noise_clamp,self.action_noise_clamp)
+                      ,-1 + 1e-2,1 - 1e-2)
+        q1, q2 = self.critic.apply(target_params, key, next_feature, next_action)
+        next_q = jnp.minimum(q1,q2)
         return (not_dones * next_q * self._gamma) + rewards
     
-    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DDPG",
+    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TD3",
               reset_num_timesteps=True, replay_wrapper=None):
-        
-        self.exploration = LinearSchedule(schedule_timesteps=int(self.exploration_fraction * total_timesteps),
-                                                initial_p=self.exploration_initial_eps,
-                                                final_p=self.exploration_final_eps)
-        self.epsilon = 1.0
         super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)

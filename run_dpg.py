@@ -3,6 +3,7 @@ import argparse
 import gym
 
 from haiku_baselines.DDPG.ddpg import DDPG
+from haiku_baselines.TD3.td3 import TD3
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -57,6 +58,10 @@ if __name__ == "__main__":
     if args.algo == "DDPG":
         agent = DDPG(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau,
                     prioritized_replay = args.per, exploration_final_eps = args.final_eps, n_step = args.n_step, train_freq=args.train_freq,
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
+    if args.algo == "TD3":
+        agent = TD3(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau,
+                    prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
 
 
