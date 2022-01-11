@@ -24,7 +24,7 @@ if __name__ == "__main__":
     parser.add_argument('--n_support', type=int,default=32, help='n_support for QRDQN,IQN,FQF')
     parser.add_argument('--node', type=int,default=256, help='network node number')
     parser.add_argument('--hidden_n', type=int,default=2, help='hidden layer number')
-    parser.add_argument('--final_eps', type=float,default=0.1, help='final epsilon')
+    parser.add_argument('--eps', type=float,default=0.1, help='epsilon')
     parser.add_argument('--worker', type=int,default=1, help='gym_worker_size')
     parser.add_argument('--optimizer', type=str,default='adamw', help='optimaizer')
     parser.add_argument('--train_freq', type=int, default=1, help='train_frequancy')
@@ -57,11 +57,11 @@ if __name__ == "__main__":
         
     if args.algo == "DDPG":
         agent = DDPG(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau,
-                    prioritized_replay = args.per, exploration_final_eps = args.final_eps, n_step = args.n_step, train_freq=args.train_freq,
+                    prioritized_replay = args.per, exploration_final_eps = args.eps, n_step = args.n_step, train_freq=args.train_freq,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "TD3":
         agent = TD3(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau,
-                    prioritized_replay = args.per, action_noise = args.final_eps, n_step = args.n_step, train_freq=args.train_freq,
+                    prioritized_replay = args.per, action_noise = args.eps, n_step = args.n_step, train_freq=args.train_freq,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
 
 
