@@ -125,7 +125,7 @@ class DQN(Q_Network_Family):
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
             next_vals = not_dones * jnp.take_along_axis(next_q, next_actions, axis=1)
-        return jax.lax.stop_gradient((next_vals * self._gamma) + rewards)
+        return (next_vals * self._gamma) + rewards
 
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DQN",
