@@ -58,6 +58,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
 
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
+        self._actor_train_step = jax.jit(self._actor_train_step)
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         return self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))) #
@@ -80,9 +81,14 @@ class TD3(Deteministic_Policy_Gradient_Family):
             else:
                 data = self.replay_buffer.sample(self.batch_size)
             
-            self.params, self.target_params, self.opt_state, loss, t_mean, new_priorities = \
-                self._train_step(self.params, self.target_params, self.opt_state, steps, next(self.key_seq),
+            self.params, self.target_params, self.opt_state, loss, new_priorities = \
+                self._train_step(self.params, self.target_params, self.opt_state, next(self.key_seq),
                                  **data)
+                
+            t_mean = None
+            if steps % self.policy_delay == 0:
+                self.params, self.opt_state, t_mean = \
+                self._actor_train_step(self.params, self.opt_state,data['obses'])
             
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data['indexes'], new_priorities)
@@ -94,23 +100,26 @@ class TD3(Deteministic_Policy_Gradient_Family):
             
         return loss
 
-    def _train_step(self, params, target_params, opt_state, step, key, 
+    def _train_step(self, params, target_params, opt_state, key, 
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); not_dones = 1.0 - dones
         targets = self._target(target_params, rewards, nxtobses, not_dones, key)
         (critic_loss,abs_error), critic_grad = jax.value_and_grad(self._critic_loss,has_aux = True)(params, obses, actions, targets, weights, key)
         updates, opt_state = self.optimizer.update(critic_grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        actor_loss = None
-        if bool(step % self.policy_delay == 0):
-            actor_loss, actor_grad = jax.value_and_grad(self._actor_loss)(params, obses, key)
-            updates, opt_state = self.optimizer.update(actor_grad, opt_state, params=params)
-            params = optax.apply_updates(params, updates)
         target_params = soft_update(params, target_params, self.target_network_update_tau)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error + self.prioritized_replay_eps
-        return params, target_params, opt_state, critic_loss, actor_loss, new_priorities
+        return params, target_params, opt_state, critic_loss, new_priorities
+    
+    def _actor_train_step(self,params,opt_state,obses):
+        actor_loss, actor_grad = jax.value_and_grad(self._actor_loss)(params, obses, None)
+        updates, opt_state = self.optimizer.update(actor_grad, opt_state, params=params)
+        params = optax.apply_updates(params, updates)
+        return params, opt_state, actor_loss
+        
+        
     
     def _critic_loss(self, params, obses, actions, targets, weights, key):
         feature = self.preproc.apply(params, key, obses)
