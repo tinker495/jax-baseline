@@ -18,7 +18,7 @@ class Actor(hk.Module):
                     self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
                 ] + 
                 [
-                    self.layer(self.action_size),
+                    self.layer(self.action_size[0]),
                     jax.nn.tanh
                 ]
                 )(feature)
