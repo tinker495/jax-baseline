@@ -55,7 +55,7 @@ if __name__ == "__main__":
                      'cnn_mode': cnn_mode}
         
     if args.algo == "DDPG":
-        agent = DDPG(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update_tau,
+        agent = DDPG(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau,
                     prioritized_replay = args.per, exploration_final_eps = args.final_eps, n_step = args.n_step, train_freq=args.train_freq,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
 
