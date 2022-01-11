@@ -80,7 +80,7 @@ class Deteministic_Policy_Gradient_Family(object):
             action_space = self.env.action_space
             observation_space = self.env.observation_space
             self.observation_space = [list(observation_space.shape)]
-            self.action_size = [action_space._shape]
+            self.action_size = [action_space.low.shape[0]]
             self.worker_size = 1
             self.env_type = "gym"
             
