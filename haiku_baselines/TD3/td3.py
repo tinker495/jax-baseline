@@ -118,8 +118,6 @@ class TD3(Deteministic_Policy_Gradient_Family):
         updates, opt_state = self.optimizer.update(actor_grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         return params, opt_state, actor_loss
-        
-        
     
     def _critic_loss(self, params, obses, actions, targets, weights, key):
         feature = self.preproc.apply(params, key, obses)
