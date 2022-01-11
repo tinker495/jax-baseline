@@ -19,11 +19,12 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                  param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
-        super(DDPG, self).__init__(env, gamma, learning_rate, buffer_size, train_freq, gradient_steps, batch_size, double_q,
-                 dueling_model, n_step, learning_starts, target_network_update_tau, prioritized_replay,
-                 prioritized_replay_alpha, prioritized_replay_beta0, prioritized_replay_eps, 
-                 param_noise, munchausen, log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
+        super(DDPG, self).__init__(env, gamma, learning_rate, buffer_size, train_freq, gradient_steps, batch_size,
+                 n_step, learning_starts, target_network_update_tau, prioritized_replay,
+                 prioritized_replay_alpha, prioritized_replay_beta0, prioritized_replay_eps,
+                 log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
                  full_tensorboard_log, seed, optimizer)
+                
         self.exploration_final_eps = exploration_final_eps
         self.exploration_initial_eps = exploration_initial_eps
         self.exploration_fraction = exploration_fraction
