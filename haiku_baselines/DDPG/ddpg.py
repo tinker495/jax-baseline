@@ -47,7 +47,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         feature = self.preproc.apply(pre_param, None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         actor_param = self.actor.init(next(self.key_seq), feature)
-        critic_param = self.critic.init(next(self.key_seq), feature, self.actor.apply(actor_param, feature))
+        critic_param = self.critic.init(next(self.key_seq), feature, self.actor.apply(actor_param, None, feature))
         self.params = hk.data_structures.merge(pre_param, actor_param, critic_param)
         self.target_params = self.params
         
