@@ -121,7 +121,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
         q1, q2 = self.critic.apply(params, key, feature, actions)
         error1 = jnp.squeeze(q1 - targets)
         error2 = jnp.squeeze(q2 - targets)
-        return jnp.mean(weights*(jnp.square(error1) + jnp.square(error2))), jnp.abs(error1)
+        return jnp.mean(weights*jnp.square(error1)) + jnp.mean(weights*jnp.square(error2)), jnp.abs(error1)
     
     def _actor_loss(self, params, obses, key):
         feature = self.preproc.apply(params, key, obses)
