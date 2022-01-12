@@ -63,6 +63,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
         print(jax.tree_map(lambda x: x.shape, pre_param))
         print(jax.tree_map(lambda x: x.shape, actor_param))
         print(jax.tree_map(lambda x: x.shape, critic_param))
+        print(jax.tree_map(lambda x: x.shape, value_param))
         print("-------------------------------------------------")
 
         self._get_actions = jax.jit(self._get_actions)
