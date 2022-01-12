@@ -10,7 +10,7 @@ from haiku_baselines.FQF.network import Model
 from haiku_baselines.common.Module import PreProcess, FractionProposal
 
 from haiku_baselines.common.utils import hard_update, convert_jax
-from haiku_baselines.common.losses import QuantileHuberLosses
+from haiku_baselines.common.losses import QuantileHuberLosses, FQFQuantileLosses
 
 class FQF(Q_Network_Family):
     def __init__(self, env, gamma=0.99, learning_rate=3e-4, buffer_size=100000, exploration_fraction=0.3, n_support = 32, delta = 1.0,
@@ -117,17 +117,15 @@ class FQF(Q_Network_Family):
     def _loss(self, params, obses, actions, targets, weights, key):
         feature = self.preproc.apply(params, key, obses)
         tau, tau_hats, entropy = self.fpf.apply(params, key, feature)
-        theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, jax.lax.stop_gradient(tau_hats), key), actions, axis=1) # batch x 1 x support
+        theta_loss_tile = jnp.take_along_axis(self.get_q(params, feature, jax.lax.stop_gradient(tau_hats), key), actions, axis=1) # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                          # batch x support x 1
         hubber = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, tau_hats, self.delta)
         q_loss = jnp.mean(weights*hubber)
-        tua_vals = jnp.take_along_axis(self.get_q(jax.lax.stop_gradient(params), obses, tau[:,1:-1], key), actions, axis=1) # batch x 1 x support
-        return q_loss, hubber
-    
-        tua_vals = self.model(obses,quantile[:,1:-1].contiguous()).gather(1,actions.view(-1,1,1).repeat_interleave(self.n_support-1, dim=2)).squeeze()
-        qunatile_function_loss = self.quantile_loss(tua_vals,vals.squeeze(),quantile)
-        entropy_loss = -self.ent_coef * entropies.mean()
-        qunatile_function_loss = qunatile_function_loss + entropy_loss
+        tau_vals = jnp.take_along_axis(self.get_q(jax.lax.stop_gradient(params), feature, tau[:,1:-1], key), actions, axis=1) # batch x 1 x support
+        quantile_loss = jnp.mean(FQFQuantileLosses(jnp.squeeze(tau_vals),jax.lax.stop_gradient(jnp.squeeze(theta_loss_tile)),tau,self.n_support))
+        entropy_loss = -self.ent_coef * jnp.mean(entropy)
+        total_loss = q_loss + quantile_loss + entropy_loss
+        return total_loss, hubber
     
     def _target(self,params, target_params, fqf_params, obses, actions, rewards, nxtobses, not_dones, key):
         feature = self.preproc.apply(params, key, nxtobses)
