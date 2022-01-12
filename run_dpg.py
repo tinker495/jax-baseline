@@ -4,6 +4,8 @@ import gym
 
 from haiku_baselines.DDPG.ddpg import DDPG
 from haiku_baselines.TD3.td3 import TD3
+from haiku_baselines.TD4_QR.td4_qr import TD4_QR
+from haiku_baselines.SAC.sac import SAC
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -28,6 +30,7 @@ if __name__ == "__main__":
     parser.add_argument('--worker', type=int,default=1, help='gym_worker_size')
     parser.add_argument('--optimizer', type=str,default='adamw', help='optimaizer')
     parser.add_argument('--train_freq', type=int, default=1, help='train_frequancy')
+    parser.add_argument('--ent_coef', type=str,default='auto', help='sac entropy coefficient')
     args = parser.parse_args() 
     env_name = args.env
     cnn_mode = "normal"
@@ -62,6 +65,14 @@ if __name__ == "__main__":
     if args.algo == "TD3":
         agent = TD3(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau,
                     prioritized_replay = args.per, action_noise = args.eps, n_step = args.n_step, train_freq=args.train_freq,
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
+    if args.algo == "TD4_QR":
+        agent = TD4_QR(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau,
+                    prioritized_replay = args.per, action_noise = args.eps, n_step = args.n_step, train_freq=args.train_freq, n_support = args.n_support,
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
+    if args.algo == "SAC":
+        agent = SAC(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau,
+                    prioritized_replay = args.per, action_noise = args.eps, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
 
 
