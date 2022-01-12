@@ -58,7 +58,6 @@ class TD3(Deteministic_Policy_Gradient_Family):
 
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
-        self._actor_train_step = jax.jit(self._actor_train_step)
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         return self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))) #
