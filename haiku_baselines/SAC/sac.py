@@ -138,7 +138,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
     
     def _loss(self, params, obses, actions, targets, weights, key, step, ent_coef):
         feature = self.preproc.apply(params, key, obses)
-        policy, log_prob, mu, log_std, std = self._get_update_data(params, obses, key)
+        policy, log_prob, mu, log_std, std = self._get_update_data(params, feature, key)
         q1, q2 = self.critic.apply(params, key, feature, actions)
         q1_pi, q2_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
         value = self.value.apply(params, key, feature)
