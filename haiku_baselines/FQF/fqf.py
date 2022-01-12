@@ -127,9 +127,9 @@ class FQF(Q_Network_Family):
         total_loss = q_loss + quantile_loss + entropy_loss
         return total_loss, hubber
     
-    def _target(self,params, target_params, fqf_params, obses, actions, rewards, nxtobses, not_dones, key):
+    def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         feature = self.preproc.apply(params, key, nxtobses)
-        tau, tau_hats, entropy = self.fpf.apply(fqf_params, key, feature)
+        tau, tau_hats, entropy = self.fpf.apply(params, key, feature)
         next_q = self.get_q(target_params,self.preproc.apply(target_params, key, nxtobses),tau_hats,key)
         if self.double_q:
             next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(feature,nxtobses,tau_hats,key),axis=2),axis=1),axis=(1,2))
