@@ -52,7 +52,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
             if '_' in self.ent_coef:
                 init_value = np.log(float(self.ent_coef.split('_')[1]))
                 assert init_value > 0., "The initial value of ent_coef must be greater than 0"
-            self.log_ent_coef = jax.device_put(jnp.array(init_value))
+            self.log_ent_coef = jax.device_put(init_value)
             self.ent_coef = jnp.exp(self.log_ent_coef)
         else:
             self.ent_coef = float(self.ent_coef)
