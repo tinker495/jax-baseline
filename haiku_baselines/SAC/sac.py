@@ -91,6 +91,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
     
     def actions(self,obs,steps):
         actions = np.asarray(self._get_actions(self.params,obs, next(self.key_seq)))
+        print(actions)
         return actions
     
     def train_step(self, steps, gradient_steps):
