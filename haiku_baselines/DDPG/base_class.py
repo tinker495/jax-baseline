@@ -289,7 +289,7 @@ class Deteministic_Policy_Gradient_Family(object):
             terminal = False
             episode_rew = 0
             while not terminal:
-                actions = np.asarray(self._get_actions(self.params,state, None))
+                actions = np.asarray(self._get_actions(self.params,state, next(self.key_seq)))
                 observation, reward, terminal, info = Render_env.step(actions[0])
                 state = [np.expand_dims(observation,axis=0)]
                 episode_rew += reward
