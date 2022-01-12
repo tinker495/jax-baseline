@@ -72,7 +72,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
     def _get_update_data(self,params,feature,key = None) -> jnp.ndarray:
         mu, log_std = self.actor.apply(params, key, feature)
         std = jnp.exp(log_std)
-        x_t = mu + std * jax.random.normal(key,std)
+        x_t = mu + std * jax.random.normal(key,std.shape)
         pi = jax.nn.tanh(x_t)
         var = (std ** 2)
         log_prob = jnp.sum(-jnp.square(x_t - mu) / (2 * var) - jnp.log(std) - jnp.log(jnp.sqrt(2 * jnp.pi)) - jnp.log(1 - jnp.square(jnp.pi) + 1e-6),axis=-1,keepdims=True)
