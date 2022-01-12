@@ -57,7 +57,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         print("-------------------------------------------------")
 
         self._get_actions = jax.jit(self._get_actions)
-        self._train_step = jax.jit(self._train_step)
+        #self._train_step = jax.jit(self._train_step)
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         return self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))) #
@@ -115,7 +115,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         policy = self.actor.apply(params, key, feature)
         vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
         actor_loss = jnp.mean(-vals)
-        total_loss = critic_loss #jnp.where(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
+        total_loss = jnp.where(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
         return total_loss , critic_loss, actor_loss, jnp.abs(error1)
     
     def _target(self, target_params, rewards, nxtobses, not_dones, key):
