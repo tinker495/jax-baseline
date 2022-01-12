@@ -3,6 +3,10 @@ import haiku as hk
 import jax
 import jax.numpy as jnp
 
+LOG_STD_MAX = 2
+LOG_STD_MIN = -20
+LOG_STD_SCALE = (LOG_STD_MAX - LOG_STD_MIN)/2.0
+LOG_STD_MEAN = (LOG_STD_MAX + LOG_STD_MIN)/2.0
 
 class Actor(hk.Module):
     def __init__(self,action_size,node=256,hidden_n=2):
@@ -16,11 +20,13 @@ class Actor(hk.Module):
             linear = hk.Sequential(
                 [
                     self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
+                ] + 
+                [
+                    self.layer(self.action_size[0]*2)
                 ]
                 )(feature)
-            mu = self.layer(self.action_size[0])(linear)
-            log_std = self.layer(self.action_size[0])(linear)
-            return mu, log_std
+            mu, log_std = jnp.split(linear, 2, axis=-1)
+            return mu, jnp.clip(log_std,LOG_STD_MIN,LOG_STD_MAX)
         
 class Critic(hk.Module):
     def __init__(self,node=256,hidden_n=2):

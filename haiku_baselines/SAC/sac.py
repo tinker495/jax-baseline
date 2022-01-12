@@ -74,7 +74,11 @@ class SAC(Deteministic_Policy_Gradient_Family):
         std = jnp.exp(log_std)
         x_t = mu + std * jax.random.normal(key,std.shape)
         pi = jax.nn.tanh(x_t)
-        log_prob = jnp.sum(-jnp.square(x_t - mu) / jnp.square(std) - log_std,axis=1,keepdims=True)
+        log_prob = jnp.sum(-0.5 * (
+            jnp.square((x_t - mu) / (std + 1e-6))
+            + 2 * log_std
+            + jnp.log(2 * np.pi)
+            ),axis=1)
         return pi, log_prob, mu, log_std, std
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
@@ -148,7 +152,6 @@ class SAC(Deteministic_Policy_Gradient_Family):
         error_v = jnp.squeeze(value - jax.lax.stop_gradient(jnp.minimum(q1_pi,q2_pi) - ent_coef * log_prob))
         critic_loss = jnp.mean(weights*jnp.square(error1)) + jnp.mean(weights*jnp.square(error2)) + jnp.mean(jnp.square(error_v))
         actor_loss = jnp.mean(ent_coef * log_prob - q1_pi)
-        actor_loss = (ent_coef * log_prob - qf1_pi).mean()
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
         return total_loss, (critic_loss, actor_loss, jnp.abs(error_v), log_prob)
     
