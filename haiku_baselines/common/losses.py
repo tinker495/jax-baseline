@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-def HuberLosses(q_tile, target_tile,quantile,delta):
+def QuantileHuberLosses(q_tile, target_tile,quantile,delta):
     error = target_tile - q_tile
     error_neg = jax.lax.stop_gradient((error < 0.).astype(jnp.float32))
     weight = jnp.abs(quantile - error_neg)

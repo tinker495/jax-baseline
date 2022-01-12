@@ -9,7 +9,7 @@ from haiku_baselines.TD4_QR.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
 
 from haiku_baselines.common.utils import soft_update, convert_jax
-from haiku_baselines.common.losses import HuberLosses
+from haiku_baselines.common.losses import QuantileHuberLosses
 
 class TD4_QR(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.99, learning_rate=3e-4, buffer_size=100000,target_action_noise_mul = 2.0, 
@@ -119,8 +119,8 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         q1_loss_tile = jnp.expand_dims(q1,axis=1)                                               # batch x 1 x (support x dual_axis)
         q2_loss_tile = jnp.expand_dims(q2,axis=1)                                               # batch x 1 x (support x dual_axis)
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x (support x dual_axis) x 1
-        huber1 = HuberLosses(q1_loss_tile, logit_valid_tile, self.quantile, self.delta)
-        huber2 = HuberLosses(q2_loss_tile, logit_valid_tile, self.quantile, self.delta)
+        huber1 = QuantileHuberLosses(q1_loss_tile, logit_valid_tile, self.quantile, self.delta)
+        huber2 = QuantileHuberLosses(q2_loss_tile, logit_valid_tile, self.quantile, self.delta)
         critic_loss = jnp.mean(weights*huber1) + jnp.mean(weights*huber2)
         policy = self.actor.apply(params, key, feature)
         vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
