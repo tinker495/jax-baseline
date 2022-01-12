@@ -72,7 +72,7 @@ if __name__ == "__main__":
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "SAC":
         agent = SAC(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau,
-                    prioritized_replay = args.per, action_noise = args.eps, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef,
+                    prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
 
 
