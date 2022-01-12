@@ -18,8 +18,8 @@ class Actor(hk.Module):
                     self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
                 ]
                 )(feature)
-            mu = self.layer(self.action_size[0])
-            log_std = self.layer(self.action_size[0])
+            mu = self.layer(self.action_size[0])(linear)
+            log_std = self.layer(self.action_size[0])(linear)
             return mu, log_std
         
 class Critic(hk.Module):
