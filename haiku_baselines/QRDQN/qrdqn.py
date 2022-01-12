@@ -53,8 +53,6 @@ class QRDQN(Q_Network_Family):
         self.opt_state = self.optimizer.init(self.params)
         
         self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support+1)[:1])/2.0   # [support]
-        if self.dueling_model:
-            self.quantile = repeat(self.quantile,'t -> (t d)',d=2)                                                      # [(support x dual_axis)]
         self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                                       # [1 x 1 x support]
         
         print("----------------------model----------------------")
@@ -111,8 +109,8 @@ class QRDQN(Q_Network_Family):
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, key):
-        theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)  # batch x 1 x (support x dual_axis)
-        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x (support x dual_axis) x 1
+        theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)  # batch x 1 x support
+        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x support x 1
         loss = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, self.quantile, self.delta)
         return jnp.mean(weights*loss), loss
     
@@ -138,8 +136,8 @@ class QRDQN(Q_Network_Family):
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
-            next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1)) # batch x (support x dual_axis)
-        return (next_vals * self._gamma) + rewards                                                 # batch x (support x dual_axis)
+            next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1)) # batch x support
+        return (next_vals * self._gamma) + rewards                                                 # batch x support
 
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="QRDQN",

@@ -54,8 +54,6 @@ class IQN(Q_Network_Family):
         self.opt_state = self.optimizer.init(self.params)
         
         self.tile_n = self.n_support
-        if self.double_q:
-            self.tile_n = self.tile_n*2
         
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
@@ -121,10 +119,8 @@ class IQN(Q_Network_Family):
     
     def _loss(self, params, obses, actions, targets, weights, tau, key):
         tau = jax.random.uniform(key,(self.n_support,))
-        theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, tau, key), actions, axis=1) # batch x 1 x (support x dual_axis)
-        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                          # batch x (support x dual_axis) x 1
-        if self.dueling_model:
-            tau = jnp.tile(tau,(2))
+        theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, tau, key), actions, axis=1) # batch x 1 x support
+        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                          # batch x support x 1
         loss = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, tau, self.delta)
         return jnp.mean(weights*loss), loss
     
@@ -151,8 +147,8 @@ class IQN(Q_Network_Family):
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
-            next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))  # batch x (support x dual_axis)
-        return (next_vals * self._gamma) + rewards                                                  # batch x (support x dual_axis)
+            next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))  # batch x support
+        return (next_vals * self._gamma) + rewards                                                  # batch x support
 
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="IQN",

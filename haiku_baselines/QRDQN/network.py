@@ -53,5 +53,5 @@ class Model(hk.Module):
                     hk.Reshape((self.action_size[0],self.support_n))
                 ]
                 )(feature)
-            q = jnp.concatenate([v,a],axis=2)
+            q = v + a - jnp.max(a,axis=1,keepdims=True)
             return q

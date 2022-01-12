@@ -79,5 +79,5 @@ class Model(hk.Module):
                 ]
                 )(mul_embedding)
                 ,'(b t) a -> b a t',b=batch_size, t=quaitle_shape[0])                                                   #[ batch x action x tau ]
-            q = jnp.concatenate([v,a],axis=2)
+            q = v + a - jnp.max(a,axis=1,keepdims=True)
             return q

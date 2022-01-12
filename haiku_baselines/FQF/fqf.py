@@ -8,7 +8,9 @@ from einops import rearrange, reduce, repeat
 from haiku_baselines.DQN.base_class import Q_Network_Family
 from haiku_baselines.FQF.network import Model
 from haiku_baselines.common.Module import PreProcess, FractionProposal
+
 from haiku_baselines.common.utils import hard_update, convert_jax
+from haiku_baselines.common.losses import QuantileHuberLosses
 
 class FQF(Q_Network_Family):
     def __init__(self, env, gamma=0.99, learning_rate=3e-4, buffer_size=100000, exploration_fraction=0.3, n_support = 32, delta = 1.0,
@@ -47,17 +49,15 @@ class FQF(Q_Network_Family):
         model_param = self.model.init(next(self.key_seq),
                             self.preproc.apply(pre_param, 
                             None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]), tau)
-        self.fpf_param = self.fpf.init(next(self.key_seq),
+        fpf_param = self.fpf.init(next(self.key_seq),
                             self.preproc.apply(pre_param, 
                             None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]))
-        self.params = hk.data_structures.merge(pre_param, model_param)
+        self.params = hk.data_structures.merge(pre_param, model_param, fpf_param)
         self.target_params = self.params
         
         self.opt_state = self.optimizer.init(self.params)
         
         self.tile_n = self.n_support
-        if self.double_q:
-            self.tile_n = self.tile_n*2
         
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
@@ -114,21 +114,20 @@ class FQF(Q_Network_Family):
             new_priorities = abs_error + self.prioritized_replay_eps
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
-    def _loss(self, params, fqf_params, obses, actions, targets, weights, key):
+    def _loss(self, params, obses, actions, targets, weights, key):
         feature = self.preproc.apply(params, key, obses)
-        tau, tau_hats, entropy = self.fpf.apply(fqf_params, key, feature)
-        theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, tau_hats, key), actions, axis=1) # batch x 1 x (support x dual_axis)
-        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                          # batch x (support x dual_axis) x 1
-        error = logit_valid_tile - theta_loss_tile                                              # batch x (support x dual_axis) x (support x dual_axis)
-        huber = ((jnp.abs(error) <= self.delta).astype(jnp.float32) *
-                0.5 * error ** 2 +
-                (jnp.abs(error) > self.delta).astype(jnp.float32) *
-                self.delta * (jnp.abs(error) - 0.5 * self.delta))
-        if self.dueling_model:
-            tau_hats = jnp.tile(tau_hats,(2))
-        mul = jax.lax.stop_gradient(jnp.abs(jnp.expand_dims(tau_hats,axis=(0,1)) - (error < 0).astype(jnp.float32)))
-        loss = jnp.sum(jnp.mean(mul*huber,axis=1),axis=1)
-        return jnp.mean(weights*loss), loss
+        tau, tau_hats, entropy = self.fpf.apply(params, key, feature)
+        theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, jax.lax.stop_gradient(tau_hats), key), actions, axis=1) # batch x 1 x support
+        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                          # batch x support x 1
+        hubber = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, tau_hats, self.delta)
+        q_loss = jnp.mean(weights*hubber)
+        tua_vals = jnp.take_along_axis(self.get_q(jax.lax.stop_gradient(params), obses, tau[:,1:-1], key), actions, axis=1) # batch x 1 x support
+        return q_loss, hubber
+    
+        tua_vals = self.model(obses,quantile[:,1:-1].contiguous()).gather(1,actions.view(-1,1,1).repeat_interleave(self.n_support-1, dim=2)).squeeze()
+        qunatile_function_loss = self.quantile_loss(tua_vals,vals.squeeze(),quantile)
+        entropy_loss = -self.ent_coef * entropies.mean()
+        qunatile_function_loss = qunatile_function_loss + entropy_loss
     
     def _target(self,params, target_params, fqf_params, obses, actions, rewards, nxtobses, not_dones, key):
         feature = self.preproc.apply(params, key, nxtobses)
@@ -154,8 +153,8 @@ class FQF(Q_Network_Family):
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
-            next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))  # batch x (support x dual_axis)
-        return (next_vals * self._gamma) + rewards                                                  # batch x (support x dual_axis)
+            next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))  # batch x support
+        return (next_vals * self._gamma) + rewards                                                  # batch x support
 
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="FQF",
