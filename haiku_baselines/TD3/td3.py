@@ -81,56 +81,43 @@ class TD3(Deteministic_Policy_Gradient_Family):
             else:
                 data = self.replay_buffer.sample(self.batch_size)
             
-            self.params, self.target_params, self.opt_state, loss, new_priorities = \
+            self.params, self.target_params, self.opt_state, loss, t_mean, new_priorities = \
                 self._train_step(self.params, self.target_params, self.opt_state, next(self.key_seq),
                                  **data)
-                
-            t_mean = None
-            if steps % self.policy_delay == 0:
-                self.params, self.opt_state, t_mean = \
-                self._actor_train_step(self.params, self.opt_state,data['obses'])
             
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data['indexes'], new_priorities)
             
         if self.summary and steps % self.log_interval == 0:
             self.summary.add_scalar("loss/qloss", loss, steps)
-            if t_mean is not None:
-                self.summary.add_scalar("loss/targets", t_mean, steps)
+            self.summary.add_scalar("loss/targets", t_mean, steps)
             
         return loss
 
-    def _train_step(self, params, target_params, opt_state, key, 
+    def _train_step(self, params, target_params, opt_state, key, step,
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); not_dones = 1.0 - dones
         targets = self._target(target_params, rewards, nxtobses, not_dones, key)
-        (critic_loss,abs_error), critic_grad = jax.value_and_grad(self._critic_loss,has_aux = True)(params, obses, actions, targets, weights, key)
-        updates, opt_state = self.optimizer.update(critic_grad, opt_state, params=params)
+        (total_loss, critic_loss, actor_loss, abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key, step)
+        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         target_params = soft_update(params, target_params, self.target_network_update_tau)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error + self.prioritized_replay_eps
-        return params, target_params, opt_state, critic_loss, new_priorities
+        return params, target_params, opt_state, critic_loss, -actor_loss, new_priorities
     
-    def _actor_train_step(self,params,opt_state,obses):
-        actor_loss, actor_grad = jax.value_and_grad(self._actor_loss)(params, obses, None)
-        updates, opt_state = self.optimizer.update(actor_grad, opt_state, params=params)
-        params = optax.apply_updates(params, updates)
-        return params, opt_state, actor_loss
-    
-    def _critic_loss(self, params, obses, actions, targets, weights, key):
+    def _loss(self, params, obses, actions, targets, weights, key, step):
         feature = self.preproc.apply(params, key, obses)
         q1, q2 = self.critic.apply(params, key, feature, actions)
         error1 = jnp.squeeze(q1 - targets)
         error2 = jnp.squeeze(q2 - targets)
-        return jnp.mean(weights*jnp.square(error1)) + jnp.mean(weights*jnp.square(error2)), jnp.abs(error1)
-    
-    def _actor_loss(self, params, obses, key):
-        feature = self.preproc.apply(params, key, obses)
+        critic_loss = jnp.mean(weights*jnp.square(error1)) + jnp.mean(weights*jnp.square(error2))
         policy = self.actor.apply(params, key, feature)
         vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
-        return jnp.mean(-vals)
+        actor_loss = jnp.mean(-vals)
+        total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
+        return total_loss , critic_loss, actor_loss, jnp.abs(error1)
     
     def _target(self, target_params, rewards, nxtobses, not_dones, key):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
