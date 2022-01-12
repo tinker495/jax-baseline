@@ -32,6 +32,7 @@ class Critic(hk.Module):
         self.support_n = support_n
         self.layer = hk.Linear
         
+    '''
     def __call__(self,feature: jnp.ndarray,actions: jnp.ndarray) -> jnp.ndarray:
         concat = jnp.concatenate([feature,actions],axis=1)
         q1_net = hk.Sequential(
@@ -71,4 +72,3 @@ class Critic(hk.Module):
             ]
             )(concat)
         return q1_net,q2_net
-    '''
