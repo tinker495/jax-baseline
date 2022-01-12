@@ -97,7 +97,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); not_dones = 1.0 - dones
         targets = self._target(target_params, rewards, nxtobses, not_dones, key)
-        (total_loss, critic_loss, actor_loss, abs_error), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key, step)
+        (total_loss, (critic_loss, actor_loss, abs_error)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key, step)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         target_params = soft_update(params, target_params, self.target_network_update_tau)
@@ -116,7 +116,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
         actor_loss = jnp.mean(-vals)
         total_loss = jnp.where(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
-        return total_loss , critic_loss, actor_loss, jnp.abs(error1)
+        return total_loss, (critic_loss, actor_loss,jnp.abs(error1))
     
     def _target(self, target_params, rewards, nxtobses, not_dones, key):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
