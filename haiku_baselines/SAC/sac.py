@@ -42,7 +42,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         feature = self.preproc.apply(pre_param, None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         actor_param = self.actor.init(next(self.key_seq), feature)
-        critic_param = self.critic.init(next(self.key_seq), feature, self.actor.apply(actor_param, None, feature))
+        critic_param = self.critic.init(next(self.key_seq), feature, np.zeros((1,self.action_size[0])))
         value_param = self.value.init(next(self.key_seq), feature)
         self.params = hk.data_structures.merge(pre_param, actor_param, critic_param, value_param)
         self.target_params = self.params
@@ -75,7 +75,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
         x_t = mu + std * jax.random.normal(key,std.shape)
         pi = jax.nn.tanh(x_t)
         var = (std ** 2)
-        log_prob = jnp.sum(-jnp.square(x_t - mu) / (2 * var) - jnp.log(std) - jnp.log(jnp.sqrt(2 * jnp.pi)) - jnp.log(1 - jnp.square(jnp.pi) + 1e-6),keepdims=True)
+        log_prob = jnp.sum(-jnp.square(x_t - mu) / (2 * var) - jnp.log(std) - jnp.log(jnp.sqrt(2 * jnp.pi)) - jnp.log(1 - jnp.square(jnp.pi) + 1e-6),axis=-1,keepdims=True)
         return pi, log_prob, mu, log_std, std
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
