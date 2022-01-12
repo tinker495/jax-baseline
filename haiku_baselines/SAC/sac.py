@@ -66,11 +66,11 @@ class SAC(Deteministic_Policy_Gradient_Family):
         print("-------------------------------------------------")
 
         self._get_actions = jax.jit(self._get_actions)
-        #self._train_step = jax.jit(self._train_step)
-        #self._train_ent_coef = jax.jit(self._train_ent_coef)
+        self._train_step = jax.jit(self._train_step)
+        self._train_ent_coef = jax.jit(self._train_ent_coef)
         
     def _get_update_data(self,params,feature,key = None) -> jnp.ndarray:
-        mu, log_std = self.actor.apply(params, key, feature)
+        mu, log_std = self.actor.apply(params, None, feature)
         std = jnp.exp(log_std)
         x_t = mu + std * jax.random.normal(key,std.shape)
         pi = jax.nn.tanh(x_t)
@@ -79,7 +79,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
         return pi, log_prob, mu, log_std, std
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
-        mu, log_std = self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))
+        mu, log_std = self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses)))
         std = jnp.exp(log_std)
         pi = jax.nn.tanh(mu + std * jax.random.normal(key,std.shape))
         return pi
@@ -90,7 +90,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
                                     )
     
     def actions(self,obs,steps):
-        actions = self._get_actions(self.params,obs, next(self.key_seq))
+        actions = np.asarray(self._get_actions(self.params,obs, next(self.key_seq)))
         return actions
     
     def train_step(self, steps, gradient_steps):
