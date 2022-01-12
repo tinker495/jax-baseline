@@ -78,7 +78,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
             jnp.square((x_t - mu) / (std + 1e-6))
             + 2 * log_std
             + jnp.log(2 * np.pi)
-            ),axis=1) - jnp.log(1 - jnp.square(pi) + 1e-6)
+            ) - jnp.log(1 - jnp.square(pi) + 1e-6),axis=1)
         return pi, log_prob, mu, log_std, std
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
