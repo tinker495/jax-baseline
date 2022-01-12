@@ -66,8 +66,8 @@ class SAC(Deteministic_Policy_Gradient_Family):
         print("-------------------------------------------------")
 
         self._get_actions = jax.jit(self._get_actions)
-        self._train_step = jax.jit(self._train_step)
-        self._train_ent_coef = jax.jit(self._train_ent_coef)
+        #self._train_step = jax.jit(self._train_step)
+        #self._train_ent_coef = jax.jit(self._train_ent_coef)
         
     def _get_update_data(self,params,feature,key = None) -> jnp.ndarray:
         mu, log_std = self.actor.apply(params, key, feature)
