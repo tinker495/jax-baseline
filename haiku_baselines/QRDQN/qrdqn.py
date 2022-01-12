@@ -8,7 +8,9 @@ from einops import rearrange, reduce, repeat
 from haiku_baselines.DQN.base_class import Q_Network_Family
 from haiku_baselines.QRDQN.network import Model
 from haiku_baselines.common.Module import PreProcess
+
 from haiku_baselines.common.utils import hard_update, convert_jax
+from haiku_baselines.common.losses import HuberLosses
 
 class QRDQN(Q_Network_Family):
     def __init__(self, env, gamma=0.99, learning_rate=3e-4, buffer_size=100000, exploration_fraction=0.3, n_support = 200, delta = 1,
@@ -112,12 +114,7 @@ class QRDQN(Q_Network_Family):
         theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)  # batch x 1 x (support x dual_axis)
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x (support x dual_axis) x 1
         error = logit_valid_tile - theta_loss_tile                                              # batch x (support x dual_axis) x (support x dual_axis)
-        huber = ((jnp.abs(error) <= self.delta).astype(jnp.float32) *
-                0.5 * error ** 2 +
-                (jnp.abs(error) > self.delta).astype(jnp.float32) *
-                self.delta * (jnp.abs(error) - 0.5 * self.delta))
-        mul = jax.lax.stop_gradient(jnp.abs(self.quantile - (error < 0).astype(jnp.float32)))
-        loss = jnp.sum(jnp.mean(mul*huber,axis=1),axis=1)
+        loss = HuberLosses(error, self.quantile, self.delta)
         return jnp.mean(weights*loss), loss
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):

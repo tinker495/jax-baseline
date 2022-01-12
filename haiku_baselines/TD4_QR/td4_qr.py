@@ -7,11 +7,13 @@ import optax
 from haiku_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from haiku_baselines.TD4_QR.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
+
 from haiku_baselines.common.utils import soft_update, convert_jax
+from haiku_baselines.common.losses import HuberLosses
 
 class TD4_QR(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.99, learning_rate=3e-4, buffer_size=100000,target_action_noise_mul = 1.5, 
-                 action_noise = 0.1, train_freq=1, gradient_steps=1, batch_size=32, policy_delay = 3,
+                 n_support = 200, delta = 1, action_noise = 0.1, train_freq=1, gradient_steps=1, batch_size=32, policy_delay = 3,
                  n_step = 1, learning_starts=1000, target_network_update_tau=5e-4, prioritized_replay=False,
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
@@ -27,6 +29,8 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         self.traget_action_noise = action_noise*target_action_noise_mul
         self.action_noise_clamp = 0.5 #self.target_action_noise*1.5
         self.policy_delay = policy_delay
+        self.n_support = n_support
+        self.delta = delta
         
         if _init_setup_model:
             self.setup_model() 
@@ -49,6 +53,9 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         self.target_params = self.params
         
         self.opt_state = self.optimizer.init(self.params)
+        
+        self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support+1)[:1])/2.0   # [support]
+        self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                                       # [1 x 1 x support]
         
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
@@ -109,14 +116,19 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
     def _loss(self, params, obses, actions, targets, weights, key, step):
         feature = self.preproc.apply(params, key, obses)
         q1, q2 = self.critic.apply(params, key, feature, actions)
-        error1 = jnp.squeeze(q1 - targets)
-        error2 = jnp.squeeze(q2 - targets)
-        critic_loss = jnp.mean(weights*jnp.square(error1)) + jnp.mean(weights*jnp.square(error2))
+        q1_loss_tile = jnp.expand_dims(q1,axis=1)                                               # batch x 1 x (support x dual_axis)
+        q2_loss_tile = jnp.expand_dims(q2,axis=1)                                               # batch x 1 x (support x dual_axis)
+        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x (support x dual_axis) x 1
+        error1 = q1_loss_tile - logit_valid_tile
+        error2 = q2_loss_tile - logit_valid_tile
+        huber1 = HuberLosses(error1, self.quantile, self.delta)
+        huber2 = HuberLosses(error2, self.quantile, self.delta)
+        critic_loss = jnp.mean(weights*huber1) + jnp.mean(weights*huber2)
         policy = self.actor.apply(params, key, feature)
         vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
-        actor_loss = jnp.mean(-vals)
+        actor_loss = jnp.mean(-jnp.mean(vals,axis=1))
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
-        return total_loss, (critic_loss, actor_loss, jnp.abs(error1))
+        return total_loss, (critic_loss, actor_loss, huber1)
     
     def _target(self, target_params, rewards, nxtobses, not_dones, key):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
