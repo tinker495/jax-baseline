@@ -114,6 +114,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
         if self.summary and steps % self.log_interval == 0:
             self.summary.add_scalar("loss/qloss", loss, steps)
             self.summary.add_scalar("loss/targets", t_mean, steps)
+            self.summary.add_scalar("loss/ent_coef", self.ent_coef, steps)
             
         return loss
 
