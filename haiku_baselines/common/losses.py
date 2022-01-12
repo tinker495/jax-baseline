@@ -5,7 +5,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-def HuberLosses(error,quantile,delta):
+def HuberLosses(q_tile, target_tile,quantile,delta):
+    error = target_tile - q_tile
     huber = ((jnp.abs(error) <= delta).astype(jnp.float32) *
             0.5 * error ** 2 +
             (jnp.abs(error) > delta).astype(jnp.float32) *
