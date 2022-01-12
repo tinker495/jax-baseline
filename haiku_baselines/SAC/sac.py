@@ -59,8 +59,20 @@ class SAC(Deteministic_Policy_Gradient_Family):
         self._train_step = jax.jit(self._train_step)
         self._actor_train_step = jax.jit(self._actor_train_step)
         
+    def _get_update_data(self,params,feature,key = None) -> jnp.ndarray:
+        mu, log_std = self.actor.apply(params, key, feature)
+        std = jnp.exp(log_std)
+        x_t = mu + std * jax.random.normal(key,std.shape)
+        pi = jax.nn.tanh(x_t)
+        var = (std ** 2)
+        log_prob = jnp.sum(-jnp.square(x_t - mu) / (2 * var) - jnp.log(std) - jnp.log(jnp.sqrt(2 * jnp.pi)) - jnp.log(1 - jnp.square(jnp.pi) + 1e-6),keepdims=True)
+        return pi, log_prob, mu, log_std, std
+        
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
-        return self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))) #
+        mu, log_std = self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))
+        std = jnp.exp(log_std)
+        pi = jax.nn.tanh(mu + std * jax.random.normal(key,std.shape))
+        return pi
     
     def discription(self):
         return "score : {:.3f}, loss : {:.3f} |".format(
@@ -68,8 +80,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
                                     )
     
     def actions(self,obs,steps):
-        actions = np.clip(np.asarray(self._get_actions(self.params,obs, None)) + 
-                          np.random.normal(0,self.action_noise,size=(self.worker_size,self.action_size[0])),-1,1)
+        actions = self._get_actions(self.params,obs, next(self.key_seq))
         return actions
     
     def train_step(self, steps, gradient_steps):
@@ -87,7 +98,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
             t_mean = None
             if steps % self.policy_delay == 0:
                 self.params, self.opt_state, t_mean = \
-                self._actor_train_step(self.params, self.opt_state,data['obses'])
+                self._actor_train_step(self.params, self.opt_state,data['obses'],next(self.key_seq))
             
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data['indexes'], new_priorities)
@@ -112,8 +123,8 @@ class SAC(Deteministic_Policy_Gradient_Family):
             new_priorities = abs_error + self.prioritized_replay_eps
         return params, target_params, opt_state, critic_loss, new_priorities
     
-    def _actor_train_step(self,params,opt_state,obses):
-        actor_loss, actor_grad = jax.value_and_grad(self._actor_loss)(params, obses, None)
+    def _actor_train_step(self,params,opt_state,obses,key):
+        actor_loss, actor_grad = jax.value_and_grad(self._actor_loss)(params, obses, key)
         updates, opt_state = self.optimizer.update(actor_grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         return params, opt_state, actor_loss
@@ -125,11 +136,11 @@ class SAC(Deteministic_Policy_Gradient_Family):
         error2 = jnp.squeeze(q2 - targets)
         return jnp.mean(weights*jnp.square(error1)) + jnp.mean(weights*jnp.square(error2)), jnp.abs(error1)
     
-    def _actor_loss(self, params, obses, key):
-        feature = self.preproc.apply(params, key, obses)
-        policy = self.actor.apply(params, key, feature)
+    def _actor_loss(self, params, obses, key, ent_coef):
+        feature = self.preproc.apply(params, key, convert_jax(obses))
+        policy, log_prob, mu, log_std, std = self._get_update_data(params, obses, key)
         vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
-        return jnp.mean(-vals)
+        return jnp.mean(ent_coef * log_prob - vals)
     
     def _target(self, target_params, rewards, nxtobses, not_dones, key):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
