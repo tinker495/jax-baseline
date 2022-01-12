@@ -37,6 +37,26 @@ class Critic(hk.Module):
         q1_net = hk.Sequential(
             [
                 self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
+            ]
+            )(concat)
+        q1_mean = self.layer(1)(q1_net)
+        q1_cumsum = jnp.cumsum(jax.nn.softplus(self.layer(self.support_n)(q1_net)),axis=1)
+        q1 = q1_mean + q1_cumsum - jnp.mean(q1_cumsum,axis=1,keepdims=True)
+        q2_net = hk.Sequential(
+            [
+                self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
+            ]
+            )(concat)
+        q2_mean = self.layer(1)(q2_net)
+        q2_cumsum = jnp.cumsum(jax.nn.softplus(self.layer(self.support_n)(q2_net)),axis=1)
+        q2 = q2_mean + q2_cumsum - jnp.mean(q2_cumsum,axis=1,keepdims=True)
+        return q1,q2
+    '''
+    def __call__(self,feature: jnp.ndarray,actions: jnp.ndarray) -> jnp.ndarray:
+        concat = jnp.concatenate([feature,actions],axis=1)
+        q1_net = hk.Sequential(
+            [
+                self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
             ] + 
             [
                 self.layer(self.support_n)
@@ -51,3 +71,4 @@ class Critic(hk.Module):
             ]
             )(concat)
         return q1_net,q2_net
+    '''
