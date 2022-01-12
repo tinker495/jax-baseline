@@ -47,6 +47,16 @@ class SAC(Deteministic_Policy_Gradient_Family):
         self.params = hk.data_structures.merge(pre_param, actor_param, critic_param, value_param)
         self.target_params = self.params
         
+        if isinstance(self.ent_coef, str) and self.ent_coef.startswith('auto'):
+            init_value = np.log(0.1)
+            if '_' in self.ent_coef:
+                init_value = np.log(float(self.ent_coef.split('_')[1]))
+                assert init_value > 0., "The initial value of ent_coef must be greater than 0"
+            self.log_ent_coef = jax.device_put(jnp.array(init_value))
+            self.ent_coef = jnp.exp(self.log_ent_coef)
+        else:
+            self.ent_coef = float(self.ent_coef)
+        
         self.opt_state = self.optimizer.init(self.params)
         
         print("----------------------model----------------------")
@@ -57,7 +67,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
 
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
-        self._actor_train_step = jax.jit(self._actor_train_step)
+        self._train_ent_coef = jax.jit(self._train_ent_coef)
         
     def _get_update_data(self,params,feature,key = None) -> jnp.ndarray:
         mu, log_std = self.actor.apply(params, key, feature)
@@ -91,56 +101,54 @@ class SAC(Deteministic_Policy_Gradient_Family):
             else:
                 data = self.replay_buffer.sample(self.batch_size)
             
-            self.params, self.target_params, self.opt_state, loss, new_priorities = \
-                self._train_step(self.params, self.target_params, self.opt_state, next(self.key_seq),
+            self.params, self.target_params, self.opt_state, loss, t_mean, log_prob,new_priorities = \
+                self._train_step(self.params, self.target_params, self.opt_state, next(self.key_seq), steps, self.ent_coef,
                                  **data)
-                
-            t_mean = None
-            if steps % self.policy_delay == 0:
-                self.params, self.opt_state, t_mean = \
-                self._actor_train_step(self.params, self.opt_state,data['obses'],next(self.key_seq))
             
+            if not isinstance(self.ent_coef, float):
+                self.log_ent_coef, self.ent_coef = self._train_ent_coef(self.log_ent_coef, log_prob)
+                
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data['indexes'], new_priorities)
             
         if self.summary and steps % self.log_interval == 0:
             self.summary.add_scalar("loss/qloss", loss, steps)
-            if t_mean is not None:
-                self.summary.add_scalar("loss/targets", t_mean, steps)
+            self.summary.add_scalar("loss/targets", t_mean, steps)
             
         return loss
 
-    def _train_step(self, params, target_params, opt_state, key, 
+    def _train_step(self, params, target_params, opt_state, key, step, ent_coef,
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); not_dones = 1.0 - dones
         targets = self._target(target_params, rewards, nxtobses, not_dones, key)
-        (critic_loss,abs_error), critic_grad = jax.value_and_grad(self._critic_loss,has_aux = True)(params, obses, actions, targets, weights, key)
-        updates, opt_state = self.optimizer.update(critic_grad, opt_state, params=params)
+        (total_loss, (critic_loss, actor_loss, abs_error, log_prob)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key, step, ent_coef)
+        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         target_params = soft_update(params, target_params, self.target_network_update_tau)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error + self.prioritized_replay_eps
-        return params, target_params, opt_state, critic_loss, new_priorities
+        return params, target_params, opt_state, critic_loss, -actor_loss, log_prob, new_priorities
     
-    def _actor_train_step(self,params,opt_state,obses,key):
-        actor_loss, actor_grad = jax.value_and_grad(self._actor_loss)(params, obses, key)
-        updates, opt_state = self.optimizer.update(actor_grad, opt_state, params=params)
-        params = optax.apply_updates(params, updates)
-        return params, opt_state, actor_loss
+    def _train_ent_coef(self,log_coef,log_prob):
+        l = lambda log_ent_coef, log_prob: -jnp.mean(log_ent_coef * (log_prob + self.target_entropy))
+        grad = jax.grad(l)(log_coef,log_prob)
+        log_coef = log_coef - self.learning_rate * grad
+        return log_coef, jnp.exp(log_coef)
     
-    def _critic_loss(self, params, obses, actions, targets, weights, key):
+    def _loss(self, params, obses, actions, targets, weights, key, step, ent_coef):
         feature = self.preproc.apply(params, key, obses)
+        policy, log_prob, mu, log_std, std = self._get_update_data(params, obses, key)
         q1, q2 = self.critic.apply(params, key, feature, actions)
+        q1_pi, q2_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
+        value = self.value.apply(params, key, feature)
         error1 = jnp.squeeze(q1 - targets)
         error2 = jnp.squeeze(q2 - targets)
-        return jnp.mean(weights*jnp.square(error1)) + jnp.mean(weights*jnp.square(error2)), jnp.abs(error1)
-    
-    def _actor_loss(self, params, obses, key, ent_coef):
-        feature = self.preproc.apply(params, key, convert_jax(obses))
-        policy, log_prob, mu, log_std, std = self._get_update_data(params, obses, key)
-        vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
-        return jnp.mean(ent_coef * log_prob - vals)
+        error_v = jnp.squeeze(value - jax.lax.stop_gradient(jnp.minimum(q1_pi,q2_pi) - ent_coef * log_prob))
+        critic_loss = jnp.mean(weights*jnp.square(error1)) + jnp.mean(weights*jnp.square(error2)) + jnp.mean(jnp.square(error_v))
+        actor_loss = jnp.mean(ent_coef * log_prob - q1_pi)
+        total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
+        return total_loss, (critic_loss, actor_loss, jnp.abs(error_v), log_prob)
     
     def _target(self, target_params, rewards, nxtobses, not_dones, key):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
