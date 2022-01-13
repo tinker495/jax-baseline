@@ -152,12 +152,13 @@ class TQC(Deteministic_Policy_Gradient_Family):
         qnets = self.critic.apply(params, key, feature, actions)
         qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x (support x dual_axis) x 1
-        critic_loss = 0
-        for q in qnets:
+        huber0 = QuantileHuberLosses(jnp.expand_dims(qnets[0],axis=1),logit_valid_tile,self.quantile,self.delta)
+        critic_loss = jnp.mean(weights*huber0)
+        for q in qnets[1:]:
             critic_loss += jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta))
         actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi,axis=-1),axis=-1))
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
-        return total_loss, (critic_loss, actor_loss, QuantileHuberLosses(jnp.expand_dims(qnets[0],axis=1),logit_valid_tile,self.quantile,self.delta), log_prob)
+        return total_loss, (critic_loss, actor_loss, huber0, log_prob)
     
     def _target(self, param, target_params, rewards, nxtobses, not_dones, key, ent_coef):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
