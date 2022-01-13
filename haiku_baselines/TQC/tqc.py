@@ -30,6 +30,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         self.n_support = n_support
         self.delta = delta
         self.critic_num = critic_num
+        self.quantile_drop = self.critic_num
         
         if _init_setup_model:
             self.setup_model() 
@@ -164,7 +165,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
         policy, log_prob, mu, log_std, std = self._get_update_data(param, self.preproc.apply(param, key, nxtobses),key)
         qnets_pi = self.critic.apply(target_params, key, next_feature, policy)
-        truncated_q_pi = truncated_mixture(qnets_pi,self.n_support*2 - 10) - ent_coef * log_prob
+        truncated_q_pi = truncated_mixture(qnets_pi,self.n_support*self.critic_num - self.quantile_drop) - ent_coef * log_prob
         return (not_dones * truncated_q_pi * self._gamma) + rewards
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TQC",
