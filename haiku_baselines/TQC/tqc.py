@@ -158,11 +158,11 @@ class TQC(Deteministic_Policy_Gradient_Family):
         error_q = 0
         for q in qnets:
             error_q += jnp.mean(weights*QuantileHuberLosses(q,targets,self.quantile,self.delta))
-        huber_v = jnp.mean(weights*QuantileHuberLosses(value,truncated_mixture(qnets_pi,self.n_support),self.quantile,self.delta))
+        truncated_q_pi = truncated_mixture(qnets_pi,self.n_support)
+        huber_v = jnp.mean(weights*QuantileHuberLosses(value,jax.lax.stop_gradient(truncated_q_pi),self.quantile,self.delta))
         critic_loss = error_q + huber_v
         actor_loss = 0
-        for q_pi in qnets_pi:
-            actor_loss += jnp.mean(ent_coef * log_prob - q_pi)
+        actor_loss += jnp.mean(ent_coef * log_prob - jnp.mean(truncated_q_pi,axis=-1))
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
         return total_loss, (critic_loss, actor_loss, jnp.abs(huber_v), log_prob)
     
