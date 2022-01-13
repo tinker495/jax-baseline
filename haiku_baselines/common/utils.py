@@ -16,6 +16,12 @@ def soft_update(new_tensors, old_tensors, tau : float):
     return jax.tree_multimap(
       lambda new, old: tau * new + (1.0 - tau) * old,
       new_tensors, old_tensors)
+  
+@jax.jit  
+def truncated_mixture(quantiles, out_support):
+  quantiles = jnp.concatenate(quantiles,axis=-1)
+  sorted = jnp.sort(quantiles,axis=1)
+  return sorted[:,:out_support]
     
 @jax.jit
 def convert_states(obs : List):

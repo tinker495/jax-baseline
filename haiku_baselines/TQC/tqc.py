@@ -5,19 +5,20 @@ import numpy as np
 import optax
 
 from haiku_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from haiku_baselines.SAC.network import Actor, Critic, Value
-
+from haiku_baselines.TQC.network import Actor, Critic, Value
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import soft_update, convert_jax
 
-class SAC(Deteministic_Policy_Gradient_Family):
+from haiku_baselines.common.utils import soft_update, convert_jax, truncated_mixture
+from haiku_baselines.common.losses import QuantileHuberLosses
+
+class TQC(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.99, learning_rate=3e-4, buffer_size=100000, train_freq=1, gradient_steps=1, ent_coef = 'auto', 
-                 batch_size=32, policy_delay = 3, n_step = 1, learning_starts=1000, target_network_update_tau=5e-4,
+                 n_support = 200, delta = 1.0, critic_num = 2,batch_size=32, policy_delay = 3, n_step = 1, learning_starts=1000, target_network_update_tau=5e-4,
                  prioritized_replay=False, prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4,
                  prioritized_replay_eps=1e-6, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
-        super(SAC, self).__init__(env, gamma, learning_rate, buffer_size, train_freq, gradient_steps, batch_size,
+        super(TQC, self).__init__(env, gamma, learning_rate, buffer_size, train_freq, gradient_steps, batch_size,
                  n_step, learning_starts, target_network_update_tau, prioritized_replay,
                  prioritized_replay_alpha, prioritized_replay_beta0, prioritized_replay_eps,
                  log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
@@ -26,6 +27,9 @@ class SAC(Deteministic_Policy_Gradient_Family):
         self.policy_delay = policy_delay
         self.ent_coef = ent_coef
         self.target_entropy = -np.prod(self.action_size).astype(np.float32) + 0.5 #-np.sqrt(np.prod(self.action_size).astype(np.float32))
+        self.n_support = n_support
+        self.delta = delta
+        self.critic_num = critic_num
         
         if _init_setup_model:
             self.setup_model() 
@@ -37,8 +41,8 @@ class SAC(Deteministic_Policy_Gradient_Family):
             del self.policy_kwargs['cnn_mode']
         self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
         self.actor = hk.transform(lambda x: Actor(self.action_size,**self.policy_kwargs)(x))
-        self.critic = hk.transform(lambda x,a: Critic(**self.policy_kwargs)(x,a))
-        self.value = hk.transform(lambda x: Value(**self.policy_kwargs)(x))
+        self.critic = hk.transform(lambda x,a: Critic(support_n=self.n_support, critic_num = self.critic_num, **self.policy_kwargs)(x,a))
+        self.value = hk.transform(lambda x: Value(support_n=self.n_support, **self.policy_kwargs)(x))
         pre_param = self.preproc.init(next(self.key_seq),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         feature = self.preproc.apply(pre_param, None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
@@ -59,6 +63,9 @@ class SAC(Deteministic_Policy_Gradient_Family):
             self.ent_coef = float(self.ent_coef)
         
         self.opt_state = self.optimizer.init(self.params)
+        
+        self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support+1)[:1])/2.0   # [support]
+        self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                                       # [1 x 1 x support]
         
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
@@ -145,22 +152,25 @@ class SAC(Deteministic_Policy_Gradient_Family):
     def _loss(self, params, obses, actions, targets, weights, key, step, ent_coef):
         feature = self.preproc.apply(params, key, obses)
         policy, log_prob, mu, log_std, std = self._get_update_data(params, feature, key)
-        q1, q2 = self.critic.apply(params, key, feature, actions)
-        q1_pi, q2_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
+        qnets = self.critic.apply(params, key, feature, actions)
+        qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
         value = self.value.apply(params, key, feature)
-        error1 = jnp.squeeze(q1 - targets)
-        error2 = jnp.squeeze(q2 - targets)
-        error_v = jnp.squeeze(value - jax.lax.stop_gradient(jnp.minimum(q1_pi,q2_pi) - ent_coef * log_prob))
-        critic_loss = jnp.mean(weights*jnp.square(error1)) + jnp.mean(weights*jnp.square(error2)) + jnp.mean(jnp.square(error_v))
-        actor_loss = jnp.mean(ent_coef * log_prob - q1_pi)
+        error_q = 0
+        for q in qnets:
+            error_q += jnp.mean(weights*QuantileHuberLosses(q,targets,self.quantile,self.delta))
+        huber_v = jnp.mean(weights*QuantileHuberLosses(value,truncated_mixture(qnets_pi,self.n_support),self.quantile,self.delta))
+        critic_loss = error_q + huber_v
+        actor_loss = 0
+        for q_pi in qnets_pi:
+            actor_loss += jnp.mean(ent_coef * log_prob - q_pi)
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
-        return total_loss, (critic_loss, actor_loss, jnp.abs(error_v), log_prob)
+        return total_loss, (critic_loss, actor_loss, jnp.abs(huber_v), log_prob)
     
     def _target(self, target_params, rewards, nxtobses, not_dones, key):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
         v = self.value.apply(target_params, key, next_feature)
         return (not_dones * v * self._gamma) + rewards
     
-    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="SAC",
+    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TQC",
               reset_num_timesteps=True, replay_wrapper=None):
         super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)
