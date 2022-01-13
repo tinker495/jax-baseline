@@ -162,7 +162,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         truncated_q_pi = truncated_mixture(qnets_pi,self.n_support)
         huber_v = jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(value,axis=1),jax.lax.stop_gradient(jnp.expand_dims(truncated_q_pi,axis=2)),self.quantile,self.delta))
         critic_loss = error_q + huber_v
-        actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(truncated_q_pi,axis=-1))
+        actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi,axis=-1),axis=-1))
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
         return total_loss, (critic_loss, actor_loss, jnp.abs(huber_v), log_prob)
     
