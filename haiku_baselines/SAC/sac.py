@@ -126,7 +126,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
     def _train_step(self, params, target_params, opt_state, key, step, ent_coef,
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); not_dones = 1.0 - dones
-        targets = self._target(params, target_params, rewards, nxtobses, not_dones, key, ent_coef)
+        targets = self._target(target_params, rewards, nxtobses, not_dones, key)
         (total_loss, (critic_loss, actor_loss, abs_error, log_prob)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key, step, ent_coef)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
@@ -156,9 +156,8 @@ class SAC(Deteministic_Policy_Gradient_Family):
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
         return total_loss, (critic_loss, actor_loss, jnp.abs(error_v), log_prob)
     
-    def _target(self, param, target_params, rewards, nxtobses, not_dones, key, ent_coef):
+    def _target(self, target_params, rewards, nxtobses, not_dones, key):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
-        policy, log_prob, mu, log_std, std = self._get_update_data(param, self.preproc.apply(param, key, nxtobses),key)
         v = self.value.apply(target_params, key, next_feature)
         return (not_dones * v * self._gamma) + rewards
     
