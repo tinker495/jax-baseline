@@ -155,9 +155,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         qnets = self.critic.apply(params, key, feature, actions)
         qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
         value = self.value.apply(params, key, feature)
-        error_q = 0
-        for q in qnets:
-            error_q += jnp.mean(weights*QuantileHuberLosses(q,targets,self.quantile,self.delta))
+        error_q = jnp.mean([jnp.mean(weights*QuantileHuberLosses(q,targets,self.quantile,self.delta)) for q in qnets],axis=1)
         truncated_q_pi = truncated_mixture(qnets_pi,self.n_support)
         huber_v = jnp.mean(weights*QuantileHuberLosses(value,jax.lax.stop_gradient(truncated_q_pi),self.quantile,self.delta))
         critic_loss = error_q + huber_v
