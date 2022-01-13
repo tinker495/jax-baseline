@@ -159,7 +159,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
     def _target(self, param, target_params, rewards, nxtobses, not_dones, key, ent_coef):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
         policy, log_prob, mu, log_std, std = self._get_update_data(param, self.preproc.apply(param, key, nxtobses),key)
-        v = self.value.apply(target_params, key, next_feature) - ent_coef * log_prob
+        v = self.value.apply(target_params, key, next_feature)
         return (not_dones * v * self._gamma) + rewards
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="SAC",
