@@ -155,9 +155,10 @@ class TQC(Deteministic_Policy_Gradient_Family):
         qnets = self.critic.apply(params, key, feature, actions)
         qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
         value = self.value.apply(params, key, feature)
-        error_q = jnp.mean([jnp.mean(weights*QuantileHuberLosses(q,targets,self.quantile,self.delta)) for q in qnets],axis=1)
+        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x (support x dual_axis) x 1
+        error_q = jnp.mean([jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta)) for q in qnets],axis=1)
         truncated_q_pi = truncated_mixture(qnets_pi,self.n_support)
-        huber_v = jnp.mean(weights*QuantileHuberLosses(value,jax.lax.stop_gradient(truncated_q_pi),self.quantile,self.delta))
+        huber_v = jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(value,axis=1),jax.lax.stop_gradient(jnp.expand_dims(truncated_q_pi,axis=2)),self.quantile,self.delta))
         critic_loss = error_q + huber_v
         actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(truncated_q_pi,axis=-1))
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
