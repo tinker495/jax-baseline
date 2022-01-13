@@ -21,7 +21,7 @@ def soft_update(new_tensors, old_tensors, tau : float):
 def truncated_mixture(quantiles, out_support):
   quantiles = jnp.concatenate(quantiles,axis=-1)
   sorted = jnp.sort(quantiles,axis=1)
-  return sorted[:,:out_support]
+  return jax.lax.slice(sorted,0,out_support)
     
 @jax.jit
 def convert_states(obs : List):
