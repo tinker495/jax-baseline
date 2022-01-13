@@ -281,6 +281,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
     def test_unity(self, episode,directory):
         pass
     
+    def test_action(self, state):
+        return self.actions(state,0)
+    
     def test_gym(self, episode,directory):
         from colabgymrender.recorder import Recorder
         Render_env = Recorder(self.env, directory)
@@ -289,7 +292,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             terminal = False
             episode_rew = 0
             while not terminal:
-                actions = np.asarray(self._get_actions(self.params,state, next(self.key_seq)))
+                actions = self.test_action(state)
                 observation, reward, terminal, info = Render_env.step(actions[0])
                 state = [np.expand_dims(observation,axis=0)]
                 episode_rew += reward
