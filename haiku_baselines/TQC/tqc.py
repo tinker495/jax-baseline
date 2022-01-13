@@ -5,7 +5,7 @@ import numpy as np
 import optax
 
 from haiku_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from haiku_baselines.TQC.network import Actor, Critic, Value
+from haiku_baselines.TQC.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
 
 from haiku_baselines.common.utils import soft_update, convert_jax, truncated_mixture
@@ -42,14 +42,12 @@ class TQC(Deteministic_Policy_Gradient_Family):
         self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
         self.actor = hk.transform(lambda x: Actor(self.action_size,**self.policy_kwargs)(x))
         self.critic = hk.transform(lambda x,a: Critic(support_n=self.n_support, critic_num = self.critic_num, **self.policy_kwargs)(x,a))
-        self.value = hk.transform(lambda x: Value(support_n=self.n_support, **self.policy_kwargs)(x))
         pre_param = self.preproc.init(next(self.key_seq),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         feature = self.preproc.apply(pre_param, None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         actor_param = self.actor.init(next(self.key_seq), feature)
         critic_param = self.critic.init(next(self.key_seq), feature, np.zeros((1,self.action_size[0])))
-        value_param = self.value.init(next(self.key_seq), feature)
-        self.params = hk.data_structures.merge(pre_param, actor_param, critic_param, value_param)
+        self.params = hk.data_structures.merge(pre_param, actor_param, critic_param)
         self.target_params = self.params
         
         if isinstance(self.ent_coef, str) and self.ent_coef.startswith('auto'):
@@ -71,7 +69,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
         print(jax.tree_map(lambda x: x.shape, pre_param))
         print(jax.tree_map(lambda x: x.shape, actor_param))
         print(jax.tree_map(lambda x: x.shape, critic_param))
-        print(jax.tree_map(lambda x: x.shape, value_param))
         print("-------------------------------------------------")
 
         self._get_actions = jax.jit(self._get_actions)
@@ -154,23 +151,20 @@ class TQC(Deteministic_Policy_Gradient_Family):
         policy, log_prob, mu, log_std, std = self._get_update_data(params, feature, key)
         qnets = self.critic.apply(params, key, feature, actions)
         qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
-        value = self.value.apply(params, key, feature)
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x (support x dual_axis) x 1
-        error_q = 0
+        critic_loss = 0
         for q in qnets:
-            error_q += jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta))
-        truncated_q_pi = truncated_mixture(qnets_pi,self.n_support)
-        huber_v = jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(value,axis=1),jax.lax.stop_gradient(jnp.expand_dims(truncated_q_pi,axis=2)),self.quantile,self.delta))
-        critic_loss = error_q + huber_v
+            critic_loss += jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta))
         actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi,axis=-1),axis=-1))
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
-        return total_loss, (critic_loss, actor_loss, jnp.abs(huber_v), log_prob)
+        return total_loss, (critic_loss, actor_loss, QuantileHuberLosses(jnp.expand_dims(qnets[0],axis=1),logit_valid_tile,self.quantile,self.delta), log_prob)
     
     def _target(self, param, target_params, rewards, nxtobses, not_dones, key, ent_coef):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
         policy, log_prob, mu, log_std, std = self._get_update_data(param, self.preproc.apply(param, key, nxtobses),key)
-        v = self.value.apply(target_params, key, next_feature) - ent_coef * log_prob
-        return (not_dones * v * self._gamma) + rewards
+        qnets_pi = self.critic.apply(target_params, key, next_feature, policy)
+        truncated_q_pi = truncated_mixture(qnets_pi,self.n_support) - ent_coef * log_prob
+        return (not_dones * truncated_q_pi * self._gamma) + rewards
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TQC",
               reset_num_timesteps=True, replay_wrapper=None):
