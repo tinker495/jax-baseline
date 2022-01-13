@@ -14,7 +14,7 @@ if __name__ == "__main__":
     parser.add_argument('--gamma', type=float, default=0.99, help='gamma')
     parser.add_argument('--target_update_tau', type=float, default=2e-4, help='target update intervals')
     parser.add_argument('--batch', type=int, default=64, help='batch size')
-    parser.add_argument('--buffer_size', type=float, default=100000, help='buffer_size')
+    parser.add_argument('--buffer_size', type=float, default=2000000, help='buffer_size')
     parser.add_argument('--per', action='store_true')
     parser.add_argument('--n_step', type=int, default=1, help='n step setting when n > 1 is n step td method')
     parser.add_argument('--steps', type=float, default=1e6, help='step size')
