@@ -75,6 +75,9 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         actions = np.clip(np.asarray(self._get_actions(self.params,obs, None)) + self.noise()*self.epsilon,-1,1)
         return actions
     
+    def test_action(self, state):
+        return np.clip(np.asarray(self._get_actions(self.params,state, None)) + self.noise()*self.exploration_final_eps,-1,1)
+    
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
