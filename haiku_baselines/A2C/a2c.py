@@ -90,7 +90,9 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
         value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
-        targets, adv = zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, t, v, nv in zip(rewards, dones, terminals, value, next_value)])
+        targets = [r + self.gamma * (1.0 - d) * nv for r, d, nv in zip(rewards, dones, next_value)]
+        adv = [t - v for t,v in zip(targets, value)]
+        #targets, adv = zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, t, v, nv in zip(rewards, dones, terminals, value, next_value)])
         obses_hstack = [jnp.hstack(zo) for zo in list(zip(*obses))]
         action_hstack = jnp.hstack(actions)
         adv_hstack = jnp.hstack(adv)
@@ -117,7 +119,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         prob = jax.nn.softmax(self.actor.apply(params, key, feature))
         action_prob = jnp.clip(jnp.take_along_axis(prob, actions, axis=1),1e-5,1.0)
         cross_entropy = jnp.log(action_prob)*adv
-        actor_loss = jnp.mean(cross_entropy)
+        actor_loss = -jnp.mean(cross_entropy)
         entropy = prob * jnp.log(prob)
         entropy_loss = jnp.mean(entropy)
         total_loss = critic_loss + actor_loss - ent_coef * entropy_loss
