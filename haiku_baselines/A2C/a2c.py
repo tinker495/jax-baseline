@@ -100,7 +100,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
     def _loss_discrete(self, params, obses, actions, targets, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
         vals = self.critic.apply(params, key, feature)
-        error = jnp.squeeze(vals - targets)
+        error = jnp.squeeze(targets - vals)
         critic_loss = jnp.mean(jnp.square(error))
         prob = jax.nn.softmax(self.actor.apply(params, key, feature))
         action_prob = jnp.clip(jnp.take_along_axis(prob, actions, axis=1),1e-5,1.0)
