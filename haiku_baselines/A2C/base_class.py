@@ -213,7 +213,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 self.scores[term_ids] = 0
                 self.eplen[term_ids] = 0
             
-            if (steps + 1) % self.epoch_size == 0: #train in step the environments
+            if (steps + 1) % self.batch_size == 0: #train in step the environments
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
                 self.buffer.clear()
@@ -248,7 +248,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 self.eplen[0] = 0
                 state = [np.expand_dims(self.env.reset(),axis=0)]
                 
-            if (steps + 1) % self.epoch_size == 0: #train in step the environments
+            if (steps + 1) % self.batch_size == 0: #train in step the environments
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
                 self.buffer.clear()
@@ -282,7 +282,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.scores += rewards
             state = next_states
             
-            if (steps + 1) % self.epoch_size == 0: #train in step the environments
+            if (steps + 1) % self.batch_size == 0: #train in step the environments
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
                 self.buffer.clear()
