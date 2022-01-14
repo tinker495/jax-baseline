@@ -11,11 +11,11 @@ from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import convert_jax, get_gaes
 
 class A2C(Actor_Critic_Policy_Gradient_Family):
-    def __init__(self, env, gamma=0.99, learning_rate=5e-5, batch_size=32, ent_coef = 0.5,
+    def __init__(self, env, gamma=0.99, lamda = 0.95, gae_normalize = True, learning_rate=3e-4, batch_size=32, ent_coef = 0.5,
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
-        super(A2C, self).__init__(env, gamma, learning_rate, batch_size, ent_coef,
+        super(A2C, self).__init__(env, gamma, lamda, gae_normalize, learning_rate, batch_size, ent_coef,
                  log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
                  full_tensorboard_log, seed, optimizer)
         
