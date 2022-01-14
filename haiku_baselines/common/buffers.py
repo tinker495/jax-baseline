@@ -36,7 +36,7 @@ class EpochBuffer(object):
                 key, jnp.zeros((self.worker_size,self._maxsize,*self.nextobsdict[key]["shape"]),dtype=self.nextobsdict[key]['dtype'] if 'dtype' in self.nextobsdict[key] else jnp.float32)
             )   for key in self.nextobsdict]
             +[(
-                'dones', jnp.zeros((self.worker_size,self._maxsize,),dtype=jnp.float32)
+                'dones', jnp.zeros((self.worker_size,self._maxsize,1),dtype=jnp.float32)
             )]
             )
         
