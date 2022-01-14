@@ -65,22 +65,22 @@ class EpochBuffer(object):
         self._next_idx = 0
         self._storage = dict(
             [(
-                key, jnp.zeros((self.worker_size,self._maxsize,*self.obsdict[key]["shape"]),dtype=self.obsdict[key]['dtype'] if 'dtype' in self.obsdict[key] else jnp.float32)
+                key, np.zeros((self.worker_size,self._maxsize,*self.obsdict[key]["shape"]),dtype=self.obsdict[key]['dtype'])
             )   for key in self.obsdict]
             +
             [(
-                'rewards', jnp.zeros((self.worker_size,self._maxsize,1),dtype=jnp.float32)
+                'rewards', np.zeros((self.worker_size,self._maxsize,1),dtype=np.float32)
             )
             ,
             (
-                'actions', jnp.zeros((self.worker_size,self._maxsize,*self.action_space),dtype=jnp.float32)
+                'actions', np.zeros((self.worker_size,self._maxsize,*self.action_space),dtype=np.float32)
             )]
             +
             [(
-                key, jnp.zeros((self.worker_size,self._maxsize,*self.nextobsdict[key]["shape"]),dtype=self.nextobsdict[key]['dtype'] if 'dtype' in self.nextobsdict[key] else jnp.float32)
+                key, np.zeros((self.worker_size,self._maxsize,*self.nextobsdict[key]["shape"]),dtype=self.nextobsdict[key]['dtype'])
             )   for key in self.nextobsdict]
             +[(
-                'dones', jnp.zeros((self.worker_size,self._maxsize,),dtype=jnp.float32)
+                'dones', np.zeros((self.worker_size,self._maxsize,1),dtype=np.float32)
             )]
             )
 
