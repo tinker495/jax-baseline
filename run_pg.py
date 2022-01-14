@@ -9,7 +9,7 @@ if __name__ == "__main__":
     parser.add_argument('--env', type=str, default="Pendulum-v0", help='environment')
     parser.add_argument('--algo', type=str, default="A2C", help='algo ID')
     parser.add_argument('--gamma', type=float, default=0.99, help='gamma')
-    parser.add_argument('--lamda', type=float, default=0.95, help='gae lamda')
+    parser.add_argument('--lamda', type=float, default=0.9, help='gae lamda')
     parser.add_argument('--batch', type=int, default=32, help='batch size')
     parser.add_argument('--steps', type=float, default=1e6, help='step size')
     parser.add_argument('--verbose', type=int, default=0, help='verbose')
