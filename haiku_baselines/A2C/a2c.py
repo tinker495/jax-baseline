@@ -91,12 +91,16 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
         value = [self.critic.apply(params, key, self.preproc.apply(params, None, o)) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, None, n)) for n in nxtobses]
+        adv, targets = zip(*[get_gaes(r, d, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, v, nv in zip(rewards, dones, value, next_value)])
         obses_hstack = [jnp.hstack(zo) for zo in list(zip(*obses))]
+        action_hstack = jnp.hstack(actions)
+        adv_hstack = jnp.hstack(adv)
+        target_hstack = jnp.hstack(targets)
         for oh in obses_hstack:
             print(oh.shape)
-        adv, targets = zip(*[get_gaes(r, d, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, v, nv in zip(rewards, dones, value, next_value)])
+            print(oh)
         (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
-                                                        obses_hstack, jnp.hstack(actions), jnp.hstack(targets), jnp.hstack(adv), ent_coef, key)
+                                                        obses_hstack, action_hstack, adv_hstack, target_hstack, ent_coef, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         return params, opt_state, critic_loss, actor_loss
