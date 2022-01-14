@@ -92,7 +92,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
         adv, targets = zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, t, v, nv in zip(rewards, dones, terminals, value, next_value)])
         (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
-                                                        [jnp.hstack(zo) for zo in list(zip(*obses))], jnp.hstack(actions), jnp.hstack(adv), jnp.hstack(targets), ent_coef, key)
+                                                        [jnp.hstack(zo) for zo in list(zip(*obses))], jnp.hstack(actions), jnp.hstack(targets), jnp.hstack(adv), ent_coef, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         return params, opt_state, critic_loss, actor_loss
