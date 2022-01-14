@@ -31,6 +31,7 @@ if __name__ == "__main__":
     parser.add_argument('--worker', type=int,default=1, help='gym_worker_size')
     parser.add_argument('--optimizer', type=str,default='adamw', help='optimaizer')
     parser.add_argument('--train_freq', type=int, default=1, help='train_frequancy')
+    parser.add_argument('--critic_num', type=int,default=2, help='tqc critic number')
     parser.add_argument('--ent_coef', type=str,default='auto', help='sac entropy coefficient')
     args = parser.parse_args() 
     env_name = args.env
@@ -77,7 +78,7 @@ if __name__ == "__main__":
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "TQC":
         agent = TQC(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau,
-                    prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef, n_support = args.n_support,
+                    prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef, n_support = args.n_support, critic_num = args.critic_num, 
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
         
 
