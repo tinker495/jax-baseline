@@ -29,12 +29,12 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             del self.policy_kwargs['cnn_mode']
         self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
         self.actor = hk.transform(lambda x: Actor(self.action_size,**self.policy_kwargs)(x))
-        self.critic = hk.transform(lambda x,a: Critic(**self.policy_kwargs)(x,a))
+        self.critic = hk.transform(lambda x: Critic(**self.policy_kwargs)(x))
         pre_param = self.preproc.init(next(self.key_seq),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         feature = self.preproc.apply(pre_param, None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         actor_param = self.actor.init(next(self.key_seq), feature)
-        critic_param = self.critic.init(next(self.key_seq), feature, np.zeros((1,self.action_size[0])))
+        critic_param = self.critic.init(next(self.key_seq), feature)
         self.params = hk.data_structures.merge(pre_param, actor_param, critic_param)
         
         self.opt_state = self.optimizer.init(self.params)
