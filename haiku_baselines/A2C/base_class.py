@@ -102,9 +102,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
         print("worker_size : ", self.worker_size)
         print("-------------------------------------------------")
         if self.action_type == 'discrete':
+            self._get_actions = self._get_actions_discrete
             self.actions = self.action_discrete
             self._loss = self._loss_discrete
         elif self.action_type == 'continuous':
+            self._get_actions = self._get_actions_continuous
             self.actions = self.action_continuous
             self._loss = self._loss_continuous
     
@@ -114,6 +116,15 @@ class Actor_Critic_Policy_Gradient_Family(object):
     def _train_step(self, steps):
         pass
     
+    def _get_actions_discrete(self):
+        pass
+    
+    def _get_actions_continuous(self):
+        pass
+    
+    def _loss_discrete(self):
+        pass
+    
     def _get_actions(self, params, obses) -> np.ndarray:
         pass
     
@@ -121,9 +132,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
         pass
     
     def action_continuous(self,obs,steps):
-        pass
-    
-    def action_discrete(self):
         pass
     
     def _loss_continuous(self):
