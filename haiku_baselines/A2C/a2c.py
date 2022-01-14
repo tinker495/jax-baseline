@@ -11,11 +11,11 @@ from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import convert_jax, get_gaes
 
 class A2C(Actor_Critic_Policy_Gradient_Family):
-    def __init__(self, env, gamma=0.99, learning_rate=5e-5, gradient_steps=1, batch_size=32,
+    def __init__(self, env, gamma=0.99, learning_rate=5e-5, batch_size=32, ent_coef = 0.5,
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
-        super(A2C, self).__init__(env, gamma, learning_rate, gradient_steps, batch_size,
+        super(A2C, self).__init__(env, gamma, learning_rate, batch_size, ent_coef,
                  log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
                  full_tensorboard_log, seed, optimizer)
         
@@ -72,14 +72,13 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
     def test_action(self, state):
         return np.clip(np.asarray(self._get_actions(self.params,state, None)) + self.noise()*self.exploration_final_eps,-1,1)
     
-    def train_step(self, steps, gradient_steps):
+    def train_step(self, steps):
         # Sample a batch from the replay buffer
         data = self.buffer.get_buffer()
-        for _ in range(gradient_steps):
-            
-            self.params, self.target_params, self.opt_state, loss, t_mean = \
-                self._train_step(self.params, self.target_params, self.opt_state, None,
-                                 **data)
+        
+        self.params, self.opt_state, loss, t_mean = \
+            self._train_step(self.params, self.opt_state, None,
+                                **data)
             
         if self.summary and steps % self.log_interval == 0:
             self.summary.add_scalar("loss/qloss", loss, steps)
@@ -87,42 +86,35 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             
         return loss
 
-    def _train_step_discrete(self, params, opt_state, key, 
-                    obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
+    def _train_step(self, params, opt_state, key, ent_coef,
+                    obses, actions, rewards, nxtobses, dones):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]; not_dones = [1.0 - d for d in dones]
         value = [self.critic.apply(params, key, self.preproc.apply(params, None, o)) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, None, n)) for n in nxtobses]
         adv, targets = zip(*[get_gaes(r, d, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, v, nv in zip(rewards, dones, value, next_value)])
-        return 
+        (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, adv, ent_coef, key)
+        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+        params = optax.apply_updates(params, updates)
+        return params, opt_state, critic_loss, actor_loss
     
-    def _train_step_continuous(self, params, target_params, opt_state, key, 
-                    obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
-        obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); not_dones = 1.0 - dones
-        return params, target_params, opt_state, critic_loss, actor_loss
-    
-    def _critic_loss(self, params, obses, actions, targets, weights, key):
+    def _loss_discrete(self, params, obses, actions, targets, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
-        vals = self.critic.apply(params, key, feature, actions)
+        vals = self.critic.apply(params, key, feature)
         error = jnp.squeeze(vals - targets)
-        return jnp.mean(weights*jnp.square(error)), jnp.abs(error)
+        critic_loss = jnp.mean(jnp.square(error))
+        prob = self.actor.apply(params, key, feature)
+        action_prob = jnp.take_along_axis(prob, actions, axis=1)
+        cross_entropy = action_prob*adv
+        actor_loss = -jnp.mean(cross_entropy)
+        entropy = prob * jnp.log(prob)
+        entropy_loss = jnp.mean(entropy)
+        total_loss = critic_loss + actor_loss - ent_coef * entropy_loss
+        return total_loss, (critic_loss, actor_loss)
     
-    def _actor_loss(self, params, obses, key):
-        feature = self.preproc.apply(params, key, obses)
-        policy = self.actor.apply(params, key, feature)
-        vals = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
-        return jnp.mean(-vals)
-    
-    def _target(self, target_params, rewards, nxtobses, not_dones, key):
-        next_feature = self.preproc.apply(target_params, key, nxtobses)
-        next_action = self.actor.apply(target_params, key, next_feature)
-        next_q = self.critic.apply(target_params, key, next_feature, next_action)
-        return (not_dones * next_q * self._gamma) + rewards
+    def _loss_continuous(self, params, obses, actions, targets, adv, ent_coef, key):
+        pass
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DDPG",
               reset_num_timesteps=True, replay_wrapper=None):
         
-        self.exploration = LinearSchedule(schedule_timesteps=int(self.exploration_fraction * total_timesteps),
-                                                initial_p=self.exploration_initial_eps,
-                                                final_p=self.exploration_final_eps)
-        self.epsilon = 1.0
         super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)

@@ -16,7 +16,7 @@ from mlagents_envs.environment import UnityEnvironment, ActionTuple
 from gym import spaces
 
 class Actor_Critic_Policy_Gradient_Family(object):
-    def __init__(self, env, gamma=0.99, lamda = 0.95, gae_normalize = True,learning_rate=3e-4, gradient_steps=1, batch_size=32,
+    def __init__(self, env, gamma=0.99, lamda = 0.95, gae_normalize = True,learning_rate=3e-4, batch_size=32, ent_coef = 0.5,
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
@@ -26,12 +26,12 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.seed = 42 if seed is None else seed
         self.key_seq = hk.PRNGSequence(self.seed)
         
-        self.gradient_steps = gradient_steps
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.gamma = gamma
         self.lamda = lamda
         self.gae_normalize = gae_normalize
+        self.ent_coef = ent_coef
         self.tensorboard_log = tensorboard_log
         self.full_tensorboard_log = full_tensorboard_log
         
@@ -103,9 +103,10 @@ class Actor_Critic_Policy_Gradient_Family(object):
         print("-------------------------------------------------")
         if self.action_type == 'discrete':
             self.actions = self.action_discrete
+            self._loss = self._loss_discrete
         elif self.action_type == 'continuous':
             self.actions = self.action_continuous
-            
+            self._loss = self._loss_continuous
     
     def setup_model(self):
         pass
@@ -120,6 +121,12 @@ class Actor_Critic_Policy_Gradient_Family(object):
         pass
     
     def action_continuous(self,obs,steps):
+        pass
+    
+    def action_discrete(self):
+        pass
+    
+    def _loss_continuous(self):
         pass
         
     def learn(self, total_timesteps, callback=None, log_interval=1000, tb_log_name="Q_network",
@@ -199,7 +206,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 self.eplen[term_ids] = 0
             
             if (steps + 1) % self.epoch_size == 0: #train in step the environments
-                loss = self.train_step(steps,self.gradient_steps)
+                loss = self.train_step(steps)
                 self.lossque.append(loss)
                 self.buffer.clear()
             
@@ -234,7 +241,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 state = [np.expand_dims(self.env.reset(),axis=0)]
                 
             if (steps + 1) % self.epoch_size == 0: #train in step the environments
-                loss = self.train_step(steps,self.gradient_steps)
+                loss = self.train_step(steps)
                 self.lossque.append(loss)
                 self.buffer.clear()
             
@@ -268,7 +275,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             state = next_states
             
             if (steps + 1) % self.epoch_size == 0: #train in step the environments
-                loss = self.train_step(steps,self.gradient_steps)
+                loss = self.train_step(steps)
                 self.lossque.append(loss)
                 self.buffer.clear()
             
