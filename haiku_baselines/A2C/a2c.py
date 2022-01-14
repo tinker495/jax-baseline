@@ -73,7 +73,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         # Sample a batch from the replay buffer
         data = self.buffer.get_buffer()
         
-        self.params, self.opt_state, critic_loss, actor_loss, adv_hstack, target_hstack = \
+        self.params, self.opt_state, critic_loss, actor_loss = \
             self._train_step(self.params, self.opt_state, None, self.ent_coef,
                                 **data)
             
@@ -90,26 +90,12 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
         value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
-        #targets = [r + self.gamma * (1.0 - d) * nv for r, d, nv in zip(rewards, dones, next_value)]
-        #adv = [t - v for t,v in zip(targets, value)]
         adv, targets = zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, t, v, nv in zip(rewards, dones, terminals, value, next_value)])
-        obses_hstack = [jnp.hstack(zo) for zo in list(zip(*obses))]
-        action_hstack = jnp.hstack(actions)
-        adv_hstack = jnp.hstack(adv)
-        target_hstack = jnp.hstack(targets)
-        '''
-        for oh in obses_hstack:
-            print('ob :', oh.shape, ', ', oh)
-            
-        print('act: ', action_hstack.shape, ', ', action_hstack)
-        print('adv: ', adv_hstack.shape, ', ', adv_hstack)
-        print('target: ', target_hstack.shape, ', ', target_hstack)
-        '''
         (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
-                                                        obses_hstack, action_hstack, target_hstack, adv_hstack, ent_coef, key)
+                                                        [jnp.hstack(zo) for zo in list(zip(*obses))], jnp.hstack(actions), jnp.hstack(adv), jnp.hstack(targets), ent_coef, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        return params, opt_state, critic_loss, actor_loss, adv_hstack, target_hstack
+        return params, opt_state, critic_loss, actor_loss
     
     def _loss_discrete(self, params, obses, actions, targets, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
