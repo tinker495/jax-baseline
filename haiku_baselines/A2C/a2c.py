@@ -84,7 +84,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             self.summary.add_scalar("loss/critic_loss", critic_loss, steps)
             self.summary.add_scalar("loss/actor_loss", actor_loss, steps)
             
-        return loss
+        return critic_loss
 
     def _train_step(self, params, opt_state, key, ent_coef,
                     obses, actions, rewards, nxtobses, dones):
