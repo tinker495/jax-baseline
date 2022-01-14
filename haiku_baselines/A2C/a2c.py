@@ -76,13 +76,13 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         # Sample a batch from the replay buffer
         data = self.buffer.get_buffer()
         
-        self.params, self.opt_state, loss, t_mean = \
+        self.params, self.opt_state, critic_loss, actor_loss = \
             self._train_step(self.params, self.opt_state, None, self.ent_coef,
                                 **data)
             
         if self.summary and steps % self.log_interval == 0:
-            self.summary.add_scalar("loss/qloss", loss, steps)
-            self.summary.add_scalar("loss/targets", t_mean, steps)
+            self.summary.add_scalar("loss/critic_loss", critic_loss, steps)
+            self.summary.add_scalar("loss/actor_loss", actor_loss, steps)
             
         return loss
 
