@@ -62,6 +62,7 @@ class EpochBuffer(object):
             }
         
     def clear(self):
+        self._next_idx = 0
         self._storage = dict(
             [(
                 key, jnp.zeros((self.worker_size,self._maxsize,*self.obsdict[key]["shape"]),dtype=self.obsdict[key]['dtype'] if 'dtype' in self.obsdict[key] else jnp.float32)

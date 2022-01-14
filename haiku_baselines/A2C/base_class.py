@@ -16,7 +16,7 @@ from mlagents_envs.environment import UnityEnvironment, ActionTuple
 from gym import spaces
 
 class Actor_Critic_Policy_Gradient_Family(object):
-    def __init__(self, env, gamma=0.99, learning_rate=5e-5, epoch_size=1000, train_freq=1, gradient_steps=1, batch_size=32,
+    def __init__(self, env, gamma=0.99, learning_rate=3e-4, epoch_size=1000, gradient_steps=1, batch_size=32,
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
@@ -26,7 +26,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.seed = 42 if seed is None else seed
         self.key_seq = hk.PRNGSequence(self.seed)
         
-        self.train_freq = train_freq
         self.gradient_steps = gradient_steps
         self.batch_size = batch_size
         self.epoch_size = epoch_size
@@ -201,6 +200,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             if (steps + 1) % self.epoch_size == 0: #train in step the environments
                 loss = self.train_step(steps,self.gradient_steps)
                 self.lossque.append(loss)
+                self.buffer.clear()
             
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
@@ -232,9 +232,10 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 self.eplen[0] = 0
                 state = [np.expand_dims(self.env.reset(),axis=0)]
                 
-            if steps > self.learning_starts and steps % self.train_freq == 0:
+            if (steps + 1) % self.epoch_size == 0: #train in step the environments
                 loss = self.train_step(steps,self.gradient_steps)
                 self.lossque.append(loss)
+                self.buffer.clear()
             
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
@@ -249,10 +250,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.eplen += 1
             actions = self.actions([state],steps)
             self.env.step(actions)
-
-            if steps > self.learning_starts and steps % self.train_freq == 0:
-                loss = self.train_step(steps,self.gradient_steps)
-                self.lossque.append(loss)
             
             next_states,rewards,dones,terminals,end_states,end_idx = self.env.get_steps()
             nxtstates = np.copy(next_states)
@@ -268,6 +265,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.buffer.add([state], actions, rewards, [nxtstates], dones, terminals)
             self.scores += rewards
             state = next_states
+            
+            if (steps + 1) % self.epoch_size == 0: #train in step the environments
+                loss = self.train_step(steps,self.gradient_steps)
+                self.lossque.append(loss)
+                self.buffer.clear()
             
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
