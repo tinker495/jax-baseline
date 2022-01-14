@@ -37,10 +37,14 @@ class EpochBuffer(object):
             )   for key in self.nextobsdict]
             +[(
                 'dones', np.zeros((self.worker_size,self._maxsize,1),dtype=np.float32)
-            )]
+            ),(
+                'terimnals', np.zeros((self.worker_size,self._maxsize,1),dtype=np.float32)
+            )
+            ]
+            
             )
         
-    def add(self, obs_t, action, reward, nxtobs_t, done):
+    def add(self, obs_t, action, reward, nxtobs_t, done, terimnal):
         obses_dicts = dict(zip(self.obsdict.keys(),obs_t))
         nxtobses_dicts = dict(zip(self.nextobsdict.keys(),nxtobs_t))
         for k in obses_dicts:
@@ -50,15 +54,17 @@ class EpochBuffer(object):
         self._storage['actions'][:,self._next_idx,:] = action
         self._storage['rewards'][:,self._next_idx,:] = reward
         self._storage['dones'][:,self._next_idx,:] = done
+        self._storage['terimnals'][:,self._next_idx,:] = terimnal
         self._next_idx += 1
 
     def get_buffer(self):
         return {
-            'obses'     : [[self._storage[o][w] for o in self.obsdict.keys()] for w in range(self.worker_size)],
-            'actions'   : [self._storage['actions'][w] for w in range(self.worker_size)],
-            'rewards'   : [self._storage['rewards'][w] for w in range(self.worker_size)],
-            'nxtobses'  : [[self._storage[no][w] for no in self.nextobsdict.keys()] for w in range(self.worker_size)],
-            'dones'     : [self._storage['dones'][w] for w in range(self.worker_size)]
+            'obses'     : [[self._storage[o][w,:] for o in self.obsdict.keys()] for w in range(self.worker_size)],
+            'actions'   : [self._storage['actions'][w,:] for w in range(self.worker_size)],
+            'rewards'   : [self._storage['rewards'][w,:] for w in range(self.worker_size)],
+            'nxtobses'  : [[self._storage[no][w,:] for no in self.nextobsdict.keys()] for w in range(self.worker_size)],
+            'dones'     : [self._storage['dones'][w,:] for w in range(self.worker_size)],
+            'terimnals'     : [self._storage['terimnals'][w,:] for w in range(self.worker_size)]
             }
         
     def clear(self):
@@ -81,7 +87,10 @@ class EpochBuffer(object):
             )   for key in self.nextobsdict]
             +[(
                 'dones', np.zeros((self.worker_size,self._maxsize,1),dtype=np.float32)
-            )]
+            ),(
+                'terimnals', np.zeros((self.worker_size,self._maxsize,1),dtype=np.float32)
+            )
+            ]
             )
 
 @jax.jit

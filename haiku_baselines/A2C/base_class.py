@@ -203,7 +203,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 terminal[term_ids] = True
                 reward[term_ids] = term_rewards
             self.scores += reward
-            self.buffer.add(old_obses, actions, reward, nxtobs, done)
+            self.buffer.add(old_obses, actions, reward, nxtobs, done, terminal)
             if term_on:
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", np.mean(self.scores[term_ids]), steps)
@@ -235,7 +235,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             done = terminal
             if "TimeLimit.truncated" in info:
                 done = not info["TimeLimit.truncated"]
-            self.buffer.add(state, actions, reward, next_state, done)
+            self.buffer.add(state, actions, reward, next_state, done, terminal)
             self.scores[0] += reward
             state = next_state
             if terminal:
@@ -278,7 +278,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 self.scoreque.extend(self.scores[end_idx])
                 self.scores[end_idx] = 0
                 self.eplen[end_idx] = 0
-            self.buffer.add([state], actions, rewards, [nxtstates], dones)
+            self.buffer.add([state], actions, rewards, [nxtstates], dones, terminals)
             self.scores += rewards
             state = next_states
             

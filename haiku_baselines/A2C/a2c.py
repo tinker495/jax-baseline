@@ -86,11 +86,11 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         return critic_loss
 
     def _train_step(self, params, opt_state, key, ent_coef,
-                    obses, actions, rewards, nxtobses, dones):
+                    obses, actions, rewards, nxtobses, dones, terminals):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
         value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
-        adv, targets = zip(*[get_gaes(r, d, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, v, nv in zip(rewards, dones, value, next_value)])
+        adv, targets = zip(*[get_gaes(r, d, terminals, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, v, nv in zip(rewards, dones, value, next_value, terminals)])
         obses_hstack = [jnp.hstack(zo) for zo in list(zip(*obses))]
         action_hstack = jnp.hstack(actions)
         adv_hstack = jnp.hstack(adv)
