@@ -40,8 +40,7 @@ def discounted(rewards,gamma=0.99): #lfilter([1],[1,-gamma],x[::-1])[::-1]
     return out
 
 def get_gaes(rewards, dones, values, next_values, gamma, lamda, normalize):
-    deltas = [r + gamma * (1 - d) * (nv - v) for r, d, nv, v in zip(rewards, dones, next_values, values)]
-    deltas = jnp.stack(deltas)
+    deltas = rewards + gamma * (1 - dones) * next_values  - values
     gaes = jnp.array(deltas)
     for t in reversed(range(len(deltas) - 1)):
         gaes.at[t].set(gaes[t] + (1 - dones[t]) * gamma * lamda * gaes[t + 1])
