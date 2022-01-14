@@ -73,10 +73,12 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         # Sample a batch from the replay buffer
         data = self.buffer.get_buffer()
         
-        self.params, self.opt_state, critic_loss, actor_loss = \
+        self.params, self.opt_state, critic_loss, actor_loss, adv_hstack, target_hstack = \
             self._train_step(self.params, self.opt_state, None, self.ent_coef,
                                 **data)
             
+        print(np.mean(adv_hstack))
+        print(np.mean(target_hstack))
         if self.summary and steps % self.log_interval == 0:
             self.summary.add_scalar("loss/critic_loss", critic_loss, steps)
             self.summary.add_scalar("loss/actor_loss", actor_loss, steps)
@@ -86,8 +88,8 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
     def _train_step(self, params, opt_state, key, ent_coef,
                     obses, actions, rewards, nxtobses, dones):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
-        value = [self.critic.apply(params, key, self.preproc.apply(params, None, o)) for o in obses]
-        next_value = [self.critic.apply(params, key, self.preproc.apply(params, None, n)) for n in nxtobses]
+        value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
+        next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
         adv, targets = zip(*[get_gaes(r, d, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, v, nv in zip(rewards, dones, value, next_value)])
         obses_hstack = [jnp.hstack(zo) for zo in list(zip(*obses))]
         action_hstack = jnp.hstack(actions)
@@ -105,7 +107,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
                                                         obses_hstack, action_hstack, adv_hstack, target_hstack, ent_coef, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        return params, opt_state, critic_loss, actor_loss
+        return params, opt_state, critic_loss, actor_loss, adv_hstack, target_hstack
     
     def _loss_discrete(self, params, obses, actions, targets, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
