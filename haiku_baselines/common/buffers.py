@@ -7,6 +7,82 @@ import jax.numpy as jnp
 
 from haiku_baselines.common.segment_tree import SumSegmentTree, MinSegmentTree
 
+
+class EpochBuffer(object):
+    def __init__(self, epoch_size : int, observation_space: list, worker_size = 1, action_space = 1):
+        self._maxsize = epoch_size
+        self.worker_size = worker_size
+        self.observation_space = observation_space
+        self.action_space = action_space
+        self._next_idx = 0
+        self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": jnp.uint8} if len(o) >= 3 else {"shape": o})
+                            for idx,o in enumerate(observation_space))
+        self.nextobsdict = dict(("nextobs{}".format(idx),{"shape": o,"dtype": jnp.uint8} if len(o) >= 3 else {"shape": o})
+                            for idx,o in enumerate(observation_space))
+        self._storage = dict(
+            [(
+                key, jnp.zeros((self.worker_size,self._maxsize,*self.obsdict[key]["shape"]),dtype=self.obsdict[key]['dtype'] if 'dtype' in self.obsdict[key] else jnp.float32)
+            )   for key in self.obsdict]
+            +
+            [(
+                'rewards', jnp.zeros((self.worker_size,self._maxsize,1),dtype=jnp.float32)
+            )
+            ,
+            (
+                'actions', jnp.zeros((self.worker_size,self._maxsize,*self.action_space),dtype=jnp.float32)
+            )]
+            +
+            [(
+                key, jnp.zeros((self.worker_size,self._maxsize,*self.nextobsdict[key]["shape"]),dtype=self.nextobsdict[key]['dtype'] if 'dtype' in self.nextobsdict[key] else jnp.float32)
+            )   for key in self.nextobsdict]
+            +[(
+                'dones', jnp.zeros((self.worker_size,self._maxsize,),dtype=jnp.float32)
+            )]
+            )
+        
+    def add(self, obs_t, action, reward, nxtobs_t, done):
+        obses_dicts = dict(zip(self.obsdict.keys(),obs_t))
+        nxtobses_dicts = dict(zip(self.nextobsdict.keys(),nxtobs_t))
+        for k in obses_dicts:
+            self._storage[k][self._next_idx] = obses_dicts[k]
+        for k in nxtobses_dicts:
+            self._storage[k][self._next_idx] = nxtobses_dicts[k]
+        self._storage['actions'][self._next_idx] = action
+        self._storage['rewards'][self._next_idx] = reward
+        self._storage['dones'][self._next_idx] = done
+        self._next_idx += 1
+
+    def get_buffer(self):
+        return {
+            'obses'     : [self._storage[o] for o in self.obsdict.keys()],
+            'actions'   : self._storage['actions'],
+            'rewards'   : self._storage['rewards'],
+            'nxtobses'  : [self._storage[no] for no in self.nextobsdict.keys()],
+            'dones'     : self._storage['dones']
+            }
+        
+    def clear(self):
+        self._storage = dict(
+            [(
+                key, jnp.zeros((self.worker_size,self._maxsize,*self.obsdict[key]["shape"]),dtype=self.obsdict[key]['dtype'] if 'dtype' in self.obsdict[key] else jnp.float32)
+            )   for key in self.obsdict]
+            +
+            [(
+                'rewards', jnp.zeros((self.worker_size,self._maxsize,1),dtype=jnp.float32)
+            )
+            ,
+            (
+                'actions', jnp.zeros((self.worker_size,self._maxsize,*self.action_space),dtype=jnp.float32)
+            )]
+            +
+            [(
+                key, jnp.zeros((self.worker_size,self._maxsize,*self.nextobsdict[key]["shape"]),dtype=self.nextobsdict[key]['dtype'] if 'dtype' in self.nextobsdict[key] else jnp.float32)
+            )   for key in self.nextobsdict]
+            +[(
+                'dones', jnp.zeros((self.worker_size,self._maxsize,),dtype=jnp.float32)
+            )]
+            )
+
 @jax.jit
 def discounted(rewards,gamma=0.99): #lfilter([1],[1,-gamma],x[::-1])[::-1]
     _gamma = 1

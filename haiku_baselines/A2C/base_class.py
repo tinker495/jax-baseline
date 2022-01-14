@@ -8,7 +8,7 @@ from tqdm.auto import trange
 from collections import deque
 
 from haiku_baselines.common.base_classes import TensorboardWriter, save, restore, select_optimizer
-from haiku_baselines.common.cpprb_buffers import ReplayBuffer, PrioritizedReplayBuffer
+from haiku_baselines.common.buffers import EpochBuffer
 from haiku_baselines.common.utils import convert_states
 from haiku_baselines.common.worker import gymMultiworker
 
@@ -16,8 +16,8 @@ from mlagents_envs.environment import UnityEnvironment, ActionTuple
 from gym import spaces
 
 class Actor_Critic_Policy_Gradient_Family(object):
-    def __init__(self, env, gamma=0.99, learning_rate=5e-5, update_interval=3000, train_freq=1, gradient_steps=1, batch_size=32,
-                 learning_starts=1000, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
+    def __init__(self, env, gamma=0.99, learning_rate=5e-5, epoch_size=1000, train_freq=1, gradient_steps=1, batch_size=32,
+                 log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
         self.env = env
@@ -26,11 +26,10 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.seed = 42 if seed is None else seed
         self.key_seq = hk.PRNGSequence(self.seed)
         
-        self.learning_starts = learning_starts
         self.train_freq = train_freq
         self.gradient_steps = gradient_steps
         self.batch_size = batch_size
-        self.update_interval = update_interval
+        self.epoch_size = epoch_size
         self.learning_rate = learning_rate
         self.gamma = gamma
         self.tensorboard_log = tensorboard_log
@@ -42,12 +41,16 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.optimizer = select_optimizer(optimizer,self.learning_rate,1e-2/self.batch_size)
         
         self.get_env_setup()
+        self.get_memory_setup()
         
     def save_params(self, path):
         save(path, self.params)
             
     def load_params(self, path):
         self.params = self.target_params = restore(path)
+        
+    def get_memory_setup(self):
+        self.buffer = EpochBuffer(self.epoch_size, self.observation_space, self.worker_size, 1 if self.action_type == 'discrete' else self.action_size, self.n_step, self.gamma)
         
     def get_env_setup(self):
         print("----------------------env------------------------")
@@ -79,8 +82,10 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.observation_space = [list(observation_space.shape)]
             if not isinstance(action_space, spaces.Box):
                 self.action_size = [action_space.n]
+                self.action_type = 'discrete'
             else:
                 self.action_size = [action_space.shape[0]]
+                self.action_type = 'continuous'
             self.worker_size = 1
             self.env_type = "gym"
             
@@ -96,6 +101,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
         print("action size : ", self.action_size)
         print("worker_size : ", self.worker_size)
         print("-------------------------------------------------")
+        if self.action_type == 'discrete':
+            self.actions = self.action_discrete
+        elif self.action_type == 'continuous':
+            self.actions = self.action_continuous
+            
     
     def setup_model(self):
         pass
@@ -106,9 +116,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
     def _get_actions(self, params, obses) -> np.ndarray:
         pass
     
-    def actions(self,obs,steps):
+    def action_discrete(self,obs,steps):
         pass
-
+    
+    def action_continuous(self,obs,steps):
+        pass
         
     def learn(self, total_timesteps, callback=None, log_interval=1000, tb_log_name="Q_network",
               reset_num_timesteps=True, replay_wrapper=None):
@@ -146,10 +158,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.env.set_actions(self.group_name, action_tuple)
             self.env.step()
             
-            if steps > self.learning_starts and steps % self.train_freq == 0: #train in step the environments
-                loss = self.train_step(steps,self.gradient_steps)
-                self.lossque.append(loss)
-            
             dec, term = self.env.get_steps(self.group_name)
             term_ids = list(term.agent_id)
             term_obses = convert_states(term.obs)
@@ -180,7 +188,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 terminal[term_ids] = True
                 reward[term_ids] = term_rewards
             self.scores += reward
-            self.replay_buffer.add(old_obses, actions, reward, nxtobs, done, terminal)
+            self.buffer.add(old_obses, actions, reward, nxtobs, done, terminal)
             if term_on:
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", np.mean(self.scores[term_ids]), steps)
@@ -189,6 +197,10 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 self.scoreque.extend(self.scores[term_ids])
                 self.scores[term_ids] = 0
                 self.eplen[term_ids] = 0
+            
+            if (steps + 1) % self.epoch_size == 0: #train in step the environments
+                loss = self.train_step(steps,self.gradient_steps)
+                self.lossque.append(loss)
             
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
@@ -207,7 +219,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             done = terminal
             if "TimeLimit.truncated" in info:
                 done = not info["TimeLimit.truncated"]
-            self.replay_buffer.add(state, actions, reward, next_state, done, terminal)
+            self.buffer.add(state, actions, reward, next_state, done, terminal)
             self.scores[0] += reward
             state = next_state
             if terminal:
@@ -253,7 +265,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 self.scoreque.extend(self.scores[end_idx])
                 self.scores[end_idx] = 0
                 self.eplen[end_idx] = 0
-            self.replay_buffer.add([state], actions, rewards, [nxtstates], dones, terminals)
+            self.buffer.add([state], actions, rewards, [nxtstates], dones, terminals)
             self.scores += rewards
             state = next_states
             
