@@ -90,13 +90,13 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
         value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
-        targets = [r + self.gamma * (1.0 - d) * nv for r, d, nv in zip(rewards, dones, next_value)]
-        adv = [t - v for t,v in zip(targets, value)]
-        #targets, adv = zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, t, v, nv in zip(rewards, dones, terminals, value, next_value)])
-        obses_hstack = obses[0]#[jnp.hstack(zo) for zo in list(zip(*obses))]
-        action_hstack = actions[0]#jnp.hstack(actions)
-        adv_hstack = adv[0]#jnp.hstack(adv)
-        target_hstack = targets[0]#jnp.hstack(targets)
+        #targets = [r + self.gamma * (1.0 - d) * nv for r, d, nv in zip(rewards, dones, next_value)]
+        #adv = [t - v for t,v in zip(targets, value)]
+        adv, targets = zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, t, v, nv in zip(rewards, dones, terminals, value, next_value)])
+        obses_hstack = [jnp.hstack(zo) for zo in list(zip(*obses))]
+        action_hstack = jnp.hstack(actions)
+        adv_hstack = jnp.hstack(adv)
+        target_hstack = jnp.hstack(targets)
         '''
         for oh in obses_hstack:
             print('ob :', oh.shape, ', ', oh)
@@ -106,7 +106,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         print('target: ', target_hstack.shape, ', ', target_hstack)
         '''
         (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
-                                                        obses_hstack, action_hstack, adv_hstack, target_hstack, ent_coef, key)
+                                                        obses_hstack, action_hstack, target_hstack, adv_hstack, ent_coef, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         return params, opt_state, critic_loss, actor_loss, adv_hstack, target_hstack
@@ -119,7 +119,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         prob = jax.nn.softmax(self.actor.apply(params, key, feature))
         action_prob = jnp.clip(jnp.take_along_axis(prob, actions, axis=1),1e-5,1.0)
         cross_entropy = jnp.log(action_prob)*adv
-        actor_loss = jnp.mean(cross_entropy)
+        actor_loss = -jnp.mean(cross_entropy)
         entropy = prob * jnp.log(prob)
         entropy_loss = jnp.mean(entropy)
         total_loss = critic_loss + actor_loss - ent_coef * entropy_loss
