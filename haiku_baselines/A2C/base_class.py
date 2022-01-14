@@ -50,7 +50,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.params = self.target_params = restore(path)
         
     def get_memory_setup(self):
-        self.buffer = EpochBuffer(self.epoch_size, self.observation_space, self.worker_size, 1 if self.action_type == 'discrete' else self.action_size, self.n_step, self.gamma)
+        self.buffer = EpochBuffer(self.batch_size, self.observation_space, self.worker_size, 1 if self.action_type == 'discrete' else self.action_size, self.n_step, self.gamma)
         
     def get_env_setup(self):
         print("----------------------env------------------------")
