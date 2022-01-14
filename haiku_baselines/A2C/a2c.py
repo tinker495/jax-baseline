@@ -13,7 +13,7 @@ from haiku_baselines.common.utils import convert_jax, get_gaes
 class A2C(Actor_Critic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.99, lamda = 0.9, gae_normalize = True, learning_rate=3e-4, batch_size=32, val_coef=0.2, ent_coef = 0.5,
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
-                 full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
+                 full_tensorboard_log=False, seed=None, optimizer = 'rmsprop'):
         
         super(A2C, self).__init__(env, gamma, lamda, gae_normalize, learning_rate, batch_size, val_coef, ent_coef,
                  log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
