@@ -93,10 +93,10 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         targets = [r + self.gamma * (1.0 - d) * nv for r, d, nv in zip(rewards, dones, next_value)]
         adv = [t - v for t,v in zip(targets, value)]
         #targets, adv = zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, t, v, nv in zip(rewards, dones, terminals, value, next_value)])
-        obses_hstack = [jnp.hstack(zo) for zo in list(zip(*obses))]
-        action_hstack = jnp.hstack(actions)
-        adv_hstack = jnp.hstack(adv)
-        target_hstack = jnp.hstack(targets)
+        obses_hstack = obses[0]#[jnp.hstack(zo) for zo in list(zip(*obses))]
+        action_hstack = actions[0]#jnp.hstack(actions)
+        adv_hstack = adv[0]#jnp.hstack(adv)
+        target_hstack = targets[0]#jnp.hstack(targets)
         '''
         for oh in obses_hstack:
             print('ob :', oh.shape, ', ', oh)
