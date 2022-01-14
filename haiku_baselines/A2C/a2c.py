@@ -57,8 +57,8 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         return mu, std
     
     def discription(self):
-        return "score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(
-                                    np.mean(self.scoreque), self.epsilon, np.mean(self.lossque)
+        return "score : {:.3f}, loss : {:.3f} |".format(
+                                    np.mean(self.scoreque), np.mean(self.lossque)
                                     )
     
     def action_discrete(self,obs,steps):
