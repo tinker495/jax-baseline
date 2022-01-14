@@ -29,3 +29,24 @@ def convert_states(obs : List):
 @jax.jit
 def convert_jax(obs : List):
   return [jax.device_get(o).astype(jnp.float32)*(1.0/255.0) if len(o.shape) >= 4 else jax.device_get(o) for o in obs]
+
+@jax.jit
+def discounted(rewards,gamma=0.99): #lfilter([1],[1,-gamma],x[::-1])[::-1]
+    _gamma = 1
+    out = 0
+    for r in rewards:
+        out += r*_gamma
+        _gamma *= gamma
+    return out
+
+def get_gaes(rewards, dones, values, next_values, gamma, lamda, normalize):
+    deltas = [r + gamma * (1 - d) * nv - v for r, d, nv, v in zip(rewards, dones, next_values, values)]
+    deltas = jnp.stack(deltas)
+    gaes = jnp.array(deltas)
+    for t in reversed(range(len(deltas) - 1)):
+        gaes[t] = gaes[t] + (1 - dones[t]) * gamma * lamda * gaes[t + 1]
+
+    target = gaes + values
+    if normalize:
+        gaes = (gaes - gaes.mean()) / (gaes.std() + 1e-8)
+    return gaes, target

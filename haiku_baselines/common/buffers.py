@@ -44,21 +44,21 @@ class EpochBuffer(object):
         obses_dicts = dict(zip(self.obsdict.keys(),obs_t))
         nxtobses_dicts = dict(zip(self.nextobsdict.keys(),nxtobs_t))
         for k in obses_dicts:
-            self._storage[k][self._next_idx] = obses_dicts[k]
+            self._storage[k][:,self._next_idx,:] = obses_dicts[k]
         for k in nxtobses_dicts:
-            self._storage[k][self._next_idx] = nxtobses_dicts[k]
-        self._storage['actions'][self._next_idx] = action
-        self._storage['rewards'][self._next_idx] = reward
-        self._storage['dones'][self._next_idx] = done
+            self._storage[k][:,self._next_idx,:] = nxtobses_dicts[k]
+        self._storage['actions'][:,self._next_idx,:] = action
+        self._storage['rewards'][:,self._next_idx,:] = reward
+        self._storage['dones'][:,self._next_idx,:] = done
         self._next_idx += 1
 
     def get_buffer(self):
         return {
-            'obses'     : [self._storage[o] for o in self.obsdict.keys()],
-            'actions'   : self._storage['actions'],
-            'rewards'   : self._storage['rewards'],
-            'nxtobses'  : [self._storage[no] for no in self.nextobsdict.keys()],
-            'dones'     : self._storage['dones']
+            'obses'     : [[self._storage[o][w] for o in self.obsdict.keys()] for w in range(self.worker_size)],
+            'actions'   : [self._storage['actions'][w] for w in range(self.worker_size)],
+            'rewards'   : [self._storage['rewards'][w] for w in range(self.worker_size)],
+            'nxtobses'  : [[self._storage[no][w] for no in self.nextobsdict.keys()] for w in range(self.worker_size)],
+            'dones'     : [self._storage['dones'][w] for w in range(self.worker_size)]
             }
         
     def clear(self):

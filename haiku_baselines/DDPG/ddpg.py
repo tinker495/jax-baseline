@@ -103,29 +103,25 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); not_dones = 1.0 - dones
         targets = self._target(target_params, rewards, nxtobses, not_dones, key)
-        (critic_loss,abs_error), critic_grad = jax.value_and_grad(self._critic_loss,has_aux = True)(params, obses, actions, targets, weights, key)
-        updates, opt_state = self.optimizer.update(critic_grad, opt_state, params=params)
-        params = optax.apply_updates(params, updates)
-        actor_loss, actor_grad = jax.value_and_grad(self._actor_loss)(params, obses, key)
-        updates, opt_state = self.optimizer.update(actor_grad, opt_state, params=params)
+        (total_loss,(critic_loss, actor_loss, abs_error)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key)
+        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         target_params = soft_update(params, target_params, self.target_network_update_tau)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error + self.prioritized_replay_eps
-        return params, target_params, opt_state, critic_loss, actor_loss, new_priorities
+        return params, target_params, opt_state, critic_loss, -actor_loss, new_priorities
     
-    def _critic_loss(self, params, obses, actions, targets, weights, key):
+    def _loss(self, params, obses, actions, targets, weights, key):
         feature = self.preproc.apply(params, key, obses)
         vals = self.critic.apply(params, key, feature, actions)
         error = jnp.squeeze(vals - targets)
-        return jnp.mean(weights*jnp.square(error)), jnp.abs(error)
-    
-    def _actor_loss(self, params, obses, key):
-        feature = self.preproc.apply(params, key, obses)
+        critic_loss = jnp.mean(weights*jnp.square(error))
         policy = self.actor.apply(params, key, feature)
         vals = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
-        return jnp.mean(-vals)
+        actor_loss = jnp.mean(-vals)
+        total_loss = critic_loss + actor_loss
+        return total_loss, (critic_loss, -actor_loss, jnp.abs(error))
     
     def _target(self, target_params, rewards, nxtobses, not_dones, key):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
