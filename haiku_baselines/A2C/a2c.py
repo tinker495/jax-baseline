@@ -78,7 +78,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         data = self.buffer.get_buffer()
         
         self.params, self.opt_state, loss, t_mean = \
-            self._train_step(self.params, self.opt_state, None,
+            self._train_step(self.params, self.opt_state, None, self.ent_coef,
                                 **data)
             
         if self.summary and steps % self.log_interval == 0:
@@ -89,7 +89,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
 
     def _train_step(self, params, opt_state, key, ent_coef,
                     obses, actions, rewards, nxtobses, dones):
-        obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]; not_dones = [1.0 - d for d in dones]
+        obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
         value = [self.critic.apply(params, key, self.preproc.apply(params, None, o)) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, None, n)) for n in nxtobses]
         adv, targets = zip(*[get_gaes(r, d, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, v, nv in zip(rewards, dones, value, next_value)])
