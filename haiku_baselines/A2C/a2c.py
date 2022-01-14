@@ -63,7 +63,6 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
     
     def action_discrete(self,obs,steps):
         prob = self._get_actions(self.params, obs)
-        print(prob)
         return np.stack([np.random.choice(self.action_size[0],p=p) for p in prob],axis=0)
     
     def action_continuous(self,obs,steps):
@@ -93,7 +92,8 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         value = [self.critic.apply(params, key, self.preproc.apply(params, None, o)) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, None, n)) for n in nxtobses]
         adv, targets = zip(*[get_gaes(r, d, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, v, nv in zip(rewards, dones, value, next_value)])
-        (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, adv, ent_coef, key)
+        (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
+                                                        jnp.hstack(obses), jnp.hstack(actions), jnp.hstack(targets), jnp.hstack(adv), ent_coef, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         return params, opt_state, critic_loss, actor_loss
