@@ -90,7 +90,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
         value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
-        adv, targets = zip(*[get_gaes(r, d, terminals, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, v, nv in zip(rewards, dones, value, next_value, terminals)])
+        adv, targets = zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, t, v, nv in zip(rewards, dones, terminals, value, next_value)])
         obses_hstack = [jnp.hstack(zo) for zo in list(zip(*obses))]
         action_hstack = jnp.hstack(actions)
         adv_hstack = jnp.hstack(adv)
