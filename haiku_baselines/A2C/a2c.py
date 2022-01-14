@@ -112,8 +112,8 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         vals = self.critic.apply(params, key, feature)
         error = jnp.squeeze(vals - targets)
         critic_loss = jnp.mean(jnp.square(error))
-        prob = jnp.clip(jax.nn.softmax(self.actor.apply(params, key, feature)),1e-5,1.0)
-        action_prob = jnp.take_along_axis(prob, actions, axis=1)
+        prob = jax.nn.softmax(self.actor.apply(params, key, feature))
+        action_prob = jnp.clip(jnp.take_along_axis(prob, actions, axis=1),1e-5,1.0)
         cross_entropy = jnp.log(action_prob)*adv
         actor_loss = -jnp.mean(cross_entropy)
         entropy = prob * jnp.log(prob)
