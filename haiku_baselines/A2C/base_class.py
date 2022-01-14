@@ -16,7 +16,7 @@ from mlagents_envs.environment import UnityEnvironment, ActionTuple
 from gym import spaces
 
 class Actor_Critic_Policy_Gradient_Family(object):
-    def __init__(self, env, gamma=0.99, lamda = 0.95, gae_normalize = True,learning_rate=3e-4, batch_size=32, ent_coef = 0.5,
+    def __init__(self, env, gamma=0.99, lamda = 0.95, gae_normalize = True,learning_rate=3e-4, batch_size=32, val_coef=0.2, ent_coef=0.01,
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
@@ -31,6 +31,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.gamma = gamma
         self.lamda = lamda
         self.gae_normalize = gae_normalize
+        self.val_coef = val_coef
         self.ent_coef = ent_coef
         self.tensorboard_log = tensorboard_log
         self.full_tensorboard_log = full_tensorboard_log

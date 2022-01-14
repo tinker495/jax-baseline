@@ -19,7 +19,8 @@ if __name__ == "__main__":
     parser.add_argument('--hidden_n', type=int,default=2, help='hidden layer number')
     parser.add_argument('--worker', type=int,default=1, help='gym_worker_size')
     parser.add_argument('--optimizer', type=str,default='adamw', help='optimaizer')
-    parser.add_argument('--ent_coef', type=float,default=0.5, help='sac entropy coefficient')
+    parser.add_argument('--ent_coef', type=float,default=0.01, help='entropy coefficient')
+    parser.add_argument('--val_coef', type=float,default=0.2, help='val coefficient')
     args = parser.parse_args() 
     env_name = args.env
     cnn_mode = "normal"
@@ -48,7 +49,7 @@ if __name__ == "__main__":
                      'cnn_mode': cnn_mode}
         
     if args.algo == "A2C":
-        agent = A2C(env, gamma=args.gamma, lamda=args.lamda, batch_size = args.batch, ent_coef = args.ent_coef,
+        agent = A2C(env, gamma=args.gamma, lamda=args.lamda, batch_size = args.batch, val_coef = args.val_coef, ent_coef = args.ent_coef,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
         
 
