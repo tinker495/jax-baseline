@@ -96,12 +96,14 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         action_hstack = jnp.hstack(actions)
         adv_hstack = jnp.hstack(adv)
         target_hstack = jnp.hstack(targets)
+        '''
         for oh in obses_hstack:
             print('ob :', oh.shape, ', ', oh)
             
         print('act: ', action_hstack.shape, ', ', action_hstack)
         print('adv: ', adv_hstack.shape, ', ', adv_hstack)
         print('target: ', target_hstack.shape, ', ', target_hstack)
+        '''
         (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
                                                         obses_hstack, action_hstack, adv_hstack, target_hstack, ent_coef, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
@@ -113,7 +115,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         vals = self.critic.apply(params, key, feature)
         error = jnp.squeeze(vals - targets)
         critic_loss = jnp.mean(jnp.square(error))
-        prob = self.actor.apply(params, key, feature)
+        prob = jnp.clip(jax.nn.softmax(self.actor.apply(params, key, feature)),13-5,1.0)
         action_prob = jnp.take_along_axis(prob, actions, axis=1)
         cross_entropy = action_prob*adv
         actor_loss = -jnp.mean(cross_entropy)
