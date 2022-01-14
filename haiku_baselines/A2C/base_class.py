@@ -13,12 +13,11 @@ from haiku_baselines.common.utils import convert_states
 from haiku_baselines.common.worker import gymMultiworker
 
 from mlagents_envs.environment import UnityEnvironment, ActionTuple
+from gym import spaces
 
 class Actor_Critic_Policy_Gradient_Family(object):
-    def __init__(self, env, gamma=0.99, learning_rate=5e-5, buffer_size=50000, train_freq=1, gradient_steps=1, batch_size=32,
-                 n_step = 1, learning_starts=1000, target_network_update_tau=5e-4, prioritized_replay=False,
-                 prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6,
-                 log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
+    def __init__(self, env, gamma=0.99, learning_rate=5e-5, update_interval=3000, train_freq=1, gradient_steps=1, batch_size=32,
+                 learning_starts=1000, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
         self.env = env
@@ -30,20 +29,12 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.learning_starts = learning_starts
         self.train_freq = train_freq
         self.gradient_steps = gradient_steps
-        self.prioritized_replay = prioritized_replay
-        self.prioritized_replay_eps = prioritized_replay_eps
         self.batch_size = batch_size
-        self.target_network_update_tau = target_network_update_tau
-        self.prioritized_replay_alpha = prioritized_replay_alpha
-        self.prioritized_replay_beta0 = prioritized_replay_beta0
-        self.buffer_size = buffer_size
+        self.update_interval = update_interval
         self.learning_rate = learning_rate
         self.gamma = gamma
-        self._gamma = self.gamma**n_step #n_step gamma
         self.tensorboard_log = tensorboard_log
         self.full_tensorboard_log = full_tensorboard_log
-        self.n_step_method = (n_step > 1)
-        self.n_step = n_step
         
         self.params = None
         self.target_params = None
@@ -51,7 +42,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.optimizer = select_optimizer(optimizer,self.learning_rate,1e-2/self.batch_size)
         
         self.get_env_setup()
-        self.get_memory_setup()
         
     def save_params(self, path):
         save(path, self.params)
@@ -71,7 +61,14 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.group_name = group_name
             
             self.observation_space = [list(spec.shape) for spec in group_spec.observation_specs]
-            self.action_size = [group_spec.action_spec.continuous_size]
+            if group_spec.action_spec.continuous_size == 0:
+                self.action_size = [branch for branch in group_spec.action_spec.discrete_branches]
+                self.action_type = 'discrete'
+                self.conv_action_tuple = lambda a: ActionTuple(discrete=a)
+            else:
+                self.action_size = [group_spec.action_spec.continuous_size]
+                self.action_type = 'continuous'
+                self.conv_action_tuple = lambda a: ActionTuple(continuous=a)
             self.worker_size = len(dec.agent_id)
             self.env_type = "unity"
             
@@ -80,7 +77,10 @@ class Actor_Critic_Policy_Gradient_Family(object):
             action_space = self.env.action_space
             observation_space = self.env.observation_space
             self.observation_space = [list(observation_space.shape)]
-            self.action_size = [action_space.shape[0]]
+            if not isinstance(action_space, spaces.Box):
+                self.action_size = [action_space.n]
+            else:
+                self.action_size = [action_space.shape[0]]
             self.worker_size = 1
             self.env_type = "gym"
             
@@ -96,12 +96,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
         print("action size : ", self.action_size)
         print("worker_size : ", self.worker_size)
         print("-------------------------------------------------")
-        
-    def get_memory_setup(self):
-        if not self.prioritized_replay:
-            self.replay_buffer = ReplayBuffer(self.buffer_size,self.observation_space, self.worker_size, self.action_size, self.n_step, self.gamma)
-        else:
-            self.replay_buffer = PrioritizedReplayBuffer(self.buffer_size,self.observation_space,self.prioritized_replay_alpha, self.worker_size, self.action_size, self.n_step, self.gamma)
     
     def setup_model(self):
         pass
@@ -118,10 +112,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
         
     def learn(self, total_timesteps, callback=None, log_interval=1000, tb_log_name="Q_network",
               reset_num_timesteps=True, replay_wrapper=None):
-        if self.n_step_method:
-            tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
-        if self.prioritized_replay:
-            tb_log_name = tb_log_name + "+PER"
         
         pbar = trange(total_timesteps, miniters=log_interval)
         with TensorboardWriter(self.tensorboard_log, tb_log_name) as (self.summary, self.save_path):
@@ -150,7 +140,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(obses,steps)
-            action_tuple = ActionTuple(continuous=actions)
+            action_tuple = self.conv_action_tuple(actions)
             old_obses = obses
 
             self.env.set_actions(self.group_name, action_tuple)
