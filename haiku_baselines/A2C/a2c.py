@@ -127,7 +127,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
     def _loss_continuous(self, params, obses, actions, targets, adv, ent_coef, key):
         pass
     
-    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="DDPG",
+    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="A2C",
               reset_num_timesteps=True, replay_wrapper=None):
         
         super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)
