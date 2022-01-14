@@ -108,7 +108,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         actor_loss = -jnp.mean(cross_entropy)
         entropy = prob * jnp.log(prob)
         entropy_loss = jnp.mean(entropy)
-        total_loss = critic_loss + 1e-2*(actor_loss - ent_coef * entropy_loss)
+        total_loss = critic_loss + 1e-1*(actor_loss - ent_coef * entropy_loss)
         return total_loss, (critic_loss, actor_loss)
     
     def _loss_continuous(self, params, obses, actions, targets, adv, ent_coef, key):
