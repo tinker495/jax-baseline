@@ -69,9 +69,6 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         mu, std = self._get_actions(self.params, obs)
         return mu
     
-    def test_action(self, state):
-        return np.clip(np.asarray(self._get_actions(self.params,state, None)) + self.noise()*self.exploration_final_eps,-1,1)
-    
     def train_step(self, steps):
         # Sample a batch from the replay buffer
         data = self.buffer.get_buffer()
