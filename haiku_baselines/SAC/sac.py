@@ -25,7 +25,8 @@ class SAC(Deteministic_Policy_Gradient_Family):
         
         self.policy_delay = policy_delay
         self.ent_coef = ent_coef
-        self.target_entropy = -np.prod(self.action_size).astype(np.float32)/2.0 #
+        self.target_entropy = -np.prod(self.action_size).astype(np.float32) #
+        self.ent_coef_learning_rate = 1e-6
         
         if _init_setup_model:
             self.setup_model() 
@@ -49,7 +50,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
         self.target_params = self.params
         
         if isinstance(self.ent_coef, str) and self.ent_coef.startswith('auto'):
-            init_value = np.log(0.1)
+            init_value = np.log(1.0)
             if '_' in self.ent_coef:
                 init_value = np.log(float(self.ent_coef.split('_')[1]))
                 assert init_value > 0., "The initial value of ent_coef must be greater than 0"
@@ -139,7 +140,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
     def _train_ent_coef(self,log_coef,log_prob):
         l = lambda log_ent_coef, log_prob: -jnp.mean(log_ent_coef * (log_prob + self.target_entropy))
         grad = jax.grad(l)(log_coef,log_prob)
-        log_coef = log_coef - self.learning_rate * grad
+        log_coef = log_coef - self.ent_coef_learning_rate * grad
         return log_coef, jnp.exp(log_coef)
     
     def _loss(self, params, obses, actions, targets, weights, key, step, ent_coef):
