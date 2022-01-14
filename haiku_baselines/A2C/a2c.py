@@ -11,7 +11,7 @@ from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import convert_jax, get_gaes
 
 class A2C(Actor_Critic_Policy_Gradient_Family):
-    def __init__(self, env, gamma=0.99, lamda = 0.95, gae_normalize = False, learning_rate=3e-4, batch_size=32, ent_coef = 0.5,
+    def __init__(self, env, gamma=0.99, lamda = 0.95, gae_normalize = True, learning_rate=3e-4, batch_size=32, ent_coef = 0.5,
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
@@ -90,7 +90,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
         value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
-        adv, targets = zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, t, v, nv in zip(rewards, dones, terminals, value, next_value)])
+        targets, adv = zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, t, v, nv in zip(rewards, dones, terminals, value, next_value)])
         obses_hstack = [jnp.hstack(zo) for zo in list(zip(*obses))]
         action_hstack = jnp.hstack(actions)
         adv_hstack = jnp.hstack(adv)
