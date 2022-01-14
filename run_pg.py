@@ -19,7 +19,7 @@ if __name__ == "__main__":
     parser.add_argument('--hidden_n', type=int,default=2, help='hidden layer number')
     parser.add_argument('--worker', type=int,default=1, help='gym_worker_size')
     parser.add_argument('--optimizer', type=str,default='adamw', help='optimaizer')
-    parser.add_argument('--ent_coef', type=int,default=0.5, help='sac entropy coefficient')
+    parser.add_argument('--ent_coef', type=float,default=0.5, help='sac entropy coefficient')
     args = parser.parse_args() 
     env_name = args.env
     cnn_mode = "normal"
