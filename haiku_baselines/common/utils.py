@@ -44,7 +44,7 @@ def get_gaes(rewards, dones, values, next_values, gamma, lamda, normalize):
     deltas = jnp.stack(deltas)
     gaes = jnp.array(deltas)
     for t in reversed(range(len(deltas) - 1)):
-        gaes[t] = gaes[t] + (1 - dones[t]) * gamma * lamda * gaes[t + 1]
+        gaes.at[t].set(gaes[t] + (1 - dones[t]) * gamma * lamda * gaes[t + 1])
 
     target = gaes + values
     if normalize:
