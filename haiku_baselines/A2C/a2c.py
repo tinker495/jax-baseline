@@ -97,8 +97,11 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         adv_hstack = jnp.hstack(adv)
         target_hstack = jnp.hstack(targets)
         for oh in obses_hstack:
-            print(oh.shape)
-            print(oh)
+            print('ob :', oh.shape, ', ', oh)
+            
+        print('act: ', action_hstack.shape, ', ', action_hstack)
+        print('adv: ', adv_hstack.shape, ', ', adv_hstack)
+        print('target: ', target_hstack.shape, ', ', target_hstack)
         (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
                                                         obses_hstack, action_hstack, adv_hstack, target_hstack, ent_coef, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
