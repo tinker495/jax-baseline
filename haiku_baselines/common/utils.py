@@ -40,7 +40,7 @@ def discounted(rewards,gamma=0.99): #lfilter([1],[1,-gamma],x[::-1])[::-1]
     return out
 
 def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda, normalize):
-    target = rewards + gamma * (1.0 - terminals) * next_values
+    target = rewards + gamma * (1.0 - dones) * next_values
     deltas = target - values
     #gaes = (delta - jnp.mean(delta)) / (jnp.std(delta) + 1e-8)
 
