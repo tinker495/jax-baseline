@@ -5,7 +5,7 @@ import numpy as np
 import optax
 
 from haiku_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
-from haiku_baselines.A2C.network import Actor, Critic
+from haiku_baselines.PPO.network import Actor, Critic
 from haiku_baselines.common.schedules import LinearSchedule
 from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import convert_jax, get_gaes
