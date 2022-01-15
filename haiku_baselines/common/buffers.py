@@ -91,6 +91,7 @@ class EpochBuffer(object):
                 'terminals', np.zeros((self.worker_size,self._maxsize,1),dtype=np.float32)
             )
             ]
+            
             )
 
 @jax.jit
