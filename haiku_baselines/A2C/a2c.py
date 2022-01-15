@@ -46,7 +46,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         print("-------------------------------------------------")
         
         self._get_actions = jax.jit(self._get_actions)
-        #self._train_step = jax.jit(self._train_step)
+        self._train_step = jax.jit(self._train_step)
         
     def _get_actions_discrete(self, params, obses, key = None) -> jnp.ndarray:
         prob = jax.nn.softmax(self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses))),axis=1)
