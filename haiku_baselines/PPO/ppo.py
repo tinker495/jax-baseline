@@ -79,7 +79,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             
         #print(np.mean(adv_hstack))
         #print(np.mean(target_hstack))
-        if self.summary and steps % self.log_interval == 0:
+        if self.summary:
             self.summary.add_scalar("loss/critic_loss", critic_loss, steps)
             self.summary.add_scalar("loss/actor_loss", actor_loss, steps)
             
