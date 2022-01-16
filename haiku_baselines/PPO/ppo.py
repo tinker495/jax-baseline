@@ -100,7 +100,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         old_prob = jnp.clip(jnp.take_along_axis(self.actor.apply(params, key, features), actions, axis=1),1e-5,1.0)
         targets = jnp.vstack(targets); adv = targets - old_value; adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-8)
         idxes = jnp.arange(0, old_value.shape[0])#jax.random.permutation(key, old_value.shape[0])
-        for i in range((self.batch_size * self.worker_size)//self.minibatch_size):
+        for i in range(old_value.shape[0]//self.minibatch_size):
             start = i*self.minibatch_size
             end = (i+1)*self.minibatch_size
             mini_batch = idxes[start:end]
