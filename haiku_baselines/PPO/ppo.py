@@ -100,8 +100,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         value = jnp.vstack(value); targets = jnp.vstack(targets); adv = targets - value; adv = (adv - jnp.mean(adv)) / (jnp.std(adv) + 1e-8)
         old_prob = self.actor.apply(params, key, jnp.vstack(features))
         old_value = value
-        idxes = jnp.arange(0, value.shape[0])
-        idxes = jax.random.shuffle(key, idxes)
+        idxes = jax.random.permutation(key, value.shape[0])
         for i in range((self.batch_size * self.worker_size)//self.minibatch_size):
             start = i*self.minibatch_size
             end = (i+1)*self.minibatch_size
