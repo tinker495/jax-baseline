@@ -105,8 +105,8 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             end = (i+1)*self.minibatch_size
             mini_batch = idxes[start:end]
             (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
-                                                            [o[mini_batch] for o in obses], actions[mini_batch], targets[mini_batch],
-                                                            old_value[mini_batch], old_prob[mini_batch], adv[mini_batch], ent_coef, key)
+                                                            [o[mini_batch,:] for o in obses], actions[mini_batch,:], targets[mini_batch,:],
+                                                            old_value[mini_batch,:], old_prob[mini_batch,:], adv[mini_batch,:], ent_coef, key)
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
         return params, opt_state, critic_loss, actor_loss
