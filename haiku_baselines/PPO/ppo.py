@@ -92,21 +92,21 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     def _train_step(self, params, opt_state, key, ent_coef,
                     obses, actions, rewards, nxtobses, dones, terminals):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
-        value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
-        old_prob = [jnp.clip(jnp.take_along_axis(self.actor.apply(params, key, self.preproc.apply(params, key, o)), actions, axis=1),1e-5,1.0) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
         targets = [discount_with_terminal(r,d,t,nv,self.gamma) for r,d,t,nv in zip(rewards,dones,terminals,next_value)]
-        obses = [jnp.vstack(zo) for zo in zip(*obses)]; actions = jnp.vstack(actions)
-        value = jnp.vstack(value); targets = jnp.vstack(targets); adv = targets - value; adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-8)
-        old_prob = jnp.vstack(old_prob)
-        idxes = jax.random.permutation(key, value.shape[0])
+        obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions)
+        features = self.preproc.apply(params, key, obses)
+        old_value = self.critic.apply(params, key, features)
+        old_prob = jnp.clip(jnp.take_along_axis(self.actor.apply(params, key, features), actions, axis=1),1e-5,1.0)
+        targets = jnp.vstack(targets); adv = targets - old_value; adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-8)
+        idxes = jax.random.permutation(key, old_value.shape[0])
         for i in range((self.batch_size * self.worker_size)//self.minibatch_size):
             start = i*self.minibatch_size
             end = (i+1)*self.minibatch_size
             mini_batch = idxes[start:end]
             (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
                                                             [o[mini_batch] for o in obses], actions[mini_batch], targets[mini_batch],
-                                                            value[mini_batch], old_prob[mini_batch], adv[mini_batch], ent_coef, key)
+                                                            old_value[mini_batch], old_prob[mini_batch], adv[mini_batch], ent_coef, key)
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
         return params, opt_state, critic_loss, actor_loss
@@ -122,7 +122,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         prob = jnp.clip(jax.nn.softmax(self.actor.apply(params, key, feature)),1e-5,1.0)
         action_prob = jnp.take_along_axis(prob, actions, axis=1)
         ratio = jnp.exp(jnp.log(action_prob) - jnp.log(old_prob))
-        cross_entropy1 = adv*ratio; cross_entropy2 = adv*jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)
+        cross_entropy1 = adv*jnp.log(action_prob); cross_entropy2 = adv*jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)
         #actor_loss = -jnp.mean(jnp.minimum(cross_entropy1,cross_entropy2))
         actor_loss = -jnp.mean(cross_entropy1)
         entropy = prob * jnp.log(prob)
