@@ -121,7 +121,6 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         ratio = jnp.exp(jnp.log(action_prob) - jnp.log(old_prob))
         cross_entropy1 = adv*ratio; cross_entropy2 = adv*jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)
         actor_loss = -jnp.mean(jnp.minimum(cross_entropy1,cross_entropy2))
-        #actor_loss = -jnp.mean(cross_entropy1)
         entropy = prob * jnp.log(prob)
         entropy_loss = jnp.mean(entropy)
         total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
