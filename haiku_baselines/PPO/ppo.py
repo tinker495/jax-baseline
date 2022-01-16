@@ -63,7 +63,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     
     def action_discrete(self,obs,steps):
         prob = self._get_actions(self.params, obs)
-        return np.stack([np.random.choice(self.action_size[0],p=p) for p in prob],axis=0)
+        return np.expand_dims(np.stack([np.random.choice(self.action_size[0],p=p) for p in prob],axis=0),axis=1)
     
     def action_continuous(self,obs,steps):
         mu, std = self._get_actions(self.params, obs)
@@ -92,7 +92,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
         adv, targets = zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, t, v, nv in zip(rewards, dones, terminals, value, next_value)])
         (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
-                                                        [jnp.hstack(zo) for zo in list(zip(*obses))], jnp.hstack(actions), jnp.hstack(targets), jnp.hstack(adv), ent_coef, key)
+                                                        [jnp.vstack(zo) for zo in list(zip(*obses))], jnp.vstack(actions), jnp.vstack(targets), jnp.vstack(adv), ent_coef, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         return params, opt_state, critic_loss, actor_loss

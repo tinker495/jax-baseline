@@ -214,7 +214,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 self.scores[term_ids] = 0
                 self.eplen[term_ids] = 0
             
-            if (steps + 1) % self.batch_size == 0: #train in step the environments
+            if steps % self.batch_size == 0: #train in step the environments
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
                 self.buffer.clear()
