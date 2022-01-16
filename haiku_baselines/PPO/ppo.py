@@ -12,12 +12,14 @@ from haiku_baselines.common.utils import convert_jax, get_gaes
 
 class PPO(Actor_Critic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.99, lamda = 0.9, gae_normalize = False, learning_rate=3e-4, batch_size=32, val_coef=0.2, ent_coef = 0.5,
-                 log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
+                 ppo_eps = 0.2, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'rmsprop'):
         
         super(PPO, self).__init__(env, gamma, lamda, gae_normalize, learning_rate, batch_size, val_coef, ent_coef,
                  log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
                  full_tensorboard_log, seed, optimizer)
+        
+        self.ppo_eps = ppo_eps
         
         if _init_setup_model:
             self.setup_model() 
@@ -88,6 +90,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     def _train_step(self, params, opt_state, key, ent_coef,
                     obses, actions, rewards, nxtobses, dones, terminals):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
+        rewards = []
         value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
         adv, targets = zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, t, v, nv in zip(rewards, dones, terminals, value, next_value)])
