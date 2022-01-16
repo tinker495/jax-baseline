@@ -236,7 +236,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             done = terminal
             if "TimeLimit.truncated" in info:
                 done = not info["TimeLimit.truncated"]
-            self.buffer.add(state, actions, reward, next_state, done, terminal)
+            self.buffer.add(state, actions[0], reward, next_state, done, terminal)
             self.scores[0] += reward
             state = next_state
             if terminal:
