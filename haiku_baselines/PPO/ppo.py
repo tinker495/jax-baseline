@@ -114,7 +114,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     def _loss_discrete(self, params, obses, actions, targets, old_value, old_prob, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
         vals = self.critic.apply(params, key, feature)
-        critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals))
+        critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
         #vals_clipped = old_value + jnp.clip(vals - old_value, -self.clip_value, self.clip_value)
         #vloss1 = jnp.square(jnp.squeeze(targets - vals)); vloss2 = jnp.square(jnp.squeeze(targets - vals_clipped))
         #critic_loss = jnp.mean(jnp.maximum(vloss1,vloss2))
