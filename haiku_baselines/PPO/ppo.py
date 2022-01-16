@@ -97,21 +97,18 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions)
         features = self.preproc.apply(params, key, obses)
         old_value = self.critic.apply(params, key, features)
-        old_prob = jnp.clip(jnp.take_along_axis(self.actor.apply(params, key, features), actions, axis=1),1e-5,1.0)
+        old_prob = jnp.take_along_axis(jnp.clip(jax.nn.softmax(self.actor.apply(params, key, features)),1e-5,1.0), actions, axis=1)
         targets = jnp.vstack(targets); adv = targets - old_value; adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-8)
-        '''
         idxes = jnp.arange(0, old_value.shape[0])#jax.random.permutation(key, old_value.shape[0])
         for i in range(old_value.shape[0]//self.minibatch_size):
             start = i*self.minibatch_size
             end = (i+1)*self.minibatch_size
             mini_batch = idxes[start:end]
-        '''
-
-        (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
-                                                        obses, actions, targets,
-                                                        old_value, old_prob, adv, ent_coef, key)
-        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-        params = optax.apply_updates(params, updates)
+            (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
+                                                            [o[mini_batch] for o in obses], actions[mini_batch], targets[mini_batch],
+                                                            old_value[mini_batch], old_prob[mini_batch], adv[mini_batch], ent_coef, key)
+            updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+            params = optax.apply_updates(params, updates)
         return params, opt_state, critic_loss, actor_loss
     
     def _loss_discrete(self, params, obses, actions, targets, old_value, old_prob, adv, ent_coef, key):
