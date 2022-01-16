@@ -121,7 +121,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         
         prob = jnp.clip(jax.nn.softmax(self.actor.apply(params, key, feature)),1e-5,1.0)
         action_prob = jnp.take_along_axis(prob, actions, axis=1)
-        ratio = jnp.exp(jnp.log(old_prob) - jnp.log(action_prob))
+        ratio = jnp.exp(jnp.log(action_prob) - jnp.log(old_prob))
         cross_entropy1 = ratio*adv; cross_entropy2 = jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)*adv
         actor_loss = -jnp.mean(jnp.minimum(cross_entropy1,cross_entropy2))
         entropy = prob * jnp.log(prob)
