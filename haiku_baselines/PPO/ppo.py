@@ -11,7 +11,7 @@ from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import convert_jax, discount_with_terminal
 
 class PPO(Actor_Critic_Policy_Gradient_Family):
-    def __init__(self, env, gamma=0.99, lamda = 0.9, gae_normalize = False, learning_rate=3e-4, batch_size=512, minibatch_size=32, val_coef=0.2, ent_coef = 0.5, 
+    def __init__(self, env, gamma=0.99, lamda = 0.9, gae_normalize = False, learning_rate=3e-4, batch_size=512, minibatch_size=16, val_coef=0.2, ent_coef = 0.5, 
                  clip_value = 100.0, ppo_eps = 0.2, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'rmsprop'):
         
@@ -98,17 +98,14 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         targets = [discount_with_terminal(r,d,t,nv,self.gamma) for r,d,t,nv in zip(rewards,dones,terminals,next_value)]
         obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions); value = jnp.vstack(value); act_prob = jnp.vstack(act_prob)
         targets = jnp.vstack(targets); adv = targets - value; adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-8)
-        '''
-        idxes = jnp.arange(0, value.shape[0])#jax.random.permutation(key, old_value.shape[0])
-        
+        idxes = jax.random.permutation(key, value.shape[0]) #
+        for i in range(value.shape[0]//self.minibatch_size):
             start = i*self.minibatch_size
             end = (i+1)*self.minibatch_size
             mini_batch = idxes[start:end]
-            '''
-        for i in range(value.shape[0]//self.minibatch_size):
             (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
-                                                        obses, actions, targets,
-                                                        value, act_prob, adv, ent_coef, key)
+                                                        [o[mini_batch] for o in obses], actions[mini_batch], targets[mini_batch],
+                                                        value[mini_batch], act_prob[mini_batch], adv[mini_batch], ent_coef, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         return params, opt_state, critic_loss, actor_loss
