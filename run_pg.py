@@ -3,6 +3,7 @@ import argparse
 import gym
 
 from haiku_baselines.A2C.a2c import A2C
+from haiku_baselines.PPO.ppo import PPO
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -51,7 +52,9 @@ if __name__ == "__main__":
     if args.algo == "A2C":
         agent = A2C(env, gamma=args.gamma, lamda=args.lamda, batch_size = args.batch, val_coef = args.val_coef, ent_coef = args.ent_coef,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
-        
+    if args.algo == "PPO":
+        agent = PPO(env, gamma=args.gamma, lamda=args.lamda, batch_size = args.batch, val_coef = args.val_coef, ent_coef = args.ent_coef,
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
 
 
 
