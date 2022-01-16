@@ -314,7 +314,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             episode_rew = 0
             while not terminal:
                 actions = self.test_action(state)
-                observation, reward, terminal, info = Render_env.step(actions[0])
+                observation, reward, terminal, info = Render_env.step(actions[0][0])
                 state = [np.expand_dims(observation,axis=0)]
                 episode_rew += reward
             print("episod reward :", episode_rew)
