@@ -92,15 +92,14 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     def _train_step(self, params, opt_state, key, ent_coef,
                     obses, actions, rewards, nxtobses, dones, terminals):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
-        features =[self.preproc.apply(params, key, o) for o in obses] 
-        value = [self.critic.apply(params, key, f) for f in features]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
         targets = [discount_with_terminal(r,d,t,nv,self.gamma) for r,d,t,nv in zip(rewards,dones,terminals,next_value)]
         obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions)
-        value = jnp.vstack(value); targets = jnp.vstack(targets); adv = targets - value; adv = (adv - jnp.mean(adv)) / (jnp.std(adv) + 1e-8)
+        features = self.preproc.apply(params, key, obses)
+        old_value = self.critic.apply(params, key, features)
         old_prob = self.actor.apply(params, key, jnp.vstack(features))
-        old_value = value
-        idxes = jax.random.permutation(key, value.shape[0])
+        targets = jnp.vstack(targets); adv = targets - old_value; adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-8)
+        idxes = jax.random.permutation(key, old_value.shape[0])
         for i in range((self.batch_size * self.worker_size)//self.minibatch_size):
             start = i*self.minibatch_size
             end = (i+1)*self.minibatch_size
