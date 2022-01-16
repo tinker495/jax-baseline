@@ -93,7 +93,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
                     obses, actions, rewards, nxtobses, dones, terminals):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
         value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
-        act_prob = [jnp.take_along_axis(jnp.clip(jax.nn.softmax(self.actor.apply(params, key, self.preproc.apply(params, key, o))),1e-5,1.0), actions, axis=1) for o in obses]
+        act_prob = [jnp.take_along_axis(jnp.clip(jax.nn.softmax(self.actor.apply(params, key, self.preproc.apply(params, key, o))),1e-5,1.0), a, axis=1) for o,a in zip(obses,actions)]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
         targets = [discount_with_terminal(r,d,t,nv,self.gamma) for r,d,t,nv in zip(rewards,dones,terminals,next_value)]
         obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions); value = jnp.vstack(value); act_prob = jnp.vstack(act_prob)
