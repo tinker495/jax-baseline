@@ -91,7 +91,10 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
         targets = [discount_with_terminal(r,d,t,nv,self.gamma) for r,d,t,nv in zip(rewards,dones,terminals,next_value)]
-        obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions); value = jnp.vstack(value); targets = jnp.vstack(targets)
+        obses = [jnp.vstack(zo) for zo in list(zip(*obses))]
+        actions = jnp.vstack(actions)
+        value = jnp.vstack(value)
+        targets = jnp.vstack(targets)
         adv = targets - value
         (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
                                                         obses, actions, targets, adv, ent_coef, key)
