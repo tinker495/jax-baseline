@@ -97,7 +97,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions)
         features = self.preproc.apply(params, key, obses)
         old_value = self.critic.apply(params, key, features)
-        old_prob = jnp.clip(jnp.take_along_axis(self.actor.apply(params, key, features), actions, axis=1),1e-5,1.0)
+        old_prob = jax.lax.stop_gradient(jnp.clip(jnp.take_along_axis(self.actor.apply(params, key, features), actions, axis=1),1e-5,1.0))
         targets = jnp.vstack(targets); adv = targets - old_value; adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-8)
         idxes = jnp.arange(0, old_value.shape[0])#jax.random.permutation(key, old_value.shape[0])
         for i in range(int(old_value.shape[0]/self.minibatch_size)):
