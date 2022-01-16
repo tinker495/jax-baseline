@@ -104,9 +104,10 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         for i in range((self.batch_size * self.worker_size)//self.minibatch_size):
             start = i*self.minibatch_size
             end = (i+1)*self.minibatch_size
+            mini_batch = idxes[start:end]
             (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
-                                                            [o[start:end] for o in obses], actions[start:end], targets[start:end],
-                                                            old_value[start:end], old_prob[start:end], adv[start:end], ent_coef, key)
+                                                            [o[mini_batch] for o in obses], actions[mini_batch], targets[mini_batch],
+                                                            old_value[mini_batch], old_prob[mini_batch], adv[mini_batch], ent_coef, key)
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
         return params, opt_state, critic_loss, actor_loss
@@ -121,8 +122,8 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         prob = jnp.clip(jax.nn.softmax(self.actor.apply(params, key, feature)),1e-5,1.0)
         action_prob = jnp.take_along_axis(prob, actions, axis=1)
         ratio = jnp.exp(jnp.log(old_prob) - jnp.log(action_prob))
-        cross_entropy1 = -ratio*adv; cross_entropy2 = -jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)*adv
-        actor_loss = jnp.mean(jnp.maximum(cross_entropy1,cross_entropy2))
+        cross_entropy1 = ratio*adv; cross_entropy2 = jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)*adv
+        actor_loss = -jnp.mean(jnp.minimum(cross_entropy1,cross_entropy2))
         entropy = prob * jnp.log(prob)
         entropy_loss = jnp.mean(entropy)
         total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
