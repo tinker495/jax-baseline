@@ -8,7 +8,7 @@ from haiku_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from haiku_baselines.A2C.network import Actor, Critic
 from haiku_baselines.common.schedules import LinearSchedule
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import convert_jax, get_gaes
+from haiku_baselines.common.utils import convert_jax, get_gaes, discount_with_terminal
 
 class A2C(Actor_Critic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.99, lamda = 0.9, gae_normalize = True, learning_rate=3e-4, batch_size=32, val_coef=0.2, ent_coef = 0.5,
@@ -90,9 +90,11 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
         value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
-        adv, targets = zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda, self.gae_normalize) for r, d, t, v, nv in zip(rewards, dones, terminals, value, next_value)])
+        targets = [discount_with_terminal(r,d,t,nv,self.gamma) for r,d,t,nv in zip(rewards,dones,terminals,next_value)]
+        obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions); value = jnp.vstack(value); targets = jnp.vstack(targets)
+        adv = targets - value
         (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
-                                                        [jnp.vstack(zo) for zo in list(zip(*obses))], jnp.vstack(actions), jnp.vstack(targets), jnp.vstack(adv), ent_coef, key)
+                                                        obses, actions, targets, adv, ent_coef, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         return params, opt_state, critic_loss, actor_loss

@@ -39,6 +39,14 @@ def discounted(rewards,gamma=0.99): #lfilter([1],[1,-gamma],x[::-1])[::-1]
         _gamma *= gamma
     return out
 
+def discount_with_terminal(rewards, dones, terminals, next_value, gamma):
+    ret = rewards[-1] + gamma * next_value[-1] * (1. - dones[-1])
+    discounted = [ret]
+    for reward, done, term, val in zip(rewards[-2::-1], dones[-2::-1], terminals[-2::-1], next_value[-2::-1]):
+        ret = reward + gamma * (ret * (1. - term) + next_value * (1. - done) * term) # fixed off by one bug
+        discounted.append(ret)
+    return discounted[::-1]
+
 def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda, normalize):
     deltas = rewards + gamma * (1.0 - dones) * next_values - values
     
