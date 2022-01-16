@@ -98,7 +98,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         targets = [discount_with_terminal(r,d,t,nv,self.gamma) for r,d,t,nv in zip(rewards,dones,terminals,next_value)]
         obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions)
         value = jnp.vstack(value); targets = jnp.vstack(targets); adv = targets - value; adv = (adv - jnp.mean(adv)) / (jnp.std(adv) + 1e-8)
-        old_prob = self.actor.apply(params, key, obses)
+        old_prob = self.actor.apply(params, key, jnp.vstack(features))
         old_value = value
         idxes = jnp.arange(0, value.shape[0])
         idxes = jax.random.shuffle(key, idxes)
