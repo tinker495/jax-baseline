@@ -8,7 +8,7 @@ from haiku_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from haiku_baselines.A2C.network import Actor, Critic
 from haiku_baselines.common.schedules import LinearSchedule
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import convert_jax, get_gaes, discount_with_terminal
+from haiku_baselines.common.utils import convert_jax, discount_with_terminal
 
 class A2C(Actor_Critic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.99, lamda = 0.9, gae_normalize = True, learning_rate=3e-4, batch_size=32, val_coef=0.2, ent_coef = 0.5,
