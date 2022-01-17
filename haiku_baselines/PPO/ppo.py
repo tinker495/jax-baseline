@@ -59,7 +59,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     
     def _get_actions_continuous(self, params, obses, key = None) -> jnp.ndarray:
         mu,std = self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))
-        return mu, std
+        return mu, jnp.exp(std)
     
     def get_logprob_discrete(self, prob, action, key):
         return jnp.take_along_axis(prob, action, axis=1)
