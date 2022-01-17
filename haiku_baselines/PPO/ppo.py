@@ -110,7 +110,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             update_state = (params, opt_state)
             return update_state, (c_loss, a_loss)
         
-        batched_obses = jnp.split(obses, self.minibatch_size); batched_actions = jnp.split(actions, self.minibatch_size)
+        batched_obses = list(zip(*[jnp.split(o, self.minibatch_size) for o in obses])); batched_actions = jnp.split(actions, self.minibatch_size)
         batched_targets = jnp.split(targets, self.minibatch_size); batched_value = jnp.split(value, self.minibatch_size)
         batched_act_prob = jnp.split(act_prob, self.minibatch_size); batched_adv = jnp.split(adv, self.minibatch_size)
         (params, opt_state), (critic_loss, actor_loss) = \
