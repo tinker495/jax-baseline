@@ -41,12 +41,13 @@ def discounted(rewards,gamma=0.99): #lfilter([1],[1,-gamma],x[::-1])[::-1]
 
 def discount_with_terminal(rewards, dones, terminals, next_values, gamma):
   def f(ret, info):
-    print(info[0])
     reward, done, term, nextval = info[0]
     if ret == None:
       ret = reward + gamma * nextval * (1. - done)
+      return ret, ret
     else:
-      return reward + gamma * (ret * (1. - term) + nextval * (1. - done) * term)
+      ret = reward + gamma * (ret * (1. - term) + nextval * (1. - done) * term)
+      return ret, ret
   _, discounted = jax.lax.scan(f,None,list(zip(rewards, dones, terminals, next_values)),reverse=True)
   return jnp.flip(discounted)
   
