@@ -57,7 +57,7 @@ def discount_with_terminal(rewards, dones, terminals, next_values, gamma):
     discounted.append(ret)
   return discounted[::-1]
 '''
-'''
+
 def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
   def f(last_gae_lam, info):
     reward, done, value, nextval, term = info
@@ -83,3 +83,4 @@ def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
   advs = jnp.array(advs[::-1])
   target = advs + values
   return advs, target
+'''
