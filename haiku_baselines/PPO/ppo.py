@@ -61,13 +61,21 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         mu,std = self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))
         return mu, jnp.exp(std)
     
-    def get_logprob_discrete(self, prob, action, key):
-        return jnp.take_along_axis(prob, action, axis=1)
+    def get_logprob_discrete(self, prob, action, key, out_prob=False):
+        prob = jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0)
+        if out_prob:
+            return prob, jnp.take_along_axis(prob, action, axis=1)
+        else:
+            return jnp.take_along_axis(prob, action, axis=1)
     
-    def get_logprob_continuous(self, prob, action, key):
+    def get_logprob_continuous(self, prob, action, key, out_prob=False):
         mu, log_std = prob
         std = jnp.exp(log_std)
-        return jnp.sum(jnp.square((action - mu) / (std + 1e-6)) + 2 * log_std + jnp.log(2 * np.pi),axis=1,keepdims=True)
+        if out_prob:
+            return prob, jnp.sum(jnp.square((action - mu) / (std + 1e-6)) + 2 * log_std + jnp.log(2 * np.pi),axis=1,keepdims=True)
+        else:
+            return jnp.sum(jnp.square((action - mu) / (std + 1e-6)) + 2 * log_std + jnp.log(2 * np.pi),axis=1,keepdims=True)
+    
     
     def discription(self):
         return "score : {:.3f}, loss : {:.3f} |".format(
@@ -130,8 +138,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         vals = self.critic.apply(params, key, feature)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
         
-        prob = self.actor.apply(params, key, feature)
-        action_prob = self.get_logprob(prob, actions, key)
+        prob, action_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
         ratio = jnp.exp(jnp.log(action_prob) - jnp.log(old_prob))
         cross_entropy1 = adv*ratio; cross_entropy2 = adv*jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)
         actor_loss = -jnp.mean(jnp.minimum(cross_entropy1,cross_entropy2))

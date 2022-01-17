@@ -138,13 +138,13 @@ class Actor_Critic_Policy_Gradient_Family(object):
     def _loss_continuous(self):
         pass
     
-    def get_logprob(self,params, feature, action, key):
+    def get_logprob(self,params, feature, action, key, out_prob=False):
         pass
     
-    def get_logprob_discrete(self,params, feature, action, key):
+    def get_logprob_discrete(self,params, feature, action, key, out_prob=False):
         pass
     
-    def get_logprob_continuous(self,params, feature, action, key):
+    def get_logprob_continuous(self,params, feature, action, key, out_prob=False):
         pass
         
     def learn(self, total_timesteps, callback=None, log_interval=1000, tb_log_name="Q_network",
