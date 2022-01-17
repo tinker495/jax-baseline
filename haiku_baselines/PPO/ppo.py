@@ -104,7 +104,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         def f(update_state , info):
             params, opt_state = update_state
             obses, actions, targets, value, act_prob, adv = info[0]
-            print(obses.shape)
+            print(obses[0].shape)
             (total_loss, (c_loss, a_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
                                                         obses, actions, targets,
                                                         value, act_prob, adv, ent_coef, key)
