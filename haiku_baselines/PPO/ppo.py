@@ -103,7 +103,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         critic_loss = 0; actor_loss = 0
         batch_num = value.shape[0]//self.minibatch_size
         def f(i, info):
-            params, opt_state, obses, actions, targets, value, act_prob, adv, critic_loss, actor_loss = info
+            params, opt_state, idxes, obses, actions, targets, value, act_prob, adv, critic_loss, actor_loss = info
             start = i*self.minibatch_size
             end = (i+1)*self.minibatch_size
             mini_batch = idxes[start:end]
@@ -115,7 +115,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             critic_loss += c_loss; actor_loss += a_loss
             return params, opt_state, obses, actions, targets, value, act_prob, adv, critic_loss, actor_loss
         params, opt_state, _, actions, targets, value, act_prob, adv, critic_loss, actor_loss = \
-                        jax.lax.fori_loop(0, batch_num, f, (params, opt_state, obses, actions, targets, value, act_prob, adv, critic_loss, actor_loss))
+                        jax.lax.fori_loop(0, batch_num, f, (params, opt_state, idxes, obses, actions, targets, value, act_prob, adv, critic_loss, actor_loss))
 
         return params, opt_state, critic_loss/batch_num, actor_loss/batch_num
     
