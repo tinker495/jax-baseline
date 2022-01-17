@@ -40,12 +40,26 @@ def discounted(rewards,gamma=0.99): #lfilter([1],[1,-gamma],x[::-1])[::-1]
   return out
 
 def discount_with_terminal(rewards, dones, terminals, next_values, gamma):
+  
+  def f(ret, info):
+    reward, done, term, nextval = info
+    if ret == None:
+      ret = reward + gamma * nextval * (1. - done)
+    else:
+      return reward + gamma * (ret * (1. - term) + nextval * (1. - done) * term)
+  _, discounted = jax.lax.scan(f,None,zip(rewards, dones, terminals, next_values),reverse=True)
+  return jnp.flip(discounted)
+  
+
+'''
+def discount_with_terminal(rewards, dones, terminals, next_values, gamma):
   ret = rewards[-1] + gamma * next_values[-1] * (1. - dones[-1])
   discounted = [ret]
   for reward, done, term, nextval in zip(rewards[-2::-1], dones[-2::-1], terminals[-2::-1], next_values[-2::-1]):
     ret = reward + gamma * (ret * (1. - term) + nextval * (1. - done) * term) # fixed off by one bug
     discounted.append(ret)
   return discounted[::-1]
+'''
 
 def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
   last_gae_lam = 0
