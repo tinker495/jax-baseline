@@ -110,12 +110,15 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             print(len(valuebatch))
             print(len(act_probbatch))
             print(len(advbatch))
+            '''
             (total_loss, (c_loss, a_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
                                                         obsbatch, actbatch, targetbatch,
                                                         valuebatch, act_probbatch, advbatch, ent_coef, key)
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
-            return (params, opt_state), (c_loss, a_loss)
+            '''
+
+            return (params, opt_state), (0, 0)
         
         batched_obses =  [list(zo) for zo in zip(*[jnp.split(o[idxes], batch_n) for o in obses])]
         batched_actions = jnp.split(actions[idxes], batch_n)
