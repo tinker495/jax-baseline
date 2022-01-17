@@ -240,7 +240,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(state,steps)
-            next_state, reward, terminal, info = self.env.step(actions[0][0])
+            next_state, reward, terminal, info = self.env.step(actions[0][0] if self.action_tyep == 'discrete' else actions[0])
             next_state = [np.expand_dims(next_state,axis=0)]
             done = terminal
             if "TimeLimit.truncated" in info:
