@@ -102,25 +102,23 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         idxes = jax.random.permutation(key,adv.shape[0])
         batch_n = adv.shape[0]//self.minibatch_size
         def f(update_state , info):
-            params, opt_state = update_state
-            obses, actions, targets, value, act_prob, adv = info[0]
-            print(len(obses))
-            print(obses[0].shape)
+            params, opt_state, i = update_state
+            obses, actions, targets, value, act_prob, adv = info
             (total_loss, (c_loss, a_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
-                                                        obses, actions, targets,
-                                                        value, act_prob, adv, ent_coef, key)
+                                                        obses[i], actions[i], targets[i],
+                                                        value[i], act_prob[i], adv[i], ent_coef, key)
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
-            return (params, opt_state), (c_loss, a_loss)
+            return (params, opt_state, i + 1), (c_loss, a_loss)
         
-        batched_obses =  [list(zo)for zo in zip(*[jnp.split(o[idxes], batch_n) for o in obses])]
+        batched_obses =  list(zip(*[jnp.split(o[idxes], batch_n) for o in obses]))
         batched_actions = jnp.split(actions[idxes], batch_n)
         batched_targets = jnp.split(targets[idxes], batch_n)
         batched_value = jnp.split(value[idxes], batch_n)
         batched_act_prob = jnp.split(act_prob[idxes], batch_n)
         batched_adv = jnp.split(adv[idxes], batch_n)
         (params, opt_state), (critic_loss, actor_loss) = \
-                        jax.lax.scan(f,(params, opt_state),list(zip(batched_obses, batched_actions, batched_targets, batched_value, batched_act_prob, batched_adv)))
+                        jax.lax.scan(f,(params, opt_state, 0),(batched_obses, batched_actions, batched_targets, batched_value, batched_act_prob, batched_adv))
 
         return params, opt_state, jnp.mean(critic_loss), jnp.mean(actor_loss)
     
