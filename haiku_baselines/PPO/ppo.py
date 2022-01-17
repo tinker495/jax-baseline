@@ -99,7 +99,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions); value = jnp.vstack(value); act_prob = jnp.vstack(act_prob)
         targets = jnp.vstack(targets); adv = jnp.vstack(adv); 
         adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-8)
-        batch_n = adv.shape//self.minibatch_size
+        batch_n = adv.shape[0]//self.minibatch_size
         def f(update_state , info):
             params, opt_state = update_state
             obses, actions, targets, value, act_prob, adv = info
