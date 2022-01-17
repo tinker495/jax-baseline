@@ -111,7 +111,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         
         batched_obses = list(zip(*[jnp.split(o, self.minibatch_size) for o in obses]))
         for bb in batched_obses:
-            print(bb.shape)
+            print(bb)
         batched_actions = jnp.split(actions, self.minibatch_size)
         batched_targets = jnp.split(targets, self.minibatch_size)
         batched_value = jnp.split(value, self.minibatch_size)
