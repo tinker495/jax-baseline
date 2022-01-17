@@ -41,6 +41,7 @@ def discounted(rewards,gamma=0.99): #lfilter([1],[1,-gamma],x[::-1])[::-1]
 
 def discount_with_terminal(rewards, dones, terminals, next_values, gamma):
   def f(ret, info):
+    print(info)
     reward, done, term, nextval = info
     if ret == None:
       ret = reward + gamma * nextval * (1. - done)
