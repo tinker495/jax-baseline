@@ -114,10 +114,10 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             params = optax.apply_updates(params, updates)
             critic_loss += c_loss; actor_loss += a_loss
             return params, opt_state, obses, actions, targets, value, act_prob, adv, critic_loss, actor_loss
-        params, opt_state, _, actions, targets, value, act_prob, adv = jax.lax.fori_loop(0, batch_num,f,
-                                                                                         (params, opt_state, obses, actions, targets, value, act_prob, adv, critic_loss, actor_loss))
+        params, opt_state, _, actions, targets, value, act_prob, adv, critic_loss, actor_loss = \
+                        jax.lax.fori_loop(0, batch_num, f, (params, opt_state, obses, actions, targets, value, act_prob, adv, critic_loss, actor_loss))
 
-        return params, opt_state, critic_loss, actor_loss
+        return params, opt_state, critic_loss/batch_num, actor_loss/batch_num
     
     def _loss_discrete(self, params, obses, actions, targets, old_value, old_prob, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
