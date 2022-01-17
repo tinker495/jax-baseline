@@ -105,7 +105,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             params, opt_state = update_state
             obses, actions, targets, value, act_prob, adv = info
             print(obses)
-            print(actions.shape)
+            print(actions)
             (total_loss, (c_loss, a_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
                                                         obses, actions, targets,
                                                         value, act_prob, adv, ent_coef, key)
@@ -120,7 +120,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         batched_act_prob = jnp.split(act_prob[idxes], batch_n)
         batched_adv = jnp.split(adv[idxes], batch_n)
         (params, opt_state), (critic_loss, actor_loss) = \
-                        jax.lax.scan(f,(params, opt_state),list(zip(batched_obses, batched_actions, batched_targets, batched_value, batched_act_prob, batched_adv)))
+                        jax.lax.scan(f,(params, opt_state),(batched_obses, batched_actions, batched_targets, batched_value, batched_act_prob, batched_adv))
 
         return params, opt_state, jnp.mean(critic_loss), jnp.mean(actor_loss)
     
