@@ -48,7 +48,7 @@ def discount_with_terminal(rewards, dones, terminals, next_values, gamma):
     else:
       ret = reward + gamma * (ret * (1. - term) + nextval * (1. - done) * term)
       return ret, ret
-  _, discounted = jax.lax.scan(f,None,list(zip(rewards, dones, terminals, next_values)),reverse=True)
+  _, discounted = jax.lax.scan(f,None,(rewards, dones, terminals, next_values),reverse=True)
   return jnp.flip(discounted)
   
 
