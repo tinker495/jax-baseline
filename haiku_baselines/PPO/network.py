@@ -24,7 +24,7 @@ class Actor(hk.Module):
                 return action_probs
             elif self.action_type == 'continuous':
                 mu = self.layer(self.action_size[0])(mlp)
-                log_std = hk.get_parameter("log_std", [self.action_size[0]], jnp.float32, hk.initializers.TruncatedNormal(stddev=0.1))
+                log_std = hk.get_parameter("log_std", [self.action_size[0],], jnp.float32, hk.initializers.TruncatedNormal(stddev=0.1))
                 return mu, log_std 
         
 class Critic(hk.Module):
