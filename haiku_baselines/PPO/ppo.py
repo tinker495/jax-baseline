@@ -123,10 +123,8 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         for info in zip(batched_obses, batched_actions, batched_targets, batched_value, batched_act_prob, batched_adv):
             (params, opt_state), (c_loss, a_loss) = jitf((params, opt_state), info)
             critic_loss.append(c_loss); actor_loss.append(a_loss)
-        #(params, opt_state), (critic_loss, actor_loss) = \
-        #                jax.lax.scan(f,(params, opt_state),(batched_obses, batched_actions, batched_targets, batched_value, batched_act_prob, batched_adv),length=self.minibatch_size)
 
-        return params, opt_state, jnp.mean(critic_loss), jnp.mean(actor_loss)
+        return params, opt_state, jnp.mean(jnp.array(critic_loss)), jnp.mean(jnp.array(actor_loss))
     
     def _loss_discrete(self, params, obses, actions, targets, old_value, old_prob, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
