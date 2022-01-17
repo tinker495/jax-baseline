@@ -32,29 +32,30 @@ def convert_jax(obs : List):
 
 @jax.jit
 def discounted(rewards,gamma=0.99): #lfilter([1],[1,-gamma],x[::-1])[::-1]
-    _gamma = 1
-    out = 0
-    for r in rewards:
-        out += r*_gamma
-        _gamma *= gamma
-    return out
+  _gamma = 1
+  out = 0
+  for r in rewards:
+    out += r*_gamma
+    _gamma *= gamma
+  return out
 
 def discount_with_terminal(rewards, dones, terminals, next_values, gamma):
-    ret = rewards[-1] + gamma * next_values[-1] * (1. - dones[-1])
-    discounted = [ret]
-    for reward, done, term, nextval in zip(rewards[-2::-1], dones[-2::-1], terminals[-2::-1], next_values[-2::-1]):
-        ret = reward + gamma * (ret * (1. - term) + nextval * (1. - done) * term) # fixed off by one bug
-        discounted.append(ret)
-    return discounted[::-1]
+  ret = rewards[-1] + gamma * next_values[-1] * (1. - dones[-1])
+  discounted = [ret]
+  for reward, done, term, nextval in zip(rewards[-2::-1], dones[-2::-1], terminals[-2::-1], next_values[-2::-1]):
+    ret = reward + gamma * (ret * (1. - term) + nextval * (1. - done) * term) # fixed off by one bug
+    discounted.append(ret)
+  return discounted[::-1]
 
-def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda, normalize):
-    deltas = rewards + gamma * (1.0 - dones) * next_values - values
-    
-    gaes = jnp.array(deltas)
-    for t in reversed(range(len(deltas) - 1)):
-        gaes.at[t].set(gaes[t] + (1.0 - terminals[t]) * gamma * lamda * gaes[t + 1])
-
-    target = gaes + values
-    if normalize:
-        gaes = (gaes - gaes.mean()) / (gaes.std() + 1e-8)
-    return gaes, target
+def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
+  last_gae_lam = 0
+  delta = rewards[-1] + gamma * next_values[-1] * (1. - dones[-1]) - values[-1]
+  last_gae_lam = delta + gamma * lamda * (1. - dones[-1]) * last_gae_lam
+  advs = [last_gae_lam]
+  for reward, done, value, nextval, term in zip(rewards[-2::-1], dones[-2::-1], values[-2::-1], next_values[-2::-1], terminals[-2::-1]):
+    delta = reward + gamma * (nextval * (1. - done)) - value
+    last_gae_lam = delta + gamma * lamda * (1. - term) * last_gae_lam
+    advs.append(last_gae_lam)
+  advs = jnp.array(advs[::-1])
+  target = advs + values
+  return advs, target

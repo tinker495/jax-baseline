@@ -8,7 +8,7 @@ from haiku_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from haiku_baselines.PPO.network import Actor, Critic
 from haiku_baselines.common.schedules import LinearSchedule
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import convert_jax, discount_with_terminal
+from haiku_baselines.common.utils import convert_jax, get_gaes
 
 class PPO(Actor_Critic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.99, lamda = 0.9, gae_normalize = False, learning_rate=3e-4, batch_size=512, minibatch_size=16, val_coef=0.2, ent_coef = 0.5, 
@@ -95,9 +95,10 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
         act_prob = [jnp.take_along_axis(jnp.clip(jax.nn.softmax(self.actor.apply(params, key, self.preproc.apply(params, key, o))),1e-5,1.0), a, axis=1) for o,a in zip(obses,actions)]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
-        targets = [discount_with_terminal(r,d,t,nv,self.gamma) for r,d,t,nv in zip(rewards,dones,terminals,next_value)]
+        adv,targets = list(zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda) for r,d,t,v,nv in zip(rewards,dones,terminals,value,next_value)]))
         obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions); value = jnp.vstack(value); act_prob = jnp.vstack(act_prob)
-        targets = jnp.vstack(targets); adv = targets - value; adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-8)
+        targets = jnp.vstack(targets); adv = jnp.vstack(adv); 
+        adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-8)
         idxes = jax.random.permutation(key, value.shape[0]) #
         for i in range(value.shape[0]//self.minibatch_size):
             start = i*self.minibatch_size
