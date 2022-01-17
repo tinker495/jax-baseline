@@ -106,12 +106,10 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self._get_actions = self._get_actions_discrete
             self.get_logprob = self.get_logprob_discrete
             self.actions = self.action_discrete
-            self._loss = self._loss_discrete
         elif self.action_type == 'continuous':
             self._get_actions = self._get_actions_continuous
             self.get_logprob = self.action_continuous
             self.actions = self.action_continuous
-            self._loss = self._loss_continuous
     
     def setup_model(self):
         pass

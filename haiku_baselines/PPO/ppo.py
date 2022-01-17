@@ -125,7 +125,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         params = optax.apply_updates(params, updates)
         return params, opt_state, c_loss, a_loss
     
-    def _loss_discrete(self, params, obses, actions, targets, old_value, old_prob, adv, ent_coef, key):
+    def _loss(self, params, obses, actions, targets, old_value, old_prob, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
         vals = self.critic.apply(params, key, feature)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
@@ -142,9 +142,6 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         elif self.action_type == 'continuous':
             total_loss = self.val_coef * critic_loss + actor_loss
         return total_loss, (critic_loss, actor_loss)
-    
-    def _loss_continuous(self, params, obses, actions, targets, adv, ent_coef, key):
-        pass
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="PPO",
               reset_num_timesteps=True, replay_wrapper=None):
