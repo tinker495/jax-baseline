@@ -113,7 +113,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             params = optax.apply_updates(params, updates)
             return (params, opt_state), (c_loss, a_loss)
         
-        batched_obses =  tuple(zip(*[jnp.split(o[idxes], batch_n) for o in obses]))
+        batched_obses =  [list(zip(*[jnp.split(o[idxes], batch_n) for o in obses]))]
         batched_actions = jnp.array(jnp.split(actions[idxes], batch_n))
         batched_targets = jnp.array(jnp.split(targets[idxes], batch_n))
         batched_value = jnp.array(jnp.split(value[idxes], batch_n))
