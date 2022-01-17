@@ -110,12 +110,12 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             params = optax.apply_updates(params, updates)
             return (params, opt_state), (c_loss, a_loss)
         
-        batched_obses = jnp.swapaxes(jnp.array([jnp.split(o, batch_n) for o in obses]),0,1)
-        batched_actions = jnp.array(jnp.split(actions, batch_n))
-        batched_targets = jnp.array(jnp.split(targets, batch_n))
-        batched_value = jnp.array(jnp.split(value, batch_n))
-        batched_act_prob = jnp.array(jnp.split(act_prob, batch_n))
-        batched_adv = jnp.array(jnp.split(adv, batch_n))
+        batched_obses =  [list(zo) for zo in zip(*[jnp.split(o, batch_n) for o in obses])]
+        batched_actions = jnp.split(actions, batch_n)
+        batched_targets = jnp.split(targets, batch_n)
+        batched_value = jnp.split(value, batch_n)
+        batched_act_prob = jnp.split(act_prob, batch_n)
+        batched_adv = jnp.split(adv, batch_n)
         (params, opt_state), (critic_loss, actor_loss) = \
                         jax.lax.scan(f,(params, opt_state),(batched_obses, batched_actions, batched_targets, batched_value, batched_act_prob, batched_adv))
 
