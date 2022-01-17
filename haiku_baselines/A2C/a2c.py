@@ -87,7 +87,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
 
     def _train_step(self, params, opt_state, key, ent_coef,
                     obses, actions, rewards, nxtobses, dones, terminals):
-        obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
+        obses = jax.vmap(convert_jax)(obses); nxtobses = jax.vmap(convert_jax)(nxtobses) #[convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
         value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
         targets = [discount_with_terminal(r,d,t,nv,self.gamma) for r,d,t,nv in zip(rewards,dones,terminals,next_value)]
