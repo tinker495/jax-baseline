@@ -50,8 +50,8 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         print("-------------------------------------------------")
         
         self._get_actions = jax.jit(self._get_actions)
-        self._preprocess = jax.jit(self._preprocess)
         self._train_step = jax.jit(self._train_step)
+        self._optimize_step = jax.jit(self._optimize_step)
         
     def _get_actions_discrete(self, params, obses, key = None) -> jnp.ndarray:
         prob = jax.nn.softmax(self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses))),axis=1)
@@ -78,27 +78,16 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         # Sample a batch from the replay buffer
         data = self.buffer.get_buffer()
         
-        obses, actions, targets, value, act_prob, adv, idxes = \
-            self._preprocess(self.params, next(self.key_seq),
+        self.params, self.opt_state, critic_loss, actor_loss = \
+            self._train_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef,
                                 **data)
             
-        critic_loss = []; actor_loss = []
-        for i in range(len(idxes) // self.minibatch_size):
-            start = i * self.minibatch_size
-            end = (i + 1) * self.minibatch_size
-            batchidx = idxes[start:end]
-            self.params, self.opt_state, c_loss, a_loss = self._train_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, 
-                            [o[batchidx] for o in obses], actions[batchidx], targets[batchidx], value[batchidx], act_prob[batchidx], adv[batchidx])
-            critic_loss.append(c_loss); actor_loss.append(a_loss)
-        critic_loss = np.array(critic_loss).mean(); actor_loss = np.array(actor_loss).mean()
-        #print(np.mean(adv_hstack))
-        #print(np.mean(target_hstack))
         if self.summary:
             self.summary.add_scalar("loss/critic_loss", critic_loss, steps)
             self.summary.add_scalar("loss/actor_loss", actor_loss, steps)
             
         return critic_loss
-    def _preprocess(self, params, key, obses, actions, rewards, nxtobses, dones, terminals):
+    def _train_step(self, params, opt_state, key, ent_coef, obses, actions, rewards, nxtobses, dones, terminals):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
         feature = [self.preproc.apply(params, key, o) for o in obses]
         value = [self.critic.apply(params, key, f) for f in feature]
@@ -108,9 +97,19 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions); value = jnp.vstack(value); act_prob = jnp.vstack(act_prob)
         targets = jnp.vstack(targets); adv = jnp.vstack(adv); adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-8)
         idxes = jax.random.permutation(key,adv.shape[0])
-        return obses, actions, targets, value, act_prob, adv, idxes
+        
+        critic_loss = []; actor_loss = []
+        for i in range(len(idxes) // self.minibatch_size):
+            start = i * self.minibatch_size
+            end = (i + 1) * self.minibatch_size
+            batchidx = idxes[start:end]
+            params, opt_state, c_loss, a_loss = self._optimize_step(params, opt_state, key, ent_coef, 
+                            [o[batchidx] for o in obses], actions[batchidx], targets[batchidx], value[batchidx], act_prob[batchidx], adv[batchidx])
+            critic_loss.append(c_loss); actor_loss.append(a_loss)
+        critic_loss = jnp.array(critic_loss).mean(); actor_loss = jnp.array(actor_loss).mean()
+        return params, opt_state, critic_loss, actor_loss
     
-    def _train_step(self, params, opt_state, key, ent_coef,
+    def _optimize_step(self, params, opt_state, key, ent_coef,
                     obsbatch, actbatch, targetbatch, valuebatch, act_probbatch, advbatch):
         (total_loss, (c_loss, a_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
                                                                 obsbatch, actbatch, targetbatch,
