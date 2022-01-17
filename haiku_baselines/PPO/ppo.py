@@ -51,7 +51,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         
         self._get_actions = jax.jit(self._get_actions)
         self._preprocess = jax.jit(self._preprocess)
-        self._train_step = jax.jit(self._train_step)
+        self._optimize_step = jax.jit(self._optimize_step)
         
     def _get_actions_discrete(self, params, obses, key = None) -> jnp.ndarray:
         prob = jax.nn.softmax(self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses))),axis=1)
@@ -87,7 +87,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             start = i * self.minibatch_size
             end = (i + 1) * self.minibatch_size
             batchidx = idxes[start:end]
-            self.params, self.opt_state, c_loss, a_loss = self._train_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, 
+            self.params, self.opt_state, c_loss, a_loss = self._optimize_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, 
                             [o[batchidx] for o in obses], actions[batchidx], targets[batchidx], value[batchidx], act_prob[batchidx], adv[batchidx])
             critic_loss.append(c_loss); actor_loss.append(a_loss)
         critic_loss = np.array(critic_loss).mean(); actor_loss = np.array(actor_loss).mean()
