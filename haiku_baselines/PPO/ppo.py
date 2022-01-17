@@ -78,13 +78,17 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         # Sample a batch from the replay buffer
         data = self.buffer.get_buffer()
         
-        batched_data = \
+        obses, actions, targets, value, act_prob, adv, idxes = \
             self._preprocess(self.params, next(self.key_seq),
                                 **data)
             
         critic_loss = []; actor_loss = []
-        for batch in zip(*batched_data):
-            self.params, self.opt_state, c_loss, a_loss = self._train_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, *batch)
+        for i in range(len(idxes) // self.minibatch_size):
+            start = i * self.minibatch_size
+            end = (i + 1) * self.minibatch_size
+            batchidx = idxes[start:end]
+            self.params, self.opt_state, c_loss, a_loss = self._train_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, 
+                            obses[batchidx], actions[batchidx], targets[batchidx], value[batchidx], act_prob[batchidx], adv[batchidx])
             critic_loss.append(c_loss); actor_loss.append(a_loss)
         critic_loss = np.array(critic_loss).mean(); actor_loss = np.array(actor_loss).mean()
         #print(np.mean(adv_hstack))
@@ -104,14 +108,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions); value = jnp.vstack(value); act_prob = jnp.vstack(act_prob)
         targets = jnp.vstack(targets); adv = jnp.vstack(adv); adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-8)
         idxes = jax.random.permutation(key,adv.shape[0])
-        batch_n = adv.shape[0]//self.minibatch_size
-        batched_obses =  [list(zo) for zo in zip(*[jnp.split(o[idxes], batch_n) for o in obses])]
-        batched_actions = jnp.split(actions[idxes], batch_n)
-        batched_targets = jnp.split(targets[idxes], batch_n)
-        batched_value = jnp.split(value[idxes], batch_n)
-        batched_act_prob = jnp.split(act_prob[idxes], batch_n)
-        batched_adv = jnp.split(adv[idxes], batch_n)
-        return batched_obses, batched_actions, batched_targets, batched_value, batched_act_prob, batched_adv
+        return obses, actions, targets, value, act_prob, adv, idxes
     
     def _train_step(self, params, opt_state, key, ent_coef,
                     obsbatch, actbatch, targetbatch, valuebatch, act_probbatch, advbatch):
