@@ -104,6 +104,8 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         def f(update_state , info):
             params, opt_state = update_state
             obses, actions, targets, value, act_prob, adv = info
+            print(obses)
+            print(obses[0].shape)
             (total_loss, (c_loss, a_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
                                                         obses, actions, targets,
                                                         value, act_prob, adv, ent_coef, key)
@@ -111,8 +113,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             params = optax.apply_updates(params, updates)
             return (params, opt_state), (c_loss, a_loss)
         
-        batched_obses =  [list(zo) for zo in zip(*[jnp.split(o[idxes], batch_n) for o in obses])]
-        print(batched_obses)
+        batched_obses =  list(zip(*[jnp.split(o[idxes], batch_n) for o in obses]))
         batched_actions = jnp.split(actions[idxes], batch_n)
         batched_targets = jnp.split(targets[idxes], batch_n)
         batched_value = jnp.split(value[idxes], batch_n)
