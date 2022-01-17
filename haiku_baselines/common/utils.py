@@ -65,10 +65,11 @@ def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
     last_gae_lam = delta + gamma * lamda * (1. - term) * last_gae_lam
     return last_gae_lam, last_gae_lam
   delta = rewards[-1] + gamma * next_values[-1] * (1. - dones[-1]) - values[-1]
-  last_gae_lam = delta
+  last_gae_lam = jnp.array(delta)
   _, advs = jax.lax.scan(f, last_gae_lam, (rewards[:-1], dones[:-1], values[:-1], next_values[:-1], terminals[:-1]),reverse=True)
-  advs = jnp.append(jnp.flip(advs,axis=0), jnp.expand_dims(last_gae_lam,axis=1), axis=0) #jnp.append(advs, last_gae_lam)
-  return advs, advs + values
+  advs = jnp.append(jnp.flip(advs,axis=0), jnp.expand_dims(delta,axis=1), axis=0)
+  target = advs + values
+  return advs, target
 
 '''
 def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
