@@ -107,8 +107,8 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
                                                         [o[mini_batch] for o in obses], actions[mini_batch], targets[mini_batch],
                                                         value[mini_batch], act_prob[mini_batch], adv[mini_batch], ent_coef, key)
-        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-        params = optax.apply_updates(params, updates)
+            updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+            params = optax.apply_updates(params, updates)
         return params, opt_state, critic_loss, actor_loss
     
     def _loss_discrete(self, params, obses, actions, targets, old_value, old_prob, adv, ent_coef, key):
