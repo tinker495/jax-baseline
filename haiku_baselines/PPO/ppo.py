@@ -99,6 +99,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions); value = jnp.vstack(value); act_prob = jnp.vstack(act_prob)
         targets = jnp.vstack(targets); adv = jnp.vstack(adv); 
         adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-8)
+        batch_n = adv.shape//self.minibatch_size
         def f(update_state , info):
             params, opt_state = update_state
             obses, actions, targets, value, act_prob, adv = info
@@ -109,14 +110,12 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             params = optax.apply_updates(params, updates)
             return (params, opt_state), (c_loss, a_loss)
         
-        batched_obses = list(zip(*[jnp.split(o, self.minibatch_size) for o in obses]))
-        for bb in batched_obses:
-            print(bb)
-        batched_actions = jnp.split(actions, self.minibatch_size)
-        batched_targets = jnp.split(targets, self.minibatch_size)
-        batched_value = jnp.split(value, self.minibatch_size)
-        batched_act_prob = jnp.split(act_prob, self.minibatch_size)
-        batched_adv = jnp.split(adv, self.minibatch_size)
+        batched_obses = jnp.swapaxes(jnp.array([jnp.split(o, batch_n) for o in obses]),0,1)
+        batched_actions = jnp.array(jnp.split(actions, batch_n))
+        batched_targets = jnp.array(jnp.split(targets, batch_n))
+        batched_value = jnp.array(jnp.split(value, batch_n))
+        batched_act_prob = jnp.array(jnp.split(act_prob, batch_n))
+        batched_adv = jnp.array(jnp.split(adv, batch_n))
         (params, opt_state), (critic_loss, actor_loss) = \
                         jax.lax.scan(f,(params, opt_state),(batched_obses, batched_actions, batched_targets, batched_value, batched_act_prob, batched_adv))
 
