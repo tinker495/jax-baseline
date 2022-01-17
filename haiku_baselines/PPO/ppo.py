@@ -115,6 +115,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         batched_targets = jnp.split(targets, self.minibatch_size)
         batched_value = jnp.split(value, self.minibatch_size)
         batched_act_prob = jnp.split(act_prob, self.minibatch_size)
+        print(adv.shape)
         batched_adv = jnp.split(adv, self.minibatch_size)
         (params, opt_state), (critic_loss, actor_loss) = \
                         jax.lax.scan(f,(params, opt_state),(batched_obses, batched_actions, batched_targets, batched_value, batched_act_prob, batched_adv))
