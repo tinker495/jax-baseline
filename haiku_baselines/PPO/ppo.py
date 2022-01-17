@@ -99,25 +99,24 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions); value = jnp.vstack(value); act_prob = jnp.vstack(act_prob)
         targets = jnp.vstack(targets); adv = jnp.vstack(adv); 
         adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-8)
-        idxes = jax.random.permutation(key, value.shape[0]) #
-        critic_loss = 0; actor_loss = 0
-        batch_num = value.shape[0]//self.minibatch_size
-        def f(i, info):
-            params, opt_state, idxes, obses, actions, targets, value, act_prob, adv, critic_loss, actor_loss = info
-            start = i*self.minibatch_size
-            end = (i+1)*self.minibatch_size
-            mini_batch = idxes[start:end]
+        def f(update_state , info):
+            params, opt_state = update_state
+            obses, actions, targets, value, act_prob, adv = info
             (total_loss, (c_loss, a_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
-                                                        [o[mini_batch] for o in obses], actions[mini_batch], targets[mini_batch],
-                                                        value[mini_batch], act_prob[mini_batch], adv[mini_batch], ent_coef, key)
+                                                        obses, actions, targets,
+                                                        value, act_prob, adv, ent_coef, key)
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
-            critic_loss += c_loss; actor_loss += a_loss
-            return params, opt_state, obses, actions, targets, value, act_prob, adv, critic_loss, actor_loss
-        params, opt_state, _, actions, targets, value, act_prob, adv, critic_loss, actor_loss = \
-                        jax.lax.fori_loop(0, batch_num, f, (params, opt_state, idxes, obses, actions, targets, value, act_prob, adv, critic_loss, actor_loss))
+            update_state = (params, opt_state)
+            return update_state, (c_loss, a_loss)
+        
+        batched_obses = jnp.split(obses, self.minibatch_size); batched_actions = jnp.split(actions, self.minibatch_size)
+        batched_targets = jnp.split(targets, self.minibatch_size); batched_value = jnp.split(value, self.minibatch_size)
+        batched_act_prob = jnp.split(act_prob, self.minibatch_size); batched_adv = jnp.split(adv, self.minibatch_size)
+        (params, opt_state), (critic_loss, actor_loss) = \
+                        jax.lax.scan(f,(params, opt_state),(batched_obses, batched_actions, batched_targets, batched_value, batched_act_prob, batched_adv))
 
-        return params, opt_state, critic_loss/batch_num, actor_loss/batch_num
+        return params, opt_state, jnp.mean(critic_loss), jnp.mean(actor_loss)
     
     def _loss_discrete(self, params, obses, actions, targets, old_value, old_prob, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
