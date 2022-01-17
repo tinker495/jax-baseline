@@ -104,21 +104,12 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         def f(update_state , info):
             params, opt_state = update_state
             obsbatch, actbatch, targetbatch, valuebatch, act_probbatch, advbatch = info
-            print(len(obsbatch))
-            print(len(actbatch))
-            print(len(targetbatch))
-            print(len(valuebatch))
-            print(len(act_probbatch))
-            print(len(advbatch))
-            '''
             (total_loss, (c_loss, a_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
                                                         obsbatch, actbatch, targetbatch,
                                                         valuebatch, act_probbatch, advbatch, ent_coef, key)
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
-            '''
-
-            return (params, opt_state), (0, 0)
+            return (params, opt_state), (c_loss, a_loss)
         
         batched_obses =  [list(zo) for zo in zip(*[jnp.split(o[idxes], batch_n) for o in obses])]
         batched_actions = jnp.split(actions[idxes], batch_n)
@@ -126,8 +117,14 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         batched_value = jnp.split(value[idxes], batch_n)
         batched_act_prob = jnp.split(act_prob[idxes], batch_n)
         batched_adv = jnp.split(adv[idxes], batch_n)
-        (params, opt_state), (critic_loss, actor_loss) = \
-                        jax.lax.scan(f,(params, opt_state),(batched_obses, batched_actions, batched_targets, batched_value, batched_act_prob, batched_adv),length=self.minibatch_size)
+        jitf = jax.jit(f)
+        critic_loss = []
+        actor_loss = []
+        for info in zip(batched_obses, batched_actions, batched_targets, batched_value, batched_act_prob, batched_adv):
+            (params, opt_state), (c_loss, a_loss) = jitf((params, opt_state), info)
+            critic_loss.append(c_loss); actor_loss.append(a_loss)
+        #(params, opt_state), (critic_loss, actor_loss) = \
+        #                jax.lax.scan(f,(params, opt_state),(batched_obses, batched_actions, batched_targets, batched_value, batched_act_prob, batched_adv),length=self.minibatch_size)
 
         return params, opt_state, jnp.mean(critic_loss), jnp.mean(actor_loss)
     
