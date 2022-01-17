@@ -141,7 +141,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
     def learn(self, total_timesteps, callback=None, log_interval=1000, tb_log_name="Q_network",
               reset_num_timesteps=True, replay_wrapper=None):
         
-        pbar = trange(total_timesteps, miniters=log_interval)
+        pbar = trange(total_timesteps, miniters=log_interval, smoothing=0.01)
         with TensorboardWriter(self.tensorboard_log, tb_log_name) as (self.summary, self.save_path):
             if self.env_type == "unity":
                 self.learn_unity(pbar, callback, log_interval)
