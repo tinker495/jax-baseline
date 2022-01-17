@@ -105,7 +105,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             params, opt_state, i = update_state
             obsbatch, actbatch, targetbatch, valuebatch, act_probbatch, advbatch = info
             (total_loss, (c_loss, a_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
-                                                        obsbatch, actbatch, targetbatch,
+                                                        obsbatch[i], actbatch, targetbatch,
                                                         valuebatch, act_probbatch, advbatch, ent_coef, key)
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
