@@ -28,7 +28,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             cnn_mode = self.policy_kwargs['cnn_mode']
             del self.policy_kwargs['cnn_mode']
         self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
-        self.actor = hk.transform(lambda x: Actor(self.action_size,**self.policy_kwargs)(x))
+        self.actor = hk.transform(lambda x: Actor(self.action_size,self.action_type,**self.policy_kwargs)(x))
         self.critic = hk.transform(lambda x: Critic(**self.policy_kwargs)(x))
         pre_param = self.preproc.init(next(self.key_seq),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])

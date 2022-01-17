@@ -32,7 +32,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             cnn_mode = self.policy_kwargs['cnn_mode']
             del self.policy_kwargs['cnn_mode']
         self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
-        self.actor = hk.transform(lambda x: Actor(self.action_size,**self.policy_kwargs)(x))
+        self.actor = hk.transform(lambda x: Actor(self.action_size,self.action_type,**self.policy_kwargs)(x))
         self.critic = hk.transform(lambda x: Critic(**self.policy_kwargs)(x))
         pre_param = self.preproc.init(next(self.key_seq),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
@@ -54,12 +54,20 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         self._optimize_step = jax.jit(self._optimize_step)
         
     def _get_actions_discrete(self, params, obses, key = None) -> jnp.ndarray:
-        prob = jax.nn.softmax(self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses))),axis=1)
+        prob = jax.nn.softmax(self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))),axis=1)
         return prob
     
     def _get_actions_continuous(self, params, obses, key = None) -> jnp.ndarray:
-        mu,std = self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses)))
+        mu,std = self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))
         return mu, std
+    
+    def get_logprob_discrete(self, prob, action, key):
+        return jnp.take_along_axis(prob, action, axis=1)
+    
+    def get_logprob_continuous(self, prob, action, key):
+        mu, log_std = prob
+        std = jnp.exp(log_std)
+        return jnp.sum(jnp.square((action - mu) / (std + 1e-6)) + 2 * log_std + jnp.log(2 * np.pi),axis=1,keepdims=True)
     
     def discription(self):
         return "score : {:.3f}, loss : {:.3f} |".format(
@@ -72,7 +80,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     
     def action_continuous(self,obs,steps):
         mu, std = self._get_actions(self.params, obs)
-        return mu
+        return np.random.normal(mu, std)
     
     def train_step(self, steps):
         # Sample a batch from the replay buffer
@@ -100,7 +108,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
         feature = [self.preproc.apply(params, key, o) for o in obses]
         value = [self.critic.apply(params, key, f) for f in feature]
-        act_prob = [jnp.take_along_axis(jnp.clip(jax.nn.softmax(self.actor.apply(params, key, f)),1e-5,1.0), a, axis=1) for f,a in zip(feature,actions)]
+        act_prob = [self.get_logprob(self.actor.apply(params, key, f), a, key) for f,a in zip(feature,actions)]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
         adv,targets = list(zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda) for r,d,t,v,nv in zip(rewards,dones,terminals,value,next_value)]))
         obses = [jnp.vstack(zo) for zo in list(zip(*obses))]; actions = jnp.vstack(actions); value = jnp.vstack(value); act_prob = jnp.vstack(act_prob)
@@ -122,14 +130,17 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         vals = self.critic.apply(params, key, feature)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
         
-        prob = jnp.clip(jax.nn.softmax(self.actor.apply(params, key, feature)),1e-5,1.0)
-        action_prob = jnp.take_along_axis(prob, actions, axis=1)
+        prob = self.actor.apply(params, key, feature)
+        action_prob = self.get_logprob(prob, actions, key)
         ratio = jnp.exp(jnp.log(action_prob) - jnp.log(old_prob))
         cross_entropy1 = adv*ratio; cross_entropy2 = adv*jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)
         actor_loss = -jnp.mean(jnp.minimum(cross_entropy1,cross_entropy2))
-        entropy = prob * jnp.log(prob)
-        entropy_loss = jnp.mean(entropy)
-        total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
+        if self.action_type == 'discrete':
+            entropy = prob * jnp.log(prob)
+            entropy_loss = jnp.mean(entropy)
+            total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
+        elif self.action_type == 'continuous':
+            total_loss = self.val_coef * critic_loss + actor_loss
         return total_loss, (critic_loss, actor_loss)
     
     def _loss_continuous(self, params, obses, actions, targets, adv, ent_coef, key):

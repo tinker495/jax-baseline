@@ -104,10 +104,12 @@ class Actor_Critic_Policy_Gradient_Family(object):
         print("-------------------------------------------------")
         if self.action_type == 'discrete':
             self._get_actions = self._get_actions_discrete
+            self.get_logprob = self.get_logprob_discrete
             self.actions = self.action_discrete
             self._loss = self._loss_discrete
         elif self.action_type == 'continuous':
             self._get_actions = self._get_actions_continuous
+            self.get_logprob = self.action_continuous
             self.actions = self.action_continuous
             self._loss = self._loss_continuous
     
@@ -136,6 +138,15 @@ class Actor_Critic_Policy_Gradient_Family(object):
         pass
     
     def _loss_continuous(self):
+        pass
+    
+    def get_logprob(self,params, feature, action, key):
+        pass
+    
+    def get_logprob_discrete(self,params, feature, action, key):
+        pass
+    
+    def get_logprob_continuous(self,params, feature, action, key):
         pass
         
     def learn(self, total_timesteps, callback=None, log_interval=1000, tb_log_name="Q_network",
