@@ -12,7 +12,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--env', type=str, default="Pendulum-v0", help='environment')
     parser.add_argument('--algo', type=str, default="DDPG", help='algo ID')
-    parser.add_argument('--gamma', type=float, default=0.99, help='gamma')
+    parser.add_argument('--gamma', type=float, default=0.995, help='gamma')
     parser.add_argument('--target_update_tau', type=float, default=2e-4, help='target update intervals')
     parser.add_argument('--batch', type=int, default=64, help='batch size')
     parser.add_argument('--buffer_size', type=float, default=2000000, help='buffer_size')
