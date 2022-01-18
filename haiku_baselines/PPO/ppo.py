@@ -11,14 +11,16 @@ from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import convert_jax, get_gaes
 
 class PPO(Actor_Critic_Policy_Gradient_Family):
-    def __init__(self, env, gamma=0.99, lamda = 0.9, gae_normalize = False, learning_rate=3e-4, batch_size=512, minibatch_size=16, val_coef=0.5, ent_coef = 0.001, 
+    def __init__(self, env, gamma=0.99, lamda = 0.9, gae_normalize = True, learning_rate=3e-4, batch_size=512, minibatch_size=16, val_coef=0.5, ent_coef = 0.001, 
                  clip_value = 100.0, ppo_eps = 0.2, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'rmsprop'):
         
-        super(PPO, self).__init__(env, gamma, lamda, gae_normalize, learning_rate, batch_size, val_coef, ent_coef,
+        super(PPO, self).__init__(env, gamma, learning_rate, batch_size, val_coef, ent_coef,
                  log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
                  full_tensorboard_log, seed, optimizer)
         
+        self.lamda = lamda
+        self.gae_normalize = gae_normalize
         self.ppo_eps = ppo_eps
         self.minibatch_size = minibatch_size
         self.clip_value = clip_value
@@ -125,7 +127,9 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
         adv,targets = tuple(zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda) for r,d,t,v,nv in zip(rewards,dones,terminals,value,next_value)]))
         obses = [jnp.vstack(list(zo)) for zo in zip(*obses)]; actions = jnp.vstack(actions); value = jnp.vstack(value); act_prob = jnp.vstack(act_prob)
-        targets = jnp.vstack(targets); adv = jnp.vstack(adv); adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-12)
+        targets = jnp.vstack(targets); adv = jnp.vstack(adv); 
+        if self.gae_normalize:
+            adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-12)
         idxes = jax.random.permutation(key,adv.shape[0])
         return obses, actions, targets, value, act_prob, adv, idxes
     
