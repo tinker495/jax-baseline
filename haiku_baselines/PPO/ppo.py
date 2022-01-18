@@ -75,9 +75,13 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         print('mean : ', mu.shape)
         print('std : ', std.shape)
         if out_prob:
-            return prob, - jnp.sum(0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1,keepdims=True) + jnp.sum(log_std,axis=-1,keepdims=True) + 0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32)),axis=-1,keepdims=True)
+            return prob, - jnp.sum(0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1,keepdims=True) + 
+                                   jnp.sum(log_std,axis=-1,keepdims=True) + 
+                                   0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32),axis=-1,keepdims=True)
         else:
-            return - jnp.sum(0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1,keepdims=True) + jnp.sum(log_std,axis=-1,keepdims=True) + 0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32),axis=-1,keepdims=True)
+            return - jnp.sum(0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1,keepdims=True) + 
+                             jnp.sum(log_std,axis=-1,keepdims=True) + 
+                             0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32),axis=-1,keepdims=True)
     
     
     def discription(self):
