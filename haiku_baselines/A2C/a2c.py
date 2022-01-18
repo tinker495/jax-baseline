@@ -11,7 +11,7 @@ from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import convert_jax, discount_with_terminal
 
 class A2C(Actor_Critic_Policy_Gradient_Family):
-    def __init__(self, env, gamma=0.99, learning_rate=3e-4, batch_size=32, val_coef=0.2, ent_coef = 0.5,
+    def __init__(self, env, gamma=0.995, learning_rate=3e-4, batch_size=32, val_coef=0.2, ent_coef = 0.5,
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'rmsprop'):
         

@@ -11,7 +11,7 @@ from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import convert_jax, get_gaes
 
 class PPO(Actor_Critic_Policy_Gradient_Family):
-    def __init__(self, env, gamma=0.99, lamda = 0.9, gae_normalize = False, learning_rate=3e-4, batch_size=256, minibatch_size=32, val_coef=0.5, ent_coef = 0.001, 
+    def __init__(self, env, gamma=0.995, lamda = 0.95, gae_normalize = False, learning_rate=3e-4, batch_size=256, minibatch_size=32, val_coef=0.5, ent_coef = 0.001, 
                  clip_value = 100.0, ppo_eps = 0.2, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'rmsprop'):
         
