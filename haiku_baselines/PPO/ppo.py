@@ -123,7 +123,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         act_prob = [self.get_logprob(self.actor.apply(params, key, f), a, key) for f,a in zip(feature,actions)]
         next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
         adv,targets = tuple(zip(*[get_gaes(r, d, t, v, nv, self.gamma, self.lamda) for r,d,t,v,nv in zip(rewards,dones,terminals,value,next_value)]))
-        obses = [jnp.vstack(list(zo)) for zo in list(zip(*obses))]; actions = jnp.vstack(actions); value = jnp.vstack(value); act_prob = jnp.vstack(act_prob)
+        obses = [jnp.vstack(list(zo)) for zo in zip(*obses)]; actions = jnp.vstack(actions); value = jnp.vstack(value); act_prob = jnp.vstack(act_prob)
         targets = jnp.vstack(targets); adv = jnp.vstack(adv); adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-12)
         idxes = jax.random.permutation(key,adv.shape[0])
         return obses, actions, targets, value, act_prob, adv, idxes
