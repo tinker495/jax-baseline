@@ -160,6 +160,8 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
         
         prob, action_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
+        print(action_prob.shape)
+        print(old_prob.shape)
         ratio = jnp.exp(jnp.log(action_prob) - jnp.log(old_prob))
         min_adv = adv*jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)
         actor_loss = -jnp.mean(jnp.minimum(adv*ratio,min_adv))
