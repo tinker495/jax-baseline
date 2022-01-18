@@ -58,6 +58,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
     
     def get_logprob_discrete(self, prob, action, key, out_prob=False):
         prob = jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0)
+        action = action.astype(jnp.int32)
         if out_prob:
             return prob, jnp.log(jnp.take_along_axis(prob, action, axis=1))
         else:
