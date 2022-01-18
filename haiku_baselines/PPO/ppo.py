@@ -108,7 +108,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             start = i * self.minibatch_size
             end = (i + 1) * self.minibatch_size
             batchidx = idxes[start:end]
-            print(targets[batchidx])
+            print(targets[batchidx] - value[batchidx])
             self.params, self.opt_state, c_loss, a_loss = self._optimize_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, 
                             [o[batchidx] for o in obses], actions[batchidx], targets[batchidx], value[batchidx], act_prob[batchidx], adv[batchidx])
             critic_loss.append(c_loss); actor_loss.append(a_loss)
