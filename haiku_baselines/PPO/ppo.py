@@ -155,7 +155,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         
         prob, action_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
         ratio = jnp.exp(jnp.log(action_prob) - jnp.log(old_prob))
-        min_adv = jnp.where(adv > 0 , (1.0 + self.ppo_eps)*adv, (1.0 - self.ppo_eps)*adv)
+        min_adv = adv*jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)
         actor_loss = -jnp.mean(jnp.minimum(adv*ratio,min_adv))
         mu,log_std = prob
         entropy_loss = jnp.mean(jnp.abs(mu) + jnp.abs(log_std))
