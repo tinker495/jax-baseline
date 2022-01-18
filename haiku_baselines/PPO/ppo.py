@@ -112,7 +112,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
                             [o[batchidx] for o in obses], actions[batchidx], targets[batchidx], value[batchidx], act_prob[batchidx], adv[batchidx])
             critic_loss.append(c_loss); actor_loss.append(a_loss)
         import cv2 as cv
-        cv.imwrite('obs.jpg',obses[0][0]*255.0)
+        cv.imwrite('obs.jpg',np.array(obses[0][0]*255.0))
         critic_loss = np.array(critic_loss).mean(); actor_loss = np.array(actor_loss).mean()
         if self.summary:
             self.summary.add_scalar("loss/critic_loss", critic_loss, steps)
