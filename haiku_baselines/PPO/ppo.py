@@ -72,9 +72,15 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         mu, log_std = prob
         std = jnp.exp(log_std)
         if out_prob:
-            return prob, jnp.sum(jnp.square((action - mu) / (std + 1e-6)) + 2 * log_std + jnp.log(2 * np.pi),axis=1,keepdims=True)
+            return prob, 0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1) + jnp.sum(log_std,axis=-1) + 0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32)
         else:
-            return jnp.sum(jnp.square((action - mu) / (std + 1e-6)) + 2 * log_std + jnp.log(2 * np.pi),axis=1,keepdims=True)
+            return 0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1) + jnp.sum(log_std,axis=-1) + 0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32)
+        
+        '''
+                0.5 * tf.reduce_sum(tf.square((x - self.mean) / self.std), axis=-1) \
+               + 0.5 * np.log(2.0 * np.pi) * tf.cast(tf.shape(x)[-1], tf.float32) \
+               + tf.reduce_sum(self.logstd, axis=-1)
+        '''
     
     
     def discription(self):
