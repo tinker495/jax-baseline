@@ -45,7 +45,12 @@ if __name__ == "__main__":
             from haiku_baselines.common.worker import gymMultiworker
             env = gymMultiworker(env_name, worker_num = args.worker)
         else:
-            env = gym.make(env_name)
+            from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
+            env_type, env_id = get_env_type(env_name)
+            if env_type == 'atari':
+                env = make_wrap_atari(env_name)
+            else:
+                env = gym.make(env_name)
         env_type = "gym"
 
     
