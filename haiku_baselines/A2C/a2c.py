@@ -132,7 +132,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss)
     
-    def _loss_continuous(self, params, obses, actions, targets, old_value, old_prob, adv, ent_coef, key):
+    def _loss_continuous(self, params, obses, actions, targets, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
         vals = self.critic.apply(params, key, feature)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
