@@ -111,8 +111,8 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             self.params, self.opt_state, c_loss, a_loss = self._optimize_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, 
                             [o[batchidx] for o in obses], actions[batchidx], targets[batchidx], value[batchidx], act_prob[batchidx], adv[batchidx])
             critic_loss.append(c_loss); actor_loss.append(a_loss)
-        print(obses[0][0])
-        print(obses[1][0])
+        print(obses[0][batchidx].shape)
+        print(obses[1][batchidx].shape)
         critic_loss = np.array(critic_loss).mean(); actor_loss = np.array(actor_loss).mean()
         if self.summary:
             self.summary.add_scalar("loss/critic_loss", critic_loss, steps)
