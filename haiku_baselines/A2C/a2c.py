@@ -125,8 +125,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
         
         prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
-        cross_entropy = log_prob*adv
-        actor_loss = -jnp.mean(cross_entropy)
+        actor_loss = -jnp.mean(log_prob*adv)
         entropy = prob * jnp.log(prob)
         entropy_loss = jnp.mean(entropy)
         total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
