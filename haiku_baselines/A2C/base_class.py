@@ -212,7 +212,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 terminal[term_ids] = True
                 reward[term_ids] = term_rewards
             self.scores += reward
-            self.buffer.add(old_obses, actions, np.expand_dims(reward,axis=1), nxtobs, np.expand_dims(done,axis=1), np.expand_dims(terminal,axis=1))
+            self.buffer.add(old_obses, actions, np.expand_dims(reward*100,axis=1), nxtobs, np.expand_dims(done,axis=1), np.expand_dims(terminal,axis=1))
             if term_on:
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", np.mean(self.scores[term_ids]), steps)
