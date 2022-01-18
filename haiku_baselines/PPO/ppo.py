@@ -64,9 +64,9 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     def get_logprob_discrete(self, prob, action, key, out_prob=False):
         prob = jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0)
         if out_prob:
-            return prob, jnp.take_along_axis(prob, action, axis=1)
+            return prob, jnp.log(jnp.take_along_axis(prob, action, axis=1))
         else:
-            return jnp.take_along_axis(prob, action, axis=1)
+            return jnp.log(jnp.take_along_axis(prob, action, axis=1))
     
     def get_logprob_continuous(self, prob, action, key, out_prob=False):
         mu, log_std = prob
@@ -143,7 +143,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
         
         prob, action_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
-        ratio = jnp.exp(jnp.log(action_prob) - jnp.log(old_prob))
+        ratio = jnp.exp(action_prob - old_prob)
         cross_entropy1 = adv*ratio; cross_entropy2 = adv*jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)
         actor_loss = -jnp.mean(jnp.minimum(cross_entropy1,cross_entropy2))
         entropy = prob * jnp.log(prob)
@@ -160,7 +160,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         prob, action_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
         print('old_prob : ', old_prob.shape)
         print('action_prob : ', action_prob.shape)
-        ratio = jnp.exp(jnp.log(action_prob) - jnp.log(old_prob))
+        ratio = jnp.exp(action_prob - old_prob)
         min_adv = adv*jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)
         actor_loss = -jnp.mean(jnp.minimum(adv*ratio,min_adv))
         total_loss = self.val_coef * critic_loss + actor_loss
