@@ -75,10 +75,9 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         print('mean : ', mu.shape)
         print('std : ', std.shape)
         if out_prob:
-            return prob, 0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1) + jnp.sum(log_std,axis=-1) + 0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32)
+            return prob, 0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1,keepdims=True) + jnp.sum(log_std,axis=-1,keepdims=True) + 0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32)
         else:
-            return 0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1) + jnp.sum(log_std,axis=-1) + 0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32)
-        
+            return 0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1,keepdims=True) + jnp.sum(log_std,axis=-1,keepdims=True) + 0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32)
         '''
                 0.5 * tf.reduce_sum(tf.square((x - self.mean) / self.std), axis=-1) \
                + 0.5 * np.log(2.0 * np.pi) * tf.cast(tf.shape(x)[-1], tf.float32) \
