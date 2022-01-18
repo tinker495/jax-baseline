@@ -24,7 +24,7 @@ if __name__ == "__main__":
     parser.add_argument('--val_coef', type=float,default=0.2, help='val coefficient')
     parser.add_argument('--gae_normalize', dest='gae_normalize', action='store_true')
     parser.add_argument('--no_gae_normalize', dest='gae_normalize', action='store_false')
-    parser.set_defaults(feature=True)
+    parser.set_defaults(gae_normalize=True)
 
     args = parser.parse_args() 
     env_name = args.env
@@ -57,7 +57,7 @@ if __name__ == "__main__":
         agent = A2C(env, gamma=args.gamma, batch_size = args.batch, val_coef = args.val_coef, ent_coef = args.ent_coef,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "PPO":
-        agent = PPO(env, gamma=args.gamma, lamda=args.lamda, batch_size = args.batch, val_coef = args.val_coef, ent_coef = args.ent_coef,
+        agent = PPO(env, gamma=args.gamma, lamda=args.lamda, gae_normalize=args.gae_normalize, batch_size = args.batch, val_coef = args.val_coef, ent_coef = args.ent_coef,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
 
 
