@@ -71,6 +71,9 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     def get_logprob_continuous(self, prob, action, key, out_prob=False):
         mu, log_std = prob
         std = jnp.exp(log_std)
+        print('action : ', action.shape)
+        print('mean : ', mu.shape)
+        print('std : ', std.shape)
         if out_prob:
             return prob, 0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1) + jnp.sum(log_std,axis=-1) + 0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32)
         else:
@@ -160,8 +163,6 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
         
         prob, action_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
-        print(action_prob.shape)
-        print(old_prob.shape)
         ratio = jnp.exp(jnp.log(action_prob) - jnp.log(old_prob))
         min_adv = adv*jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)
         actor_loss = -jnp.mean(jnp.minimum(adv*ratio,min_adv))
