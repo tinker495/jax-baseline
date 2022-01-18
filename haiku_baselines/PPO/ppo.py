@@ -142,8 +142,8 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         vals = self.critic.apply(params, key, feature)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
         
-        prob, action_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
-        ratio = jnp.exp(action_prob - old_prob)
+        prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
+        ratio = jnp.exp(log_prob - old_prob)
         cross_entropy1 = adv*ratio; cross_entropy2 = adv*jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)
         actor_loss = -jnp.mean(jnp.minimum(cross_entropy1,cross_entropy2))
         entropy = prob * jnp.log(prob)
@@ -157,12 +157,12 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         vals = self.critic.apply(params, key, feature)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
         
-        prob, action_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
-        ratio = jnp.exp(action_prob - old_prob)
+        prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
+        ratio = jnp.exp(log_prob - old_prob)
         ratio_adv1 = adv*ratio; ratio_adv2 = adv*jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)
         actor_loss = -jnp.mean(jnp.minimum(ratio_adv1,ratio_adv2))
-        entropy = prob * jnp.log(prob)
-        entropy_loss = jnp.mean(entropy)
+        mu, log_std = prob
+        entropy_loss = jnp.mean(jnp.abs(mu) + jnp.abs(log_std))
         total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss)
     

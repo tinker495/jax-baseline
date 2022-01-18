@@ -49,12 +49,32 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         self._train_step = jax.jit(self._train_step)
         
     def _get_actions_discrete(self, params, obses, key = None) -> jnp.ndarray:
-        prob = jax.nn.softmax(self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses))),axis=1)
+        prob = jax.nn.softmax(self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))),axis=1)
         return prob
     
     def _get_actions_continuous(self, params, obses, key = None) -> jnp.ndarray:
-        mu,std = self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses)))
-        return mu, std
+        mu,std = self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))
+        return mu, jnp.exp(std)
+    
+    def get_logprob_discrete(self, prob, action, key, out_prob=False):
+        prob = jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0)
+        if out_prob:
+            return prob, jnp.log(jnp.take_along_axis(prob, action, axis=1))
+        else:
+            return jnp.log(jnp.take_along_axis(prob, action, axis=1))
+    
+    def get_logprob_continuous(self, prob, action, key, out_prob=False):
+        mu, log_std = prob
+        std = jnp.exp(log_std)
+        if out_prob:
+            return prob, - (0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1,keepdims=True) + 
+                                   jnp.sum(log_std,axis=-1,keepdims=True) + 
+                                   0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32))
+        else:
+            return - (0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1,keepdims=True) + 
+                             jnp.sum(log_std,axis=-1,keepdims=True) + 
+                             0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32))
+    
     
     def discription(self):
         return "score : {:.3f}, loss : {:.3f} |".format(
@@ -67,7 +87,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
     
     def action_continuous(self,obs,steps):
         mu, std = self._get_actions(self.params, obs)
-        return mu
+        return np.random.normal(mu, std)
     
     def train_step(self, steps):
         # Sample a batch from the replay buffer
@@ -102,19 +122,27 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
     def _loss_discrete(self, params, obses, actions, targets, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
         vals = self.critic.apply(params, key, feature)
-        error = jnp.squeeze(targets - vals)
-        critic_loss = jnp.mean(jnp.square(error))
-        prob = jnp.clip(jax.nn.softmax(self.actor.apply(params, key, feature)),1e-5,1.0)
-        action_prob = jnp.take_along_axis(prob, actions, axis=1)
-        cross_entropy = jnp.log(action_prob)*adv
+        critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
+        
+        prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
+        cross_entropy = log_prob*adv
         actor_loss = -jnp.mean(cross_entropy)
         entropy = prob * jnp.log(prob)
         entropy_loss = jnp.mean(entropy)
         total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss)
     
-    def _loss_continuous(self, params, obses, actions, targets, adv, ent_coef, key):
-        pass
+    def _loss_continuous(self, params, obses, actions, targets, old_value, old_prob, adv, ent_coef, key):
+        feature = self.preproc.apply(params, key, obses)
+        vals = self.critic.apply(params, key, feature)
+        critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
+        
+        prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
+        actor_loss = -jnp.mean(log_prob*adv)
+        mu, log_std = prob
+        entropy_loss = jnp.mean(jnp.abs(mu) + jnp.abs(log_std))
+        total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
+        return total_loss, (critic_loss, actor_loss)
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="A2C",
               reset_num_timesteps=True, replay_wrapper=None):
