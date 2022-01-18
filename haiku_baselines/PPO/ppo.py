@@ -158,12 +158,12 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
         
         prob, action_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
-        print('old_prob : ', old_prob.shape)
-        print('action_prob : ', action_prob.shape)
         ratio = jnp.exp(action_prob - old_prob)
-        min_adv = adv*jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)
-        actor_loss = -jnp.mean(jnp.minimum(adv*ratio,min_adv))
-        total_loss = self.val_coef * critic_loss + actor_loss
+        ratio_adv1 = adv*ratio; ratio_adv2 = adv*jnp.clip(ratio,1 - self.ppo_eps,1 + self.ppo_eps)
+        actor_loss = -jnp.mean(jnp.minimum(ratio_adv1,ratio_adv2))
+        entropy = prob * jnp.log(prob)
+        entropy_loss = jnp.mean(entropy)
+        total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss)
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="PPO",
