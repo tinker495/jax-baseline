@@ -66,7 +66,6 @@ class gymRayworker:
     def get_reset(self):
         return self.env.reset(),None,0,False,False
     
-    @property
     def get_info(self):
         return {'observation_space' : self.env.observation_space, 
                 'action_space' : self.env.action_space,
