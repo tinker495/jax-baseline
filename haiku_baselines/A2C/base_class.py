@@ -290,7 +290,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 self.scoreque.extend(self.scores[end_idx])
                 self.scores[end_idx] = 0
                 self.eplen[end_idx] = 0
-            self.buffer.add([state], actions, rewards, [nxtstates], dones, terminals)
+            self.buffer.add([state], actions, np.expand_dims(rewards,axis=1), [nxtstates], np.expand_dims(dones,axis=1), np.expand_dims(terminals,axis=1))
             self.scores += rewards
             state = next_states
             

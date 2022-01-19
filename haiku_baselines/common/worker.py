@@ -42,9 +42,9 @@ class gymMultiworker(Multiworker):
                 end_states.append(end_state)
                 end_idx.append(idx)
         states = np.stack(states,axis=0)
-        rewards = np.expand_dims(np.stack(rewards,axis=0),axis=1)
-        dones = np.expand_dims(np.stack(dones,axis=0),axis=1)
-        terminals = np.expand_dims(np.stack(terminals,axis=0),axis=1)
+        rewards = np.stack(rewards,axis=0)
+        dones = np.stack(dones,axis=0)
+        terminals = np.stack(terminals,axis=0)
         if len(end_states):
             end_states = np.stack(end_states,axis=0)
             end_idx = np.stack(end_idx,axis=0)
