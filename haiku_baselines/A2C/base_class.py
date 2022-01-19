@@ -92,7 +92,12 @@ class Actor_Critic_Policy_Gradient_Family(object):
             print("gymMultiworker")
             env_info = self.env.env_info
             self.observation_space = [list(env_info['observation_space'].shape)]
-            self.action_size = [env_info['action_space'].n]
+            if not isinstance(env_info['action_space'], spaces.Box):
+                self.action_size = [env_info['action_space'].n]
+                self.action_type = 'discrete'
+            else:
+                self.action_size = [env_info['action_space'].shape[0]]
+                self.action_type = 'continuous'
             self.worker_size = self.env.worker_num
             self.env_type = "gymMultiworker"
     
@@ -297,6 +302,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
     
+    def test_action(self, state):
+        return self.actions(state,0)
+    
     def test(self, episode = 10, tb_log_name=None):
         if tb_log_name is None:
             tb_log_name = self.save_path
@@ -304,12 +312,32 @@ class Actor_Critic_Policy_Gradient_Family(object):
         directory = tb_log_name
         if self.env_type == "gym":
             self.test_gym(episode, directory)
+        if self.env_type == "gymMultiworker":
+            self.test_gym(episode, directory)
     
     def test_unity(self, episode,directory):
         pass
     
-    def test_action(self, state):
-        return self.actions(state,0)
+    def test_gymMultiworker(self, episode,directory):
+        from colabgymrender.recorder import Recorder
+        env_id = self.env.env_id
+        from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
+        env_type, env_id = get_env_type(env_id)
+        if env_type == 'atari':
+            env = make_wrap_atari(env_id)
+        else:
+            env = gym.make(env_id)
+        Render_env = Recorder(env, directory)
+        for i in range(episode):
+            state = [np.expand_dims(Render_env.reset(),axis=0)]
+            terminal = False
+            episode_rew = 0
+            while not terminal:
+                actions = self.test_action(state)
+                observation, reward, terminal, info = Render_env.step(actions[0][0] if self.action_type == 'discrete' else actions[0])
+                state = [np.expand_dims(observation,axis=0)]
+                episode_rew += reward
+            print("episod reward :", episode_rew)
     
     def test_gym(self, episode,directory):
         from colabgymrender.recorder import Recorder
