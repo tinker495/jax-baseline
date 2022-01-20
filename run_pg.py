@@ -21,7 +21,7 @@ if __name__ == "__main__":
     parser.add_argument('--worker', type=int,default=1, help='gym_worker_size')
     parser.add_argument('--optimizer', type=str,default='adamw', help='optimaizer')
     parser.add_argument('--ent_coef', type=float,default=0.05, help='entropy coefficient')
-    parser.add_argument('--val_coef', type=float,default=0.2, help='val coefficient')
+    parser.add_argument('--val_coef', type=float,default=1.0, help='val coefficient')
     parser.add_argument('--gae_normalize', dest='gae_normalize', action='store_true')
     parser.add_argument('--no_gae_normalize', dest='gae_normalize', action='store_false')
     parser.set_defaults(gae_normalize=True)
