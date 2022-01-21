@@ -313,7 +313,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         if self.env_type == "gym":
             self.test_gym(episode, directory)
         if self.env_type == "gymMultiworker":
-            self.test_gym(episode, directory)
+            self.test_gymMultiworker(episode, directory)
     
     def test_unity(self, episode,directory):
         pass
