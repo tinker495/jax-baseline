@@ -65,8 +65,6 @@ def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
     last_gae_lam = delta + gamma * lamda * (1. - term) * last_gae_lam
     return last_gae_lam, last_gae_lam
   _, advs = jax.lax.scan(f, jnp.zeros((1,),dtype=jnp.float32), (rewards, dones, values, next_values, terminals),reverse=True)
-  print(advs.shape)
-  print(values.shape)
   return advs
 
 '''
