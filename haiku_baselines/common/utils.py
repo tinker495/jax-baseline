@@ -67,7 +67,7 @@ def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
   _, advs = jax.lax.scan(f, jnp.zeros((1,),dtype=jnp.float32), (rewards, dones, values, next_values, terminals),reverse=True)
   print(advs.shape)
   print(values.shape)
-  return advs, advs + values
+  return advs
 
 '''
 def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
