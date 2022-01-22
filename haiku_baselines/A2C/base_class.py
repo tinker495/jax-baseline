@@ -37,7 +37,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.params = None
         self.target_params = None
         self.save_path = None
-        self.optimizer = select_optimizer(optimizer,self.learning_rate,1e-2/self.batch_size)
+        self.optimizer = select_optimizer(optimizer,self.learning_rate)
         
         self.get_env_setup()
         self.get_memory_setup()
