@@ -64,7 +64,7 @@ def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
     delta = reward + gamma * (nextval * (1. - done)) - value
     last_gae_lam = delta + gamma * lamda * (1. - term) * last_gae_lam
     return last_gae_lam, last_gae_lam
-  _, advs = jax.lax.scan(f, 0, (rewards, dones, values, next_values, terminals),reverse=True)
+  _, advs = jax.lax.scan(f, jnp.zeros((1,),dtype=jnp.float32), (rewards, dones, values, next_values, terminals),reverse=True)
   return advs, advs + values
 
 '''
