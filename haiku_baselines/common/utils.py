@@ -46,6 +46,7 @@ def discount_with_terminal(rewards, dones, terminals, next_values, gamma):
     return ret, ret
   terminals.at[-1].set(jnp.ones((1,),dtype=jnp.float32))
   _, discounted = jax.lax.scan(f, jnp.zeros((1,),dtype=jnp.float32), (rewards, dones, terminals, next_values),reverse=True)
+  discounted = discounted[::-1]
   return discounted
 
 '''
@@ -65,6 +66,7 @@ def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
     last_gae_lam = delta + gamma * lamda * (1. - term) * last_gae_lam
     return last_gae_lam, last_gae_lam
   _, advs = jax.lax.scan(f, jnp.zeros((1,),dtype=jnp.float32), (rewards, dones, values, next_values, terminals),reverse=True)
+  advs = advs[::-1]
   return advs, advs + values
 
 '''
