@@ -11,7 +11,7 @@ from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import convert_jax, get_gaes
 
 class PPO(Actor_Critic_Policy_Gradient_Family):
-    def __init__(self, env, gamma=0.995, lamda = 0.95, gae_normalize = False, learning_rate=3e-4, batch_size=256, minibatch_size=32, val_coef=0.5, ent_coef = 0.001, 
+    def __init__(self, env, gamma=0.995, lamda = 0.95, gae_normalize = False, learning_rate=3e-4, batch_size=256, minibatch_size=32, epoch_num=4,val_coef=0.5, ent_coef = 0.001, 
                  clip_value = 100.0, ppo_eps = 0.2, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'rmsprop'):
         
@@ -23,6 +23,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         self.gae_normalize = gae_normalize
         self.ppo_eps = ppo_eps
         self.minibatch_size = minibatch_size
+        self.epoch_num = epoch_num
         self.clip_value = clip_value
         
         if _init_setup_model:
@@ -106,13 +107,14 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
                                 **data)
             
         critic_loss = []; actor_loss = []
-        for i in range(len(idxes) // self.minibatch_size):
-            start = i * self.minibatch_size
-            end = (i + 1) * self.minibatch_size
-            batchidx = idxes[start:end]
-            self.params, self.opt_state, c_loss, a_loss = self._optimize_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, 
-                            [o[batchidx] for o in obses], actions[batchidx], targets[batchidx], value[batchidx], act_prob[batchidx], adv[batchidx])
-            critic_loss.append(c_loss); actor_loss.append(a_loss)
+        for epoch in range(self.epoch_num):
+            for i in range(len(idxes) // self.minibatch_size):
+                start = i * self.minibatch_size
+                end = (i + 1) * self.minibatch_size
+                batchidx = idxes[start:end]
+                self.params, self.opt_state, c_loss, a_loss = self._optimize_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, 
+                                [o[batchidx] for o in obses], actions[batchidx], targets[batchidx], value[batchidx], act_prob[batchidx], adv[batchidx])
+                critic_loss.append(c_loss); actor_loss.append(a_loss)
         critic_loss = np.array(critic_loss).mean(); actor_loss = np.array(actor_loss).mean()
         if self.summary:
             self.summary.add_scalar("loss/critic_loss", critic_loss, steps)
