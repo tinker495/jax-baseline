@@ -102,12 +102,13 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         # Sample a batch from the replay buffer
         data = self.buffer.get_buffer()
         
-        obses, actions, targets, value, act_prob, adv, idxes = \
+        obses, actions, targets, value, act_prob, adv = \
             self._preprocess(self.params, next(self.key_seq),
                                 **data)
             
         critic_loss = []; actor_loss = []
         for epoch in range(self.epoch_num):
+            idxes = np.random.permutation(value.shape[0])
             for i in range(len(idxes) // self.minibatch_size):
                 start = i * self.minibatch_size
                 end = (i + 1) * self.minibatch_size
@@ -132,8 +133,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         adv = jnp.vstack(adv); targets = value + adv
         if self.gae_normalize:
             adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-12)
-        idxes = jax.random.permutation(key,adv.shape[0])
-        return obses, actions, targets, value, act_prob, adv, idxes
+        return obses, actions, targets, value, act_prob, adv
     
     def _optimize_step(self, params, opt_state, key, ent_coef,
                     obsbatch, actbatch, targetbatch, valuebatch, act_probbatch, advbatch):
