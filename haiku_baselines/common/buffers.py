@@ -363,6 +363,7 @@ class EpisodicReplayBuffer(ReplayBuffer):
                 for nidxes in nstep_idxs:                   #for nn,nidxes for enumerate(nstep_idxs)
                     reward += gamma*self._storage['rewards'][nidxes]                       #for less computation then np.power(self.gamma,nn+1)*r 
                     gamma *= self.gamma
+                print(self._storage['rewards'][nstep_idxs])
                 nxt_idxs.append(nstep_idxs[-1])
                 discounted_rewards.append(reward)
         nxt_idxs = np.array(nxt_idxs)
