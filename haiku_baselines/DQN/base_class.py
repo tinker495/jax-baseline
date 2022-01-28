@@ -10,7 +10,7 @@ from collections import deque
 from haiku_baselines.common.base_classes import TensorboardWriter, save, restore, select_optimizer
 from haiku_baselines.common.buffers import ReplayBuffer, PrioritizedReplayBuffer, EpisodicReplayBuffer, PrioritizedEpisodicReplayBuffer
 #from haiku_baselines.common.cpprb_buffers import ReplayBuffer, PrioritizedReplayBuffer
-from haiku_baselines.common.schedules import LinearSchedule
+from haiku_baselines.common.schedules import LinearSchedule, ConstantSchedule
 from haiku_baselines.common.utils import convert_states
 from haiku_baselines.common.worker import gymMultiworker
 
@@ -146,6 +146,15 @@ class Q_Network_Family(object):
             actions = np.random.choice(self.action_size[0], [self.worker_size,1])
         return actions
 
+    def discription(self):
+        if self.param_noise:
+            return "score : {:.3f}, loss : {:.3f} |".format(
+                                        np.mean(self.scoreque),np.mean(self.lossque)
+                                        )
+        else:
+            return "score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(
+                                    np.mean(self.scoreque),self.update_eps,np.mean(self.lossque)
+                                    )
         
     def learn(self, total_timesteps, callback=None, log_interval=1000, tb_log_name="Q_network",
               reset_num_timesteps=True, replay_wrapper=None):
@@ -162,9 +171,14 @@ class Q_Network_Family(object):
         if self.prioritized_replay:
             tb_log_name = tb_log_name + "+PER"
         
-        self.exploration = LinearSchedule(schedule_timesteps=int(self.exploration_fraction * total_timesteps),
-                                                initial_p=self.exploration_initial_eps,
-                                                final_p=self.exploration_final_eps)
+        if self.param_noise:
+            self.exploration = ConstantSchedule(0)
+        else:
+            self.exploration = LinearSchedule(schedule_timesteps=int(self.exploration_fraction * total_timesteps),
+                                                    initial_p=self.exploration_initial_eps,
+                                                    final_p=self.exploration_final_eps)
+        self.update_eps = 1.0
+            
         pbar = trange(total_timesteps, miniters=log_interval)
         with TensorboardWriter(self.tensorboard_log, tb_log_name) as (self.summary, self.save_path):
             if self.env_type == "unity":
@@ -186,8 +200,7 @@ class Q_Network_Family(object):
         obses = convert_states(dec.obs)
         for steps in pbar:
             self.eplen += 1
-            update_eps = self.exploration.value(steps)
-            actions = self.actions(obses,update_eps)
+            actions = self.actions(obses,self.update_eps)
             action_tuple = ActionTuple(discrete=actions)
             old_obses = obses
 
@@ -195,6 +208,7 @@ class Q_Network_Family(object):
             self.env.step()
             
             if steps > self.learning_starts and steps % self.train_freq == 0: #train in step the environments
+                self.update_eps = self.exploration.value(steps)
                 loss = self.train_step(steps,self.gradient_steps)
                 self.lossque.append(loss)
             
@@ -239,10 +253,7 @@ class Q_Network_Family(object):
                 self.eplen[term_ids] = 0
             
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
-                pbar.set_description("score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(
-                                    np.mean(self.scoreque),update_eps,np.mean(self.lossque)
-                                    )
-                                    )
+                pbar.set_description(self.discription())
         
     def learn_gym(self, pbar, callback=None, log_interval=100):
         state = [np.expand_dims(self.env.reset(),axis=0)]
@@ -252,8 +263,7 @@ class Q_Network_Family(object):
         self.lossque = deque(maxlen=10)
         for steps in pbar:
             self.eplen += 1
-            update_eps = self.exploration.value(steps)
-            actions = self.actions(state,update_eps)
+            actions = self.actions(state,self.update_eps)
             next_state, reward, terminal, info = self.env.step(actions[0][0])
             next_state = [np.expand_dims(next_state,axis=0)]
             done = terminal
@@ -273,14 +283,12 @@ class Q_Network_Family(object):
                 state = [np.expand_dims(self.env.reset(),axis=0)]
                 
             if steps > self.learning_starts and steps % self.train_freq == 0:
+                self.update_eps = self.exploration.value(steps)
                 loss = self.train_step(steps,self.gradient_steps)
                 self.lossque.append(loss)
             
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
-                pbar.set_description("score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(
-                                    np.mean(self.scoreque),update_eps,np.mean(self.lossque)
-                                    )
-                                    )
+                pbar.set_description(self.discription())
                 
     def learn_gymMultiworker(self, pbar, callback=None, log_interval=100):
         state,_,_,_,_,_ = self.env.get_steps()
@@ -290,11 +298,12 @@ class Q_Network_Family(object):
         self.lossque = deque(maxlen=10)
         for steps in pbar:
             self.eplen += 1
-            update_eps = self.exploration.value(steps)
-            actions = self.actions([state],update_eps)
+            self.update_eps = self.exploration.value(steps)
+            actions = self.actions([state],self.update_eps)
             self.env.step(actions)
 
             if steps > self.learning_starts and steps % self.train_freq == 0:
+                self.update_eps = self.exploration.value(steps)
                 loss = self.train_step(steps,self.gradient_steps)
                 self.lossque.append(loss)
             
@@ -314,10 +323,7 @@ class Q_Network_Family(object):
             state = next_states
             
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
-                pbar.set_description("score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(
-                                    np.mean(self.scoreque),update_eps,np.mean(self.lossque)
-                                    )
-                                    )
+                pbar.set_description(self.discription())
     
     def test(self, episode = 10, tb_log_name=None):
         if tb_log_name is None:
