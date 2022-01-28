@@ -366,9 +366,9 @@ class EpisodicReplayBuffer(ReplayBuffer):
         return {
             'obses'     : [self._storage[o][idxes] for o in self.obsdict.keys()],
             'actions'   : self._storage['actions'][idxes],
-            'rewards'   : self._storage['rewards'][idxes],
-            'nxtobses'  : [self._storage[no][idxes] for no in self.nextobsdict.keys()],
-            'dones'     : self._storage['dones'][idxes],
+            'rewards'   : discounted_rewards,
+            'nxtobses'  : [self._storage[no][nxt_idxs] for no in self.nextobsdict.keys()],
+            'dones'     : self._storage['dones'][nxt_idxs],
             }
 
     def sample(self, batch_size: int):
