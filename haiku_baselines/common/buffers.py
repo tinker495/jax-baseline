@@ -346,39 +346,12 @@ class EpisodicReplayBuffer(ReplayBuffer):
             self._len = self._maxsize
 
     def _encode_sample(self, idxes: Union[List[int], np.ndarray]):
-        obses_t, actions, rewards, nxtobses_t, dones = [], [], [], [], []
-        for i in idxes:
-            data = self._storage[i]
-            obs_t, action, reward, nxtobs_t, done, episode_key_and_idx, _ = data
-            episode_key, episode_index = episode_key_and_idx
-            nstep_idxs = self.episodes[episode_key][episode_index:(episode_index+self.n_step)]
-            gamma = self.gamma
-            for nidxes in nstep_idxs:                   #for nn,nidxes for enumerate(nstep_idxs)
-                data = self._storage[nidxes]
-                _, _, r, nxtobs_t, done, _, _ = data
-                reward += gamma*r                       #for less computation then np.power(self.gamma,nn+1)*r 
-                gamma *= self.gamma
-            obses_t.append(obs_t)
-            actions.append(action)
-            rewards.append(reward)
-            nxtobses_t.append(nxtobs_t)
-            dones.append(done)
-        obses_t = [np.array(o) for o in list(zip(*obses_t))]
-        actions = np.array(actions)
-        rewards = np.array(rewards)
-        nxtobses_t = [np.array(no) for no in list(zip(*nxtobses_t))]
-        dones = np.array(dones)
-        return (obses_t,
-                actions,
-                rewards,
-                nxtobses_t,
-                dones)
-    def _encode_sample(self, idxes: Union[List[int], np.ndarray]):
         nxt_idxs = []
         discounted_rewards = []
         for i in idxes:
-            episode_key, episode_index = self._storage['episodes'][i]
-            nstep_idxs = self.episodes[episode_key][episode_index:(episode_index+self.n_step)]
+            episode_array = self._storage['episodes'][i]
+            worker = episode_array[0]; episode = episode_array[1]; episode_index = episode_array[2];
+            nstep_idxs = self.episodes[(worker,episode)][episode_index:(episode_index+self.n_step)]
             gamma = self.gamma
             reward = self._storage['reward'][i]
             for nidxes in nstep_idxs:                   #for nn,nidxes for enumerate(nstep_idxs)
