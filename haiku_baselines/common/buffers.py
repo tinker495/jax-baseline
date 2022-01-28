@@ -335,6 +335,8 @@ class EpisodicReplayBuffer(ReplayBuffer):
                 del self.episodes[tuple(self._storage['episode'][nidx,:2])]
         self._storage['episode'][nxt_idxs] = np.concatenate([np.array(episode_keys,dtype=np.int32),np.expand_dims(np.array(eplens),axis=1)],axis=1)
         self._add(nxt_idxs, obs_t, action, reward, nxtobs_t, done, terminal)
+        if not isinstance(terminal, Iterable):
+            terminal = [terminal]
         for w,t in enumerate(terminal):
             if t:
                 self.worker_ep[w] += 1
@@ -450,6 +452,8 @@ class PrioritizedEpisodicReplayBuffer(EpisodicReplayBuffer):
         self._add(nxt_idxs, obs_t, action, reward, nxtobs_t, done, terminal)
         self._it_sum[nxt_idxs] = self._max_priority ** self._alpha
         self._it_min[nxt_idxs] = self._max_priority ** self._alpha
+        if not isinstance(terminal, Iterable):
+            terminal = [terminal]
         for w,t in enumerate(terminal):
             if t:
                 self.worker_ep[w] += 1
