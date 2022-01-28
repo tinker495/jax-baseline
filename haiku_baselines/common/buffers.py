@@ -190,7 +190,7 @@ class ReplayBuffer(object):
             'rewards'   : self._storage['rewards'][idxes],
             'nxtobses'  : [self._storage[no][idxes] for no in self.nextobsdict.keys()],
             'dones'     : self._storage['dones'][idxes],
-            'terminals'     : self._storage['terminals'][idxes]
+            #'terminals'     : self._storage['terminals'][idxes]
             }
     
     def sample(self, batch_size: int):
@@ -392,7 +392,7 @@ class EpisodicReplayBuffer(ReplayBuffer):
             'rewards'   : discounted_rewards,
             'nxtobses'  : [self._storage[no][nxt_idxs] for no in self.nextobsdict.keys()],
             'dones'     : self._storage['dones'][nxt_idxs],
-            'terminals'     : self._storage['terminals'][nxt_idxs]
+            #'terminals'     : self._storage['terminals'][nxt_idxs]
             }
 
     def sample(self, batch_size: int):
