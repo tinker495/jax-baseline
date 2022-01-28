@@ -1,9 +1,8 @@
 import jax
 import numpy as np
-import jax.numpy as jnp
 
 @jax.jit
-def unique(sorted_array: jnp.ndarray) -> jnp.ndarray:
+def unique(sorted_array: np.ndarray) -> np.ndarray:
     """
     More efficient implementation of np.unique for sorted arrays
     :param sorted_array: (np.ndarray)
@@ -40,7 +39,7 @@ class SegmentTree(object):
         """
         assert capacity > 0 and capacity & (capacity - 1) == 0, "capacity must be positive and a power of 2."
         self._capacity = capacity
-        self._value = jnp.full(2*capacity,neutral_element) #[neutral_element for _ in range(2 * capacity)]
+        self._value = np.full(2*capacity,neutral_element) #[neutral_element for _ in range(2 * capacity)]
         self._operation = operation
         self.neutral_element = neutral_element
         
@@ -99,13 +98,13 @@ class SegmentTree(object):
         
         self._value.at[idxs].set(val)
         if isinstance(idxs, int):
-            idxs = jnp.array([idxs])
+            idxs = np.array([idxs])
         # go up one level in the tree and remove duplicate indexes
         self._value = self._setitem_helper(self._value, idxs)
 
     def __getitem__(self, idx):
-        assert jnp.max(idx) < self._capacity
-        assert 0 <= jnp.min(idx)
+        assert np.max(idx) < self._capacity
+        assert 0 <= np.min(idx)
         return self._value[self._capacity + idx]
 
 
@@ -113,7 +112,7 @@ class SumSegmentTree(SegmentTree):
     def __init__(self, capacity):
         super(SumSegmentTree, self).__init__(
             capacity=capacity,
-            operation=jnp.add,
+            operation=np.add,
             neutral_element=0.0
         )
         
@@ -130,14 +129,14 @@ class SumSegmentTree(SegmentTree):
         return super(SumSegmentTree, self).reduce(start, end)
 
     def _find_prefixsum_idx_helper(self, _value ,prefixsum):
-        idx = jnp.ones(len(prefixsum), dtype=int)
-        cont = jnp.ones(len(prefixsum), dtype=bool)
+        idx = np.ones(len(prefixsum), dtype=int)
+        cont = np.ones(len(prefixsum), dtype=bool)
 
-        while jnp.any(cont):  # while not all nodes are leafs
+        while np.any(cont):  # while not all nodes are leafs
             idx.at[cont].set(2 * idx[cont])
-            prefixsum_new = jnp.where(_value[idx] <= prefixsum, prefixsum - _value[idx], prefixsum)
+            prefixsum_new = np.where(_value[idx] <= prefixsum, prefixsum - _value[idx], prefixsum)
             # prepare update of prefixsum for all right children
-            idx = jnp.where(jnp.logical_or(_value[idx] > prefixsum, jnp.logical_not(cont)), idx, idx + 1)
+            idx = np.where(np.logical_or(_value[idx] > prefixsum, np.logical_not(cont)), idx, idx + 1)
             # Select child node for non-leaf nodes
             prefixsum = prefixsum_new
             # update prefixsum
@@ -158,9 +157,9 @@ class SumSegmentTree(SegmentTree):
         :return: (np.ndarray) highest indexes satisfying the prefixsum constraint
         """
         if isinstance(prefixsum, float):
-            prefixsum = jnp.array([prefixsum])
-        assert 0 <= jnp.min(prefixsum)
-        assert jnp.max(prefixsum) <= self.sum() + 1e-5
+            prefixsum = np.array([prefixsum])
+        assert 0 <= np.min(prefixsum)
+        assert np.max(prefixsum) <= self.sum() + 1e-5
         assert isinstance(prefixsum[0], float)
         return self._find_prefixsum_idx_helper(self._value,prefixsum)
 
@@ -170,7 +169,7 @@ class MinSegmentTree(SegmentTree):
     def __init__(self, capacity):
         super(MinSegmentTree, self).__init__(
             capacity=capacity,
-            operation=jnp.minimum,
+            operation=np.minimum,
             neutral_element=float('inf')
         )
 
