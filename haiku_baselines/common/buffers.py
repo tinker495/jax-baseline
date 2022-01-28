@@ -113,7 +113,7 @@ class ReplayBuffer(object):
         self._maxsize = size
         self.worker_size = worker_size
         self.observation_space = observation_space
-        self.action_space = action_space
+        self.action_space = [action_space]
         self._next_idx = 0
         self._len = 0
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
