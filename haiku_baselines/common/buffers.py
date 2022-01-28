@@ -1,5 +1,6 @@
 import random
 from typing import Optional, List, Union
+from collections.abc import Iterable
 
 import jax
 import numpy as np
@@ -113,7 +114,10 @@ class ReplayBuffer(object):
         self._maxsize = size
         self.worker_size = worker_size
         self.observation_space = observation_space
-        self.action_space = [action_space]
+        if isinstance(action_space, Iterable):
+            self.action_space = action_space
+        else:
+            self.action_space = [action_space]
         self._next_idx = 0
         self._len = 0
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
