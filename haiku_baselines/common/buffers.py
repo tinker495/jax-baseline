@@ -333,7 +333,7 @@ class EpisodicReplayBuffer(ReplayBuffer):
             t = self._storage['terminals'][nidx]
             if t:
                 del self.episodes[tuple(self._storage['episode'][nidx,:2])]
-        self._storage['episode'][nxt_idxs] = np.concatenate(np.array(episode_keys,dtype=np.int32),np.expand_dims(np.array(eplens),axis=1),axis=1)
+        self._storage['episode'][nxt_idxs] = np.concatenate([np.array(episode_keys,dtype=np.int32),np.expand_dims(np.array(eplens),axis=1)],axis=1)
         self._add(nxt_idxs, obs_t, action, reward, nxtobs_t, done, terminal)
         for w,t in enumerate(terminal):
             if t:
