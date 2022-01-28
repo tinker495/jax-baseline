@@ -1,7 +1,5 @@
-import jax
 import numpy as np
 
-@jax.jit
 def unique(sorted_array: np.ndarray) -> np.ndarray:
     """
     More efficient implementation of np.unique for sorted arrays
@@ -42,9 +40,6 @@ class SegmentTree(object):
         self._value = np.full(2*capacity,neutral_element) #[neutral_element for _ in range(2 * capacity)]
         self._operation = operation
         self.neutral_element = neutral_element
-        
-        self._reduce_helper = jax.jit(self._reduce_helper)
-        self._setitem_helper = jax.jit(self._setitem_helper)
 
     def _reduce_helper(self, _value, start, end, node, node_start, node_end):
         if start == node_start and end == node_end:
@@ -116,7 +111,6 @@ class SumSegmentTree(SegmentTree):
             neutral_element=0.0
         )
         
-        self._find_prefixsum_idx_helper = jax.jit(self._find_prefixsum_idx_helper)
 
     def sum(self, start=0, end=None):
         """
