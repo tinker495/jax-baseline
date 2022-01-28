@@ -116,21 +116,21 @@ class ReplayBuffer(object):
         self.action_space = action_space
         self._next_idx = 0
         self._len = 0
-        self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": jnp.uint8} if len(o) >= 3 else {"shape": o,"dtype": jnp.float32})
+        self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
-        self.nextobsdict = dict(("nextobs{}".format(idx),{"shape": o,"dtype": jnp.uint8} if len(o) >= 3 else {"shape": o,"dtype": jnp.float32})
+        self.nextobsdict = dict(("nextobs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
         self._storage = dict(
             [(
-                key, jnp.zeros((self._maxsize,*self.obsdict[key]["shape"]),dtype=self.obsdict[key]['dtype'])
+                key, np.zeros((self._maxsize,*self.obsdict[key]["shape"]),dtype=self.obsdict[key]['dtype'])
             )   for key in self.obsdict]
             +
             [(
-                'rewards', jnp.zeros((self._maxsize,1),dtype=jnp.float32)
+                'rewards', np.zeros((self._maxsize,1),dtype=np.float32)
             )
             ,
             (
-                'actions', jnp.zeros((self._maxsize,*self.action_space),dtype=jnp.float32)
+                'actions', np.zeros((self._maxsize,*self.action_space),dtype=np.float32)
             )]
             +
             [(
