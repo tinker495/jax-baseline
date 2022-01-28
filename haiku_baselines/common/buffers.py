@@ -410,14 +410,14 @@ class EpisodicReplayBuffer(ReplayBuffer):
         return self._encode_sample(idxes)
     
 class PrioritizedEpisodicReplayBuffer(EpisodicReplayBuffer):
-    def __init__(self, size: int, observation_space: list,worker_size = 1,action_space = 1, alpha = 0.4):
+    def __init__(self, size: int, observation_space: list,worker_size = 1,action_space = 1, n_step=3, gamma=0.99, alpha = 0.4):
         """
         Implements a ring buffer (FIFO).
 
         :param size: (int)  Max number of transitions to store in the buffer. When the buffer overflows the old
             memories are dropped.
         """
-        super(PrioritizedEpisodicReplayBuffer, self).__init__(size, observation_space,worker_size,action_space)
+        super(PrioritizedEpisodicReplayBuffer, self).__init__(size, observation_space,worker_size,action_space,n_step,gamma)
         assert alpha >= 0
         self._alpha = alpha
 
