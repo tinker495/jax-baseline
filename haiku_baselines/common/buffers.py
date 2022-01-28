@@ -365,6 +365,7 @@ class EpisodicReplayBuffer(ReplayBuffer):
                 discounted_rewards.append(reward)
         nxt_idxs = np.array(nxt_idxs)
         discounted_rewards = np.array(discounted_rewards)
+        print(discounted_rewards)
         return {
             'obses'     : [self._storage[o][idxes] for o in self.obsdict.keys()],
             'actions'   : self._storage['actions'][idxes],
