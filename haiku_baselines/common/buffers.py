@@ -365,9 +365,9 @@ class EpisodicReplayBuffer(ReplayBuffer):
                     gamma *= self.gamma
                 print(self._storage['rewards'][nstep_idxs])
                 nxt_idxs.append(nstep_idxs[-1])
-                discounted_rewards.append(reward)
+                #discounted_rewards.append(reward)
         nxt_idxs = np.array(nxt_idxs)
-        discounted_rewards = np.array(discounted_rewards)
+        discounted_rewards =  self._storage['rewards'][idxes] #np.array(discounted_rewards)
         #print(discounted_rewards)
         return {
             'obses'     : [self._storage[o][idxes] for o in self.obsdict.keys()],
