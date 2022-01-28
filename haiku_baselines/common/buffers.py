@@ -194,7 +194,7 @@ class ReplayBuffer(object):
             }
     
     def sample(self, batch_size: int):
-        idxes = [random.randint(0, len(self._len) - 1) for _ in range(batch_size)]
+        idxes = [random.randint(0, self._len - 1) for _ in range(batch_size)]
         return self._encode_sample(idxes)
     
 class PrioritizedReplayBuffer(ReplayBuffer):
@@ -230,7 +230,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
     
     def _sample_proportional(self, batch_size):
         mass = []
-        total = self._it_sum.sum(0, len(self._storage) - 1)
+        total = self._it_sum.sum(0, self._len - 1)
         # TODO(szymon): should we ensure no repeats?
         mass = np.random.random(size=batch_size) * total
         idx = np.array(self._it_sum.find_prefixsum_idx(mass))
@@ -410,7 +410,7 @@ class EpisodicReplayBuffer(ReplayBuffer):
             - done_mask: (numpy bool) done_mask[i] = 1 if executing act_batch[i] resulted in the end of an episode
                 and 0 otherwise.
         """
-        idxes = [random.randint(0, len(self._storage) - 1) for _ in range(batch_size)]
+        idxes = [random.randint(0, self._len - 1) for _ in range(batch_size)]
         return self._encode_sample(idxes)
     
 class PrioritizedEpisodicReplayBuffer(EpisodicReplayBuffer):
@@ -460,7 +460,7 @@ class PrioritizedEpisodicReplayBuffer(EpisodicReplayBuffer):
     
     def _sample_proportional(self, batch_size):
         mass = []
-        total = self._it_sum.sum(0, len(self._storage) - 1)
+        total = self._it_sum.sum(0, self._len - 1)
         # TODO(szymon): should we ensure no repeats?
         mass = np.random.random(size=batch_size) * total
         idx = np.array(self._it_sum.find_prefixsum_idx(mass))
