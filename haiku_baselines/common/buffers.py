@@ -303,10 +303,11 @@ class EpisodicReplayBuffer(ReplayBuffer):
         self._storage['episode'] = np.zeros((self._maxsize, 3),np.int32)
         self.episodes = {}
         self.worker_ep = np.zeros(worker_size)
+        self.workers = np.arange(worker_size)
         self.n_step = n_step - 1
         self.gamma = gamma
         
-    def add(self, obs_t, action, reward, nxtobs_t, done, worker, terminal):
+    def add(self, obs_t, action, reward, nxtobs_t, done, terminal):
         """
         add a new transition to the buffer
 
@@ -318,7 +319,7 @@ class EpisodicReplayBuffer(ReplayBuffer):
         """
         nxt_idxs = (np.arange(self.worker_size+1) + self._next_idx) % self._maxsize
         self._next_idx = nxt_idxs[-1]; nxt_idxs = nxt_idxs[:-1]
-        episode_keys = list(zip(worker,self.worker_ep[worker]))
+        episode_keys = list(zip(self.workers,self.worker_ep[self.workers]))
         eplens = []
         for nidx,epkey in zip(nxt_idxs,episode_keys):
             if epkey not in self.episodes:
@@ -431,7 +432,7 @@ class PrioritizedEpisodicReplayBuffer(EpisodicReplayBuffer):
     def add(self, obs_t, action, reward, nxtobs_t, done, terminal):
         nxt_idxs = (np.arange(self.worker_size+1) + self._next_idx) % self._maxsize
         self._next_idx = nxt_idxs[-1]; nxt_idxs = nxt_idxs[:-1]
-        episode_keys = list(zip(worker,self.worker_ep[worker]))
+        episode_keys = list(zip(self.workers,self.worker_ep[self.workers]))
         eplens = []
         for nidx,epkey in zip(nxt_idxs,episode_keys):
             if epkey not in self.episodes:
