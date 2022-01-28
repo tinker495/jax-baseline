@@ -303,7 +303,7 @@ class EpisodicReplayBuffer(ReplayBuffer):
             are dropped.
         :param alpha: (float) how much prioritization is used (0 - no prioritization, 1 - full prioritization)
         """
-        super(PrioritizedReplayBuffer, self).__init__(size, observation_space, worker_size, action_space)
+        super(EpisodicReplayBuffer, self).__init__(size, observation_space, worker_size, action_space)
         self._storage['episode'] = np.zeros((self._maxsize, 3),np.int32)
         self.episodes = {}
         self.worker_ep = np.zeros(worker_size)
