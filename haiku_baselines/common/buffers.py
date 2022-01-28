@@ -353,9 +353,9 @@ class EpisodicReplayBuffer(ReplayBuffer):
             worker = episode_array[0]; episode = episode_array[1]; episode_index = episode_array[2];
             nstep_idxs = self.episodes[(worker,episode)][episode_index:(episode_index+self.n_step)]
             gamma = self.gamma
-            reward = self._storage['reward'][i]
+            reward = self._storage['rewards'][i]
             for nidxes in nstep_idxs:                   #for nn,nidxes for enumerate(nstep_idxs)
-                reward += gamma*self._storage['reward'][nidxes]                       #for less computation then np.power(self.gamma,nn+1)*r 
+                reward += gamma*self._storage['rewards'][nidxes]                       #for less computation then np.power(self.gamma,nn+1)*r 
                 gamma *= self.gamma
             nxt_idxs.append(nstep_idxs[-1])
             discounted_rewards.append(reward)
