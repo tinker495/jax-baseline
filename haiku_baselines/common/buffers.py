@@ -286,7 +286,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         assert len(idxes) == len(priorities)
         assert np.min(priorities) > 0
         assert np.min(idxes) >= 0
-        assert np.max(idxes) < len(self.storage)
+        assert np.max(idxes) < self._len
         self._it_sum[idxes] = priorities ** self._alpha
         self._it_min[idxes] = priorities ** self._alpha
 
@@ -349,18 +349,20 @@ class EpisodicReplayBuffer(ReplayBuffer):
         nxt_idxs = []
         discounted_rewards = []
         for i in idxes:
-            episode_array = self._storage['episodes'][i]
-            worker = episode_array[0]; episode = episode_array[1]; episode_index = episode_array[2];
-            nstep_idxs = self.episodes[(worker,episode)][episode_index:(episode_index+self.n_step)]
-            gamma = self.gamma
-            reward = self._storage['rewards'][i]
-            for nidxes in nstep_idxs:                   #for nn,nidxes for enumerate(nstep_idxs)
-                reward += gamma*self._storage['rewards'][nidxes]                       #for less computation then np.power(self.gamma,nn+1)*r 
-                gamma *= self.gamma
-            print(self.episodes[(worker,episode)])
-            print(nstep_idxs)
-            nxt_idxs.append(nstep_idxs[-1])
-            discounted_rewards.append(reward)
+            if self._storage['terminals'][i]:
+                nxt_idxs.append(i)
+                discounted_rewards.append(self._storage['rewards'][i])
+            else:
+                episode_array = self._storage['episodes'][i]
+                worker = episode_array[0]; episode = episode_array[1]; episode_index = episode_array[2];
+                nstep_idxs = self.episodes[(worker,episode)][episode_index:(episode_index+self.n_step)]
+                gamma = self.gamma
+                reward = self._storage['rewards'][i]
+                for nidxes in nstep_idxs:                   #for nn,nidxes for enumerate(nstep_idxs)
+                    reward += gamma*self._storage['rewards'][nidxes]                       #for less computation then np.power(self.gamma,nn+1)*r 
+                    gamma *= self.gamma
+                nxt_idxs.append(nstep_idxs[-1])
+                discounted_rewards.append(reward)
         nxt_idxs = np.array(nxt_idxs)
         discounted_rewards = np.array(discounted_rewards)
         return {
@@ -495,7 +497,7 @@ class PrioritizedEpisodicReplayBuffer(EpisodicReplayBuffer):
         assert len(idxes) == len(priorities)
         assert np.min(priorities) > 0
         assert np.min(idxes) >= 0
-        assert np.max(idxes) < len(self.storage)
+        assert np.max(idxes) < self._len
         self._it_sum[idxes] = priorities ** self._alpha
         self._it_min[idxes] = priorities ** self._alpha
 
