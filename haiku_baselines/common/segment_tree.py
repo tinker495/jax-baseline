@@ -84,10 +84,10 @@ class SegmentTree(object):
         idxs = unique(idxs // 2)
         while len(idxs) > 1 or idxs[0] > 0:
             # as long as there are non-zero indexes, update the corresponding values
-            _value.at[idxs].set(self._operation(
+            _value[idxs] = self._operation(
                 _value[2 * idxs],
                 _value[2 * idxs + 1]
-            ))
+            )
             # go up one level in the tree and remove duplicate indexes
             idxs = unique(idxs // 2)
         return _value
@@ -96,7 +96,7 @@ class SegmentTree(object):
         # indexes of the leaf
         idxs = idx + self._capacity
         
-        self._value.at[idxs].set(val)
+        self._value[idxs] = val
         if isinstance(idxs, int):
             idxs = np.array([idxs])
         # go up one level in the tree and remove duplicate indexes
@@ -133,7 +133,7 @@ class SumSegmentTree(SegmentTree):
         cont = np.ones(len(prefixsum), dtype=bool)
 
         while np.any(cont):  # while not all nodes are leafs
-            idx.at[cont].set(2 * idx[cont])
+            idx[cont] = 2 * idx[cont]
             prefixsum_new = np.where(_value[idx] <= prefixsum, prefixsum - _value[idx], prefixsum)
             # prepare update of prefixsum for all right children
             idx = np.where(np.logical_or(_value[idx] > prefixsum, np.logical_not(cont)), idx, idx + 1)
