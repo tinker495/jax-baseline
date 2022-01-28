@@ -348,6 +348,7 @@ class EpisodicReplayBuffer(ReplayBuffer):
             self._len = self._maxsize
 
     def _encode_sample(self, idxes: Union[List[int], np.ndarray]):
+        '''
         nxt_idxs = []
         discounted_rewards = []
         for i in idxes:
@@ -363,18 +364,19 @@ class EpisodicReplayBuffer(ReplayBuffer):
                 for nidxes in nstep_idxs:                   #for nn,nidxes for enumerate(nstep_idxs)
                     reward += gamma*self._storage['rewards'][nidxes]                       #for less computation then np.power(self.gamma,nn+1)*r 
                     gamma *= self.gamma
-                print(self._storage['rewards'][nstep_idxs])
                 nxt_idxs.append(nstep_idxs[-1])
                 #discounted_rewards.append(reward)
         nxt_idxs = np.array(nxt_idxs)
-        discounted_rewards =  self._storage['rewards'][idxes] #np.array(discounted_rewards)
+        discounted_rewards =   #np.array(discounted_rewards)
         #print(discounted_rewards)
+        '''
+
         return {
             'obses'     : [self._storage[o][idxes] for o in self.obsdict.keys()],
             'actions'   : self._storage['actions'][idxes],
-            'rewards'   : discounted_rewards,
-            'nxtobses'  : [self._storage[no][nxt_idxs] for no in self.nextobsdict.keys()],
-            'dones'     : self._storage['dones'][nxt_idxs],
+            'rewards'   : self._storage['rewards'][idxes],
+            'nxtobses'  : [self._storage[no][idxes] for no in self.nextobsdict.keys()],
+            'dones'     : self._storage['dones'][idxes],
             #'terminals'     : self._storage['terminals'][nxt_idxs]
             }
 
