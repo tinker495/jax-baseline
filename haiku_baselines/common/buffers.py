@@ -351,20 +351,19 @@ class EpisodicReplayBuffer(ReplayBuffer):
         nxt_idxs = []
         discounted_rewards = []
         for idx in idxes:
-            if self._storage['terminals'][idx]:
-                nxt_idxs.append(idx)
-                discounted_rewards.append(self._storage['rewards'][idx])
-            else:
-                episode_array = self._storage['episodes'][idx]
-                worker = episode_array[0]; episode = episode_array[1]; episode_index = episode_array[2]
-                nstep_idxs = self.episodes[(worker,episode)][episode_index:(episode_index+self.n_step)]
-                gamma = self.gamma
-                reward = np.copy(self._storage['rewards'][idx])
-                for nidxes in nstep_idxs:
-                    reward += gamma*self._storage['rewards'][nidxes]
-                    gamma *= self.gamma
+            episode_array = self._storage['episodes'][idx]
+            worker = episode_array[0]; episode = episode_array[1]; episode_index = episode_array[2]
+            nstep_idxs = self.episodes[(worker,episode)][episode_index:(episode_index+self.n_step)]
+            gamma = self.gamma
+            reward = np.copy(self._storage['rewards'][idx])
+            for nidxes in nstep_idxs:
+                reward += gamma*self._storage['rewards'][nidxes]
+                gamma *= self.gamma
+            if len(nstep_idxs):
                 nxt_idxs.append(nstep_idxs[-1])
-                discounted_rewards.append(reward)
+            else:
+                nxt_idxs.append(idx)
+            discounted_rewards.append(reward)
         nxt_idxs = np.array(nxt_idxs)
         discounted_rewards = np.array(discounted_rewards)
         return {
