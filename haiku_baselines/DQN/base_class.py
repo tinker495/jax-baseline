@@ -115,7 +115,7 @@ class Q_Network_Family(object):
                 self.replay_buffer = PrioritizedEpisodicReplayBuffer(self.buffer_size,self.observation_space, self.worker_size, 1,
                                                                      self.n_step, self.gamma, self.prioritized_replay_alpha)
             else:
-                self.replay_buffer = PrioritizedReplayBuffer(self.buffer_size,self.observation_space,self.prioritized_replay_alpha, self.worker_size, 1,
+                self.replay_buffer = PrioritizedReplayBuffer(self.buffer_size,self.observation_space, self.worker_size, 1,
                                                              self.prioritized_replay_alpha)
 
         else:
