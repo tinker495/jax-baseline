@@ -112,7 +112,7 @@ class Q_Network_Family(object):
     def get_memory_setup(self):
         if self.prioritized_replay:
             if self.n_step_method:
-                self.replay_buffer = PrioritizedEpisodicReplayBuffer(self.buffer_size,self.observation_space,self.prioritized_replay_alpha, self.worker_size, 1,
+                self.replay_buffer = PrioritizedEpisodicReplayBuffer(self.buffer_size,self.observation_space, self.worker_size, 1,
                                                                      self.n_step, self.gamma, self.prioritized_replay_alpha)
             else:
                 self.replay_buffer = PrioritizedReplayBuffer(self.buffer_size,self.observation_space,self.prioritized_replay_alpha, self.worker_size, 1,
