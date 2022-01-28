@@ -323,7 +323,7 @@ class EpisodicReplayBuffer(ReplayBuffer):
         """
         nxt_idxs = (np.arange(self.worker_size+1) + self._next_idx) % self._maxsize
         self._next_idx = nxt_idxs[-1]; nxt_idxs = nxt_idxs[:-1]
-        episode_keys = list(zip(self.workers,self.worker_ep[self.workers]))
+        episode_keys = list(zip(self.workers,self.worker_ep))
         eplens = []
         for nidx,epkey in zip(nxt_idxs,episode_keys):
             if epkey not in self.episodes:
@@ -348,36 +348,31 @@ class EpisodicReplayBuffer(ReplayBuffer):
             self._len = self._maxsize
 
     def _encode_sample(self, idxes: Union[List[int], np.ndarray]):
-        '''
         nxt_idxs = []
         discounted_rewards = []
-        for i in idxes:
-            if self._storage['terminals'][i]:
-                nxt_idxs.append(i)
-                discounted_rewards.append(self._storage['rewards'][i])
+        for idx in idxes:
+            if self._storage['terminals'][idx]:
+                nxt_idxs.append(idx)
+                discounted_rewards.append(self._storage['rewards'][idx])
             else:
-                episode_array = self._storage['episodes'][i]
-                worker = episode_array[0]; episode = episode_array[1]; episode_index = episode_array[2];
+                episode_array = self._storage['episodes'][idx]
+                worker = episode_array[0]; episode = episode_array[1]; episode_index = episode_array[2]
                 nstep_idxs = self.episodes[(worker,episode)][episode_index:(episode_index+self.n_step)]
                 gamma = self.gamma
-                reward = self._storage['rewards'][i]
-                for nidxes in nstep_idxs:                   #for nn,nidxes for enumerate(nstep_idxs)
-                    reward += gamma*self._storage['rewards'][nidxes]                       #for less computation then np.power(self.gamma,nn+1)*r 
+                reward = np.copy(self._storage['rewards'][idx])
+                for nidxes in nstep_idxs:
+                    reward += gamma*self._storage['rewards'][nidxes]
                     gamma *= self.gamma
                 nxt_idxs.append(nstep_idxs[-1])
-                #discounted_rewards.append(reward)
+                discounted_rewards.append(reward)
         nxt_idxs = np.array(nxt_idxs)
-        discounted_rewards =   #np.array(discounted_rewards)
-        #print(discounted_rewards)
-        '''
-
+        discounted_rewards = np.array(discounted_rewards)
         return {
             'obses'     : [self._storage[o][idxes] for o in self.obsdict.keys()],
             'actions'   : self._storage['actions'][idxes],
             'rewards'   : self._storage['rewards'][idxes],
             'nxtobses'  : [self._storage[no][idxes] for no in self.nextobsdict.keys()],
             'dones'     : self._storage['dones'][idxes],
-            #'terminals'     : self._storage['terminals'][nxt_idxs]
             }
 
     def sample(self, batch_size: int):
@@ -421,7 +416,7 @@ class PrioritizedEpisodicReplayBuffer(EpisodicReplayBuffer):
     def add(self, obs_t, action, reward, nxtobs_t, done, terminal):
         nxt_idxs = (np.arange(self.worker_size+1) + self._next_idx) % self._maxsize
         self._next_idx = nxt_idxs[-1]; nxt_idxs = nxt_idxs[:-1]
-        episode_keys = list(zip(self.workers,self.worker_ep[self.workers]))
+        episode_keys = list(zip(self.workers,self.worker_ep))
         eplens = []
         for nidx,epkey in zip(nxt_idxs,episode_keys):
             if epkey not in self.episodes:
