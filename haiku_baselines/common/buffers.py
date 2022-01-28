@@ -332,7 +332,9 @@ class EpisodicReplayBuffer(ReplayBuffer):
             eplens.append(len(self.episodes[epkey]))
             t = self._storage['terminals'][nidx]
             if t:
-                del self.episodes[tuple(self._storage['episodes'][nidx,:2])]
+                episode_array = self._storage['episodes'][nidx]
+                worker = episode_array[0]; episode = episode_array[1]
+                del self.episodes[(worker,episode)]
         self._storage['episodes'][nxt_idxs] = np.concatenate([np.array(episode_keys,dtype=np.int32),np.expand_dims(np.array(eplens),axis=1)],axis=1)
         self._add(nxt_idxs, obs_t, action, reward, nxtobs_t, done, terminal)
         if not isinstance(terminal, Iterable):
