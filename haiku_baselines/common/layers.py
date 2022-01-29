@@ -9,7 +9,7 @@ from typing import Any, Callable, Iterable, Optional, Type
 def get_eps(n):
     key = hk.next_rng_key()
     x = jax.random.normal(key,(n,),dtype=jnp.float32)
-    return x #jnp.sign(x)*jnp.sqrt(jnp.abs(x))
+    return jnp.sign(x)*jnp.sqrt(jnp.abs(x))
 
 class NoisyLinear(hk.Module):
     """Noisy Linear module"""
