@@ -197,6 +197,10 @@ class ReplayBuffer(object):
         idxes = [random.randint(0, self._len - 1) for _ in range(batch_size)]
         return self._encode_sample(idxes)
     
+class PrioritizedWrapper(object):
+    def __init__(self, buffer : ReplayBuffer):
+        pass
+    
 class PrioritizedReplayBuffer(ReplayBuffer):
     def __init__(self, size: int, observation_space: list,worker_size = 1,action_space = 1, alpha = 0.4):
         """
