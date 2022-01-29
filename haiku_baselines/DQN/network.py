@@ -30,20 +30,11 @@ class Model(hk.Module):
                 )(feature)
             return q_net
         else:
-            v = hk.Sequential(
+            q_net = hk.Sequential(
                 [
                     self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
-                ] + 
-                [
-                    self.layer(1)
                 ]
                 )(feature)
-            a = hk.Sequential(
-                [
-                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
-                ] + 
-                [
-                    self.layer(self.action_size[0])
-                ]
-                )(feature)
+            v = self.layer(1)(q_net)
+            a = self.layer(self.action_size[0])(q_net)
             return v + (a - jnp.max(a, axis=1, keepdims=True))  
