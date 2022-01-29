@@ -267,7 +267,7 @@ def make_atari(env_id, max_episode_steps=None):
     env = gym.make(env_id)
     env = NoopResetEnv(env, noop_max=30)
     if 'NoFrameskip' in env.spec.id:
-        env = MaxAndSkipEnv(env, skip=4)
+        env = MaxAndSkipEnv(env, skip=2)
     return env
 
 def wrap_deepmind(env, episode_life=True, clip_rewards=True, frame_stack=True, scale=False):
