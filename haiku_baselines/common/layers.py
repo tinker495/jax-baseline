@@ -44,7 +44,7 @@ class NoisyLinear(hk.Module):
 
         w_init = self.w_init
         if w_init is None:
-            stddev = 1. / np.sqrt(self.input_size)
+            stddev = 10. / np.sqrt(self.input_size)
             w_init = hk.initializers.TruncatedNormal(stddev=stddev)
         w_mu = hk.get_parameter("w_mu", [input_size, output_size], dtype, init=w_init)
         w_sigma = hk.get_parameter("w_sigma", [input_size, output_size], dtype, init=w_init)

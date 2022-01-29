@@ -6,6 +6,7 @@ from haiku_baselines.DQN.dqn import DQN
 from haiku_baselines.C51.c51 import C51
 from haiku_baselines.QRDQN.qrdqn import QRDQN
 from haiku_baselines.IQN.iqn import IQN
+from haiku_baselines.FQF.fqf import FQF
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -86,6 +87,12 @@ if __name__ == "__main__":
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     elif args.algo == "IQN":
         agent = IQN(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
+                    prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
+                    param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq,
+                    n_support = args.n_support,
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
+    elif args.algo == "FQF":
+        agent = FQF(env, gamma=args.gamma, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq,
                     n_support = args.n_support,
