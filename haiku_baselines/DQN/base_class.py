@@ -140,7 +140,7 @@ class Q_Network_Family(object):
         pass
     
     def actions(self,obs,epsilon):
-        if (epsilon <= np.random.uniform(0,1)):
+        if epsilon <= np.random.uniform(0,1):
             actions = np.asarray(self._get_actions(self.params,obs,next(self.key_seq) if self.param_noise else None))
         else:
             actions = np.random.choice(self.action_size[0], [self.worker_size,1])
