@@ -3,6 +3,7 @@ setup(
     name='haiku_baselines',
     version='0.0.1',
     packages=['haiku_baselines',
+              'haiku_baselines.common',
               'haiku_baselines.DQN',
               'haiku_baselines.C51',
               'haiku_baselines.QRDQN',
