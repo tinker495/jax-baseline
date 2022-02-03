@@ -1,1 +1,1 @@
-from haiku_baselines.PPO import PPO
+from haiku_baselines.PPO.ppo import PPO
