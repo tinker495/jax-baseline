@@ -1,5 +1,5 @@
 from haiku_baselines.DQN.dqn import DQN
-from haiku_baselines.C51.c51 import c51
+from haiku_baselines.C51.c51 import C51
 from haiku_baselines.QRDQN.qrdqn import QRDQN
 from haiku_baselines.IQN.iqn import IQN
 from haiku_baselines.FQF.fqf import FQF
