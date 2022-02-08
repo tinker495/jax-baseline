@@ -58,7 +58,8 @@ def visual_embedding(mode="simple"):
                     ])(x)
     elif mode == 'slide':
         net_fn = lambda x: hk.Sequential([
-                    hk.Conv2D(512, kernel_shape=[3, 3], stride=[1, 1], padding='SAME'), jax.nn.tanh,
+                    hk.Conv2D(64, kernel_shape=[2, 2], stride=[1, 1], padding='SAME'), jax.nn.leaky_relu,
+                    hk.Conv2D(128, kernel_shape=[2, 2], stride=[1, 1], padding='SAME'), jax.nn.leaky_relu,
                     hk.Flatten()
                     ])(x)
     elif mode == "none":
