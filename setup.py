@@ -27,7 +27,7 @@ setup(
         'box2d-py',
         'jax',
         'einops',
-        'dm-haiku',
+        'dm-haiku==0.0.5',
         'optax',
         'numpy',
         'ray',
