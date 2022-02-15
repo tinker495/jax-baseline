@@ -176,6 +176,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.scoreque = deque(maxlen=10)
         self.lossque = deque(maxlen=10)
         obses = convert_states(dec.obs)
+        self.buffer.clear()
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(obses,steps)
@@ -239,6 +240,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
         self.lossque = deque(maxlen=10)
+        self.buffer.clear()
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(state,steps)
@@ -274,6 +276,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
         self.lossque = deque(maxlen=10)
+        self.buffer.clear()
         for steps in pbar:
             self.eplen += 1
             actions = self.actions([state],steps)
