@@ -152,6 +152,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
     def learn(self, total_timesteps, callback=None, log_interval=1000, tb_log_name="Q_network",
               reset_num_timesteps=True, replay_wrapper=None):
         
+        self.buffer.clear()
         pbar = trange(total_timesteps, miniters=log_interval, smoothing=0.01)
         with TensorboardWriter(self.tensorboard_log, tb_log_name) as (self.summary, self.save_path):
             if self.env_type == "unity":
@@ -176,7 +177,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.scoreque = deque(maxlen=10)
         self.lossque = deque(maxlen=10)
         obses = convert_states(dec.obs)
-        self.buffer.clear()
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(obses,steps)
@@ -240,7 +240,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
         self.lossque = deque(maxlen=10)
-        self.buffer.clear()
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(state,steps)
@@ -276,7 +275,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
         self.lossque = deque(maxlen=10)
-        self.buffer.clear()
         for steps in pbar:
             self.eplen += 1
             actions = self.actions([state],steps)
