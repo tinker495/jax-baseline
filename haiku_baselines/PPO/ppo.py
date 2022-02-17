@@ -96,7 +96,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         print(prob, np.sum(prob))
         prob = prob / np.sum(prob)
         print(prob, np.sum(prob))
-        print('??')
+        print('??????')
         return np.expand_dims(np.stack([np.random.choice(self.action_size[0],p=p) for p in prob],axis=0),axis=1)
     
     def action_continuous(self,obs,steps):
