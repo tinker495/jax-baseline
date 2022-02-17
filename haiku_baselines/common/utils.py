@@ -78,5 +78,4 @@ def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
     last_gae_lam = delta + gamma * lamda * (1. - term) * last_gae_lam
     advs.append(last_gae_lam)
   advs = jnp.array(advs[::-1])
-  target = advs + values
-  return advs, target
+  return advs
