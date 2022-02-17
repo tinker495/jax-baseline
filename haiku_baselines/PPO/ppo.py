@@ -93,8 +93,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     
     def action_discrete(self,obs,steps):
         prob = self._get_actions(self.params, obs)
-        print(prob, np.sum(prob, axis=1))
-        return np.expand_dims(np.stack([np.random.choice(self.action_size[0],p=p) for p in prob],axis=0),axis=1)
+        return np.expand_dims(np.stack([np.random.choice(self.action_size[0],p=p/p.sum()) for p in prob],axis=0),axis=1)
     
     def action_continuous(self,obs,steps):
         mu, std = self._get_actions(self.params, obs)
