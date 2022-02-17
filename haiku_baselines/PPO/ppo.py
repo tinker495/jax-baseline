@@ -57,11 +57,11 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         self._preprocess = jax.jit(self._preprocess)
         self._optimize_step = jax.jit(self._optimize_step)
         
-    def _get_actions_discrete(self, params, obses, key = None) -> jnp.ndarray:
+    def _get_actions_discrete(self, params, obses, key = None) -> np.ndarray:
         prob = jax.nn.softmax(self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))),axis=1)
         return prob
     
-    def _get_actions_continuous(self, params, obses, key = None) -> jnp.ndarray:
+    def _get_actions_continuous(self, params, obses, key = None) -> np.ndarray:
         mu,std = self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))
         return mu, jnp.exp(std)
     
@@ -93,10 +93,6 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     
     def action_discrete(self,obs,steps):
         prob = self._get_actions(self.params, obs)
-        print(prob, np.sum(prob))
-        prob = prob / np.sum(prob)
-        print(prob, np.sum(prob))
-        print('??????')
         return np.expand_dims(np.stack([np.random.choice(self.action_size[0],p=p) for p in prob],axis=0),axis=1)
     
     def action_continuous(self,obs,steps):
