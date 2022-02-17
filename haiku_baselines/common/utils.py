@@ -39,7 +39,7 @@ def discounted(rewards,gamma=0.99): #lfilter([1],[1,-gamma],x[::-1])[::-1]
     _gamma *= gamma
   return out
 
-'''
+
 def discount_with_terminal(rewards, dones, terminals, next_values, gamma):
   def f(ret, info):
     reward, done, term, nextval = info
@@ -79,3 +79,4 @@ def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
     advs.append(last_gae_lam)
   advs = jnp.array(advs[::-1])
   return advs
+'''
