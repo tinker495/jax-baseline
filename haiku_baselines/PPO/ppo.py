@@ -97,7 +97,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     
     def action_continuous(self,obs,steps):
         mu, std = self._get_actions(self.params, obs)
-        return np.random.normal(mu, std)
+        return np.random.normal(np.array(mu), np.array(std))
     
     def train_step(self, steps):
         # Sample a batch from the replay buffer
