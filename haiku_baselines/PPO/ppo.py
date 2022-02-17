@@ -133,7 +133,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         obses = [jnp.vstack(list(zo)) for zo in zip(*obses)]; actions = jnp.vstack(actions); value = jnp.vstack(value); act_prob = jnp.vstack(act_prob)
         adv = jnp.vstack(adv); targets = value + adv
         if self.gae_normalize:
-            adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-12)
+            adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
         return obses, actions, targets, value, act_prob, adv
     
     def _optimize_step(self, params, opt_state, key, ent_coef,
