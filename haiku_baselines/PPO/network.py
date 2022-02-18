@@ -23,7 +23,7 @@ class Actor(hk.Module):
                 action_probs = self.layer(self.action_size[0])(mlp)
                 return action_probs
             elif self.action_type == 'continuous':
-                mu = self.layer(self.action_size[0],b_init=jnp.zeros)(mlp)
+                mu = self.layer(self.action_size[0])(mlp)
                 #log_std = jnp.clip(self.layer(self.action_size[0])(mlp), -20, 2)
                 log_std = jnp.clip(jnp.expand_dims(hk.get_parameter("log_std", [self.action_size[0]], jnp.float32, init=jnp.zeros),axis=0), -20, 2)
                 return mu, log_std 
