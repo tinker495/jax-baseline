@@ -92,12 +92,12 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
                                     )
     
     def action_discrete(self,obs,steps):
-        prob = np.array(self._get_actions(self.params, obs))
+        prob = self._get_actions(self.params, obs)
         return np.expand_dims(np.stack([np.random.choice(self.action_size[0],p=p) for p in prob],axis=0),axis=1)
     
     def action_continuous(self,obs,steps):
         mu, std = self._get_actions(self.params, obs)
-        return np.random.normal(np.array(mu), np.array(std))
+        return np.random.normal(mu, std)
     
     def train_step(self, steps):
         # Sample a batch from the replay buffer
