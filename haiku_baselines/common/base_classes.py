@@ -5,6 +5,7 @@ import jax
 import pickle
 
 import optax
+from optax._src import combine
 
 from tensorboardX import SummaryWriter
     
@@ -72,8 +73,8 @@ def restore(ckpt_dir):
 
 def select_optimizer(optim_str, rl, eps=1e-2/256.0):
     if optim_str == 'adam':
-        return optax.adam(rl,eps=eps)
+        return combine.chain(optax.clip_by_global_norm(3), optax.adam(rl,eps=eps))
     elif optim_str == 'adamw':
-        return optax.adamw(rl,eps=eps)
+        return combine.chain(optax.clip_by_global_norm(3), optax.adamw(rl,eps=eps))
     elif optim_str == 'rmsprop':
-        return optax.rmsprop(rl,eps=eps)
+        return combine.chain(optax.clip_by_global_norm(3), optax.rmsprop(rl,eps=eps))
