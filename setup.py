@@ -34,6 +34,6 @@ setup(
         'colabgymrender',
         'cpprb',
         'tensorboardX',
-        'importlib; python_version >= "3.5"',
+        #'importlib; python_version >= "3.5"',
     ]
 )
