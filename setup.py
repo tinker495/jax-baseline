@@ -20,7 +20,7 @@ setup(
               'haiku_baselines.PPO',],
     install_requires=[
         'requests',
-        'mlagents_envs==0.27.0',
+        'mlagents_envs',
         'gym',
         'gym[atari,accept-rom-license]',
         'box2d',
@@ -30,7 +30,7 @@ setup(
         'dm-haiku',
         'optax',
         'numpy',
-        'ray',
+        'ray[default]',
         'colabgymrender',
         'cpprb',
         'tensorboardX',
