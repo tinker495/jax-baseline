@@ -71,10 +71,10 @@ def restore(ckpt_dir):
 
     return jax.tree_unflatten(treedef, flat_state)
 
-def select_optimizer(optim_str, rl, eps=1e-2/256.0):
+def select_optimizer(optim_str, rl, eps=1e-2/256.0, grad_max=1):
     if optim_str == 'adam':
-        return combine.chain(optax.clip_by_global_norm(3), optax.adam(rl,eps=eps))
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.adam(rl,eps=eps))
     elif optim_str == 'adamw':
-        return combine.chain(optax.clip_by_global_norm(3), optax.adamw(rl,eps=eps))
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.adamw(rl,eps=eps))
     elif optim_str == 'rmsprop':
-        return combine.chain(optax.clip_by_global_norm(3), optax.rmsprop(rl,eps=eps))
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.rmsprop(rl,eps=eps))
