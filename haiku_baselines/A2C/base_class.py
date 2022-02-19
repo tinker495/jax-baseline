@@ -35,7 +35,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.full_tensorboard_log = full_tensorboard_log
         
         self.params = None
-        self.target_params = None
         self.save_path = None
         self.optimizer = select_optimizer(optimizer,self.learning_rate)
         
@@ -46,7 +45,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         save(path, self.params)
             
     def load_params(self, path):
-        self.params = self.target_params = restore(path)
+        self.params = restore(path)
         
     def get_memory_setup(self):
         self.buffer = EpochBuffer(self.batch_size, self.observation_space, self.worker_size, [1] if self.action_type == 'discrete' else self.action_size)
