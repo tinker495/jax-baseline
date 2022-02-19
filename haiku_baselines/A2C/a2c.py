@@ -138,7 +138,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
         actor_loss = -jnp.mean(log_prob*adv)
         mu, log_std = prob
-        entropy_loss = jnp.mean(jnp.abs(mu) + jnp.abs(log_std))
+        entropy_loss = jnp.mean(0.5 + 0.5 * jnp.log(2 * np.pi) + log_std) #jnp.mean(jnp.square(mu) + jnp.square(log_std))
         total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss)
     
