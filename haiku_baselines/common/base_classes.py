@@ -71,7 +71,7 @@ def restore(ckpt_dir):
 
     return jax.tree_unflatten(treedef, flat_state)
 
-def select_optimizer(optim_str, rl, eps=1e-2/256.0, grad_max=1):
+def select_optimizer(optim_str, rl, eps=1e-2/256.0, grad_max=0.1):
     if optim_str == 'adam':
         return combine.chain(optax.clip_by_global_norm(grad_max), optax.adam(rl,eps=eps))
     elif optim_str == 'adamw':
