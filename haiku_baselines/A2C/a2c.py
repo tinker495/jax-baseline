@@ -19,6 +19,8 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
                  log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
                  full_tensorboard_log, seed, optimizer)
         
+        self.get_memory_setup()
+
         if _init_setup_model:
             self.setup_model() 
             

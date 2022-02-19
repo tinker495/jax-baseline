@@ -27,6 +27,8 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         self.epoch_num = epoch_num
         self.clip_value = clip_value
         
+        self.get_memory_setup()
+        
         if _init_setup_model:
             self.setup_model() 
             

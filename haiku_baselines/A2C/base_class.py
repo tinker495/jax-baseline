@@ -39,7 +39,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.optimizer = select_optimizer(optimizer,self.learning_rate)
         
         self.get_env_setup()
-        self.get_memory_setup()
         
     def save_params(self, path):
         save(path, self.params)
