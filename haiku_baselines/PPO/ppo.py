@@ -170,7 +170,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         cross_entropy1 = -adv*ratio; cross_entropy2 = -adv*jnp.clip(ratio,1.0 - self.ppo_eps,1.0 + self.ppo_eps)
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1,cross_entropy2))
         mu, log_std = prob
-        entropy_loss = jnp.mean(jnp.abs(mu) + jnp.abs(log_std))
+        entropy_loss = jnp.mean(jnp.square(mu) + jnp.square(log_std))
         total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss)
     
