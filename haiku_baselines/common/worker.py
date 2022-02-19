@@ -8,6 +8,7 @@ import numpy as np
 import ray
 
 from abc import ABC
+from gym import spaces
 
 class Multiworker(ABC):
     def __init__(self,env_id, worker_num = 8):
@@ -62,6 +63,10 @@ class gymRayworker:
             self.env = make_wrap_atari(self.env_id)
         else:
             self.env = gym.make(self.env_id)
+        if not isinstance(self.env.action_space, spaces.Box):
+            self.action_conv =  lambda a: a[0]
+        else:
+            self.action_conv =  lambda a: a
         
     def get_reset(self):
         return self.env.reset(),None,0,False,False
@@ -73,7 +78,7 @@ class gymRayworker:
                 'env_id' : self.env_id}
         
     def step(self,action):
-        state, reward, terminal, info = self.env.step(action)
+        state, reward, terminal, info = self.env.step(self.action_conv(action))
         done = terminal
         if "TimeLimit.truncated" in info:
             done = not info["TimeLimit.truncated"]
