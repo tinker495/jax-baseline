@@ -22,7 +22,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         self.lamda = lamda
         self.gae_normalize = gae_normalize
         self.ppo_eps = ppo_eps
-        self.minibatch_size = minibatch_size
+        self.minibatch_size = minibatch_size * self.worker_size
         self.batch_size = int(np.ceil(batch_size / minibatch_size) * minibatch_size)
         self.epoch_num = epoch_num
         self.clip_value = clip_value
