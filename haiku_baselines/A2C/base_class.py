@@ -64,11 +64,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
             if group_spec.action_spec.continuous_size == 0:
                 self.action_size = [branch for branch in group_spec.action_spec.discrete_branches]
                 self.action_type = 'discrete'
-                self.conv_action_tuple = lambda a: ActionTuple(discrete=a)
+                self.conv_action = lambda a: ActionTuple(discrete=a)
             else:
                 self.action_size = [group_spec.action_spec.continuous_size]
                 self.action_type = 'continuous'
-                self.conv_action_tuple = lambda a: ActionTuple(continuous=np.clip(a, -3.0, 3.0) / 3.0)
+                self.conv_action = lambda a: ActionTuple(continuous=np.clip(a, -3.0, 3.0) / 3.0)
             self.worker_size = len(dec.agent_id)
             self.env_type = "unity"
             
@@ -80,9 +80,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
             if not isinstance(action_space, spaces.Box):
                 self.action_size = [action_space.n]
                 self.action_type = 'discrete'
+                self.conv_action = lambda a: a[0][0]
             else:
                 self.action_size = [action_space.shape[0]]
                 self.action_type = 'continuous'
+                self.conv_action = lambda a: a[0]
             self.worker_size = 1
             self.env_type = "gym"
             
@@ -178,7 +180,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(obses,steps)
-            action_tuple = self.conv_action_tuple(actions)
+            action_tuple = self.conv_action(actions)
             old_obses = obses
 
             self.env.set_actions(self.group_name, action_tuple)
@@ -241,7 +243,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(state,steps)
-            next_state, reward, terminal, info = self.env.step(actions[0][0] if self.action_type == 'discrete' else actions[0])
+            next_state, reward, terminal, info = self.env.step(self.conv_action(actions))
             next_state = [np.expand_dims(next_state,axis=0)]
             done = terminal
             if "TimeLimit.truncated" in info:
