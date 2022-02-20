@@ -79,11 +79,11 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         mu, log_std = prob
         std = jnp.exp(log_std)
         if out_prob:
-            return prob, - (0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1,keepdims=True) + 
+            return prob, - (0.5 * jnp.sum(jnp.square((3.0 * action - mu) / (std + 1e-6)),axis=-1,keepdims=True) + 
                                    jnp.sum(log_std,axis=-1,keepdims=True) + 
                                    0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32))
         else:
-            return - (0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)),axis=-1,keepdims=True) + 
+            return - (0.5 * jnp.sum(jnp.square((3.0 * action - mu) / (std + 1e-6)),axis=-1,keepdims=True) + 
                              jnp.sum(log_std,axis=-1,keepdims=True) + 
                              0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32))
     
@@ -99,7 +99,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     
     def action_continuous(self,obs,steps):
         mu, std = self._get_actions(self.params, obs)
-        return np.random.normal(mu, std)
+        return np.clip(np.random.normal(mu, std) , -3.0, 3.0) / 3.0
     
     def train_step(self, steps):
         # Sample a batch from the replay buffer
