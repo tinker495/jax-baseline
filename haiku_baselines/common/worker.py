@@ -54,6 +54,9 @@ class gymMultiworker(Multiworker):
             end_idx = None
         return states,rewards,dones,terminals,end_states,end_idx
 
+    def close(self):
+        ray.shutdown()
+
 @ray.remote
 class gymRayworker:
     def __init__(self, env_name_):
