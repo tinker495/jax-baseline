@@ -68,7 +68,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             else:
                 self.action_size = [group_spec.action_spec.continuous_size]
                 self.action_type = 'continuous'
-                self.conv_action = lambda a: ActionTuple(continuous=np.tanh(a)) #np.clip(a, -3.0, 3.0) / 3.0) 
+                self.conv_action = lambda a: ActionTuple(continuous=np.clip(a, -3.0, 3.0) / 3.0) #np.clip(a, -3.0, 3.0) / 3.0) 
             self.worker_size = len(dec.agent_id)
             self.env_type = "unity"
             
