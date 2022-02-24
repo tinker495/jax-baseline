@@ -135,7 +135,7 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
                       ,-1.0,1.0)
         q1, q2 = self.critic.apply(target_params, key, next_feature, next_action)
         next_q = truncated_mixture((q1, q2),self.n_support*2 - 2)
-        #next_q = jnp.minimum(q1,q2) 
+        #next_q = jnp.minimum(q1,q2)
         return (not_dones * next_q * self._gamma) + rewards
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TD4_QR",
