@@ -116,14 +116,13 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
     def _loss(self, params, obses, actions, targets, weights, key, step):
         feature = self.preproc.apply(params, key, obses)
         q1, q2 = self.critic.apply(params, key, feature, actions)
-        q1_loss_tile = jnp.expand_dims(q1,axis=1)                                               # batch x 1 x (support x dual_axis)
-        q2_loss_tile = jnp.expand_dims(q2,axis=1)                                               # batch x 1 x (support x dual_axis)
-        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x (support x dual_axis) x 1
+        q1_loss_tile = jnp.expand_dims(q1,axis=1)                                               # batch x 1 x support
+        q2_loss_tile = jnp.expand_dims(q2,axis=1)                                               # batch x 1 x support
+        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x support x 1
         huber1 = QuantileHuberLosses(q1_loss_tile, logit_valid_tile, self.quantile, self.delta)
         huber2 = QuantileHuberLosses(q2_loss_tile, logit_valid_tile, self.quantile, self.delta)
         critic_loss = jnp.mean(weights*huber1) + jnp.mean(weights*huber2)
-        policy = self.actor.apply(params, key, feature)
-        vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
+        vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, self.actor.apply(params, key, feature))
         actor_loss = jnp.mean(-jnp.mean(vals,axis=1))
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
         return total_loss, (critic_loss, actor_loss, huber1)
