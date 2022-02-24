@@ -9,7 +9,7 @@ from haiku_baselines.TQC.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
 
 from haiku_baselines.common.utils import soft_update, convert_jax, truncated_mixture
-from haiku_baselines.common.losses import QuantileHuberLosses
+from haiku_baselines.common.losses import QuantileHuberLosses, QuantileSquareLosses
 
 class TQC(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, train_freq=1, gradient_steps=1, ent_coef = 'auto', 
@@ -154,10 +154,10 @@ class TQC(Deteministic_Policy_Gradient_Family):
         qnets = self.critic.apply(params, key, feature, actions)
         qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x (support x dual_axis) x 1
-        huber0 = QuantileHuberLosses(jnp.expand_dims(qnets[0],axis=1),logit_valid_tile,self.quantile,self.delta)
+        huber0 = QuantileSquareLosses(jnp.expand_dims(qnets[0],axis=1),logit_valid_tile,self.quantile,self.delta)
         critic_loss = jnp.mean(weights*huber0)
         for q in qnets[1:]:
-            critic_loss += jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta))
+            critic_loss += jnp.mean(weights*QuantileSquareLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta))
         actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(qnets_pi[0],axis=1))
         #actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi,axis=1),axis=1))
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)

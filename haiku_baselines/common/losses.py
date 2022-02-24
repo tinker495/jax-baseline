@@ -19,6 +19,13 @@ def QuantileHuberLosses(q_tile, target_tile,quantile,delta):
     huber = hubberloss(error,delta)
     return jnp.sum(jnp.mean(weight*huber,axis=1),axis=1)
 
+def QuantileSquareLosses(q_tile, target_tile,quantile,delta):
+    error = target_tile - q_tile
+    error_neg = jax.lax.stop_gradient((error < 0.).astype(jnp.float32))
+    weight = jnp.abs(quantile - error_neg)
+    square = jnp.square(error)
+    return jnp.sum(jnp.mean(weight*square,axis=1),axis=1)
+
 def FQFQuantileLosses(tau_vals, vals, quantile, support_size):
     values_1 = tau_vals - vals[:,:-1]
     sign_1 = (tau_vals > jnp.concatenate([vals[:, :1], tau_vals[:, :-1]], axis=1)).astype(jnp.float32)
