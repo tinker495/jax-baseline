@@ -9,7 +9,7 @@ from haiku_baselines.TQC.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
 
 from haiku_baselines.common.utils import soft_update, convert_jax, truncated_mixture
-from haiku_baselines.common.losses import QuantileHuberLosses, QuantileSquareLosses
+from haiku_baselines.common.losses import QuantileHuberLosses
 
 class TQC(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, train_freq=1, gradient_steps=1, ent_coef = 'auto', 

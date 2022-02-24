@@ -9,7 +9,7 @@ from haiku_baselines.TD4_QR.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
 
 from haiku_baselines.common.utils import soft_update, convert_jax, truncated_mixture
-from haiku_baselines.common.losses import QuantileHuberLosses, QuantileSquareLosses
+from haiku_baselines.common.losses import QuantileHuberLosses
 
 class TD4_QR(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000,target_action_noise_mul = 2.0, 
