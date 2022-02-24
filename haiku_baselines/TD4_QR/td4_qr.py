@@ -122,6 +122,7 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         print('q1 : ', q1_loss_tile.shape)
         print('q2 : ', q2_loss_tile.shape)
         print('target : ', logit_valid_tile.shape)
+        print('quantile : ', self.quantile.shape)
         huber1 = QuantileHuberLosses(q1_loss_tile, logit_valid_tile, self.quantile, self.delta)
         huber2 = QuantileHuberLosses(q2_loss_tile, logit_valid_tile, self.quantile, self.delta)
         critic_loss = jnp.mean(weights*huber1) + jnp.mean(weights*huber2)
