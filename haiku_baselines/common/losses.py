@@ -21,8 +21,8 @@ def QuantileHuberLosses(q_tile, target_tile,quantile,delta):
 
 def QuantileSquareLosses(q_tile, target_tile,quantile,delta):
     error = target_tile - q_tile
-    error_neg = jax.lax.stop_gradient((error < 0.).astype(jnp.float32))
-    weight = jnp.abs(quantile - error_neg)
+    error_neg = (error < 0.).astype(jnp.float32)
+    weight = jax.lax.stop_gradient(jnp.abs(quantile - error_neg))
     square = jnp.square(error)
     return jnp.sum(jnp.mean(weight*square,axis=1),axis=1)
 
