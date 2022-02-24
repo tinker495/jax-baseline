@@ -8,8 +8,8 @@ from tqdm.auto import trange
 from collections import deque
 
 from haiku_baselines.common.base_classes import TensorboardWriter, save, restore, select_optimizer
-from haiku_baselines.common.buffers import ReplayBuffer, PrioritizedReplayBuffer, EpisodicReplayBuffer, PrioritizedEpisodicReplayBuffer
-#from haiku_baselines.common.cpprb_buffers import ReplayBuffer, PrioritizedReplayBuffer
+#from haiku_baselines.common.buffers import ReplayBuffer, PrioritizedReplayBuffer, EpisodicReplayBuffer, PrioritizedEpisodicReplayBuffer
+from haiku_baselines.common.cpprb_buffers import ReplayBuffer, PrioritizedReplayBuffer
 from haiku_baselines.common.utils import convert_states
 from haiku_baselines.common.worker import gymMultiworker
 
@@ -99,6 +99,7 @@ class Deteministic_Policy_Gradient_Family(object):
         print("-------------------------------------------------")
         
     def get_memory_setup(self):
+        '''
         if self.prioritized_replay:
             if self.n_step_method:
                 self.replay_buffer = PrioritizedEpisodicReplayBuffer(self.buffer_size,self.observation_space, self.worker_size, self.action_size[0],
@@ -117,7 +118,7 @@ class Deteministic_Policy_Gradient_Family(object):
             self.replay_buffer = ReplayBuffer(self.buffer_size,self.observation_space, self.worker_size, self.action_size, self.n_step, self.gamma)
         else:
             self.replay_buffer = PrioritizedReplayBuffer(self.buffer_size,self.observation_space,self.prioritized_replay_alpha, self.worker_size, self.action_size, self.n_step, self.gamma)
-        '''
+        
 
     def setup_model(self):
         pass
