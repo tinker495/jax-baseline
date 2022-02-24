@@ -31,7 +31,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         self.n_support = n_support
         self.delta = delta
         self.critic_num = critic_num
-        self.quantile_drop = self.critic_num
+        self.quantile_drop = n_support #self.critic_num
         
         if _init_setup_model:
             self.setup_model() 
