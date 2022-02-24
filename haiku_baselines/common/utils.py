@@ -17,7 +17,7 @@ def soft_update(new_tensors, old_tensors, tau : float):
       new_tensors, old_tensors)
   
 def truncated_mixture(quantiles, out_support):
-  quantiles = jnp.concatenate(quantiles,axis=-1)
+  quantiles = jnp.concatenate(quantiles,axis=1)
   sorted = jnp.sort(quantiles,axis=1)
   return sorted[:,:out_support]
     
