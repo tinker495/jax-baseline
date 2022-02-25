@@ -125,7 +125,7 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         critic_loss = jnp.mean(weights*huber1) + jnp.mean(weights*huber2)
         policy = self.actor.apply(params, key, feature)
         vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
-        actor_loss = jnp.mean(-jnp.mean(vals,axis=1))
+        actor_loss = -jnp.mean(vals)
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
         return total_loss, (critic_loss, actor_loss, huber1)
     
