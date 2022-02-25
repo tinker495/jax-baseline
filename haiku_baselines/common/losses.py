@@ -24,7 +24,7 @@ def QuantileSquareLosses(q_tile, target_tile,quantile,delta):
     error_neg = (error < 0.).astype(jnp.float32)
     weight = jax.lax.stop_gradient(jnp.abs(quantile - error_neg))
     square = jnp.square(error)
-    return jnp.sum(jnp.mean(weight*square,axis=1),axis=1)
+    return jnp.sum(jnp.mean(weight*square,axis=1),axis=1,keepdims=True)
 
 def FQFQuantileLosses(tau_vals, vals, quantile, support_size):
     values_1 = tau_vals - vals[:,:-1]
