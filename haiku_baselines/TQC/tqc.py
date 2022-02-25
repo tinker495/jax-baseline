@@ -169,8 +169,11 @@ class TQC(Deteministic_Policy_Gradient_Family):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
         policy, log_prob, mu, log_std, std = self._get_update_data(param, self.preproc.apply(param, key, nxtobses),key)
         qnets_pi = self.critic.apply(target_params, key, next_feature, policy)
-        truncated_q_pi = truncated_mixture(qnets_pi,self.n_support*self.critic_num - self.quantile_drop) - ent_coef * log_prob
-        return (not_dones * truncated_q_pi * self._gamma) + rewards
+        if self.mixture_type == 'min':
+            next_q = jnp.min(jnp.stack(qnets_pi,axis=-1),axis=-1) #jnp.minimum(q1,q2)
+        elif self.mixture_type == 'truncated':
+            next_q = truncated_mixture(qnets_pi,self.n_support*self.critic_num - self.quantile_drop) - ent_coef * log_prob
+        return (not_dones * next_q * self._gamma) + rewards
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TQC",
               reset_num_timesteps=True, replay_wrapper=None):
