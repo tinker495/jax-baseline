@@ -125,9 +125,15 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         huber2 = QuantileHuberLosses(q2_loss_tile, logit_valid_tile, self.quantile, self.delta)
         critic_loss = jnp.mean(weights*huber1) + jnp.mean(weights*huber2)
         policy = self.actor.apply(params, key, feature)
-        vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
+        distributed_policy = jnp.clip(jnp.expand_dims(policy,axis=0)
+                                        + self.action_noise*jax.random.normal(key,(5,self.batch_size,self.action_size[0]))
+                                        ,-1.0,1.0)
+        vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, distributed_policy[0])
         actor_loss = -jnp.mean(vals)
-        total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
+        for dp in distributed_policy[1:]:
+            vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, dp)
+            actor_loss += -jnp.mean(vals)
+        total_loss = critic_loss + actor_loss
         return total_loss, (critic_loss, actor_loss, huber1)
     
     def _target(self, target_params, rewards, nxtobses, not_dones, key):
