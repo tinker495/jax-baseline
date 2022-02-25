@@ -162,7 +162,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         #actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(qnets_pi[0],axis=1))
         qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
         actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi,axis=1),axis=1))
-        total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
+        total_loss = critic_loss + actor_loss
         return total_loss, (critic_loss, actor_loss, huber0, log_prob)
     
     def _target(self, param, target_params, rewards, nxtobses, not_dones, key, ent_coef):
