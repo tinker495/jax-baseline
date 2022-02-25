@@ -14,7 +14,7 @@ from haiku_baselines.common.losses import QuantileHuberLosses
 class TQC(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, train_freq=1, gradient_steps=1, ent_coef = 'auto', 
                  n_support = 200, delta = 1.0, critic_num = 2, quantile_drop = 2, batch_size=32, policy_delay = 3, n_step = 1, learning_starts=1000, target_network_update_tau=5e-4,
-                 prioritized_replay=False, prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4,
+                 prioritized_replay=False, prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, mixture_type = 'truncated',
                  prioritized_replay_eps=1e-6, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
@@ -32,6 +32,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         self.delta = delta
         self.critic_num = critic_num
         self.quantile_drop = quantile_drop
+        self.mixture_type = mixture_type
         
         if _init_setup_model:
             self.setup_model() 
@@ -65,7 +66,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         self.opt_state = self.optimizer.init(self.params)
         
         self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[1:] + 
-                         jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[:1])/2.0   # [support]
+                         jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[:-1]) / 2.0  # [support]
         self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1))).astype(jnp.float32)  # [1 x 1 x support]
         
         print("----------------------model----------------------")

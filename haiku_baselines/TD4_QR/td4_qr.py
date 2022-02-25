@@ -14,7 +14,7 @@ from haiku_baselines.common.losses import QuantileHuberLosses
 class TD4_QR(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000,target_action_noise_mul = 2.0, 
                  n_support = 200, delta = 1.0, action_noise = 0.1, train_freq=1, gradient_steps=1, batch_size=32, policy_delay = 3,
-                 n_step = 1, learning_starts=1000, target_network_update_tau=5e-4, prioritized_replay=False,
+                 n_step = 1, learning_starts=1000, target_network_update_tau=5e-4, prioritized_replay=False, mixture_type = 'min',
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
@@ -30,6 +30,7 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         self.action_noise_clamp = 0.5 #self.target_action_noise*1.5
         self.policy_delay = policy_delay
         self.n_support = n_support
+        self.mixture_type = mixture_type
         self.delta = delta
         
         if _init_setup_model:
@@ -55,7 +56,7 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         self.opt_state = self.optimizer.init(self.params)
         
         self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[1:] + 
-                         jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[:1])   # [support]
+                         jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[:-1]) / 2.0  # [support]
         self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1))).astype(jnp.float32)  # [1 x 1 x support]
         print(self.quantile)
         
@@ -137,8 +138,11 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
                       + jnp.clip(self.traget_action_noise*jax.random.normal(key,(self.batch_size,self.action_size[0])),-self.action_noise_clamp,self.action_noise_clamp)
                       ,-1.0,1.0)
         q1, q2 = self.critic.apply(target_params, key, next_feature, next_action)
-        #next_q = truncated_mixture((q1, q2),self.n_support*2 - 2)
-        next_q = jnp.minimum(q1,q2)
+        if self.mixture_type == 'min':
+            next_q = jnp.minimum(q1,q2)
+        elif self.mixture_type == 'truncated':
+            next_q = truncated_mixture((q1, q2),self.n_support*2 - 2)
+        
         return (not_dones * next_q * self._gamma) + rewards
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TD4_QR",
