@@ -59,7 +59,7 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[1:] + 
                          jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[:-1]) / 2.0  # [support]
         self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1))).astype(jnp.float32)  # [1 x 1 x support]
-        self.policy_weight = jnp.reshape(1.0 - self.risk_avoidance * 2.0 * (0.5 - self.quantile), (1, self.n_support))
+        self.policy_weight = jnp.reshape(1.0 + self.risk_avoidance * 2.0 * (0.5 - self.quantile), (1, self.n_support))
         
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
