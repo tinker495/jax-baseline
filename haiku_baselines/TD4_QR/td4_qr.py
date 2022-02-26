@@ -32,7 +32,7 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         self.n_support = n_support
         self.mixture_type = mixture_type
         self.delta = delta
-        self.policy_sample = 5
+        self.risk_avoidance = 0.9
         
         if _init_setup_model:
             self.setup_model() 
@@ -59,6 +59,7 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[1:] + 
                          jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[:-1]) / 2.0  # [support]
         self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1))).astype(jnp.float32)  # [1 x 1 x support]
+        self.policy_weight = jnp.reshape(1.0 + self.risk_avoidance * 2.0 * (0.5 - self.quantile), (1, self.n_support))
         
         print("----------------------model----------------------")
         print(jax.tree_map(lambda x: x.shape, pre_param))
@@ -126,8 +127,8 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         huber2 = QuantileHuberLosses(q2_loss_tile, logit_valid_tile, self.quantile, self.delta)
         critic_loss = jnp.mean(weights*huber1) + jnp.mean(weights*huber2)
         policy = self.actor.apply(params, key, feature)
-        vals = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
-        actor_loss = -jnp.mean(jnp.concatenate(vals,axis=1))
+        vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
+        actor_loss = -jnp.mean(vals * self.policy_weight)
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
         return total_loss, (critic_loss, actor_loss, huber1)
     
