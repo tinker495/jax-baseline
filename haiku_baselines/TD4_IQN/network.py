@@ -65,7 +65,7 @@ class Critic(hk.Module):
                 self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
             ] + 
             [
-                self.layer(self.support_n)
+                self.layer(1)
             ]
             )(mul_embedding)
             ,'(b t) o -> b (t o)',b=batch_size, t=quaitle_shape[1])
@@ -74,7 +74,7 @@ class Critic(hk.Module):
                 self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
             ] + 
             [
-                self.layer(self.support_n)
+                self.layer(1)
             ]
             )(mul_embedding)
             ,'(b t) o -> b (t o)',b=batch_size, t=quaitle_shape[1])
