@@ -34,7 +34,7 @@ class IQN(Q_Network_Family):
             self.setup_model() 
             
     def setup_model(self):
-        tau = jax.random.uniform(next(self.key_seq),(self.n_support,))
+        tau = jax.random.uniform(next(self.key_seq),(1,self.n_support))
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
         if 'cnn_mode' in self.policy_kwargs.keys():
             cnn_mode = self.policy_kwargs['cnn_mode']
@@ -78,7 +78,7 @@ class IQN(Q_Network_Family):
         return actions
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
-        tau = jax.random.uniform(key,(self.n_support,))
+        tau = jax.random.uniform(key,(self.worker_size,self.n_support))
         return jnp.expand_dims(jnp.argmax(
                jnp.mean(self.get_q(params,convert_jax(obses),tau,key),axis=2)
                ,axis=1),axis=1)
@@ -118,14 +118,14 @@ class IQN(Q_Network_Family):
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, tau, key):
-        tau = jax.random.uniform(key,(self.n_support,))
+        tau = jax.random.uniform(key,(self.batch_size,self.n_support))
         theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, tau, key), actions, axis=1) # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                          # batch x support x 1
         loss = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, tau, self.delta)
         return jnp.mean(weights*loss), loss
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, target_tau, key):
-        target_tau = jax.random.uniform(key,(self.n_support,))
+        target_tau = jax.random.uniform(key,(self.batch_size,self.n_support))
         next_q = self.get_q(target_params,nxtobses,target_tau,key)
         if self.double_q:
             next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,target_tau,key),axis=2),axis=1),axis=(1,2))

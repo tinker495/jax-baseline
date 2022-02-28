@@ -35,12 +35,14 @@ class Model(hk.Module):
                                         jax.nn.relu
                                     ]
                                     )(feature)
-        feature_tile = repeat(feature_net,'b f -> (b t) f',t=quaitle_shape[0])                                          #[ (batch x tau) x self.embedding_size]
+        feature_tile = repeat(feature_net,'b f -> (b t) f',t=quaitle_shape[1])                                          #[ (batch x tau) x self.embedding_size]
         
-        costau = jnp.cos(repeat(tau,'t -> t m',m=128)*self.pi_mtx)                                                      #[ tau x 128]
-        quantile_embedding = repeat(
-                             hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau),                      #[ tau x self.embedding_size ]
-                             't e -> (b t) e',b=batch_size)                                                             #[ (batch x tau) x self.embedding_size ]
+        costau = jnp.cos(
+                    rearrange(
+                    repeat(tau,'b t -> b t m',m=128),
+                    'b t m -> (b t) m'
+                    )*self.pi_mtx)                                                                                      #[ (batch x tau) x 128]
+        quantile_embedding = hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau)                       #[ (batch x tau) x self.embedding_size ]
 
         mul_embedding = feature_tile*quantile_embedding                                                                 #[ (batch x tau) x self.embedding_size ]
         
@@ -54,7 +56,7 @@ class Model(hk.Module):
                     self.layer(self.action_size[0])
                 ]
                 )(mul_embedding)
-                ,'(b t) a -> b a t',b=batch_size, t=quaitle_shape[0])                                                   #[ batch x action x tau ]
+                ,'(b t) a -> b a t',b=batch_size, t=quaitle_shape[1])                                                   #[ batch x action x tau ]
             return q_net
         else:
             v = repeat(
@@ -67,7 +69,7 @@ class Model(hk.Module):
                     self.layer(1)
                 ]
                 )(mul_embedding)
-                ,'(b t) o -> b o t',b=batch_size, t=quaitle_shape[0])                                                   #[ batch x 1 x tau ]
+                ,'(b t) o -> b o t',b=batch_size, t=quaitle_shape[1])                                                   #[ batch x 1 x tau ]
                 ,'b o t -> b (a o) t',a=self.action_size[0])                                                            #[ batch x action x tau ]
             a = rearrange(
                 hk.Sequential(
@@ -78,6 +80,6 @@ class Model(hk.Module):
                     self.layer(self.action_size[0])
                 ]
                 )(mul_embedding)
-                ,'(b t) a -> b a t',b=batch_size, t=quaitle_shape[0])                                                   #[ batch x action x tau ]
+                ,'(b t) a -> b a t',b=batch_size, t=quaitle_shape[1])                                                   #[ batch x action x tau ]
             q = v + a - jnp.max(a,axis=1,keepdims=True)
             return q
