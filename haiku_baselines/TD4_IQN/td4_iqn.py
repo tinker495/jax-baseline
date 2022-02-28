@@ -120,8 +120,9 @@ class TD4_IQN(Deteministic_Policy_Gradient_Family):
         q1_loss_tile = jnp.expand_dims(q1,axis=1)                                               # batch x 1 x support
         q2_loss_tile = jnp.expand_dims(q2,axis=1)                                               # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x support x 1
-        huber1 = QuantileHuberLosses(q1_loss_tile, logit_valid_tile, tau, self.delta)
-        huber2 = QuantileHuberLosses(q2_loss_tile, logit_valid_tile, tau, self.delta)
+        huber_tau = jnp.expand_dims(tau,axis=1)
+        huber1 = QuantileHuberLosses(q1_loss_tile, logit_valid_tile, huber_tau, self.delta)
+        huber2 = QuantileHuberLosses(q2_loss_tile, logit_valid_tile, huber_tau, self.delta)
         critic_loss = jnp.mean(weights*huber1) + jnp.mean(weights*huber2)
         policy = self.actor.apply(params, key, feature)
         vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy, tau)
