@@ -14,6 +14,7 @@ setup(
               'haiku_baselines.TD3',
               'haiku_baselines.SAC',
               'haiku_baselines.TD4_QR',
+              'haiku_baselines.TD4_IQN',
               'haiku_baselines.TQC',
               'haiku_baselines.A2C',
               'haiku_baselines.TRPO',
