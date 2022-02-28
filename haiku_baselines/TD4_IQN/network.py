@@ -42,7 +42,7 @@ class Critic(hk.Module):
         feature_shape = feature.shape                                                                                   #[ batch x feature]
         batch_size = feature_shape[0]                                                                                   #[ batch ]
         quaitle_shape = tau.shape                                                                                       #[ tau ]
-        concat = jnp.concatenate([mul_embedding,actions],axis=1)
+        concat = jnp.concatenate([feature,actions],axis=1)
         feature_net = hk.Sequential(
                                     [
                                         self.layer(self.embedding_size),
