@@ -52,7 +52,7 @@ class NoisyLinear(hk.Module):
         eps_in = get_eps(input_size)
         eps_out = get_eps(output_size)
         eps_ij = jnp.outer(eps_in,eps_out)
-        out = jnp.dot(inputs, w_mu + w_sigma*eps_ij, precision=precision)
+        out = jnp.dot(inputs, w_mu + w_sigma*eps_ij, precision=precision) #(batch x input) dot (input x out) => batch x out 
 
         if self.with_bias:
             b_mu = hk.get_parameter("b_mu", [self.output_size], dtype, init=self.b_init)
