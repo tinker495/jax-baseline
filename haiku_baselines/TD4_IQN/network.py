@@ -42,13 +42,13 @@ class Critic(hk.Module):
         feature_shape = feature.shape                                                                                   #[ batch x feature]
         batch_size = feature_shape[0]                                                                                   #[ batch ]
         quaitle_shape = tau.shape                                                                                       #[ tau ]
-        
+        concat = jnp.concatenate([mul_embedding,actions],axis=1)
         feature_net = hk.Sequential(
                                     [
                                         self.layer(self.embedding_size),
                                         jax.nn.relu
                                     ]
-                                    )(feature)
+                                    )(concat)
         feature_tile = repeat(feature_net,'b f -> (b t) f',t=quaitle_shape[1])                                          #[ (batch x tau) x self.embedding_size]
         
         costau = jnp.cos(
@@ -59,7 +59,6 @@ class Critic(hk.Module):
         quantile_embedding = hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau)                       #[ (batch x tau) x self.embedding_size ]
 
         mul_embedding = feature_tile*quantile_embedding                                                                 #[ (batch x tau) x self.embedding_size ]
-        concat = jnp.concatenate([mul_embedding,actions],axis=1)
 
         q1_net = rearrange(hk.Sequential(
             [
@@ -68,7 +67,7 @@ class Critic(hk.Module):
             [
                 self.layer(self.support_n)
             ]
-            )(concat)
+            )(mul_embedding)
             ,'(b t) o -> b (t o)',b=batch_size, t=quaitle_shape[1])
         q2_net = rearrange(hk.Sequential(
             [
@@ -77,6 +76,6 @@ class Critic(hk.Module):
             [
                 self.layer(self.support_n)
             ]
-            )(concat)
+            )(mul_embedding)
             ,'(b t) o -> b (t o)',b=batch_size, t=quaitle_shape[1])
         return q1_net,q2_net
