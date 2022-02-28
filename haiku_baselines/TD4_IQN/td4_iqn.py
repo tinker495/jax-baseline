@@ -103,8 +103,9 @@ class TD4_IQN(Deteministic_Policy_Gradient_Family):
     def _train_step(self, params, target_params, opt_state, key, step,
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); not_dones = 1.0 - dones
-        targets = self._target(target_params, rewards, nxtobses, not_dones, key)
-        (total_loss, (critic_loss, actor_loss, abs_error)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key, step)
+        key1, key2 = jax.random.split(key,2)
+        targets = self._target(target_params, rewards, nxtobses, not_dones, key1)
+        (total_loss, (critic_loss, actor_loss, abs_error)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key2, step)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         target_params = soft_update(params, target_params, self.target_network_update_tau)
@@ -114,7 +115,7 @@ class TD4_IQN(Deteministic_Policy_Gradient_Family):
         return params, target_params, opt_state, critic_loss, -actor_loss, new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, key, step):
-        tau = jax.random.uniform(next(self.key_seq),(self.batch_size,self.n_support))
+        tau = jax.random.uniform(key,(self.batch_size,self.n_support))
         feature = self.preproc.apply(params, key, obses)
         q1, q2 = self.critic.apply(params, key, feature, actions, tau)
         q1_loss_tile = jnp.expand_dims(q1,axis=1)                                               # batch x 1 x support
@@ -132,7 +133,7 @@ class TD4_IQN(Deteministic_Policy_Gradient_Family):
         return total_loss, (critic_loss, actor_loss, huber1)
     
     def _target(self, target_params, rewards, nxtobses, not_dones, key):
-        tau = jax.random.uniform(next(self.key_seq),(self.batch_size,self.n_support))
+        tau = jax.random.uniform(key,(self.batch_size,self.n_support))
         next_feature = self.preproc.apply(target_params, key, nxtobses)
         next_action = jnp.clip(
                       self.actor.apply(target_params, key, next_feature) \
