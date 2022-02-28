@@ -145,6 +145,6 @@ class TD4_IQN(Deteministic_Policy_Gradient_Family):
         
         return (not_dones * next_q * self._gamma) + rewards
     
-    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TD4_QR",
+    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TD4_IQN",
               reset_num_timesteps=True, replay_wrapper=None):
         super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)
