@@ -93,3 +93,4 @@ def print_param(name,params):
   print(name, end ="")
   param_tree_map = jax.tree_map(lambda x: x.shape, params)
   formatData(param_tree_map,1)
+  print()
