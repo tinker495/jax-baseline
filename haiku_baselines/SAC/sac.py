@@ -8,7 +8,7 @@ from haiku_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from haiku_baselines.SAC.network import Actor, Critic, Value
 
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import soft_update, convert_jax
+from haiku_baselines.common.utils import soft_update, convert_jax, print_param
 
 class SAC(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, train_freq=1, gradient_steps=1, ent_coef = 'auto', 
@@ -62,10 +62,10 @@ class SAC(Deteministic_Policy_Gradient_Family):
         self.opt_state = self.optimizer.init(self.params)
         
         print("----------------------model----------------------")
-        print(jax.tree_map(lambda x: x.shape, pre_param))
-        print(jax.tree_map(lambda x: x.shape, actor_param))
-        print(jax.tree_map(lambda x: x.shape, critic_param))
-        print(jax.tree_map(lambda x: x.shape, value_param))
+        print_param('preprocess',pre_param)
+        print_param('actor',actor_param)
+        print_param('critic',critic_param)
+        print_param('value',value_param)
         print("-------------------------------------------------")
 
         self._get_actions = jax.jit(self._get_actions)

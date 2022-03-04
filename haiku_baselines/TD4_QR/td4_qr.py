@@ -8,7 +8,7 @@ from haiku_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from haiku_baselines.TD4_QR.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
 
-from haiku_baselines.common.utils import soft_update, convert_jax, truncated_mixture
+from haiku_baselines.common.utils import soft_update, convert_jax, truncated_mixture, print_param
 from haiku_baselines.common.losses import QuantileHuberLosses
 
 class TD4_QR(Deteministic_Policy_Gradient_Family):
@@ -62,9 +62,9 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         self.policy_weight = jnp.reshape(1.0 + self.risk_avoidance * 2.0 * (0.5 - self.quantile), (1, self.n_support))
         
         print("----------------------model----------------------")
-        print(jax.tree_map(lambda x: x.shape, pre_param))
-        print(jax.tree_map(lambda x: x.shape, actor_param))
-        print(jax.tree_map(lambda x: x.shape, critic_param))
+        print_param('preprocess',pre_param)
+        print_param('actor',actor_param)
+        print_param('critic',critic_param)
         print("-------------------------------------------------")
 
         self._get_actions = jax.jit(self._get_actions)

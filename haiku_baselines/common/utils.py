@@ -79,3 +79,18 @@ def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
   advs = jnp.array(advs[::-1])
   return advs
 '''
+
+def formatData(t,s):
+  if not isinstance(t,dict) and not isinstance(t,list):
+      print(": "+str(t), end ="")
+  else:
+      for key in t:
+          print("\n\t"*s+str(key), end ="")
+          if not isinstance(t,list):
+              formatData(t[key],s+1)
+      print()
+
+def print_param(name,params):
+  print(name)
+  param_tree_map = jax.tree_map(lambda x: x.shape, params)
+  formatData(param_tree_map,1)

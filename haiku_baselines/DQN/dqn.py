@@ -7,7 +7,7 @@ import optax
 from haiku_baselines.DQN.base_class import Q_Network_Family
 from haiku_baselines.DQN.network import Model
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import hard_update, convert_jax
+from haiku_baselines.common.utils import hard_update, convert_jax, print_param
 
 class DQN(Q_Network_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, exploration_fraction=0.3,
@@ -47,8 +47,8 @@ class DQN(Q_Network_Family):
         self.opt_state = self.optimizer.init(self.params)
         
         print("----------------------model----------------------")
-        print(jax.tree_map(lambda x: x.shape, pre_param))
-        print(jax.tree_map(lambda x: x.shape, model_param))
+        print_param('preprocess',pre_param)
+        print_param('model',model_param)
         print("loss : mse")
         print("-------------------------------------------------")
 

@@ -9,7 +9,7 @@ from haiku_baselines.DQN.base_class import Q_Network_Family
 from haiku_baselines.IQN.network import Model
 from haiku_baselines.common.Module import PreProcess
 
-from haiku_baselines.common.utils import hard_update, convert_jax
+from haiku_baselines.common.utils import hard_update, convert_jax, print_param
 from haiku_baselines.common.losses import QuantileHuberLosses
 
 class IQN(Q_Network_Family):
@@ -56,8 +56,8 @@ class IQN(Q_Network_Family):
         self.tile_n = self.n_support
         
         print("----------------------model----------------------")
-        print(jax.tree_map(lambda x: x.shape, pre_param))
-        print(jax.tree_map(lambda x: x.shape, model_param))
+        print_param('preprocess',pre_param)
+        print_param('model',model_param)
         print("loss : quaile_huber_loss")
         print("-------------------------------------------------")
 

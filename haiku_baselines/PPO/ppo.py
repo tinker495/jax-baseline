@@ -7,7 +7,7 @@ import optax
 from haiku_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from haiku_baselines.PPO.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import convert_jax, get_gaes
+from haiku_baselines.common.utils import convert_jax, get_gaes, print_param
 
 class PPO(Actor_Critic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.995, lamda = 0.95, gae_normalize = False, learning_rate=3e-4, batch_size=256, minibatch_size=32, epoch_num=4,val_coef=0.5, ent_coef = 0.001, 
@@ -49,9 +49,9 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         self.opt_state = self.optimizer.init(self.params)
         
         print("----------------------model----------------------")
-        print(jax.tree_map(lambda x: x.shape, pre_param))
-        print(jax.tree_map(lambda x: x.shape, actor_param))
-        print(jax.tree_map(lambda x: x.shape, critic_param))
+        print_param('preprocess',pre_param)
+        print_param('actor',actor_param)
+        print_param('critic',critic_param)
         print("-------------------------------------------------")
         
         self._get_actions = jax.jit(self._get_actions)
