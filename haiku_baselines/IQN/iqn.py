@@ -129,17 +129,12 @@ class IQN(Q_Network_Family):
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         target_tau = jax.random.uniform(key,(self.batch_size,self.n_support))
         next_q = self.get_q(target_params,nxtobses,target_tau,key)
-        if self.risk_avoid:
-            action_tau = target_tau * self.CVaR
-            if self.double_q:
-                next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,action_tau,key),axis=2),axis=1),axis=(1,2))
-            else:
-                next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(target_params,nxtobses,action_tau,key),axis=2),axis=1),axis=(1,2))
+        if self.double_q:
+            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,target_tau * self.CVaR,key),axis=2),axis=1),axis=(1,2))
+        elif self.risk_avoid:
+            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(target_params,nxtobses,target_tau * self.CVaR,key),axis=2),axis=1),axis=(1,2))
         else:
-            if self.double_q:
-                next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,target_tau,key),axis=2),axis=1),axis=(1,2))
-            else:
-                next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(next_q,axis=2),axis=1),axis=(1,2))
+            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(next_q,axis=2),axis=1),axis=(1,2))
             
         if self.munchausen:
             next_q_mean = jnp.mean(next_q,axis=2)                                                                                                       # [batch x action]
