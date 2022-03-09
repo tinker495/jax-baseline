@@ -124,7 +124,7 @@ class IQN(Q_Network_Family):
         loss = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, tau, self.delta)
         return jnp.mean(weights*loss), loss
     
-    def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, target_tau, key):
+    def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         target_tau = jax.random.uniform(key,(self.batch_size,self.n_support))
         next_q = self.get_q(target_params,nxtobses,target_tau,key)
         if self.double_q:
