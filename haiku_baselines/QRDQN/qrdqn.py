@@ -52,7 +52,7 @@ class QRDQN(Q_Network_Family):
         
         self.opt_state = self.optimizer.init(self.params)
         
-        self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support+1)[:1])/2.0   # [support]
+        self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support+1)[:-1])/2.0   # [support]
         self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                                       # [1 x 1 x support]
         
         print("----------------------model----------------------")
