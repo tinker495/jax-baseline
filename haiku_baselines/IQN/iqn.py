@@ -16,7 +16,7 @@ class IQN(Q_Network_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, exploration_fraction=0.3, n_support = 32, delta = 1.0,
                  exploration_final_eps=0.02, exploration_initial_eps=1.0, train_freq=1, gradient_steps=1, batch_size=32, double_q=True,
                  dueling_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, prioritized_replay=False,
-                 prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
+                 prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, CVaR = 1.0,
                  param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
@@ -29,6 +29,8 @@ class IQN(Q_Network_Family):
         
         self.n_support = n_support
         self.delta = delta
+        self.CVaR = CVaR
+        self.risk_avoid = (CVaR != 1.0)
         
         if _init_setup_model:
             self.setup_model() 
@@ -78,7 +80,7 @@ class IQN(Q_Network_Family):
         return actions
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
-        tau = jax.random.uniform(key,(self.worker_size,self.n_support))
+        tau = jax.random.uniform(key,(self.worker_size,self.n_support)) * self.CVaR
         return jnp.expand_dims(jnp.argmax(
                jnp.mean(self.get_q(params,convert_jax(obses),tau,key),axis=2)
                ,axis=1),axis=1)
@@ -127,10 +129,17 @@ class IQN(Q_Network_Family):
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         target_tau = jax.random.uniform(key,(self.batch_size,self.n_support))
         next_q = self.get_q(target_params,nxtobses,target_tau,key)
-        if self.double_q:
-            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,target_tau,key),axis=2),axis=1),axis=(1,2))
+        if self.risk_avoid:
+            action_tau = target_tau * self.CVaR
+            if self.double_q:
+                next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,action_tau,key),axis=2),axis=1),axis=(1,2))
+            else:
+                next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(target_params,nxtobses,action_tau,key),axis=2),axis=1),axis=(1,2))
         else:
-            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(next_q,axis=2),axis=1),axis=(1,2))
+            if self.double_q:
+                next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,target_tau,key),axis=2),axis=1),axis=(1,2))
+            else:
+                next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(next_q,axis=2),axis=1),axis=(1,2))
             
         if self.munchausen:
             next_q_mean = jnp.mean(next_q,axis=2)                                                                                                       # [batch x action]
