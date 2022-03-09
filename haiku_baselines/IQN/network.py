@@ -7,7 +7,7 @@ from haiku_baselines.common.layers import NoisyLinear
 
 
 class Model(hk.Module):
-    def __init__(self,action_size,node=256,hidden_n=2,noisy=False,dueling=False, embedding_size = 512):
+    def __init__(self,action_size,node=256,hidden_n=2,noisy=False,dueling=False):
         super(Model, self).__init__()
         self.action_size = action_size
         self.node = node
@@ -18,7 +18,6 @@ class Model(hk.Module):
             self.layer = hk.Linear
         else:
             self.layer = NoisyLinear
-        self.embedding_size = embedding_size
             
         self.pi_mtx = jax.lax.stop_gradient(
                         repeat(jnp.pi* np.arange(0,128, dtype=np.float32),'m -> o m',o=1)
@@ -28,23 +27,16 @@ class Model(hk.Module):
         feature_shape = feature.shape                                                                                   #[ batch x feature]
         batch_size = feature_shape[0]                                                                                   #[ batch ]
         quaitle_shape = tau.shape                                                                                       #[ tau ]
-        
-        feature_net = hk.Sequential(
-                                    [
-                                        self.layer(self.embedding_size),
-                                        jax.nn.relu
-                                    ]
-                                    )(feature)
-        feature_tile = repeat(feature_net,'b f -> (b t) f',t=quaitle_shape[1])                                          #[ (batch x tau) x self.embedding_size]
+        feature_tile = repeat(feature,'b f -> (b t) f',t=quaitle_shape[1])                                          #[ (batch x tau) x feature]
         
         costau = jnp.cos(
                     rearrange(
                     repeat(tau,'b t -> b t m',m=128),
                     'b t m -> (b t) m'
                     )*self.pi_mtx)                                                                                      #[ (batch x tau) x 128]
-        quantile_embedding = hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau)                       #[ (batch x tau) x self.embedding_size ]
+        quantile_embedding = hk.Sequential([self.layer(feature_shape[1]),jax.nn.relu])(costau)                       #[ (batch x tau) x feature ]
 
-        mul_embedding = feature_tile*quantile_embedding                                                                 #[ (batch x tau) x self.embedding_size ]
+        mul_embedding = feature_tile*quantile_embedding                                                                 #[ (batch x tau) x feature ]
         
         if not self.dueling:
             q_net = rearrange(
