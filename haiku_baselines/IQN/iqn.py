@@ -117,7 +117,7 @@ class IQN(Q_Network_Family):
             new_priorities = abs_error + self.prioritized_replay_eps
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
-    def _loss(self, params, obses, actions, targets, weights, tau, key):
+    def _loss(self, params, obses, actions, targets, weights, key):
         tau = jax.random.uniform(key,(self.batch_size,self.n_support))
         theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, tau, key), actions, axis=1) # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                          # batch x support x 1
