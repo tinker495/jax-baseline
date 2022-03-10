@@ -73,8 +73,8 @@ def restore(ckpt_dir):
 
 def select_optimizer(optim_str, rl, eps=1e-2/256.0, grad_max=3):
     if optim_str == 'adam':
-        return combine.chain(optax.clip_by_global_norm(grad_max), optax.adam(rl,eps=eps))
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.adam(rl))
     elif optim_str == 'adamw':
-        return combine.chain(optax.clip_by_global_norm(grad_max), optax.adamw(rl,eps=eps))
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.adamw(rl))
     elif optim_str == 'rmsprop':
-        return combine.chain(optax.clip_by_global_norm(grad_max), optax.rmsprop(rl,eps=eps))
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.rmsprop(rl))
