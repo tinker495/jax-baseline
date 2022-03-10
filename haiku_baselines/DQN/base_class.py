@@ -37,7 +37,7 @@ class Q_Network_Family(object):
         self.prioritized_replay = prioritized_replay
         self.prioritized_replay_eps = prioritized_replay_eps
         self.batch_size = batch_size
-        self.target_network_update_freq = target_network_update_freq
+        self.target_network_update_freq =  int(np.ceil(target_network_update_freq / train_freq) * train_freq)
         self.prioritized_replay_alpha = prioritized_replay_alpha
         self.prioritized_replay_beta0 = prioritized_replay_beta0
         self.exploration_final_eps = exploration_final_eps
