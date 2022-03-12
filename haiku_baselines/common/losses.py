@@ -15,14 +15,14 @@ def hubberloss(x, delta):
 def QuantileHuberLosses(q_tile, target_tile,quantile,delta):
     error = target_tile - q_tile
     error_neg = (error < 0.).astype(jnp.float32)
-    weight = jnp.abs(quantile - error_neg)
+    weight = jnp.abs(jax.lax.stop_gradient(quantile) - error_neg)
     huber = hubberloss(error,delta)
     return jnp.sum(jnp.mean(weight*huber,axis=1),axis=1)
 
 def QuantileSquareLosses(q_tile, target_tile,quantile,delta):
     error = target_tile - q_tile
     error_neg = (error < 0.).astype(jnp.float32)
-    weight = jnp.abs(quantile - error_neg)
+    weight = jnp.abs(jax.lax.stop_gradient(quantile) - error_neg)
     square = jnp.square(error)
     return jnp.sum(jnp.mean(weight*square,axis=1),axis=1)
 
