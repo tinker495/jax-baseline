@@ -79,7 +79,7 @@ class EpisodicLifeEnv(gym.Wrapper):
             # so it's important to keep lives > 0, so that we only reset once
             # the environment advertises done.
             done = True
-            self.lives = lives
+        self.lives = lives
         return obs, reward, done, info
 
     def reset(self, **kwargs):
