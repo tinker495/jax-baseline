@@ -132,7 +132,7 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         risk_varience, advantage_variance = jnp.split(jnp.square(vals[:,self.middle_support] - vals),[self.middle_support],axis=1)
         risk_varience = jnp.mean(risk_varience,axis=1,keepdims=True)
         #advantage_variance = jnp.mean(advantage_variance=1,keepdims=True)
-        actor_loss = -jnp.mean(vals * self.policy_weight - 0.1*risk_varience)
+        actor_loss = -jnp.mean(vals * self.policy_weight - 0.5*risk_varience)
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
         return total_loss, (critic_loss, actor_loss, huber1)
     
