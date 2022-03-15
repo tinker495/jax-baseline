@@ -30,6 +30,7 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         self.action_noise_clamp = 0.5 #self.target_action_noise*1.5
         self.policy_delay = policy_delay
         self.n_support = n_support
+        self.middle_support = np.floor(n_support/2.0)
         self.mixture_type = mixture_type
         self.delta = delta
         self.risk_avoidance = risk_avoidance
@@ -128,7 +129,10 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         critic_loss = jnp.mean(weights*huber1) + jnp.mean(weights*huber2)
         policy = self.actor.apply(params, key, feature)
         vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
-        actor_loss = -jnp.mean(vals * self.policy_weight)
+        risk_varience, advantage_variance = jnp.split(jnp.square(vals[:,self.middle_support] - vals),[self.middle_support],axis=1)
+        risk_varience = jnp.mean(risk_varience,axis=1,keepdims=True)
+        #advantage_variance = jnp.mean(advantage_variance=1,keepdims=True)
+        actor_loss = -jnp.mean(vals * self.policy_weight - 0.1*risk_varience)
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
         return total_loss, (critic_loss, actor_loss, huber1)
     
