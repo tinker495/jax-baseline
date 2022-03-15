@@ -344,7 +344,7 @@ class Q_Network_Family(object):
             terminal = False
             episode_rew = 0
             while not terminal:
-                actions = self.actions(state,self.exploration_final_eps)
+                actions = self.actions(state,0.001)
                 observation, reward, terminal, info = Render_env.step(actions[0][0])
                 state = [np.expand_dims(observation,axis=0)]
                 episode_rew += reward
