@@ -15,7 +15,7 @@ class Actor(hk.Module):
     def __call__(self,feature: jnp.ndarray) -> jnp.ndarray:
             action = hk.Sequential(
                 [
-                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
+                    self.layer(self.node) if i%2 == 0 else jax.nn.softplus for i in range(2*self.hidden_n)
                 ] + 
                 [
                     self.layer(self.action_size[0]),
@@ -36,7 +36,7 @@ class Critic(hk.Module):
         concat = jnp.concatenate([feature,actions],axis=1)
         q1_net = hk.Sequential(
             [
-                self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
+                self.layer(self.node) if i%2 == 0 else jax.nn.softplus for i in range(2*self.hidden_n)
             ] + 
             [
                 self.layer(self.support_n)
@@ -44,7 +44,7 @@ class Critic(hk.Module):
             )(concat)
         q2_net = hk.Sequential(
             [
-                self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
+                self.layer(self.node) if i%2 == 0 else jax.nn.softplus for i in range(2*self.hidden_n)
             ] + 
             [
                 self.layer(self.support_n)

@@ -15,6 +15,15 @@ def soft_update(new_tensors, old_tensors, tau : float):
     return jax.tree_multimap(
       lambda new, old: tau * new + (1.0 - tau) * old,
       new_tensors, old_tensors)
+
+def t_soft_function(new, old, W, tau, v):
+  
+
+@jax.jit
+def t_soft_update(new_tensors, old_tensors, W_tensors,tau : float, v=1.0):
+  return jax.tree_multimap(
+    lambda new, old: tau * new + (1.0 - tau) * old,
+    new_tensors, old_tensors, W)
   
 def truncated_mixture(quantiles, out_support):
   quantiles = jnp.concatenate(quantiles,axis=1)
