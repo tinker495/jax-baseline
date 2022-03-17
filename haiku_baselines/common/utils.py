@@ -25,10 +25,10 @@ def t_soft_update(new_tensors, old_tensors, W_tensors,tau : float, v=1.0):
     lambda new, old: tau * new + (1.0 - tau) * old,
     new_tensors, old_tensors, W_tensors)
   
-def truncated_mixture(quantiles, out_support):
+def truncated_mixture(quantiles, cut):
   quantiles = jnp.concatenate(quantiles,axis=1)
   sorted = jnp.sort(quantiles,axis=1)
-  return sorted[:,:out_support]
+  return sorted[:,cut:-cut]
     
 @jax.jit
 def convert_states(obs : List):
