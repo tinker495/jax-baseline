@@ -105,7 +105,10 @@ class TQC(Deteministic_Policy_Gradient_Family):
                                     )
     
     def actions(self,obs,steps):
-        actions = np.asarray(self._get_actions(self.params,obs, next(self.key_seq)))
+        if self.learning_starts < steps:
+            actions = np.asarray(self._get_actions(self.params,obs, next(self.key_seq)))
+        else:
+            actions = np.random.uniform(-1.0,1.0,size=(self.worker_size,self.action_size[0]))
         return actions
     
     def train_step(self, steps, gradient_steps):

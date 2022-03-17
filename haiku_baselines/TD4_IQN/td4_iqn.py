@@ -75,8 +75,11 @@ class TD4_IQN(Deteministic_Policy_Gradient_Family):
                                     )
     
     def actions(self,obs,steps):
-        actions = np.clip(np.asarray(self._get_actions(self.params,obs, None)) + 
-                          np.random.normal(0,self.action_noise,size=(self.worker_size,self.action_size[0])),-1,1)
+        if self.learning_starts < steps:
+            actions = np.clip(np.asarray(self._get_actions(self.params,obs, None)) + 
+                            np.random.normal(0,self.action_noise,size=(self.worker_size,self.action_size[0])),-1,1)
+        else:
+            actions = np.random.uniform(-1.0,1.0,size=(self.worker_size,self.action_size[0]))
         return actions
     
     def train_step(self, steps, gradient_steps):
