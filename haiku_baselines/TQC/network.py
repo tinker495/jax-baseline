@@ -29,25 +29,24 @@ class Actor(hk.Module):
             return mu, jnp.clip(log_std,LOG_STD_MIN,LOG_STD_MAX)
         
 class Critic(hk.Module):
-    def __init__(self,node=256,hidden_n=2,support_n=200, critic_num = 5):
+    def __init__(self,node=256,hidden_n=2,support_n=200):
         super(Critic, self).__init__()
         self.node = node
         self.hidden_n = hidden_n
         self.support_n = support_n
-        self.critic_num = critic_num
         self.layer = hk.Linear
         
     def __call__(self,feature: jnp.ndarray,actions: jnp.ndarray) -> jnp.ndarray:
         concat = jnp.concatenate([feature,actions],axis=1)
-        q_nets = [hk.Sequential(
+        q_net = hk.Sequential(
             [
                 self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
             ] + 
             [
                 self.layer(self.support_n)
             ]
-            )(concat) for _ in range(self.critic_num)]
-        return q_nets
+            )(concat)
+        return q_net
     
 class Value(hk.Module):
     def __init__(self,node=256,hidden_n=2,support_n=200):
