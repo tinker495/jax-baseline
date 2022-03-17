@@ -7,22 +7,22 @@ import numpy as np
 
 def hubberloss(x, delta):
   abs_x = jnp.abs(x)
-  quadratic = jnp.minimum(abs_x, delta)
-  # Same as max(abs_x - delta, 0) but avoids potentially doubling gradient.
-  linear = abs_x - quadratic
-  return 0.5 * quadratic**2 + delta * linear
+  return jnp.where(abs_x > delta, delta * (abs_x - 0.5), x ** 2 * 0.5)
+  #quadratic = jnp.minimum(abs_x, delta)
+  #linear = abs_x - quadratic
+  #return 0.5 * quadratic**2 + delta * linear
 
 def QuantileHuberLosses(q_tile, target_tile,quantile,delta):
     error = target_tile - q_tile
     error_neg = (error < 0.).astype(jnp.float32)
-    weight = jax.lax.stop_gradient(jnp.abs(quantile - error_neg))
+    weight = jnp.abs(quantile - error_neg)
     huber = hubberloss(error,delta)
     return jnp.sum(jnp.mean(weight*huber,axis=1),axis=1)
 
 def QuantileSquareLosses(q_tile, target_tile,quantile,delta):
     error = target_tile - q_tile
     error_neg = (error < 0.).astype(jnp.float32)
-    weight = jax.lax.stop_gradient(jnp.abs(quantile - error_neg))
+    weight = jnp.abs(quantile - error_neg)
     square = jnp.square(error)
     return jnp.sum(jnp.mean(weight*square,axis=1),axis=1)
 
