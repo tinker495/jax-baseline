@@ -234,7 +234,7 @@ class Deteministic_Policy_Gradient_Family(object):
             done = terminal
             if "TimeLimit.truncated" in info:
                 done = not info["TimeLimit.truncated"]
-            self.replay_buffer.add(state, actions, reward, next_state, done, terminal)
+            self.replay_buffer.add(state, actions, reward, next_state if not terminal else state, done, terminal)
             self.scores[0] += reward
             state = next_state
             if terminal:
