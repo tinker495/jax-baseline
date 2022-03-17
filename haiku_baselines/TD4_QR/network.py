@@ -34,7 +34,7 @@ class Critic(hk.Module):
 
     def __call__(self,feature: jnp.ndarray,actions: jnp.ndarray) -> jnp.ndarray:
         concat = jnp.concatenate([feature,actions],axis=1)
-        q1_net = hk.Sequential(
+        q_net = hk.Sequential(
             [
                 self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
             ] + 
@@ -42,12 +42,4 @@ class Critic(hk.Module):
                 self.layer(self.support_n)
             ]
             )(concat)
-        q2_net = hk.Sequential(
-            [
-                self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
-            ] + 
-            [
-                self.layer(self.support_n)
-            ]
-            )(concat)
-        return q1_net,q2_net
+        return q_net
