@@ -25,22 +25,13 @@ class Actor(hk.Module):
                 )(feature)
             return action
         
-class Critic(hk.Module):
-    def __init__(self,node=256,hidden_n=2,support_n=200):
+class Quantile_Embeding(hk.Module):
+    def __init__(self,embedding_size=256):
         super(Critic, self).__init__()
-        self.node = node
-        self.hidden_n = hidden_n
-        self.support_n = support_n
         self.layer = hk.Linear
-        self.embedding_size = node
-            
-        self.pi_mtx = jax.lax.stop_gradient(
-                        repeat(jnp.pi* np.arange(0,128, dtype=np.float32),'m -> o m',o=1)
-                      ) # [ 1 x 128]
+        self.embedding_size = embedding_size
 
     def __call__(self,feature: jnp.ndarray,actions: jnp.ndarray, tau: jnp.ndarray) -> jnp.ndarray:
-        feature_shape = feature.shape                                                                                   #[ batch x feature]
-        batch_size = feature_shape[0]                                                                                   #[ batch ]
         quaitle_shape = tau.shape                                                                                       #[ tau ]
         concat = jnp.concatenate([feature,actions],axis=1)
         feature_net = hk.Sequential(
@@ -59,7 +50,16 @@ class Critic(hk.Module):
         quantile_embedding = hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau)                       #[ (batch x tau) x self.embedding_size ]
 
         mul_embedding = feature_tile*quantile_embedding                                                                 #[ (batch x tau) x self.embedding_size ]
+        return mul_embedding
 
+class Critic(hk.Module):
+    def __init__(self,node=256,hidden_n=2):
+        super(Critic, self).__init__()
+        self.node = node
+        self.hidden_n = hidden_n
+        self.layer = hk.Linear
+
+    def __call__(self,embedding: jnp.ndarray, batch_size, quaitle_size) -> jnp.ndarray:
         q1_net = rearrange(hk.Sequential(
             [
                 self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
@@ -67,8 +67,8 @@ class Critic(hk.Module):
             [
                 self.layer(1)
             ]
-            )(mul_embedding)
-            ,'(b t) o -> b (t o)',b=batch_size, t=quaitle_shape[1])
+            )(embedding)
+            ,'(b t) o -> b (t o)',b=batch_size, t=quaitle_size)
         q2_net = rearrange(hk.Sequential(
             [
                 self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
@@ -76,6 +76,6 @@ class Critic(hk.Module):
             [
                 self.layer(1)
             ]
-            )(mul_embedding)
-            ,'(b t) o -> b (t o)',b=batch_size, t=quaitle_shape[1])
+            )(embedding)
+            ,'(b t) o -> b (t o)',b=batch_size, t=quaitle_size)
         return q1_net,q2_net

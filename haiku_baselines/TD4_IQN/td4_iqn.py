@@ -5,7 +5,7 @@ import numpy as np
 import optax
 
 from haiku_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from haiku_baselines.TD4_IQN.network import Actor, Critic
+from haiku_baselines.TD4_IQN.network import Actor, Quantile_Embeding, Critic
 from haiku_baselines.common.Module import PreProcess
 
 from haiku_baselines.common.utils import soft_update, convert_jax, truncated_mixture, print_param
@@ -46,7 +46,12 @@ class TD4_IQN(Deteministic_Policy_Gradient_Family):
         self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
         self.actor = hk.transform(lambda x: Actor(self.action_size,
                            **self.policy_kwargs)(x))
-        self.critic = hk.transform(lambda x,a,tau: Critic(support_n=self.n_support,**self.policy_kwargs)(x,a,tau))
+        def critic(x,a,tau):
+            batch_size = a.shape[0]
+            qauntile_size = tau.shape[1]
+            embedding = Quantile_Embeding(embedding_size=self.policy_kwargs['node'])(x,a,tau)
+            return (Critic(**self.policy_kwargs)(embedding,batch_size,qauntile_size),Critic(**self.policy_kwargs)(embedding,batch_size,qauntile_size))
+        self.critic = hk.transform(critic)
         pre_param = self.preproc.init(next(self.key_seq),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         feature = self.preproc.apply(pre_param, None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
