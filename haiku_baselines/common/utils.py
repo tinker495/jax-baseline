@@ -17,7 +17,7 @@ def soft_update(new_tensors, old_tensors, tau : float):
       new_tensors, old_tensors)
 
 def t_soft_function(new, old, W, tau, v):
-  
+  pass
 
 @jax.jit
 def t_soft_update(new_tensors, old_tensors, W_tensors,tau : float, v=1.0):
