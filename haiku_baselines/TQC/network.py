@@ -47,22 +47,3 @@ class Critic(hk.Module):
             ]
             )(concat)
         return q_net
-    
-class Value(hk.Module):
-    def __init__(self,node=256,hidden_n=2,support_n=200):
-        super(Value, self).__init__()
-        self.node = node
-        self.hidden_n = hidden_n
-        self.support_n = support_n
-        self.layer = hk.Linear
-        
-    def __call__(self,feature: jnp.ndarray) -> jnp.ndarray:
-        v_net = hk.Sequential(
-            [
-                self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
-            ] + 
-            [
-                self.layer(self.support_n)
-            ]
-            )(feature)
-        return v_net
