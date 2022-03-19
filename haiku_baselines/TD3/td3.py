@@ -10,7 +10,7 @@ from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import soft_update, convert_jax, print_param
 
 class TD3(Deteministic_Policy_Gradient_Family):
-    def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000,target_action_noise_mul = 2.0, 
+    def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000,target_action_noise_mul = 1.5, 
                  action_noise = 0.1, train_freq=1, gradient_steps=1, batch_size=32, policy_delay = 3,
                  n_step = 1, learning_starts=1000, target_network_update_tau=5e-4, prioritized_replay=False,
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
