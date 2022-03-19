@@ -299,7 +299,7 @@ class Deteministic_Policy_Gradient_Family(object):
         pass
     
     def test_action(self, state):
-        return self.actions(state,0)
+        return self.actions(state,np.inf)
     
     def test_gym(self, episode,directory):
         from colabgymrender.recorder import Recorder

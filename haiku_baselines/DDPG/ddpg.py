@@ -71,8 +71,11 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                                     )
     
     def actions(self,obs,steps):
-        self.epsilon = self.exploration.value(steps)
-        actions = np.clip(np.asarray(self._get_actions(self.params,obs, None)) + self.noise()*self.epsilon,-1,1)
+        if self.learning_starts < steps:
+            self.epsilon = self.exploration.value(steps)
+            actions = np.clip(np.asarray(self._get_actions(self.params,obs, None)) + self.noise()*self.epsilon,-1,1)
+        else:
+            actions = np.random.uniform(-1.0,1.0,size=(self.worker_size,self.action_size[0]))
         return actions
     
     def test_action(self, state):
