@@ -32,6 +32,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         self.delta = delta
         self.critic_num = critic_num
         self.quantile_drop = int(max(np.round(self.critic_num * self.n_support * quantile_drop),1))
+        self.middle_support = int(np.floor(n_support/2.0))
         self.mixture_type = mixture_type
         self.risk_avoidance = risk_avoidance
         
