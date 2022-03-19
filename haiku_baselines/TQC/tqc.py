@@ -165,7 +165,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
         for q in qnets[1:]:
             critic_loss += jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta))
         policy, log_prob, mu, log_std, std = self._get_update_data(params, feature, key)
-        #actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(qnets_pi[0],axis=1))
         qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
         actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi,axis=1)*self.policy_weight,axis=1))
         total_loss = critic_loss + actor_loss
