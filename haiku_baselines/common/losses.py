@@ -6,11 +6,11 @@ import jax.numpy as jnp
 import numpy as np
 
 def hubberloss(x, delta):
-  abs_x = jnp.abs(x)
-  return jnp.where(abs_x > delta, delta * (abs_x - 0.5), x ** 2 * 0.5)
-  #quadratic = jnp.minimum(abs_x, delta)
-  #linear = abs_x - quadratic
-  #return 0.5 * quadratic**2 + delta * linear
+    abs_x = jnp.abs(x)
+    return jnp.where(abs_x > delta, delta * (abs_x - 0.5), x ** 2 * 0.5)
+    #quadratic = jnp.minimum(abs_x, delta)
+    #linear = abs_x - quadratic
+    #return 0.5 * quadratic**2 + delta * linear
 
 def QuantileHuberLosses(q_tile, target_tile,quantile,delta):
     error = target_tile - q_tile
