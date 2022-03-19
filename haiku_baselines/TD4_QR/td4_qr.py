@@ -61,7 +61,7 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[1:] + 
                          jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[:-1]) / 2.0  # [support]
         self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1))).astype(jnp.float32)  # [1 x 1 x support]
-        self.policy_weight = jnp.tile(jnp.reshape(1.0 + self.risk_avoidance * 2.0 * (0.5 - self.quantile), (1, self.n_support)),(1,2))
+        self.policy_weight = jnp.reshape(1.0 + self.risk_avoidance * 2.0 * (0.5 - self.quantile), (1, self.n_support))
         
         print("----------------------model----------------------")
         print_param('preprocess',pre_param)
@@ -132,11 +132,11 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         huber2 = QuantileHuberLosses(q2_loss_tile, logit_valid_tile, self.quantile, self.delta)
         critic_loss = jnp.mean(weights*huber1) + jnp.mean(weights*huber2)
         policy = self.actor.apply(params, key, feature)
-        qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
+        val, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
         #risk_varience, advantage_variance = jnp.split(jnp.square(vals[:,[self.middle_support]] - vals),[self.middle_support],axis=1)
         #risk_varience = jnp.sqrt(jnp.mean(risk_varience,axis=1,keepdims=True))
         #advantage_variance = jnp.sqrt(jnp.mean(advantage_variance,axis=1,keepdims=True))
-        actor_loss = jnp.mean(-jnp.concatenate(qnets_pi,axis=1)*self.policy_weight)
+        actor_loss = jnp.mean(-val*self.policy_weight)
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
         return total_loss, (critic_loss, actor_loss, huber1)
     
