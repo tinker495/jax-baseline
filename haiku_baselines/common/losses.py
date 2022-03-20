@@ -19,7 +19,8 @@ def QuantileHuberLosses(q_tile, target_tile,quantile,delta):
     error = target_tile - q_tile
     error_neg = (error < 0.).astype(jnp.float32)
     weight = jnp.abs(quantile - error_neg)
-    huber = log_cosh(error,delta)
+    #huber = hubberloss(error,delta)
+    huber = log_cosh(error)
     return jnp.sum(jnp.mean(weight*huber,axis=1),axis=1)
 
 def QuantileSquareLosses(q_tile, target_tile,quantile,delta):
