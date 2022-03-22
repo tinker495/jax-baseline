@@ -5,7 +5,7 @@ import numpy as np
 import optax
 
 from haiku_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from haiku_baselines.SAC.network import Actor, Critic, Value
+from haiku_baselines.SAC.network import Actor, Critic
 
 from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import soft_update, convert_jax, print_param
@@ -39,14 +39,12 @@ class SAC(Deteministic_Policy_Gradient_Family):
         self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
         self.actor = hk.transform(lambda x: Actor(self.action_size,**self.policy_kwargs)(x))
         self.critic = hk.transform(lambda x,a: Critic(**self.policy_kwargs)(x,a))
-        self.value = hk.transform(lambda x: Value(**self.policy_kwargs)(x))
         pre_param = self.preproc.init(next(self.key_seq),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         feature = self.preproc.apply(pre_param, None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         actor_param = self.actor.init(next(self.key_seq), feature)
         critic_param = self.critic.init(next(self.key_seq), feature, np.zeros((1,self.action_size[0])))
-        value_param = self.value.init(next(self.key_seq), feature)
-        self.params = hk.data_structures.merge(pre_param, actor_param, critic_param, value_param)
+        self.params = hk.data_structures.merge(pre_param, actor_param, critic_param)
         self.target_params = self.params
         
         if isinstance(self.ent_coef, str) and self.ent_coef.startswith('auto'):
@@ -65,7 +63,6 @@ class SAC(Deteministic_Policy_Gradient_Family):
         print_param('preprocess',pre_param)
         print_param('actor',actor_param)
         print_param('critic',critic_param)
-        print_param('value',value_param)
         print("-------------------------------------------------")
 
         self._get_actions = jax.jit(self._get_actions)
@@ -130,7 +127,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
     def _train_step(self, params, target_params, opt_state, key, step, ent_coef,
                     obses, actions, rewards, nxtobses, dones, weights=1, indexes=None):
         obses = convert_jax(obses); nxtobses = convert_jax(nxtobses); not_dones = 1.0 - dones
-        targets = self._target(target_params, rewards, nxtobses, not_dones, key)
+        targets = self._target(target_params, rewards, nxtobses, not_dones, key, ent_coef)
         (total_loss, (critic_loss, actor_loss, abs_error, log_prob)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, weights, key, step, ent_coef)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
@@ -151,19 +148,18 @@ class SAC(Deteministic_Policy_Gradient_Family):
         policy, log_prob, mu, log_std, std = self._get_update_data(params, feature, key)
         q1, q2 = self.critic.apply(params, key, feature, actions)
         q1_pi, q2_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
-        value = self.value.apply(params, key, feature)
         error1 = jnp.squeeze(q1 - targets)
         error2 = jnp.squeeze(q2 - targets)
-        error_v = jnp.squeeze(value - jax.lax.stop_gradient(jnp.minimum(q1_pi,q2_pi) - ent_coef * log_prob))
-        critic_loss = jnp.mean(weights*jnp.square(error1)) + jnp.mean(weights*jnp.square(error2)) + jnp.mean(jnp.square(error_v))
+        critic_loss = jnp.mean(weights*jnp.square(error1)) + jnp.mean(weights*jnp.square(error2))
         actor_loss = jnp.mean(ent_coef * log_prob - jnp.minimum(q1_pi,q2_pi))
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
-        return total_loss, (critic_loss, actor_loss, jnp.abs(error_v), log_prob)
+        return total_loss, (critic_loss, actor_loss, jnp.abs(error1), log_prob)
     
-    def _target(self, target_params, rewards, nxtobses, not_dones, key):
-        next_feature = self.preproc.apply(target_params, key, nxtobses)
-        v = self.value.apply(target_params, key, next_feature)
-        return (not_dones * v * self._gamma) + rewards
+    def _target(self, params, target_params, rewards, nxtobses, not_dones, key, ent_coef):
+        policy, log_prob, mu, log_std, std = self._get_update_data(params, self.preproc.apply(params, key, nxtobses),key)
+        q1_pi, q2_pi = self.critic.apply(target_params, key, self.preproc.apply(target_params, key, nxtobses), policy)
+        next_q = jnp.minimum(q1_pi,q2_pi) - ent_coef * log_prob
+        return (not_dones * next_q * self._gamma) + rewards
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="SAC",
               reset_num_timesteps=True, replay_wrapper=None):
