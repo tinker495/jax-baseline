@@ -16,7 +16,7 @@ class Actor(hk.Module):
     def __call__(self,feature: jnp.ndarray) -> jnp.ndarray:
             mlp = hk.Sequential(
                 [
-                    self.layer(self.node) if i%2 == 0 else jax.nn.relu6 for i in range(2*self.hidden_n)
+                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
                 ]
                 )(feature)
             if self.action_type == 'discrete':
@@ -37,7 +37,7 @@ class Critic(hk.Module):
     def __call__(self,feature: jnp.ndarray) -> jnp.ndarray:
         net = hk.Sequential(
             [
-                self.layer(self.node) if i%2 == 0 else jax.nn.relu6 for i in range(2*self.hidden_n)
+                self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
             ] + 
             [
                 self.layer(1)
