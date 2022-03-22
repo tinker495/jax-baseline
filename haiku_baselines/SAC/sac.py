@@ -38,7 +38,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
             del self.policy_kwargs['cnn_mode']
         self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
         self.actor = hk.transform(lambda x: Actor(self.action_size,**self.policy_kwargs)(x))
-        self.critic = hk.transform(lambda x,a: Critic(**self.policy_kwargs)(x,a))
+        self.critic = hk.transform(lambda x,a: (Critic(**self.policy_kwargs)(x,a), Critic(**self.policy_kwargs)(x,a)))
         pre_param = self.preproc.init(next(self.key_seq),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         feature = self.preproc.apply(pre_param, None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
