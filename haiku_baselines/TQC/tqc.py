@@ -170,9 +170,9 @@ class TQC(Deteministic_Policy_Gradient_Family):
         total_loss = critic_loss + actor_loss
         return total_loss, (critic_loss, actor_loss, huber0, log_prob)
     
-    def _target(self, param, target_params, rewards, nxtobses, not_dones, key, ent_coef):
+    def _target(self, params, target_params, rewards, nxtobses, not_dones, key, ent_coef):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
-        policy, log_prob, mu, log_std, std = self._get_update_data(param, self.preproc.apply(param, key, nxtobses),key)
+        policy, log_prob, mu, log_std, std = self._get_update_data(params, self.preproc.apply(params, key, nxtobses),key)
         qnets_pi = self.critic.apply(target_params, key, next_feature, policy)
         if self.mixture_type == 'min':
             next_q = jnp.min(jnp.stack(qnets_pi,axis=-1),axis=-1) - ent_coef * log_prob
