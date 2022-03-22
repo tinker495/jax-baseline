@@ -32,14 +32,14 @@ class Model(hk.Module):
         feature_net = hk.Sequential(
                                     [
                                         self.layer(self.embedding_size),
-                                        jax.nn.relu
+                                        jax.nn.leaky_relu
                                     ]
                                     )(feature)
         feature_tile = repeat(feature_net,'b f -> (b t) f',t=quaitle_shape[0])                                          #[ (batch x tau) x self.embedding_size]
         
         costau = jnp.cos(repeat(tau,'t -> t m',m=128)*self.pi_mtx)                                                      #[ tau x 128]
         quantile_embedding = repeat(
-                             hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau),                      #[ tau x self.embedding_size ]
+                             hk.Sequential([self.layer(self.embedding_size),jax.nn.leaky_relu])(costau),                      #[ tau x self.embedding_size ]
                              't e -> (b t) e',b=batch_size)                                                             #[ (batch x tau) x self.embedding_size ]
 
         mul_embedding = feature_tile*quantile_embedding                                                                 #[ (batch x tau) x self.embedding_size ]
@@ -48,7 +48,7 @@ class Model(hk.Module):
             q_net = rearrange(
                 hk.Sequential(
                 [
-                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
+                    self.layer(self.node) if i%2 == 0 else jax.nn.leaky_relu for i in range(2*self.hidden_n)
                 ] + 
                 [
                     self.layer(self.action_size[0])
@@ -61,7 +61,7 @@ class Model(hk.Module):
                 rearrange(
                 hk.Sequential(
                 [
-                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
+                    self.layer(self.node) if i%2 == 0 else jax.nn.leaky_relu for i in range(2*self.hidden_n)
                 ] +
                 [
                     self.layer(1)
@@ -72,7 +72,7 @@ class Model(hk.Module):
             a = rearrange(
                 hk.Sequential(
                 [
-                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
+                    self.layer(self.node) if i%2 == 0 else jax.nn.leaky_relu for i in range(2*self.hidden_n)
                 ] + 
                 [
                     self.layer(self.action_size[0])
