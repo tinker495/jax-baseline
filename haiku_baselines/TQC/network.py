@@ -79,5 +79,5 @@ class Critic(hk.Module):
             )(concat),axis=1)
         a_0 = jnp.zeros((feature.shape[0],1),dtype=np.float32)
         a = jnp.concatenate([a_0,a],axis=1)
-        q = v + a - a[:,-1] #jnp.max(a,axis=1,keepdims=True)
+        q = v + a - a[:,[-1]] #jnp.max(a,axis=1,keepdims=True)
         return q
