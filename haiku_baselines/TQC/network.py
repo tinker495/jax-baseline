@@ -74,8 +74,10 @@ class Critic(hk.Module):
                 self.layer(self.node) if i%2 == 0 else jax.nn.leaky_relu for i in range(2*self.hidden_n)
             ] + 
             [
-                self.layer(self.support_n), jax.nn.softplus
+                self.layer(self.support_n-1), jax.nn.softplus
             ]
             )(concat),axis=1)
+        a_0 = jnp.zeros((feature.shape[0],1),dtype=np.float32)
+        a = jnp.concatenate([a_0,a],axis=1)
         q = v + a - jnp.max(a,axis=1,keepdims=True)
         return q
