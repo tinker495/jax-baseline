@@ -77,5 +77,5 @@ class Critic(hk.Module):
                 self.layer(self.support_n), jax.nn.softplus
             ]
             )(concat),axis=1)
-        q = v + a - jnp.mean(a,axis=1,keepdims=True)
+        q = v + a - jnp.max(a,axis=1,keepdims=True)
         return q
