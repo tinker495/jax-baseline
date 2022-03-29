@@ -27,7 +27,8 @@ class Actor(hk.Module):
                 )(feature)
             mu, log_std = jnp.split(linear, 2, axis=-1)
             return mu, jnp.clip(log_std,LOG_STD_MIN,LOG_STD_MAX)
-        
+
+'''
 class Critic(hk.Module):
     def __init__(self,node=256,hidden_n=2,support_n=200):
         super(Critic, self).__init__()
@@ -47,3 +48,34 @@ class Critic(hk.Module):
         qs = jax.nn.softplus(self.layer(self.support_n - 1)(x))
         q_net = jnp.cumsum(jnp.concatenate([q0,qs],axis=1),axis=1)
         return q_net
+'''
+
+class Critic(hk.Module):
+    def __init__(self,node=256,hidden_n=2,support_n=200):
+        super(Critic, self).__init__()
+        self.node = node
+        self.hidden_n = hidden_n
+        self.support_n = support_n
+        self.layer = hk.Linear
+        
+    def __call__(self,feature: jnp.ndarray,actions: jnp.ndarray) -> jnp.ndarray:
+        concat = jnp.concatenate([feature,actions],axis=1)
+        v = hk.Sequential(
+            [
+                self.layer(self.node) if i%2 == 0 else jax.nn.leaky_relu for i in range(2*self.hidden_n)
+            ] + 
+            [
+                self.layer(1)
+            ]
+            )(feature)
+        a = jnp.cumsum(
+            hk.Sequential(
+            [
+                self.layer(self.node) if i%2 == 0 else jax.nn.leaky_relu for i in range(2*self.hidden_n)
+            ] + 
+            [
+                self.layer(self.support_n), jax.nn.softplus
+            ]
+            )(concat),axis=1)
+        q = v + a - jnp.mean(a,axis=1,keepdims=True)
+        return q
