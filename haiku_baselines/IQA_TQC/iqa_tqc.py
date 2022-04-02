@@ -88,16 +88,16 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         actions = self.actor.apply(params, None, feature, tau)                            #[ batch x tau x action]
         sample_choice = jax.random.choice(key, self.n_support,(self.buffer_size,1,1))
         sample_prob = jax.nn.softmax(jnp.sum(jnp.square(jnp.expand_dims(actions,axes=3) - jnp.expand_dims(actions,axes=2)),axis=(2,3)),axis=1) #is...?
-        log_prob = jnp.log(jnp.squeeze(jnp.take_along_axis(sample_prob, sample_choice, axis=1)))
-        pi = jax.nn.tanh(jnp.squeeze(jnp.take_along_axis(actions, sample_choice, axis=1)))
-        pi_tau = jnp.squeeze(jnp.take_along_axis(tau, sample_choice, axis=1))
+        log_prob = jnp.log(jnp.squeeze(jnp.take_along_axis(sample_prob, sample_choice, axis=1),axis=1))
+        pi = jax.nn.tanh(jnp.squeeze(jnp.take_along_axis(actions, sample_choice, axis=1),axis=1))
+        pi_tau = jnp.squeeze(jnp.take_along_axis(tau, sample_choice, axis=1),axis=1)
         return pi, log_prob, pi_tau
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         tau = jax.random.uniform(key,(self.worker_size,self.n_support, self.action_size[0]))
         actions = self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses)), tau)
         sample_choice = jax.random.choice(key, self.n_support,(self.buffer_size,1,1))
-        return jax.nn.tanh(jnp.squeeze(jnp.take_along_axis(actions, sample_choice, axis=1)))
+        return jax.nn.tanh(jnp.squeeze(jnp.take_along_axis(actions, sample_choice, axis=1),axis=1))
     
     def discription(self):
         return "score : {:.3f}, loss : {:.3f} |".format(
