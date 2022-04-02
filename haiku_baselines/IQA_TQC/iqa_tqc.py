@@ -84,7 +84,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         self._train_ent_coef = jax.jit(self._train_ent_coef)
         
     def _get_update_data(self,params,feature,key = None) -> jnp.ndarray:
-        tau = jax.random.uniform(key,(self.buffer_size,self.n_support, self.action_size)) #[ batch x tau x action]
+        tau = jax.random.uniform(key,(self.buffer_size,self.n_support, self.action_size[0])) #[ batch x tau x action]
         actions = self.actor.apply(params, None, feature, tau)                            #[ batch x tau x action]
         sample_choice = jax.random.choice(key, self.n_support,(self.buffer_size,1,1))
         sample_prob = jax.nn.softmax(jnp.sum(jnp.square(jnp.expand_dims(actions,axes=3) - jnp.expand_dims(actions,axes=2)),axis=(2,3)),axis=1) #is...?
@@ -94,7 +94,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         return pi, log_prob, pi_tau
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
-        tau = jax.random.uniform(key,(self.worker_size,self.n_support, self.action_size))
+        tau = jax.random.uniform(key,(self.worker_size,self.n_support, self.action_size[0]))
         actions = self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses)), tau)
         sample_choice = jax.random.choice(key, self.n_support,(self.buffer_size,1,1))
         return jax.nn.tanh(jnp.squeeze(jnp.take_along_axis(actions, sample_choice, axis=1)))
