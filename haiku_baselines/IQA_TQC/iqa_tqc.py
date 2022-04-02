@@ -12,6 +12,7 @@ from haiku_baselines.common.Module import PreProcess
 
 from haiku_baselines.common.utils import soft_update, convert_jax, truncated_mixture, print_param
 from haiku_baselines.common.losses import QuantileHuberLosses
+from einops import rearrange, reduce, repeat
 
 class IQA_TQC(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, train_freq=1, gradient_steps=1, ent_coef = 'auto', 
@@ -85,21 +86,18 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         self._train_ent_coef = jax.jit(self._train_ent_coef)
         
     def _get_update_data(self,params,feature,key = None) -> jnp.ndarray:
-        tau = jax.random.uniform(key,(self.batch_size,self.action_support, self.action_size[0])) #[ batch x tau x action]
-        actions = self.actor.apply(params, None, feature, tau)                                   #[ batch x tau x action]
-        sample_choice = jax.random.choice(key, self.action_support,(self.batch_size,1,1))        #[ batch x 1 x 1]
+        tau = jax.random.uniform(key,(self.batch_size,self.action_support, self.action_size[0]))    #[ batch x tau x action]
+        actions = self.actor.apply(params, None, feature, tau)                                      #[ batch x tau x action]
         sample_prob = jax.nn.softmax(jnp.mean(jnp.square(jnp.expand_dims(actions,axis=3) - jnp.expand_dims(actions, axis=2)),axis=(2,3))) #[ batch x tau ]
-        log_prob = -jnp.take_along_axis(sample_prob, jnp.squeeze(sample_choice,axis=2), axis=1) #[ batch x 1]
-        x_t = jnp.squeeze(jnp.take_along_axis(actions, sample_choice, axis=1),axis=1)
-        pi = jax.nn.tanh(x_t)#[ batch x action]
-        pi_tau = jnp.squeeze(jnp.take_along_axis(tau, sample_choice, axis=1),axis=1)             #[ batch x action]
-        return pi, log_prob, pi_tau
+        log_prob = -sample_prob                                                                     #[ batch x tau ]
+        pi = jax.nn.tanh(actions)                                                                   #[ batch x tau x action]
+        return rearrange(pi,'b t a -> t b a'), rearrange(log_prob,'b t a -> t b a'), rearrange(tau,'b t a -> t b a')
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
-        tau = jax.random.uniform(key,(self.worker_size,self.action_support, self.action_size[0]))
+        tau = jax.random.uniform(key,(self.worker_size,1, self.action_size[0]))
         actions = self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses)), tau)
-        sample_choice = jax.random.choice(key, self.action_support,(self.worker_size,1,1))
-        return jax.nn.tanh(jnp.squeeze(jnp.take_along_axis(actions, sample_choice, axis=1),axis=1))
+        #sample_choice = jax.random.choice(key, self.action_support,(self.worker_size,1,1))
+        return jax.nn.tanh(jnp.squeeze(actions,axis=1))
     
     def discription(self):
         return "score : {:.3f}, loss : {:.3f} |".format(
@@ -167,9 +165,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         for q in qnets[1:]:
             critic_loss += jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta))
         policy, log_prob, pi_tau = self._get_update_data(params, feature, key)
-        adv = jax.grad(lambda params, key, feature, policy: 
-                        jnp.mean(jnp.concatenate(self.critic.apply(params, key, feature, policy),axis=1)),
-                        3)(jax.lax.stop_gradient(params), key, feature, policy)
+        adv = jax.vmap(jax.grad(lambda policy: jnp.mean(jnp.concatenate(self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy),axis=1))))(policy)
         weighted_adv = jnp.abs(pi_tau - (adv < 0.).astype(jnp.float32))*adv*2.0
         actor_loss = jnp.mean(ent_coef * log_prob - weighted_adv*policy)
         total_loss = critic_loss + actor_loss
