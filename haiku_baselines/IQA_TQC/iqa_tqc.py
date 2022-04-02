@@ -156,7 +156,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         log_coef = log_coef - self.ent_coef_learning_rate * grad
         return log_coef, jnp.exp(log_coef)
     
-    def _critic_loss(self, params, obses, actions, targets, weights, key, step, ent_coef):
+    def _loss(self, params, obses, actions, targets, weights, key, step, ent_coef):
         feature = self.preproc.apply(params, key, obses)
         qnets = self.critic.apply(params, key, feature, actions)
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x support x 1
@@ -176,6 +176,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
     def _target(self, params, target_params, rewards, nxtobses, not_dones, key, ent_coef):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
         policy, log_prob, pi_tau = self._get_update_data(params, self.preproc.apply(params, key, nxtobses),key)
+        print(log_prob.shape)
         qnets_pi = self.critic.apply(target_params, key, next_feature, policy)
         if self.mixture_type == 'min':
             next_q = jnp.min(jnp.stack(qnets_pi,axis=-1),axis=-1) - ent_coef * log_prob
