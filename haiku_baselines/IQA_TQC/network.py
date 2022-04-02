@@ -26,7 +26,7 @@ class Actor(hk.Module):
         batch_size = feature_shape[0]                                                                                   #[ batch ]
         quaitle_shape = tau.shape                                                                                       #[ batch x tau x actions]
         x = hk.Sequential([self.layer(self.hidden_n),jax.nn.leaky_relu])(costau)
-        feature_tile = repeat(feature,'b f -> (b t) f',t=quaitle_shape[1])                                              #[ (batch x tau) x feature]
+        feature_tile = repeat(x,'b f -> (b t) f',t=quaitle_shape[1])                                              #[ (batch x tau) x feature]
 
         costau = jnp.cos(
                     rearrange(
