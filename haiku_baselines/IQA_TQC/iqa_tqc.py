@@ -183,7 +183,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
             next_q = truncated_mixture(qnets_pi,self.quantile_drop) - ent_coef * log_prob
         return (not_dones * next_q * self._gamma) + rewards
     
-    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TQC",
+    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="IQA_TQC",
               reset_num_timesteps=True, replay_wrapper=None):
         tb_log_name = tb_log_name + "({:d})".format(self.n_support)
         if self.risk_avoidance != 0.0:
