@@ -47,12 +47,12 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
             cnn_mode = self.policy_kwargs['cnn_mode']
             del self.policy_kwargs['cnn_mode']
         self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
-        self.actor = hk.transform(lambda x: Actor(self.action_size,**self.policy_kwargs)(x))
+        self.actor = hk.transform(lambda x,t: Actor(self.action_size,**self.policy_kwargs)(x,t))
         self.critic = hk.transform(lambda x,a: [Critic(support_n=self.n_support, **self.policy_kwargs)(x,a) for _ in range(self.critic_num)])
         pre_param = self.preproc.init(next(self.key_seq),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         feature = self.preproc.apply(pre_param, None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
-        actor_param = self.actor.init(next(self.key_seq), feature, np.zeros(1,self.action_support,self.action_size))
+        actor_param = self.actor.init(next(self.key_seq), feature, np.zeros((1,self.action_support,self.action_size[0])))
         critic_param = self.critic.init(next(self.key_seq), feature, np.zeros((1,self.action_size[0])))
         self.params = hk.data_structures.merge(pre_param, actor_param, critic_param)
         self.target_params = self.params
