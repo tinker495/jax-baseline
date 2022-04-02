@@ -1,23 +1,25 @@
 import jax
 import jax.numpy as jnp
 import haiku as hk
+from matplotlib import axes
 import numpy as np
 import optax
 
 from haiku_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from haiku_baselines.SAC.network import Actor, Critic
-
+from haiku_baselines.IQA_TQC.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import soft_update, convert_jax, print_param
 
-class SAC(Deteministic_Policy_Gradient_Family):
+from haiku_baselines.common.utils import soft_update, convert_jax, truncated_mixture, print_param
+from haiku_baselines.common.losses import QuantileHuberLosses
+
+class IQA_TQC(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, train_freq=1, gradient_steps=1, ent_coef = 'auto', 
-                 batch_size=32, policy_delay = 3, n_step = 1, learning_starts=1000, target_network_update_tau=5e-4,
-                 prioritized_replay=False, prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4,
+                 n_support = 200, delta = 1.0, critic_num = 2, quantile_drop = 0.05, batch_size=32, policy_delay = 3, n_step = 1, learning_starts=1000, target_network_update_tau=5e-4,
+                 prioritized_replay=False, prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, mixture_type = 'truncated', risk_avoidance = 1.0,
                  prioritized_replay_eps=1e-6, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
-        super(SAC, self).__init__(env, gamma, learning_rate, buffer_size, train_freq, gradient_steps, batch_size,
+        super(IQA_TQC, self).__init__(env, gamma, learning_rate, buffer_size, train_freq, gradient_steps, batch_size,
                  n_step, learning_starts, target_network_update_tau, prioritized_replay,
                  prioritized_replay_alpha, prioritized_replay_beta0, prioritized_replay_eps,
                  log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
@@ -25,8 +27,15 @@ class SAC(Deteministic_Policy_Gradient_Family):
         
         self.policy_delay = policy_delay
         self.ent_coef = ent_coef
-        self.target_entropy = -np.prod(self.action_size).astype(np.float32) #
+        self.target_entropy = -np.prod(self.action_size).astype(np.float32) #-np.sqrt(np.prod(self.action_size).astype(np.float32))
         self.ent_coef_learning_rate = 1e-6
+        self.n_support = n_support
+        self.delta = delta
+        self.critic_num = critic_num
+        self.quantile_drop = int(max(np.round(self.critic_num * self.n_support * quantile_drop),1))
+        self.middle_support = int(np.floor(n_support/2.0))
+        self.mixture_type = mixture_type
+        self.risk_avoidance = risk_avoidance
         
         if _init_setup_model:
             self.setup_model() 
@@ -38,7 +47,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
             del self.policy_kwargs['cnn_mode']
         self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
         self.actor = hk.transform(lambda x: Actor(self.action_size,**self.policy_kwargs)(x))
-        self.critic = hk.transform(lambda x,a: (Critic(**self.policy_kwargs)(x,a), Critic(**self.policy_kwargs)(x,a)))
+        self.critic = hk.transform(lambda x,a: [Critic(support_n=self.n_support, **self.policy_kwargs)(x,a) for _ in range(self.critic_num)])
         pre_param = self.preproc.init(next(self.key_seq),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         feature = self.preproc.apply(pre_param, None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
@@ -59,6 +68,11 @@ class SAC(Deteministic_Policy_Gradient_Family):
         
         self.opt_state = self.optimizer.init(self.params)
         
+        self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[1:] + 
+                         jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[:-1]) / 2.0  # [support]
+        self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1))).astype(jnp.float32)  # [1 x 1 x support]
+        self.policy_weight = jnp.tile(jnp.reshape(1.0 + self.risk_avoidance * 2.0 * (0.5 - self.quantile), (1, self.n_support)),(1,self.critic_num))
+        
         print("----------------------model----------------------")
         print_param('preprocess',pre_param)
         print_param('actor',actor_param)
@@ -70,22 +84,19 @@ class SAC(Deteministic_Policy_Gradient_Family):
         self._train_ent_coef = jax.jit(self._train_ent_coef)
         
     def _get_update_data(self,params,feature,key = None) -> jnp.ndarray:
-        mu, log_std = self.actor.apply(params, None, feature)
-        std = jnp.exp(log_std)
-        x_t = mu + std * jax.random.normal(key,std.shape)
-        pi = jax.nn.tanh(x_t)
-        log_prob = jnp.sum(-0.5 * (
-            jnp.square((x_t - mu) / (std + 1e-6))
-            + 2 * log_std
-            + jnp.log(2 * np.pi)
-            ) - jnp.log(1 - jnp.square(pi) + 1e-6),axis=1,keepdims=True)
-        return pi, log_prob, mu, log_std, std
+        tau = jax.random.uniform(key,(self.buffer_size,self.n_support, self.action_size)) #[ batch x tau x action]
+        actions = self.actor.apply(params, None, feature, tau)                            #[ batch x tau x action]
+        sample_choice = jax.random.choice(key, self.n_support,(self.buffer_size,1,1))
+        sample_prob = jax.nn.softmax(jnp.sum(jnp.square(jnp.expand_dims(actions,axes=3) - jnp.expand_dims(actions,axes=2)),axis=(2,3)),axis=1) #is...?
+        log_prob = jnp.squeeze(jnp.take_along_axis(sample_prob, sample_choice, axis=1))
+        pi = jax.nn.tanh(jnp.squeeze(jnp.take_along_axis(actions, sample_choice, axis=1)))
+        return pi, log_prob
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
-        mu, log_std = self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses)))
-        std = jnp.exp(log_std)
-        pi = jax.nn.tanh(mu + std * jax.random.normal(key,std.shape))
-        return pi
+        tau = jax.random.uniform(key,(self.worker_size,self.n_support, self.action_size))
+        actions = self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses)), tau)
+        sample_choice = jax.random.choice(key, self.n_support,(self.buffer_size,1,1))
+        return jax.nn.tanh(jnp.squeeze(jnp.take_along_axis(actions, sample_choice, axis=1)))
     
     def discription(self):
         return "score : {:.3f}, loss : {:.3f} |".format(
@@ -146,22 +157,31 @@ class SAC(Deteministic_Policy_Gradient_Family):
     
     def _loss(self, params, obses, actions, targets, weights, key, step, ent_coef):
         feature = self.preproc.apply(params, key, obses)
+        qnets = self.critic.apply(params, key, feature, actions)
+        logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x support x 1
+        huber0 = QuantileHuberLosses(jnp.expand_dims(qnets[0],axis=1),logit_valid_tile,self.quantile,self.delta)
+        critic_loss = jnp.mean(weights*huber0)
+        for q in qnets[1:]:
+            critic_loss += jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta))
         policy, log_prob, mu, log_std, std = self._get_update_data(params, feature, key)
-        q1, q2 = self.critic.apply(params, key, feature, actions)
-        q1_pi, q2_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
-        error1 = jnp.squeeze(q1 - targets)
-        error2 = jnp.squeeze(q2 - targets)
-        critic_loss = jnp.mean(weights*jnp.square(error1)) + jnp.mean(weights*jnp.square(error2))
-        actor_loss = jnp.mean(ent_coef * log_prob - jnp.minimum(q1_pi,q2_pi))
-        total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
-        return total_loss, (critic_loss, actor_loss, jnp.abs(error1), log_prob)
+        qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
+        actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi,axis=1)*self.policy_weight,axis=1))
+        total_loss = critic_loss + actor_loss
+        return total_loss, (critic_loss, actor_loss, huber0, log_prob)
     
     def _target(self, params, target_params, rewards, nxtobses, not_dones, key, ent_coef):
+        next_feature = self.preproc.apply(target_params, key, nxtobses)
         policy, log_prob, mu, log_std, std = self._get_update_data(params, self.preproc.apply(params, key, nxtobses),key)
-        q1_pi, q2_pi = self.critic.apply(target_params, key, self.preproc.apply(target_params, key, nxtobses), policy)
-        next_q = jnp.minimum(q1_pi,q2_pi) - ent_coef * log_prob
+        qnets_pi = self.critic.apply(target_params, key, next_feature, policy)
+        if self.mixture_type == 'min':
+            next_q = jnp.min(jnp.stack(qnets_pi,axis=-1),axis=-1) - ent_coef * log_prob
+        elif self.mixture_type == 'truncated':
+            next_q = truncated_mixture(qnets_pi,self.quantile_drop) - ent_coef * log_prob
         return (not_dones * next_q * self._gamma) + rewards
     
-    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="SAC",
+    def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TQC",
               reset_num_timesteps=True, replay_wrapper=None):
+        tb_log_name = tb_log_name + "({:d})".format(self.n_support)
+        if self.risk_avoidance != 0.0:
+            tb_log_name = tb_log_name + "_riskavoid{:.2f}".format(self.risk_avoidance)
         super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)
