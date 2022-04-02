@@ -167,8 +167,8 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
             critic_loss += jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta))
         policy, log_prob, pi_tau = self._get_update_data(params, feature, key)
         qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
-        #qnets_pi, grad_policy = jax.value_and_grad(lambda params, key, feature, policy: self.critic.apply(params, key, feature, policy),argnums=3)(jax.lax.stop_gradient(params), key, feature, policy)
         grad_policy = jax.jacobian(lambda params, key, feature, policy: self.critic.apply(params, key, feature, policy),argnums=3)(params, key, feature, policy)
+        print(grad_policy)
         grad_dir = (grad_policy < 0.).astype(jnp.float32)
         policy_weight = jnp.abs(pi_tau - grad_dir)
         actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi,axis=1),axis=1)*policy_weight)
@@ -178,7 +178,6 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
     def _target(self, params, target_params, rewards, nxtobses, not_dones, key, ent_coef):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
         policy, log_prob, pi_tau = self._get_update_data(params, self.preproc.apply(params, key, nxtobses),key)
-        print(log_prob.shape)
         qnets_pi = self.critic.apply(target_params, key, next_feature, policy)
         if self.mixture_type == 'min':
             next_q = jnp.min(jnp.stack(qnets_pi,axis=-1),axis=-1) - ent_coef * log_prob
