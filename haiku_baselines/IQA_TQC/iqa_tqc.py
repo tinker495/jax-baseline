@@ -91,7 +91,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         sample_prob = jax.nn.softmax(jnp.mean(jnp.square(jnp.expand_dims(actions,axis=3) - jnp.expand_dims(actions, axis=2)),axis=(2,3))) #[ batch x tau ]
         log_prob = -sample_prob                                                                     #[ batch x tau ]
         pi = jax.nn.tanh(actions)                                                                   #[ batch x tau x action]
-        return rearrange(pi,'b t a -> t b a'), rearrange(log_prob,'b t a -> t b a'), rearrange(tau,'b t a -> t b a')
+        return rearrange(pi,'b t a -> t b a'), rearrange(log_prob,'b t -> t b'), rearrange(tau,'b t a -> t b a')
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         tau = jax.random.uniform(key,(self.worker_size,1, self.action_size[0]))
@@ -167,7 +167,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         policy, log_prob, pi_tau = self._get_update_data(params, feature, key)
         adv = jax.vmap(jax.grad(lambda policy: jnp.mean(jnp.concatenate(self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy),axis=1))))(policy)
         weighted_adv = jnp.abs(pi_tau - (adv < 0.).astype(jnp.float32))*adv*2.0
-        actor_loss = jnp.mean(ent_coef * log_prob - weighted_adv*policy)
+        actor_loss = jnp.mean(ent_coef * jnp.expand_dims(log_prob,axis=2) - weighted_adv*policy)
         total_loss = critic_loss + actor_loss
         return total_loss, (critic_loss, actor_loss, huber0, log_prob)
     
