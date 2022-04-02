@@ -88,7 +88,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         actions = self.actor.apply(params, None, feature, tau)                            #[ batch x tau x action]
         sample_choice = jax.random.choice(key, self.n_support,(self.buffer_size,1,1))
         sample_prob = jax.nn.softmax(jnp.sum(jnp.square(jnp.expand_dims(actions,axes=3) - jnp.expand_dims(actions,axes=2)),axis=(2,3)),axis=1) #is...?
-        log_prob = jnp.squeeze(jnp.take_along_axis(sample_prob, sample_choice, axis=1))
+        log_prob = jnp.log(jnp.squeeze(jnp.take_along_axis(sample_prob, sample_choice, axis=1)))
         pi = jax.nn.tanh(jnp.squeeze(jnp.take_along_axis(actions, sample_choice, axis=1)))
         return pi, log_prob
         
@@ -163,7 +163,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         critic_loss = jnp.mean(weights*huber0)
         for q in qnets[1:]:
             critic_loss += jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta))
-        policy, log_prob, mu, log_std, std = self._get_update_data(params, feature, key)
+        policy, log_prob = self._get_update_data(params, feature, key)
         qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
         actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi,axis=1)*self.policy_weight,axis=1))
         total_loss = critic_loss + actor_loss
@@ -171,7 +171,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
     
     def _target(self, params, target_params, rewards, nxtobses, not_dones, key, ent_coef):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
-        policy, log_prob, mu, log_std, std = self._get_update_data(params, self.preproc.apply(params, key, nxtobses),key)
+        policy, log_prob = self._get_update_data(params, self.preproc.apply(params, key, nxtobses),key)
         qnets_pi = self.critic.apply(target_params, key, next_feature, policy)
         if self.mixture_type == 'min':
             next_q = jnp.min(jnp.stack(qnets_pi,axis=-1),axis=-1) - ent_coef * log_prob
