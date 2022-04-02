@@ -170,8 +170,6 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
                         jnp.mean(jnp.concatenate(self.critic.apply(params, key, feature, policy),axis=1)),
                         3)(jax.lax.stop_gradient(params), key, feature, policy)
         weighted_adv = (pi_tau - (adv < 0.).astype(jnp.float32))*adv
-        print(adv.shape)
-        print(weighted_adv)
         actor_loss = jnp.mean(ent_coef * log_prob - weighted_adv*policy)
         total_loss = critic_loss + actor_loss
         return total_loss, (critic_loss, actor_loss, huber0, log_prob)
