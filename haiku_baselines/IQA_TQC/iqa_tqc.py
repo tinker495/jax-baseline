@@ -176,9 +176,9 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         policy, log_prob, pi_tau = self._get_update_data(params, self.preproc.apply(params, key, nxtobses),key)
         qnets_pi = self.critic.apply(target_params, key, next_feature, policy[0])
         if self.mixture_type == 'min':
-            next_q = jnp.min(jnp.stack(qnets_pi,axis=-1),axis=-1) - ent_coef * log_prob
+            next_q = jnp.min(jnp.stack(qnets_pi,axis=-1),axis=-1) - ent_coef * log_prob[0]
         elif self.mixture_type == 'truncated':
-            next_q = truncated_mixture(qnets_pi,self.quantile_drop) - ent_coef * log_prob
+            next_q = truncated_mixture(qnets_pi,self.quantile_drop) - ent_coef * log_prob[0]
         return (not_dones * next_q * self._gamma) + rewards
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="IQA_TQC",
