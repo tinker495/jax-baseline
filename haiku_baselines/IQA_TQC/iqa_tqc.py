@@ -72,7 +72,6 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[1:] + 
                          jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[:-1]) / 2.0  # [support]
         self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1))).astype(jnp.float32)  # [1 x 1 x support]
-        self.policy_weight = jnp.tile(jnp.reshape(1.0 + self.risk_avoidance * 2.0 * (0.5 - self.quantile), (1, self.n_support)),(1,self.critic_num))
         
         print("----------------------model----------------------")
         print_param('preprocess',pre_param)
@@ -91,7 +90,8 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         sample_prob = jax.nn.softmax(jnp.sum(jnp.square(jnp.expand_dims(actions,axes=3) - jnp.expand_dims(actions,axes=2)),axis=(2,3)),axis=1) #is...?
         log_prob = jnp.log(jnp.squeeze(jnp.take_along_axis(sample_prob, sample_choice, axis=1)))
         pi = jax.nn.tanh(jnp.squeeze(jnp.take_along_axis(actions, sample_choice, axis=1)))
-        return pi, log_prob
+        pi_tau = jnp.squeeze(jnp.take_along_axis(tau, sample_choice, axis=1))
+        return pi, log_prob, pi_tau
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         tau = jax.random.uniform(key,(self.worker_size,self.n_support, self.action_size))
@@ -156,7 +156,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         log_coef = log_coef - self.ent_coef_learning_rate * grad
         return log_coef, jnp.exp(log_coef)
     
-    def _loss(self, params, obses, actions, targets, weights, key, step, ent_coef):
+    def _critic_loss(self, params, obses, actions, targets, weights, key, step, ent_coef):
         feature = self.preproc.apply(params, key, obses)
         qnets = self.critic.apply(params, key, feature, actions)
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x support x 1
@@ -164,15 +164,18 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         critic_loss = jnp.mean(weights*huber0)
         for q in qnets[1:]:
             critic_loss += jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta))
-        policy, log_prob = self._get_update_data(params, feature, key)
+        policy, log_prob, pi_tau = self._get_update_data(params, feature, key)
         qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
-        actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi,axis=1)*self.policy_weight,axis=1))
+        qnets_pi, grad_policy = jax.value_and_grad(lambda params, key, feature, policy: self.critic.apply(params, key, feature, policy),argnums=3)(jax.lax.stop_gradient(params), key, feature, policy)
+        grad_dir = (grad_policy < 0.).astype(jnp.float32)
+        policy_weight = jnp.abs(pi_tau - grad_dir)
+        actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi,axis=1),axis=1)*policy_weight)
         total_loss = critic_loss + actor_loss
         return total_loss, (critic_loss, actor_loss, huber0, log_prob)
     
     def _target(self, params, target_params, rewards, nxtobses, not_dones, key, ent_coef):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
-        policy, log_prob = self._get_update_data(params, self.preproc.apply(params, key, nxtobses),key)
+        policy, log_prob, pi_tau = self._get_update_data(params, self.preproc.apply(params, key, nxtobses),key)
         qnets_pi = self.critic.apply(target_params, key, next_feature, policy)
         if self.mixture_type == 'min':
             next_q = jnp.min(jnp.stack(qnets_pi,axis=-1),axis=-1) - ent_coef * log_prob
