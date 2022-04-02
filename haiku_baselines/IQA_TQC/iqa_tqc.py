@@ -84,9 +84,9 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         self._train_ent_coef = jax.jit(self._train_ent_coef)
         
     def _get_update_data(self,params,feature,key = None) -> jnp.ndarray:
-        tau = jax.random.uniform(key,(self.buffer_size,self.action_support, self.action_size[0])) #[ batch x tau x action]
+        tau = jax.random.uniform(key,(self.batch_size,self.action_support, self.action_size[0])) #[ batch x tau x action]
         actions = self.actor.apply(params, None, feature, tau)                            #[ batch x tau x action]
-        sample_choice = jax.random.choice(key, self.action_support,(self.buffer_size,1,1))
+        sample_choice = jax.random.choice(key, self.action_support,(self.batch_size,1,1))
         sample_prob = jax.nn.softmax(jnp.sum(jnp.square(jnp.expand_dims(actions,axes=3) - jnp.expand_dims(actions,axes=2)),axis=(2,3)),axis=1) #is...?
         log_prob = jnp.log(jnp.squeeze(jnp.take_along_axis(sample_prob, sample_choice, axis=1),axis=1))
         pi = jax.nn.tanh(jnp.squeeze(jnp.take_along_axis(actions, sample_choice, axis=1),axis=1))
@@ -97,8 +97,6 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         tau = jax.random.uniform(key,(self.worker_size,self.action_support, self.action_size[0]))
         actions = self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses)), tau)
         sample_choice = jax.random.choice(key, self.action_support,(self.worker_size,1,1))
-        print(actions)
-        print(sample_choice)
         return jax.nn.tanh(jnp.squeeze(jnp.take_along_axis(actions, sample_choice, axis=1),axis=1))
     
     def discription(self):
@@ -109,7 +107,6 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
     def actions(self,obs,steps):
         if self.learning_starts < steps:
             actions = np.asarray(self._get_actions(self.params,obs, next(self.key_seq)))
-            print(actions.shape)
         else:
             actions = np.random.uniform(-1.0,1.0,size=(self.worker_size,self.action_size[0]))
         return actions
