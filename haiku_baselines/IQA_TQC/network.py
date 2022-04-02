@@ -45,7 +45,7 @@ class Actor(hk.Module):
             ]
             )(mul_embedding)                                                                                            #[ (batch x tau) x actions ]
             
-        return rearrange(actions,'(b t) a -> b a t',b=batch_size, t=quaitle_shape[1])
+        return rearrange(actions,'(b t) a -> b t a',b=batch_size, t=quaitle_shape[1])
 
 class Critic(hk.Module):
     def __init__(self,node=256,hidden_n=2,support_n=200):
