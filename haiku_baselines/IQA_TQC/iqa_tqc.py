@@ -96,7 +96,9 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         tau = jax.random.uniform(key,(self.worker_size,self.n_support, self.action_size[0]))
         actions = self.actor.apply(params, None, self.preproc.apply(params, None, convert_jax(obses)), tau)
-        sample_choice = jax.random.choice(key, self.n_support,(self.buffer_size,1,1))
+        sample_choice = jax.random.choice(key, self.n_support,(self.worker_size,1,1))
+        print(actions)
+        print(sample_choice)
         return jax.nn.tanh(jnp.squeeze(jnp.take_along_axis(actions, sample_choice, axis=1),axis=1))
     
     def discription(self):
@@ -107,7 +109,6 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
     def actions(self,obs,steps):
         if self.learning_starts < steps:
             actions = np.asarray(self._get_actions(self.params,obs, next(self.key_seq)))
-            print(actions.shape)
         else:
             actions = np.random.uniform(-1.0,1.0,size=(self.worker_size,self.action_size[0]))
         return actions
