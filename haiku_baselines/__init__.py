@@ -6,5 +6,6 @@ from haiku_baselines.FQF.fqf import FQF
 from haiku_baselines.DDPG.ddpg import DDPG
 from haiku_baselines.TD3.td3 import TD3
 from haiku_baselines.TQC.tqc import TQC
+from haiku_baselines.IQA_TQC.iqa_tqc import IQA_TQC
 from haiku_baselines.A2C.a2c import A2C
 from haiku_baselines.PPO.ppo import PPO

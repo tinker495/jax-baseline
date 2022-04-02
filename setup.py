@@ -16,6 +16,7 @@ setup(
               'haiku_baselines.TD4_QR',
               'haiku_baselines.TD4_IQN',
               'haiku_baselines.TQC',
+              'haiku_baselines.IQA_TQC',
               'haiku_baselines.A2C',
               'haiku_baselines.TRPO',
               'haiku_baselines.ACER',
