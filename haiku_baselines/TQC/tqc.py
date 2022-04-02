@@ -108,6 +108,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
     def actions(self,obs,steps):
         if self.learning_starts < steps:
             actions = np.asarray(self._get_actions(self.params,obs, next(self.key_seq)))
+            print(actions.shape)
         else:
             actions = np.random.uniform(-1.0,1.0,size=(self.worker_size,self.action_size[0]))
         return actions
