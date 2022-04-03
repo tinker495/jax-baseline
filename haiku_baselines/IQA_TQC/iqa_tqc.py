@@ -88,10 +88,10 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
     def _get_update_data(self,params,feature,key = None) -> jnp.ndarray:
         tau = jax.random.uniform(key,(self.batch_size,self.action_support, self.action_size[0]))    #[ batch x tau x action]
         actions = self.actor.apply(params, None, feature, tau)                                      #[ batch x tau x action]
-        sample_prob = jax.nn.softmax(jnp.sum(jnp.square(jnp.expand_dims(actions,axis=3) - jnp.expand_dims(actions, axis=2)),axis=(2,3))) #[ batch x tau ]
-        log_prob = sample_prob - 1.0/self.action_support                                            #[ batch x tau ]
+        #sample_prob = jax.nn.softmax(jnp.sum(jnp.square(jnp.expand_dims(actions,axis=3) - jnp.expand_dims(actions, axis=2)),axis=(2,3))) #[ batch x tau ]
+        log_prob = jnp.log(1.0/self.action_support) #sample_prob - 1.0/self.action_support                                            #[ batch x tau ]rearrange(log_prob,'b t -> t b')
         pi = jax.nn.tanh(actions)                                                                   #[ batch x tau x action]
-        return rearrange(pi,'b t a -> t b a'), rearrange(log_prob,'b t -> t b'), rearrange(tau,'b t a -> t b a')
+        return rearrange(pi,'b t a -> t b a'), log_prob, rearrange(tau,'b t a -> t b a')
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         tau = jax.random.uniform(key,(self.worker_size,1, self.action_size[0]))
@@ -167,7 +167,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         policy, log_prob, pi_tau = self._get_update_data(params, feature, key)
         adv = jax.vmap(jax.grad(lambda policy: jnp.mean(jnp.concatenate(self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy),axis=1))))(policy)
         weighted_adv = jnp.abs(pi_tau - (adv < 0.).astype(jnp.float32))*adv*2.0
-        actor_loss = jnp.mean(jnp.sum(ent_coef * jnp.expand_dims(log_prob,axis=2) - weighted_adv*policy,axis=(0,2)))
+        actor_loss = jnp.mean(jnp.sum(- weighted_adv*policy,axis=(0,2)))
         total_loss = critic_loss + actor_loss
         return total_loss, (critic_loss, actor_loss, huber0, log_prob)
     
@@ -176,9 +176,9 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         policy, log_prob, pi_tau = self._get_update_data(params, self.preproc.apply(params, key, nxtobses),key)
         qnets_pi = self.critic.apply(target_params, key, next_feature, policy[0])
         if self.mixture_type == 'min':
-            next_q = jnp.min(jnp.stack(qnets_pi,axis=-1),axis=-1) - ent_coef * jnp.expand_dims(log_prob[0],axis=-1)
+            next_q = jnp.min(jnp.stack(qnets_pi,axis=-1),axis=-1) # - ent_coef * jnp.expand_dims(log_prob[0],axis=-1)
         elif self.mixture_type == 'truncated':
-            next_q = truncated_mixture(qnets_pi,self.quantile_drop) - ent_coef * jnp.expand_dims(log_prob[0],axis=-1)
+            next_q = truncated_mixture(qnets_pi,self.quantile_drop) #- ent_coef * jnp.expand_dims(log_prob[0],axis=-1)
         return (not_dones * next_q * self._gamma) + rewards
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="IQA_TQC",
