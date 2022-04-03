@@ -89,7 +89,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         tau = jax.random.uniform(key,(self.batch_size,self.action_support, self.action_size[0]))    #[ batch x tau x action]
         actions = self.actor.apply(params, None, feature, tau)                                      #[ batch x tau x action]
         sample_prob = jax.nn.softmax(jnp.sum(jnp.square(jnp.expand_dims(actions,axis=3) - jnp.expand_dims(actions, axis=2)),axis=(2,3))) #[ batch x tau ]
-        log_prob = sample_prob                                                                     #[ batch x tau ]
+        log_prob = 1 - sample_prob                                                                     #[ batch x tau ]
         pi = jax.nn.tanh(actions)                                                                   #[ batch x tau x action]
         return rearrange(pi,'b t a -> t b a'), rearrange(log_prob,'b t -> t b'), rearrange(tau,'b t a -> t b a')
         
