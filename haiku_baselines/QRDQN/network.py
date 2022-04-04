@@ -24,7 +24,7 @@ class Model(hk.Module):
         if not self.dueling:
             q_net = hk.Sequential(
                 [
-                    self.layer(self.node) if i%2 == 0 else jax.nn.leaky_relu for i in range(2*self.hidden_n)
+                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
                 ] + 
                 [
                     self.layer(self.action_size[0]*self.support_n),
@@ -36,7 +36,7 @@ class Model(hk.Module):
             v = repeat(
                 hk.Sequential(
                 [
-                    self.layer(self.node) if i%2 == 0 else jax.nn.leaky_relu for i in range(2*self.hidden_n)
+                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
                 ] +
                 [
                     self.layer(self.support_n),
@@ -46,7 +46,7 @@ class Model(hk.Module):
                 'b o t -> b (a o) t',a = self.action_size[0])
             a = hk.Sequential(
                 [
-                    self.layer(self.node) if i%2 == 0 else jax.nn.leaky_relu for i in range(2*self.hidden_n)
+                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
                 ] +
                 [
                     self.layer(self.action_size[0]*self.support_n),
