@@ -29,7 +29,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         
         self.policy_delay = policy_delay
         self.ent_coef = ent_coef
-        self.target_entropy = -np.prod(self.action_size).astype(np.float32) #-np.sqrt(np.prod(self.action_size).astype(np.float32))
+        self.target_entropy = -np.sqrt(np.prod(self.action_size)).astype(np.float32) #-np.sqrt(np.prod(self.action_size).astype(np.float32))
         self.ent_coef_learning_rate = 1e-6
         self.n_support = n_support
         self.action_support = action_support
@@ -88,7 +88,8 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
     def _get_update_data(self,params,feature,key = None) -> jnp.ndarray:
         tau = jax.random.uniform(key,(self.batch_size,self.action_support, self.action_size[0]))    #[ batch x tau x action]
         actions = self.actor.apply(params, None, feature, tau)                                      #[ batch x tau x action]
-        #sample_prob = jax.nn.softmax(jnp.sum(jnp.square(jnp.expand_dims(actions,axis=3) - jnp.expand_dims(actions, axis=2)),axis=(2,3))) #[ batch x tau ]
+        #sample_prob = jax.nn.softmax(jnp.sum(jnp.square(),axis=(2,3))) #[ batch x tau ]
+        #sample_prob = jnp.min(jnp.abs(jnp.expand_dims(actions,axis=3) - jnp.expand_dims(actions, axis=2)),axis=3)
         log_prob = jnp.log(1.0/self.action_support) #sample_prob - 1.0/self.action_support                                            #[ batch x tau ]rearrange(log_prob,'b t -> t b')
         pi = jax.nn.tanh(actions)                                                                   #[ batch x tau x action]
         return rearrange(pi,'b t a -> t b a'), log_prob, rearrange(tau,'b t a -> t b a')
@@ -166,8 +167,8 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
             critic_loss += jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta))
         policy, log_prob, pi_tau = self._get_update_data(params, feature, key)
         adv = jax.vmap(jax.grad(lambda policy: jnp.mean(jnp.concatenate(self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy),axis=1))))(policy)
-        weighted_adv = jnp.abs(pi_tau - (adv < 0.).astype(jnp.float32))*adv*2.0
-        actor_loss = jnp.mean(jnp.sum(- weighted_adv*policy,axis=(0,2)))
+        weighted_adv = jnp.abs(pi_tau - (adv < 0.).astype(jnp.float32))*adv
+        actor_loss = jnp.mean(jnp.sum(-weighted_adv*policy,axis=(0,2)))
         total_loss = critic_loss + actor_loss
         return total_loss, (critic_loss, actor_loss, huber0, log_prob)
     

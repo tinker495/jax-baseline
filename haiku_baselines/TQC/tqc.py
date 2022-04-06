@@ -26,7 +26,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         
         self.policy_delay = policy_delay
         self.ent_coef = ent_coef
-        self.target_entropy = -np.prod(self.action_size).astype(np.float32) #-np.sqrt(np.prod(self.action_size).astype(np.float32))
+        self.target_entropy = -np.sqrt(np.prod(self.action_size)).astype(np.float32) #-np.sqrt(np.prod(self.action_size).astype(np.float32))
         self.ent_coef_learning_rate = 1e-6
         self.n_support = n_support
         self.delta = delta
