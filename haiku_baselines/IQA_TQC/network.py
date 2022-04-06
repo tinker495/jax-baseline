@@ -30,7 +30,7 @@ class Actor(hk.Module):
 
         costau = jnp.cos(
                     rearrange(
-                    repeat(tau,'b t a-> b t (a m)',m=128),
+                    repeat(tau,'b t a-> b t (a m)',m=32),
                     'b t am -> (b t) am'
                     )*self.pi_mtx)                                                                                      #[ (batch x tau) x (a x 128)]
         quantile_embedding = hk.Sequential([self.layer(self.node),jax.nn.relu])(costau)                       #[ (batch x tau) x feature ]
