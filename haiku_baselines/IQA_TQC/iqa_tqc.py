@@ -89,11 +89,10 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
     def _get_update_data(self,params,feature,key = None) -> jnp.ndarray:
         tau = jax.random.uniform(key,(self.batch_size,self.action_support, self.action_size[0]))    #[ batch x tau x action]
         actions = self.actor.apply(params, None, feature, tau)                                      #[ batch x tau x action]
-        #sample_prob = jax.nn.softmax(jnp.sum(jnp.square(),axis=(2,3))) #[ batch x tau ]
-        #sample_prob = jnp.min(jnp.abs(jnp.expand_dims(actions,axis=3) - jnp.expand_dims(actions, axis=2)),axis=3)
-        log_prob = jnp.log(1.0/self.action_support) #sample_prob - 1.0/self.action_support                                            #[ batch x tau ]rearrange(log_prob,'b t -> t b')
+        grad_tau = jnp.abs(jax.grad(lambda feature, tau: jnp.mean(self.actor.apply(params, None, feature, tau)),argnums=1)(feature, tau))
+        log_prob = -jnp.sum(jnp.log(grad_tau),axis=(2),keepdims=True)                               #[ batch x tau x action]
         pi = jax.nn.tanh(actions)                                                                   #[ batch x tau x action]
-        return rearrange(pi,'b t a -> t b a'), log_prob, rearrange(tau,'b t a -> t b a')
+        return rearrange(pi,'b t a -> t b a'), rearrange(log_prob,'b t a -> t b a'), rearrange(tau,'b t a -> t b a')
         
     def _get_actions(self, params, obses, key = None) -> jnp.ndarray:
         tau = jax.random.uniform(key,(self.worker_size,1, self.action_size[0]))
