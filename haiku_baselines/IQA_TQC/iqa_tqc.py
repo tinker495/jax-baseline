@@ -92,7 +92,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         grad_tau = jax.nn.softplus(
                     jax.grad(lambda feature, tau: jnp.mean(self.actor.apply(params, None, feature, tau)),
                     argnums=1)(feature, tau))
-        log_prob = jnp.sum(-jnp.log(grad_tau),axis=(2),keepdims=True)                               #[ batch x tau x action]
+        log_prob = jnp.sum(-grad_tau,axis=(2),keepdims=True)                               #[ batch x tau x action]
         pi = jax.nn.tanh(actions)                                                                   #[ batch x tau x action]
         return rearrange(pi,'b t a -> t b a'), rearrange(log_prob,'b t a -> t b a'), rearrange(tau,'b t a -> t b a')
         
