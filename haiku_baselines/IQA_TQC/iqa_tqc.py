@@ -6,6 +6,7 @@ from matplotlib.pyplot import axis
 import numpy as np
 import optax
 from torch import clip_
+from functools import partial # reduces arguments to function by making some subset implicit
 
 from haiku_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from haiku_baselines.IQA_TQC.network import Actor, Critic
@@ -167,11 +168,13 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
             critic_loss += jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta))
         policy, log_prob, pi_tau = self._get_update_data(params, feature, key)
         adv = jax.vmap(
+            partial(
             jax.grad(
                 lambda params,key,feature,policy: jnp.mean(
                     jnp.concatenate(self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy),axis=1))
                 ,argnums=3)
-                )(params,key,feature,policy)
+            ,params,key,feature)
+            )(policy)
         clipped_adv = jnp.clip(adv,-1,1)
         weighted_adv = jnp.abs(pi_tau - (clipped_adv < 0.).astype(jnp.float32))*clipped_adv
         actor_loss = jnp.mean(jnp.sum(-weighted_adv*policy,axis=(0,2)))
