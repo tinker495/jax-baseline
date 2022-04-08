@@ -166,7 +166,12 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         for q in qnets[1:]:
             critic_loss += jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,self.quantile,self.delta))
         policy, log_prob, pi_tau = self._get_update_data(params, feature, key)
-        adv = jax.vmap(jax.grad(lambda policy: jnp.mean(jnp.concatenate(self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy),axis=1))))(policy)
+        adv = jax.vmap(
+            jax.grad(
+                lambda params,key,feature,policy: jnp.mean(
+                    jnp.concatenate(self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy),axis=1))
+                ,argnums=3)
+                )(params,key,feature,policy)
         clipped_adv = jnp.clip(adv,-1,1)
         weighted_adv = jnp.abs(pi_tau - (clipped_adv < 0.).astype(jnp.float32))*clipped_adv
         actor_loss = jnp.mean(jnp.sum(-weighted_adv*policy,axis=(0,2)))
