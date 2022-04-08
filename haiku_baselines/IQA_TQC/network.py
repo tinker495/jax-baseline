@@ -21,7 +21,7 @@ class Actor(hk.Module):
         self.pi_mtx = jax.lax.stop_gradient(
                         repeat(jnp.pi* np.arange(0,self.pi_range, dtype=np.float32),
                         'm -> o (a m)',o=1,a=self.action_size[0])
-                      ) # [ 1 x 128]
+                      ) # [ 1 x pi_range]
         
     def __call__(self,feature: jnp.ndarray, tau: jnp.ndarray) -> jnp.ndarray:
         feature_shape = feature.shape                                                                                   #[ batch x feature]
