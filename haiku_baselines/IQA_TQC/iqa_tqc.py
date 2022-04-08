@@ -89,7 +89,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
     def _get_update_data(self,params,feature,key = None) -> jnp.ndarray:
         tau = jax.random.uniform(key,(self.batch_size, self.action_support, self.action_size[0]))    #[ batch x tau x action]
         actions = self.actor.apply(params, None, feature, tau)                                      #[ batch x tau x action]
-        tau_grad = jnp.abs(jax.vmap(jax.grad(lambda tau: jnp.mean(self.actor.apply(params, None, feature, tau))),in_axes=1,out_axes=0)(tau))
+        tau_grad = jnp.abs(jax.grad(lambda tau: jnp.mean(self.actor.apply(params, None, feature, tau)))(tau))
         log_prob = jnp.sum(jnp.log(1.0/(tau_grad + 1e-3)),axis=2,keepdims=True)                                   #[ batch x tau ]
         pi = jax.nn.tanh(actions)                                                                   #[ batch x tau x action]
         return rearrange(pi,'b t a -> t b a'), log_prob, rearrange(tau,'b t a -> t b a')
