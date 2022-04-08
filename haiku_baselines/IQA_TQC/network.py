@@ -16,9 +16,11 @@ class Actor(hk.Module):
         self.node = node
         self.hidden_n = hidden_n
         self.layer = hk.Linear
+        self.pi_range = 64
 
         self.pi_mtx = jax.lax.stop_gradient(
-                        repeat(jnp.pi* np.arange(0,32, dtype=np.float32),'m -> o (a m)',o=1,a=self.action_size[0])
+                        repeat(jnp.pi* np.arange(0,self.pi_range, dtype=np.float32),
+                        'm -> o (a m)',o=1,a=self.action_size[0])
                       ) # [ 1 x 128]
         
     def __call__(self,feature: jnp.ndarray, tau: jnp.ndarray) -> jnp.ndarray:
@@ -30,7 +32,7 @@ class Actor(hk.Module):
 
         costau = jnp.cos(
                     rearrange(
-                    repeat(tau,'b t a-> b t (a m)',m=32),
+                    repeat(tau,'b t a-> b t (a m)',m=self.pi_range),
                     'b t am -> (b t) am'
                     )*self.pi_mtx)                                                                                      #[ (batch x tau) x (a x 128)]
         quantile_embedding = hk.Sequential([self.layer(self.node),jax.nn.relu])(costau)                       #[ (batch x tau) x feature ]
