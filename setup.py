@@ -28,7 +28,7 @@ setup(
         'gym[atari,accept-rom-license,box2d]',
         'box2d',
         'box2d-py',
-        'box2d-kengz',
+        #'box2d-kengz',
         'jax',
         'einops',
         'dm-haiku',
