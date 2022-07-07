@@ -5,7 +5,6 @@ import numpy as np
 import cpprb
 
 class ReplayBuffer(object):
-    
     def __init__(self, size: int, observation_space: list, worker_size = 1,action_space = 1, n_step=1, gamma=0.99):
         self.max_size = size
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o})
@@ -19,9 +18,9 @@ class ReplayBuffer(object):
                     "size": n_step,
                     "rew": "reward",
                     "gamma": gamma,
-                    "next": "nextobs0"
+                    "next": self.nextobsdict.keys
                     }
-        self.buffer = cpprb.ReplayBuffer(size,
+        self.buffers = cpprb.ReplayBuffer(size,
                     env_dict={**self.obsdict,
                         "action": {"shape": action_space},
                         "reward": {},
