@@ -8,8 +8,8 @@ from tqdm.auto import trange
 from collections import deque
 
 from haiku_baselines.common.base_classes import TensorboardWriter, save, restore, select_optimizer
-from haiku_baselines.common.buffers import ReplayBuffer, PrioritizedReplayBuffer, EpisodicReplayBuffer, PrioritizedEpisodicReplayBuffer
-#from haiku_baselines.common.cpprb_buffers import ReplayBuffer, PrioritizedReplayBuffer
+#from haiku_baselines.common.buffers import ReplayBuffer, PrioritizedReplayBuffer, EpisodicReplayBuffer, PrioritizedEpisodicReplayBuffer
+from haiku_baselines.common.cpprb_buffers import ReplayBuffer, NstepReplayBuffer, PrioritizedReplayBuffer, PrioritizedNstepReplayBuffer
 from haiku_baselines.common.schedules import LinearSchedule, ConstantSchedule
 from haiku_baselines.common.utils import convert_states
 from haiku_baselines.common.worker import gymMultiworker
@@ -110,6 +110,7 @@ class Q_Network_Family(object):
         print("-------------------------------------------------")
         
     def get_memory_setup(self):
+        '''
         if self.prioritized_replay:
             if self.n_step_method:
                 self.replay_buffer = PrioritizedEpisodicReplayBuffer(self.buffer_size,self.observation_space, self.worker_size, 1,
@@ -124,11 +125,18 @@ class Q_Network_Family(object):
             else:
                 self.replay_buffer = ReplayBuffer(self.buffer_size,self.observation_space, self.worker_size, 1)
         '''
-        if not self.prioritized_replay:
-            self.replay_buffer = ReplayBuffer(self.buffer_size,self.observation_space, self.worker_size, 1,self.n_step, self.gamma)
+        if self.prioritized_replay:
+            if self.n_step_method:
+                self.replay_buffer = PrioritizedNstepReplayBuffer(self.buffer_size,self.observation_space, 1, self.worker_size,
+                                                                     self.n_step, self.gamma, self.prioritized_replay_alpha)
+            else:
+                self.replay_buffer = PrioritizedReplayBuffer(self.buffer_size,self.observation_space, 1)
+
         else:
-            self.replay_buffer = PrioritizedReplayBuffer(self.buffer_size,self.observation_space,self.prioritized_replay_alpha, self.worker_size, 1, self.n_step, self.gamma)
-        '''
+            if self.n_step_method:
+                self.replay_buffer = NstepReplayBuffer(self.buffer_size,self.observation_space, 1, self.worker_size, self.n_step, self.gamma)
+            else:
+                self.replay_buffer = ReplayBuffer(self.buffer_size,self.observation_space, 1)
     
     def setup_model(self):
         pass
