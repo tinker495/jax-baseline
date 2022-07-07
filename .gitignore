@@ -6,5 +6,4 @@
 *.vscode
 *__pycache__
 build/
-test/
 log/
