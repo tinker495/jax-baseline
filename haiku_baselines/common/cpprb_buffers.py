@@ -74,7 +74,7 @@ class NstepReplayBuffer(ReplayBuffer):
                     },
                     Nstep=n_s)
         if worker_size > 1:
-            self.local_buffers = [cpprb.ReplayBuffer(size,
+            self.local_buffers = [cpprb.ReplayBuffer(2000,
                         env_dict={**self.obsdict,
                             "action": {"shape": action_space},
                             "reward": {},
@@ -154,7 +154,7 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
                     alpha=alpha,
                     Nstep=n_s)
         if worker_size > 1:
-            self.local_buffers = [cpprb.ReplayBuffer(size,
+            self.local_buffers = [cpprb.ReplayBuffer(2000,
                         env_dict={**self.obsdict,
                             "action": {"shape": action_space},
                             "reward": {},
