@@ -1,4 +1,4 @@
-# haiku-baseline
+# Haiku-Baseline
 
 
 ## Implemented Environments
@@ -11,7 +11,7 @@
 
 ## Implemented Algorithms
 
-| **Name**            | **Refactored**               | ```Box```          | ```Discrete```     | ```Per```          | ```N-step```       | ```NoisyNet```     | ```Munchausen```   |
+| **Name**            | **Operable**                 | ```Box```          | ```Discrete```     | ```Per```          | ```N-step```       | ```NoisyNet```     | ```Munchausen```   |
 | ------------------- | ---------------------------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
 | DQN                 | :heavy_check_mark:           | :x:                | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | C51                 | :heavy_check_mark:           | :x:                | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
