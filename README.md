@@ -4,6 +4,8 @@ Haiku-Baseline is the same Reinforcement Learning implementation as any Baseline
 
 It's not compared to any Baseline yet, but it's two to three times faster than the Torch and Tensorflow works that we've implemented before.
 
+This implementation is configured to flexibly solve the commonly used gym and unity ml environment for testing algorithms in various complex environments.
+
 ## Implemented Environments
 
 | **Name**                | **Q-Net based**              | **Actor-Critic based**       | **DDPG based**               | 
@@ -35,8 +37,12 @@ It's not compared to any Baseline yet, but it's two to three times faster than t
 
 ## Test 
 
-To test atari and rainbow-DQN(not C51)
+To test atari and Rainbow-DQN(or C51, QRQDN, IQN, FQF)
 
 ```
-python test/run_qnet.py --algo DQN --env BreakoutNoFrameskip-v4 --learning_rate 0.0000625 --steps 1e7 --batch 64 --target_update 2000 --node 512 --hidden_n 1 --final_eps 0.01 --learning_starts 1000 --gamma 0.995 --buffer_size 2e5 --exploration_fraction 0.3 --n_step 3 --per --double --dueling --noisynet --munchausen
+python test/run_qnet.py --algo DQN --env BreakoutNoFrameskip-v4 --learning_rate 0.0000625 --steps 1e7 --batch 64 --target_update 2000 --node 512 --hidden_n 1 --final_eps 0.01 --learning_starts 1000 --gamma 0.995 --buffer_size 2e5 --n_step 3 --per --double --dueling --noisynet --munchausen
+python test/run_qnet.py --algo C51 --env BreakoutNoFrameskip-v4 --learning_rate 0.0000625 --steps 1e7 --batch 64 --target_update 2000 --node 512 --hidden_n 1 --final_eps 0.01 --learning_starts 1000 --gamma 0.995 --buffer_size 2e5 --n_step 3 --per --double --dueling --noisynet --munchausen --max 10 --min -10
+python test/run_qnet.py --algo QRDQN --env BreakoutNoFrameskip-v4 --learning_rate 0.0000625 --steps 1e7 --batch 64 --target_update 2000 --node 512 --hidden_n 1 --final_eps 0.01 --learning_starts 1000 --gamma 0.995 --buffer_size 2e5 --n_step 3 --per --double --dueling --noisynet --munchausen --n_support 32
+python test/run_qnet.py --algo IQN --env BreakoutNoFrameskip-v4 --learning_rate 0.0000625 --steps 1e7 --batch 64 --target_update 2000 --node 512 --hidden_n 1 --final_eps 0.01 --learning_starts 1000 --gamma 0.995 --buffer_size 2e5 --n_step 3 --per --double --dueling --noisynet --munchausen --n_support 32
+python test/run_qnet.py --algo FQF --env BreakoutNoFrameskip-v4 --learning_rate 0.0000625 --steps 1e7 --batch 64 --target_update 2000 --node 512 --hidden_n 1 --final_eps 0.01 --learning_starts 1000 --gamma 0.995 --buffer_size 2e5 --n_step 3 --per --double --dueling --noisynet --munchausen --n_support 32
 ```
