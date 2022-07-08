@@ -12,7 +12,7 @@ from haiku_baselines.IQA_TQC.iqa_tqc import IQA_TQC
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--learning_rate', type=float, default=0.0003, help='learning rate')
+    parser.add_argument('--learning_rate', type=float, default=0.0000625, help='learning rate')
     parser.add_argument('--env', type=str, default="Pendulum-v0", help='environment')
     parser.add_argument('--worker_id', type=int, default=0, help="unlty ml agent's worker id")
     parser.add_argument('--worker', type=int,default=1, help='gym_worker_size')

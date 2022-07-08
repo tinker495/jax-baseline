@@ -10,7 +10,7 @@ from haiku_baselines.FQF.fqf import FQF
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--learning_rate', type=float, default=0.00025, help='learning rate')
+    parser.add_argument('--learning_rate', type=float, default=0.0000625, help='learning rate')
     parser.add_argument('--env', type=str, default="Cartpole-v1", help='environment')
     parser.add_argument('--algo', type=str, default="DQN", help='algo ID')
     parser.add_argument('--gamma', type=float, default=0.995, help='gamma')
