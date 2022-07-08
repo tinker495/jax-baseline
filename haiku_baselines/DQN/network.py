@@ -30,6 +30,7 @@ class Model(hk.Module):
                 )(feature)
             return q_net
         else:
+            '''
             q_net = hk.Sequential(
                 [
                     self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
@@ -37,4 +38,15 @@ class Model(hk.Module):
                 )(feature)
             v = self.layer(1)(q_net)
             a = self.layer(self.action_size[0])(q_net)
-            return v + (a - jnp.max(a, axis=1, keepdims=True))  
+            '''
+            v = hk.Sequential(
+                [
+                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
+                ]  + [self.layer(1)]
+                )(feature)
+            a = hk.Sequential(
+                [
+                    self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
+                ]  + [self.action_size[0]]
+                )(feature)
+            return v + (a - jnp.max(a, axis=1, keepdims=True))
