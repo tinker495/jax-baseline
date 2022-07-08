@@ -38,6 +38,6 @@ class Model(hk.Module):
             a = hk.Sequential(
                 [
                     self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
-                ]  + [self.action_size[0]]
+                ]  + [self.layer(self.action_size[0])]
                 )(feature)
             return v + (a - jnp.max(a, axis=1, keepdims=True))
