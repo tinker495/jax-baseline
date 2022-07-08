@@ -11,15 +11,20 @@
 
 ## Implemented Algorithms
 
-| **Name**            | **Operable**                 | ```Box```          | ```Discrete```     | ```Per```          | ```N-step```       | ```NoisyNet```     | ```Munchausen```   |
+| **Name**            | **Complete**                 | ```Box```          | ```Discrete```     | ```Per```          | ```N-step```       | ```NoisyNet```     | ```Munchausen```   |
 | ------------------- | ---------------------------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
 | DQN                 | :heavy_check_mark:           | :x:                | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | C51                 | :heavy_check_mark:           | :x:                | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | QRDQN               | :heavy_check_mark:           | :x:                | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | IQN                 | :heavy_check_mark:           | :x:                | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | A2C                 | :heavy_check_mark: 			 | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                | :x:                | :x:                |
+| TRPO                | TODO           		         |                    |                    |                    |                    |                    |                    |
 | PPO                 | :heavy_check_mark:           | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                | :x:                | :x:                |
+| ACER                | TODO           		         |                    |                    |                    |                    |                    |                    |
 | DDPG                | :heavy_check_mark:           | :heavy_check_mark: | :x:                | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |
 | SAC                 | :heavy_check_mark:           | :heavy_check_mark: | :x:                | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |
 | TD3                 | :heavy_check_mark:           | :heavy_check_mark: | :x:                | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |
 | TQC                 | :heavy_check_mark:           | :heavy_check_mark: | :x:                | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |
+| Ape-X-Qnets         | TODO           		         |                    |                    |                    |                    |                    |                    |
+| Ape-X-DDPG based    | TODO           		         |                    |                    |                    |                    |                    |                    |
+| IMPALA              | TODO           		         |                    |                    |                    |                    |                    |                    |
