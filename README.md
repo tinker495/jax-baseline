@@ -1,5 +1,7 @@
 # Haiku-Baseline
 
+Haiku-Baseline is the same Reinforcement Learning implementation as any Baseline implemented through the Jax and Haiku libraries.
+It's not compared to any Baseline yet, but it's two to three times faster than the Torch and Tensorflow works that we've implemented before.
 
 ## Implemented Environments
 
@@ -17,6 +19,7 @@
 | C51                 | :heavy_check_mark:           | :x:                | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | QRDQN               | :heavy_check_mark:           | :x:                | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | IQN                 | :heavy_check_mark:           | :x:                | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| FQF                 | :heavy_check_mark:           | :x:                | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | A2C                 | :heavy_check_mark: 			 | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                | :x:                | :x:                |
 | TRPO                | TODO           		         |                    |                    |                    |                    |                    |                    |
 | PPO                 | :heavy_check_mark:           | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                | :x:                | :x:                |
