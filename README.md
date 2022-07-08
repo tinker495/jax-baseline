@@ -28,3 +28,11 @@
 | Ape-X-Qnets         | TODO           		         |                    |                    |                    |                    |                    |                    |
 | Ape-X-DDPG based    | TODO           		         |                    |                    |                    |                    |                    |                    |
 | IMPALA              | TODO           		         |                    |                    |                    |                    |                    |                    |
+
+## Test 
+
+To test atari and rainbow-DQN(not C51)
+
+'''
+python test/run_qnet.py --algo DQN --env BreakoutNoFrameskip-v4 --learning_rate 0.0000625 --steps 1e7 --batch 64 --target_update 2000 --node 512 --hidden_n 1 --final_eps 0.01 --learning_starts 1000 --gamma 0.995 --buffer_size 2e5 --exploration_fraction 0.3 --n_step 3 --per --double --dueling --noisynet --munchausen
+'''
