@@ -73,5 +73,4 @@ if __name__ == "__main__":
 
     agent.learn(int(args.steps))
     
-    env.close()
-    #agent.test()
+    agent.test()
