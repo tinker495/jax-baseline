@@ -16,14 +16,14 @@ class C51(Q_Network_Family):
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
                  param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None,
                  categorial_max = 250, categorial_min = -250,
-                 full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
+                 full_tensorboard_log=False, seed=None, optimizer = 'adamw', compress_memory = False):
         
         super(C51, self).__init__(env, gamma, learning_rate, buffer_size, exploration_fraction,
                  exploration_final_eps, exploration_initial_eps, train_freq, gradient_steps, batch_size, double_q,
                  dueling_model, n_step, learning_starts, target_network_update_freq, prioritized_replay,
                  prioritized_replay_alpha, prioritized_replay_beta0, prioritized_replay_eps, 
                  param_noise, munchausen, log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
-                 full_tensorboard_log, seed, optimizer)
+                 full_tensorboard_log, seed, optimizer, compress_memory)
         
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = categorial_max

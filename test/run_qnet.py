@@ -13,7 +13,7 @@ if __name__ == "__main__":
     parser.add_argument('--learning_rate', type=float, default=0.0000625, help='learning rate')
     parser.add_argument('--env', type=str, default="Cartpole-v1", help='environment')
     parser.add_argument('--algo', type=str, default="DQN", help='algo ID')
-    parser.add_argument('--gamma', type=float, default=0.995, help='gamma')
+    parser.add_argument('--gamma', type=float, default=0.99, help='gamma')
     parser.add_argument('--target_update', type=int, default=2000, help='target update intervals')
     parser.add_argument('--batch', type=int, default=64, help='batch size')
     parser.add_argument('--buffer_size', type=float, default=500000, help='buffer_size')
@@ -39,6 +39,7 @@ if __name__ == "__main__":
     parser.add_argument('--train_freq', type=int, default=1, help='train_frequancy')
     parser.add_argument('--learning_starts', type=int, default=5000, help='learning start')
     parser.add_argument('--exploration_fraction', type=float, default=0.3, help='exploration fraction')
+    parser.add_argument('--compress_memory', action='store_true')
     args = parser.parse_args() 
     env_name = args.env
     cnn_mode = "normal"
@@ -76,31 +77,31 @@ if __name__ == "__main__":
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq, learning_starts=args.learning_starts,
                     exploration_fraction = args.exploration_fraction,
-                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory)
     elif args.algo == "C51":
         agent = C51(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq, learning_starts=args.learning_starts,
                     categorial_max = args.max, categorial_min = args.min, exploration_fraction = args.exploration_fraction,
-                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory)
     elif args.algo == "QRDQN":
         agent = QRDQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq, learning_starts=args.learning_starts,
                     n_support = args.n_support, exploration_fraction = args.exploration_fraction,
-                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory)
     elif args.algo == "IQN":
         agent = IQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq, learning_starts=args.learning_starts,
                     n_support = args.n_support, exploration_fraction = args.exploration_fraction, CVaR= args.CVaR,
-                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory)
     elif args.algo == "FQF":
         agent = FQF(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq, learning_starts=args.learning_starts,
                     n_support = args.n_support, exploration_fraction = args.exploration_fraction,
-                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
+                    tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory)
 
 
     agent.learn(int(args.steps))

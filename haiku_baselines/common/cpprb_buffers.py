@@ -5,20 +5,28 @@ import numpy as np
 import cpprb
 
 class ReplayBuffer(object):
-    def __init__(self, size: int, observation_space: list,action_space = 1):
+    def __init__(self, size: int, observation_space: list,action_space = 1,compress_memory = False):
         self.max_size = size
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
-        self.nextobsdict = dict(("nextobs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
+        self.nextobsdict = dict(("next_obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
+        self.obscompress = None
+        if compress_memory:
+            self.obscompress = []
+            for k in self.obsdict:
+                if len(self.obsdict[k]["shape"]) >= 3:
+                    self.obscompress.append(k)
+                    del self.nextobsdict[f'next_{k}']
+        
         self.buffer = cpprb.ReplayBuffer(size,
                     env_dict={**self.obsdict,
                         "action": {"shape": action_space},
                         "reward": {},
                         **self.nextobsdict,
                         "done": {}
-                    })
-
+                    },next_of = self.obscompress, stack_compress = self.obscompress)
+    
     def __len__(self) -> int:
         return len(self.buffer)
 
@@ -52,12 +60,20 @@ class ReplayBuffer(object):
                 }
 
 class NstepReplayBuffer(ReplayBuffer):
-    def __init__(self, size: int, observation_space: list,action_space = 1, worker_size = 1, n_step=1, gamma=0.99):
+    def __init__(self, size: int, observation_space: list,action_space = 1, worker_size = 1, n_step=1, gamma=0.99,compress_memory = False):
         self.max_size = size
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
-        self.nextobsdict = dict(("nextobs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
+        self.nextobsdict = dict(("next_obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
+        self.obscompress = None
+        if compress_memory:
+            self.obscompress = []
+            for k in self.obsdict:
+                if len(self.obsdict[k]["shape"]) >= 3:
+                    self.obscompress.append(k)
+                    del self.nextobsdict[f'next_{k}']
+        
         self.worker_size = worker_size
         n_s = {
                 "size": n_step,
@@ -72,7 +88,7 @@ class NstepReplayBuffer(ReplayBuffer):
                         **self.nextobsdict,
                         "done": {}
                     },
-                    Nstep=n_s)
+                    Nstep=n_s,next_of = self.obscompress, stack_compress = self.obscompress)
         if worker_size > 1:
             self.local_buffers = [cpprb.ReplayBuffer(2000,
                         env_dict={**self.obsdict,
@@ -83,7 +99,7 @@ class NstepReplayBuffer(ReplayBuffer):
                         }) for _ in range(worker_size)]
             self.add = self.multiworker_add
 
-    def add(self, obs_t, action, reward, nxtobs_t, done, terminal=False):
+    def add(self, obs_t, action, reward, nxtobs_t, done, terminal=False,compress_memory = False):
         super().add(obs_t, action, reward, nxtobs_t, done, terminal)
         if terminal:
             self.buffer.on_episode_end()
@@ -99,12 +115,20 @@ class NstepReplayBuffer(ReplayBuffer):
                 self.local_buffers[w].clear()
         
 class PrioritizedReplayBuffer(ReplayBuffer):
-    def __init__(self, size: int, observation_space: list, alpha: float, action_space = 1):
+    def __init__(self, size: int, observation_space: list, alpha: float, action_space = 1,compress_memory = False):
         self.max_size = size
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
-        self.nextobsdict = dict(("nextobs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
+        self.nextobsdict = dict(("next_obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
+        self.obscompress = None
+        if compress_memory:
+            self.obscompress = []
+            for k in self.obsdict:
+                if len(self.obsdict[k]["shape"]) >= 3:
+                    self.obscompress.append(k)
+                    del self.nextobsdict[f'next_{k}']
+        
         self.buffer = cpprb.PrioritizedReplayBuffer(size,
                     env_dict={**self.obsdict,
                         "action": {"shape": action_space},
@@ -112,7 +136,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                         **self.nextobsdict,
                         "done": {}
                     },
-                    alpha=alpha)
+                    alpha=alpha,next_of = self.obscompress, stack_compress = self.obscompress)
 
     def sample(self, batch_size: int, beta=0.5):
         smpl = self.buffer.sample(batch_size, beta)
@@ -131,12 +155,20 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
 
 class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
-    def __init__(self, size: int, observation_space: list, action_space = 1, worker_size = 1, n_step=1, gamma=0.99, alpha = 0.4):
+    def __init__(self, size: int, observation_space: list, action_space = 1, worker_size = 1, n_step=1, gamma=0.99, alpha = 0.4,compress_memory = False):
         self.max_size = size
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
-        self.nextobsdict = dict(("nextobs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
+        self.nextobsdict = dict(("next_obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
+        self.obscompress = None
+        if compress_memory:
+            self.obscompress = []
+            for k in self.obsdict:
+                if len(self.obsdict[k]["shape"]) >= 3:
+                    self.obscompress.append(k)
+                    del self.nextobsdict[f'next_{k}']
+        
         self.worker_size = worker_size
         n_s = {
                 "size": n_step,
@@ -152,7 +184,7 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
                         "done": {}
                     },
                     alpha=alpha,
-                    Nstep=n_s)
+                    Nstep=n_s,next_of = self.obscompress, stack_compress = self.obscompress)
         if worker_size > 1:
             self.local_buffers = [cpprb.ReplayBuffer(2000,
                         env_dict={**self.obsdict,
