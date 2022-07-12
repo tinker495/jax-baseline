@@ -38,6 +38,13 @@ def convert_states(obs : List):
 def convert_jax(obs : List):
   return [jax.device_get(o).astype(jnp.float32)*(1.0/255.0) if len(o.shape) >= 4 else jax.device_get(o) for o in obs]
 
+def q_log_pi(q,entropy_tau):
+  q_submax = q - jnp.max(q, axis=1, keepdims=True)
+  logsum = jax.nn.logsumexp(q_submax/entropy_tau,axis=1,keepdims=True)
+  tau_log_pi = (q_submax - entropy_tau*logsum)
+  pi = jax.nn.softmax(q_submax/entropy_tau)
+  return q_submax, tau_log_pi, pi
+
 @jax.jit
 def discounted(rewards,gamma=0.99): #lfilter([1],[1,-gamma],x[::-1])[::-1]
   _gamma = 1

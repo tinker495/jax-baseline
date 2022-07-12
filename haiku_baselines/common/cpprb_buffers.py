@@ -99,7 +99,7 @@ class NstepReplayBuffer(ReplayBuffer):
                         }) for _ in range(worker_size)]
             self.add = self.multiworker_add
 
-    def add(self, obs_t, action, reward, nxtobs_t, done, terminal=False,compress_memory = False):
+    def add(self, obs_t, action, reward, nxtobs_t, done, terminal=False):
         super().add(obs_t, action, reward, nxtobs_t, done, terminal)
         if terminal:
             self.buffer.on_episode_end()

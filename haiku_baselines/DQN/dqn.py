@@ -7,7 +7,7 @@ import optax
 from haiku_baselines.DQN.base_class import Q_Network_Family
 from haiku_baselines.DQN.network import Model
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import hard_update, convert_jax, print_param
+from haiku_baselines.common.utils import hard_update, convert_jax, print_param, q_log_pi
 
 class DQN(Q_Network_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, exploration_fraction=0.3,
@@ -101,28 +101,25 @@ class DQN(Q_Network_Family):
     def _loss(self, params, obses, actions, targets, weights, key):
         vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         error = jnp.squeeze(vals - targets)
-        return jnp.mean(jnp.square(error)*jnp.squeeze(weights)), jnp.abs(error)
+        return jnp.mean(jnp.square(error) * weights), jnp.abs(error)
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)
         if self.double_q:
-            next_actions = jnp.expand_dims(jnp.argmax(self.get_q(params,nxtobses,key),axis=1),axis=1)
+            next_actions = jnp.argmax(self.get_q(params,nxtobses,key),axis=1,keepdims=True)
         else:
-            next_actions = jnp.expand_dims(jnp.argmax(next_q,axis=1),axis=1)
+            next_actions = jnp.argmax(next_q,axis=1,keepdims=True)
             
         if self.munchausen:
-            logsum = jax.nn.logsumexp((next_q - jnp.max(next_q,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
-            tau_log_pi_next = next_q - jnp.max(next_q, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum
-            pi_target = jax.nn.softmax(next_q/self.munchausen_entropy_tau, axis=1)
-            next_vals = jnp.sum((pi_target * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next)), axis=1, keepdims=True) * not_dones
+            _, tau_log_pi_next, pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
+            next_vals = jnp.sum(pi_next * (next_q - tau_log_pi_next),axis=1,keepdims=True) * not_dones
             
             q_k_targets = self.get_q(target_params,obses,key)
-            v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
-            logsum = jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1, keepdims=True)
-            log_pi = q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum
+            q_sub_targets, tau_log_pi, _ = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            log_pi = q_sub_targets - self.munchausen_entropy_tau*tau_log_pi
             munchausen_addon = jnp.take_along_axis(log_pi,actions,axis=1)
             
-            rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
+            rewards = rewards + self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
             next_vals = not_dones * jnp.take_along_axis(next_q, next_actions, axis=1)
         return (next_vals * self._gamma) + rewards

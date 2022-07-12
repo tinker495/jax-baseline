@@ -9,7 +9,7 @@ from haiku_baselines.DQN.base_class import Q_Network_Family
 from haiku_baselines.QRDQN.network import Model
 from haiku_baselines.common.Module import PreProcess
 
-from haiku_baselines.common.utils import hard_update, convert_jax, print_param
+from haiku_baselines.common.utils import hard_update, convert_jax, print_param, q_log_pi
 from haiku_baselines.common.losses import QuantileHuberLosses
 
 class QRDQN(Q_Network_Family):
@@ -52,8 +52,12 @@ class QRDQN(Q_Network_Family):
         
         self.opt_state = self.optimizer.init(self.params)
         
-        self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support+1)[:-1])/2.0   # [support]
-        self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                                        # [1 x 1 x support]
+        if not self.dueling_model:
+            self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support+1)[:-1])/2.0   # [support]
+            self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                                        # [1 x 1 x support]
+        else:
+            self.quantile = (jnp.linspace(0.0,1.0,self.n_support*self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support*self.n_support+1)[:-1])/2.0   # [support]
+            self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                                        # [1 x 1 x support]
         
         print("----------------------model----------------------")
         print_param('preprocess',pre_param)
@@ -112,7 +116,7 @@ class QRDQN(Q_Network_Family):
         theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)  # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x support x 1
         loss = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, self.quantile, self.delta)
-        return jnp.mean(weights*loss), loss
+        return jnp.mean(loss * weights), loss
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)
@@ -123,18 +127,15 @@ class QRDQN(Q_Network_Family):
             
         if self.munchausen:
             next_q_mean = jnp.mean(next_q,axis=2)
-            logsum = jax.nn.logsumexp((next_q_mean - jnp.max(next_q_mean,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
-            tau_log_pi_next = jnp.expand_dims(next_q_mean - jnp.max(next_q_mean, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum,axis=2)
-            pi_target = jnp.expand_dims(jax.nn.softmax(next_q_mean/self.munchausen_entropy_tau, axis=1),axis=2)
-            next_vals = jnp.sum((pi_target * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next)), axis=1) * not_dones
+            _, tau_log_pi_next, pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
+            next_vals = jnp.sum(jnp.expand_dims(pi_next,axis=2) * (next_q - jnp.expand_dims(tau_log_pi_next,axis=2)), axis=1) * not_dones
             
             q_k_targets = jnp.mean(self.get_q(target_params,obses,key),axis=2)
-            v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
-            logsum = jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1, keepdims=True)
-            log_pi = jnp.expand_dims(q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum,axis=2)
+            q_sub_targets, tau_log_pi, _ = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            log_pi = q_sub_targets - self.munchausen_entropy_tau*tau_log_pi
             munchausen_addon = jnp.take_along_axis(log_pi,actions,axis=1)
             
-            rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
+            rewards = rewards + self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
             next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1)) # batch x support
         return (next_vals * self._gamma) + rewards                                                 # batch x support
