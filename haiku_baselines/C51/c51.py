@@ -7,7 +7,7 @@ import optax
 from haiku_baselines.DQN.base_class import Q_Network_Family
 from haiku_baselines.C51.network import Model
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import hard_update, convert_jax, print_param
+from haiku_baselines.common.utils import hard_update, convert_jax, print_param, q_log_pi
 
 class C51(Q_Network_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, exploration_fraction=0.3, categorial_bar_n = 51,
@@ -133,18 +133,15 @@ class C51(Q_Network_Family):
         
         if self.munchausen:
             next_q_mean = jnp.sum(next_q*self.categorial_bar,axis=2)
-            logsum = jax.nn.logsumexp((next_q_mean - jnp.max(next_q_mean,axis=1,keepdims=True))/self.munchausen_entropy_tau, axis=1, keepdims=True)
-            tau_log_pi_next = next_q_mean - jnp.max(next_q_mean, axis=1, keepdims=True) - self.munchausen_entropy_tau*logsum
-            pi_target = jax.nn.softmax(next_q_mean/self.munchausen_entropy_tau, axis=1)
-            next_categorial = (self.categorial_bar - jnp.sum(pi_target * tau_log_pi_next, axis=1, keepdims=True)) * not_dones
+            _, tau_log_pi_next, pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
+            next_categorial = (self.categorial_bar - jnp.sum(pi_next * tau_log_pi_next, axis=1, keepdims=True)) * not_dones
             
             q_k_targets = jnp.sum(self.get_q(target_params,obses,key)*self.categorial_bar,axis=2)
-            v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
-            logsum = jax.nn.logsumexp((q_k_targets - v_k_target)/self.munchausen_entropy_tau, axis=1, keepdims=True)
-            log_pi = q_k_targets - v_k_target - self.munchausen_entropy_tau*logsum
+            q_sub_targets, tau_log_pi, _ = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            log_pi = q_sub_targets - self.munchausen_entropy_tau*tau_log_pi
             munchausen_addon = jnp.take_along_axis(log_pi,jnp.squeeze(actions,axis=2),axis=1)
             
-            rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
+            rewards = rewards + self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
             next_categorial = not_dones * self.categorial_bar
         target_categorial = (next_categorial * self._gamma) + rewards
