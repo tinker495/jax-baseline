@@ -8,11 +8,12 @@ for ep in range(10):
 		buffer.add([[ep,idx]],idx,1,[[ep,idx]],False,False)
 	buffer.add([[ep,9]],9,1,[[ep,9]],True,True)
 
-samples = buffer.sample(100)
-for k in samples:
-	if k == 'obses' or k == 'nxtobses':
-		s = samples[k][0]
-	else:
-		s = samples[k]
-	print(len(s))
-	print(f'{k} :', s[0])
+samples = buffer.sample(20)
+for i in range(20):
+	for k in samples:
+		if k == 'obses' or k == 'nxtobses':
+			s = samples[k][0]
+		else:
+			s = samples[k]
+		print(f'{k} :', s[i],end=' ')
+	print()

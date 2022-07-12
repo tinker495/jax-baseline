@@ -128,7 +128,10 @@ class QRDQN(Q_Network_Family):
         if self.munchausen:
             next_q_mean = jnp.mean(next_q,axis=2)
             _, tau_log_pi_next, pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
+            #sample_ratio = jax.random.uniform(key,(self.batch_size,self.action_size,self.n_support)) < jnp.expand_dims(pi_next,axis=2)
             next_vals = jnp.sum(jnp.expand_dims(pi_next,axis=2) * (next_q - jnp.expand_dims(tau_log_pi_next,axis=2)), axis=1) * not_dones
+            #get_samples = [sample_ratio]
+            #next_vals = jnp.reshape(, (self.batch_size, self.action_size * self.n_support)) * not_dones
             
             q_k_targets = jnp.mean(self.get_q(target_params,obses,key),axis=2)
             q_sub_targets, tau_log_pi, _ = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
