@@ -46,7 +46,7 @@ class Q_Network_Family(object):
         self.buffer_size = buffer_size
         self.learning_rate = learning_rate
         self.gamma = gamma
-        self._gamma = self.gamma**n_step #n_step gamma
+        self._gamma = np.power(gamma,n_step) #n_step gamma
         self.tensorboard_log = tensorboard_log
         self.full_tensorboard_log = full_tensorboard_log
         self.double_q = double_q
