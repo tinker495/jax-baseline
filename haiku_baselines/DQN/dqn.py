@@ -111,11 +111,12 @@ class DQN(Q_Network_Family):
             next_actions = jnp.argmax(next_q,axis=1,keepdims=True)
             
         if self.munchausen:
-            _, tau_log_pi_next, pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
+            next_sub_q, tau_log_pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
+            pi_next = jax.nn.softmax(next_sub_q/self.munchausen_entropy_tau)
             next_vals = jnp.sum(pi_next * (next_q - tau_log_pi_next),axis=1,keepdims=True) * not_dones
             
             q_k_targets = self.get_q(target_params,obses,key)
-            q_sub_targets, tau_log_pi, _ = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau*tau_log_pi
             munchausen_addon = jnp.take_along_axis(log_pi,actions,axis=1)
             
