@@ -115,9 +115,9 @@ class DQN(Q_Network_Family):
             next_vals = jnp.sum(pi_next * (next_q - tau_log_pi_next),axis=1,keepdims=True) * not_dones
             
             if self.double_q:
-                q_k_targets = self.get_q(target_params,obses,key)
-            else:
                 q_k_targets = self.get_q(params,obses,key)
+            else:
+                q_k_targets = self.get_q(target_params,obses,key)
             q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau*tau_log_pi
             munchausen_addon = jnp.take_along_axis(log_pi,actions,axis=1)
