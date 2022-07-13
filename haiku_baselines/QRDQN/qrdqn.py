@@ -88,7 +88,7 @@ class QRDQN(Q_Network_Family):
             
             self.params, self.target_params, self.opt_state, loss, t_mean, new_priorities = \
                 self._train_step(self.params, self.target_params, self.opt_state, steps, 
-                                 next(self.key_seq) if self.param_noise else None,**data)
+                                 next(self.key_seq) if self.param_noise or self.munchausen else None,**data)
             
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data['indexes'], new_priorities)
@@ -120,20 +120,24 @@ class QRDQN(Q_Network_Family):
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)
-        if self.double_q:
-            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,key),axis=2),axis=1),axis=(1,2))
-        else:
-            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(next_q,axis=2),axis=1),axis=(1,2))
             
         if self.munchausen:
-            next_q_mean = jnp.mean(next_q,axis=2)
+            if self.double_q:
+                next_q_mean = jnp.mean(self.get_q(params,nxtobses,key),axis=2)
+            else:
+                next_q_mean = jnp.mean(next_q,axis=2)
             next_sub_q, tau_log_pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
-            pi_next = jax.nn.softmax(next_sub_q/self.munchausen_entropy_tau)
-            #sample_ratio = jax.random.uniform(key,(self.batch_size,self.action_size,self.n_support)) < jnp.expand_dims(pi_next,axis=2)
-            next_vals = jnp.sum(jnp.expand_dims(pi_next,axis=2) * (next_q - jnp.expand_dims(tau_log_pi_next,axis=2)), axis=1) * not_dones
-            #get_samples = [sample_ratio]
-            #next_vals = jnp.reshape(, (self.batch_size, self.action_size * self.n_support)) * not_dones
+            pi_next = jax.nn.softmax(next_sub_q/self.munchausen_entropy_tau,axis=1)
+            p_cuml = jnp.expand_dims(jnp.cumsum(pi_next,axis=1),axis=2).tile(32)
+            r = jax.random.uniform(key, (32,1,32), dtype=p_cuml.dtype)
+            ind = jnp.swapaxes(jax.vmap(jax.vmap(lambda p,r: jnp.searchsorted(p, r),in_axes=(1,1)))(p_cuml,r),1,2)
+            sampled_q = jnp.take_along_axis(next_q - jnp.expand_dims(tau_log_pi_next,axis=2),ind,axis=1).squeeze()
+            next_vals = sampled_q * not_dones
             
+            if self.double_q:
+                q_k_targets = jnp.mean(self.get_q(params,obses,key),axis=2)
+            else:
+                q_k_targets = jnp.mean(self.get_q(target_params,obses,key),axis=2)
             q_k_targets = jnp.mean(self.get_q(target_params,obses,key),axis=2)
             q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau*tau_log_pi
@@ -141,6 +145,10 @@ class QRDQN(Q_Network_Family):
             
             rewards = rewards + self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
+            if self.double_q:
+                next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,key),axis=2),axis=1),axis=(1,2))
+            else:
+                next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(next_q,axis=2),axis=1),axis=(1,2))
             next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1)) # batch x support
         return (next_vals * self._gamma) + rewards                                                 # batch x support
 

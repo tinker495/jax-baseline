@@ -129,26 +129,52 @@ class IQN(Q_Network_Family):
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         target_tau = jax.random.uniform(key,(self.batch_size,self.n_support))
         next_q = self.get_q(target_params,nxtobses,target_tau,key)
-        if self.double_q:
-            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,target_tau * self.CVaR,key),axis=2),axis=1),axis=(1,2))
-        elif self.risk_avoid:
-            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(target_params,nxtobses,target_tau * self.CVaR,key),axis=2),axis=1),axis=(1,2))
-        else:
-            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(next_q,axis=2),axis=1),axis=(1,2))
             
         if self.munchausen:
-            next_q_mean = jnp.mean(next_q,axis=2)
+            if self.double_q:
+                if self.risk_avoid:
+                    next_q_mean = jnp.mean(self.get_q(params,nxtobses,target_tau * self.CVaR,key),axis=2)
+                else:
+                    next_q_mean = jnp.mean(self.get_q(params,nxtobses,target_tau,key),axis=2)
+            else:
+                if self.risk_avoid:
+                    next_q_mean = jnp.mean(self.get_q(target_params,nxtobses,target_tau * self.CVaR,key),axis=2)
+                else:
+                    next_q_mean = jnp.mean(next_q,axis=2)
             next_sub_q, tau_log_pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
-            pi_next = jax.nn.softmax(next_sub_q/self.munchausen_entropy_tau)
-            next_vals = jnp.sum(jnp.expand_dims(pi_next,axis=2) * (next_q - jnp.expand_dims(tau_log_pi_next,axis=2)), axis=1) * not_dones
+            pi_next = jax.nn.softmax(next_sub_q/self.munchausen_entropy_tau,axis=1)
+            p_cuml = jnp.expand_dims(jnp.cumsum(pi_next,axis=1),axis=2).tile(32)
+            r = jax.random.uniform(key, (32,1,32), dtype=p_cuml.dtype)
+            ind = jnp.swapaxes(jax.vmap(jax.vmap(lambda p,r: jnp.searchsorted(p, r),in_axes=(1,1)))(p_cuml,r),1,2)
+            sampled_q = jnp.take_along_axis(next_q - jnp.expand_dims(tau_log_pi_next,axis=2),ind,axis=1).squeeze()
+            next_vals = sampled_q * not_dones
             
-            q_k_targets = jnp.mean(self.get_q(target_params,obses,target_tau,key),axis=2)
+            if self.double_q:
+                if self.risk_avoid:
+                    q_k_targets = jnp.mean(self.get_q(params,obses,target_tau * self.CVaR,key),axis=2)
+                else:
+                    q_k_targets = jnp.mean(self.get_q(params,obses,target_tau,key),axis=2)
+            else:
+                if self.risk_avoid:
+                    q_k_targets = jnp.mean(self.get_q(target_params,obses,target_tau * self.CVaR,key),axis=2)
+                else:
+                    q_k_targets = jnp.mean(self.get_q(target_params,obses,target_tau,key),axis=2)
             q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau*tau_log_pi
             munchausen_addon = jnp.take_along_axis(log_pi,jnp.squeeze(actions,axis=2),axis=1)
             
             rewards = rewards + self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
+            if self.double_q:
+                if self.risk_avoid:
+                    next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,target_tau * self.CVaR,key),axis=2),axis=1),axis=(1,2))
+                else:
+                    next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,nxtobses,target_tau,key),axis=2),axis=1),axis=(1,2))
+            else:
+                if self.risk_avoid:
+                    next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(target_params,nxtobses,target_tau * self.CVaR,key),axis=2),axis=1),axis=(1,2))
+                else:
+                    next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(next_q,axis=2),axis=1),axis=(1,2))
             next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))  # batch x support
         return (next_vals * self._gamma) + rewards                                                  # batch x support
 

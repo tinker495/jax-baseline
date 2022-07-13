@@ -21,7 +21,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=0, help='random seed')
     parser.add_argument('--node', type=int,default=256, help='network node number')
     parser.add_argument('--hidden_n', type=int,default=2, help='hidden layer number')
-    parser.add_argument('--optimizer', type=str,default='rmsprop', help='optimaizer')
+    parser.add_argument('--optimizer', type=str,default='adamw', help='optimaizer')
     parser.add_argument('--ent_coef', type=float,default=0.001, help='entropy coefficient')
     parser.add_argument('--val_coef', type=float,default=0.6, help='val coefficient')
     parser.add_argument('--gae_normalize', dest='gae_normalize', action='store_true')
