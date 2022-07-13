@@ -16,7 +16,7 @@ if __name__ == "__main__":
     parser.add_argument('--gamma', type=float, default=0.99, help='gamma')
     parser.add_argument('--target_update', type=int, default=2000, help='target update intervals')
     parser.add_argument('--batch', type=int, default=64, help='batch size')
-    parser.add_argument('--buffer_size', type=float, default=500000, help='buffer_size')
+    parser.add_argument('--buffer_size', type=float, default=200000, help='buffer_size')
     parser.add_argument('--double', action='store_true')
     parser.add_argument('--dueling',action='store_true')
     parser.add_argument('--per', action='store_true')
@@ -39,6 +39,7 @@ if __name__ == "__main__":
     parser.add_argument('--train_freq', type=int, default=1, help='train_frequancy')
     parser.add_argument('--learning_starts', type=int, default=5000, help='learning start')
     parser.add_argument('--exploration_fraction', type=float, default=0.3, help='exploration fraction')
+    parser.add_argument('--clip_rewards', action='store_true')
     parser.add_argument('--compress_memory', action='store_true')
     args = parser.parse_args() 
     env_name = args.env
@@ -62,7 +63,7 @@ if __name__ == "__main__":
             from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
             env_type, env_id = get_env_type(env_name)
             if env_type == 'atari':
-                env = make_wrap_atari(env_name)
+                env = make_wrap_atari(env_name,clip_rewards=args.clip_rewards)
             else:
                 env = gym.make(env_name)
         env_type = "gym"
