@@ -41,11 +41,11 @@ This implementation is configured to flexibly solve the commonly used gym and un
 To test atari with DQN(or C51, QRQDN, IQN, FQF)
 ```
 python run_qnet.py --algo DQN --env BreakoutNoFrameskip-v4 --learning_rate 0.0002 \
-				   --steps 5e5 --batch 32 --train_freq 1 --target_update 1000 --node 512 \
-				   --hidden_n 1 --final_eps 0.01 --learning_starts 20000 --gamma 0.995 --clip_rewards
+				--steps 5e5 --batch 32 --train_freq 1 --target_update 1000 --node 512 \
+				--hidden_n 1 --final_eps 0.01 --learning_starts 20000 --gamma 0.995 --clip_rewards
 ```
 
 Only 15 minutes is sufficient to run 50K steps on DQNs learning atari breakout (540 steps/sec). This performance measurement was on Nvidia RTX3080 and AMD Ryzen 95950X in a single process.
 ```
-score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████████████████████████████████| 500000/500000 [15:24<00:00, 540.88it/s]
+score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 500000/500000 [15:24<00:00, 540.88it/s]
 ```
