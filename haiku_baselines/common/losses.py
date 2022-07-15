@@ -29,13 +29,12 @@ def QuantileSquareLosses(q_tile, target_tile,quantile,delta):
     square = jnp.square(error)
     return jnp.sum(jnp.mean(weight*square,axis=1),axis=1)
 
-def FQFQuantileLosses(tau_vals, vals, quantile, support_size):
+def FQFQuantileLosses(tau_vals, vals, quantile):
     values_1 = tau_vals - vals[:,:-1]
-    sign_1 = (tau_vals > jnp.concatenate([vals[:, :1], tau_vals[:, :-1]], axis=1)).astype(jnp.float32)
+    sign_1 = (tau_vals > jnp.concatenate([vals[:, :1], tau_vals[:, :-1]], axis=1))
     
     values_2 = tau_vals - vals[:,1:]
-    sign_2 = (tau_vals < jnp.concatenate([vals[:, 1:], tau_vals[:, -1:]], axis=1)).astype(jnp.float32)
+    sign_2 = (tau_vals < jnp.concatenate([tau_vals[:, 1:], vals[:, -1:]], axis=1))
     
-    grad_of_taus = jnp.reshape(jnp.where(sign_1, values_1, -values_1) +
-                               jnp.where(sign_2, values_2, -values_2)),(-1,support_size)
-    return jnp.sum(grad_of_taus* quantile[:,1:-1],axis=-1)
+    grad_of_taus = jnp.where(sign_1, values_1, -values_1) + jnp.where(sign_2, values_2, -values_2)
+    return jnp.sum(grad_of_taus * quantile[:,1:-1],axis=1)

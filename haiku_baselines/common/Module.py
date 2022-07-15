@@ -1,3 +1,4 @@
+from matplotlib.pyplot import axis
 import numpy as np
 import abc as ABC
 import haiku as hk
@@ -19,22 +20,27 @@ class PreProcess(hk.Module):
     
 class FractionProposal(hk.Module):
     def __init__(self,support_size,node=256,hidden_n=2):
+        super(FractionProposal, self).__init__()
         self.support_size = support_size
         self.node = node
         self.hidden_n = hidden_n
         
     def __call__(self,feature):
         batch = feature.shape[0]
-        log_probs = hk.Sequential([
+        log_probs = jax.nn.log_softmax(hk.Sequential([
                     hk.Linear(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n - 1)
-                    ]+[jax.nn.log_softmax]
-                    )
-        probs = jnp.exp(log_probs)
+                    ]
+                    +
+                    [
+                    hk.Linear(self.support_size)
+                    ]
+                    )(feature),axis=1)
+        probs= jnp.exp(log_probs)
         tau_0 = jnp.zeros((batch,1),dtype=np.float32)
         tau_1_N = jnp.cumsum(probs,axis=1)
-        tau = jnp.concatenate([tau_0,tau_1_N],axis=1)
+        tau = jnp.concatenate((tau_0,tau_1_N),axis=1)
         tau_hat = jax.lax.stop_gradient((tau[:,:-1] + tau[:,1:])/2.0)
-        entropy = -jnp.sum(log_probs * probs,keepdims=True)
+        entropy = - jnp.sum(log_probs * probs, axis=-1 ,keepdims=True)
         return tau, tau_hat, entropy
     
 def visual_embedding(mode="simple"):

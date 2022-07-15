@@ -279,6 +279,8 @@ class Q_Network_Family(object):
             done = terminal
             if done and "TimeLimit.truncated" in info:
                 done = not info["TimeLimit.truncated"]
+                if info["TimeLimit.truncated"]:
+                    next_state = state
             self.replay_buffer.add(state, actions[0], reward, next_state, done, terminal)
             self.scores[0] += reward
             state = next_state

@@ -7,7 +7,7 @@ from haiku_baselines.common.layers import NoisyLinear
 
 
 class Model(hk.Module):
-    def __init__(self,action_size,node=256,hidden_n=2,noisy=False,dueling=False, embedding_size = 512):
+    def __init__(self,action_size,node=256,hidden_n=2,noisy=False,dueling=False):
         super(Model, self).__init__()
         self.action_size = action_size
         self.node = node
@@ -18,7 +18,6 @@ class Model(hk.Module):
             self.layer = hk.Linear
         else:
             self.layer = NoisyLinear
-        self.embedding_size = embedding_size
             
         self.pi_mtx = jax.lax.stop_gradient(
                         repeat(jnp.pi* np.arange(0,128, dtype=np.float32),'m -> o m',o=1)
@@ -28,21 +27,16 @@ class Model(hk.Module):
         feature_shape = feature.shape                                                                                   #[ batch x feature]
         batch_size = feature_shape[0]                                                                                   #[ batch ]
         quaitle_shape = tau.shape                                                                                       #[ tau ]
+        feature_tile = repeat(feature,'b f -> (b t) f',t=quaitle_shape[1])                                          #[ (batch x tau) x feature]
         
-        feature_net = hk.Sequential(
-                                    [
-                                        self.layer(self.embedding_size),
-                                        jax.nn.relu
-                                    ]
-                                    )(feature)
-        feature_tile = repeat(feature_net,'b f -> (b t) f',t=quaitle_shape[0])                                          #[ (batch x tau) x self.embedding_size]
-        
-        costau = jnp.cos(repeat(tau,'t -> t m',m=128)*self.pi_mtx)                                                      #[ tau x 128]
-        quantile_embedding = repeat(
-                             hk.Sequential([self.layer(self.embedding_size),jax.nn.relu])(costau),                      #[ tau x self.embedding_size ]
-                             't e -> (b t) e',b=batch_size)                                                             #[ (batch x tau) x self.embedding_size ]
+        costau = jnp.cos(
+                    rearrange(
+                    repeat(tau,'b t -> b t m',m=128),
+                    'b t m -> (b t) m'
+                    )*self.pi_mtx)                                                                                      #[ (batch x tau) x 128]
+        quantile_embedding = hk.Sequential([self.layer(feature_shape[1]),jax.nn.relu])(costau)                       #[ (batch x tau) x feature ]
 
-        mul_embedding = feature_tile*quantile_embedding                                                                 #[ (batch x tau) x self.embedding_size ]
+        mul_embedding = feature_tile*quantile_embedding                                                                 #[ (batch x tau) x feature ]
         
         if not self.dueling:
             q_net = rearrange(
@@ -54,7 +48,7 @@ class Model(hk.Module):
                     self.layer(self.action_size[0])
                 ]
                 )(mul_embedding)
-                ,'(b t) a -> b a t',b=batch_size, t=quaitle_shape[0])                                                   #[ batch x action x tau ]
+                ,'(b t) a -> b a t',b=batch_size, t=quaitle_shape[1])                                                   #[ batch x action x tau ]
             return q_net
         else:
             v = repeat(
@@ -67,8 +61,8 @@ class Model(hk.Module):
                     self.layer(1)
                 ]
                 )(mul_embedding)
-                ,'(b t) o -> b o t',b=batch_size, t=quaitle_shape[0])                                                   #[ batch x 1 x tau ]
-                ,'b o t -> b (a o) t',a=self.action_size[0])                                                            #[ batch x action x tau ]
+                ,'(b t) o -> b o t',b=batch_size, t=quaitle_shape[1])                                                   #[ batch x 1 x tau ]
+                ,'b o t -> b a o t',a=self.action_size[0])                                                            #[ batch x action x tau ]
             a = rearrange(
                 hk.Sequential(
                 [
@@ -78,6 +72,6 @@ class Model(hk.Module):
                     self.layer(self.action_size[0])
                 ]
                 )(mul_embedding)
-                ,'(b t) a -> b a t',b=batch_size, t=quaitle_shape[0])                                                   #[ batch x action x tau ]
-            q = v + a - jnp.max(a,axis=1,keepdims=True)
+                ,'(b t) a -> b a o t',b=batch_size, o=1, t=quaitle_shape[1])                                                   #[ batch x action x tau ]
+            q = hk.Reshape((self.action_size[0],self.support_n*self.support_n))(v + a - jnp.max(a, axis=(1,2), keepdims=True))
             return q

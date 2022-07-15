@@ -124,7 +124,7 @@ class IQN(Q_Network_Family):
         theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, tau, key), actions, axis=1) # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                          # batch x support x 1
         loss = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, jnp.expand_dims(tau,axis=1), self.delta)
-        return jnp.mean( loss * weights), loss
+        return jnp.mean( loss * weights / jnp.max(weights) ), loss #remove weight multiply cpprb weight is something wrong
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         target_tau = jax.random.uniform(key,(self.batch_size,self.n_support))
@@ -149,16 +149,10 @@ class IQN(Q_Network_Family):
             sampled_q = jnp.take_along_axis(next_q - jnp.expand_dims(tau_log_pi_next,axis=2),ind,axis=1).squeeze()
             next_vals = sampled_q * not_dones
             
-            if self.double_q:
-                if self.risk_avoid:
-                    q_k_targets = jnp.mean(self.get_q(params,obses,target_tau * self.CVaR,key),axis=2)
-                else:
-                    q_k_targets = jnp.mean(self.get_q(params,obses,target_tau,key),axis=2)
+            if self.risk_avoid:
+                q_k_targets = jnp.mean(self.get_q(target_params,obses,target_tau * self.CVaR,key),axis=2)
             else:
-                if self.risk_avoid:
-                    q_k_targets = jnp.mean(self.get_q(target_params,obses,target_tau * self.CVaR,key),axis=2)
-                else:
-                    q_k_targets = jnp.mean(self.get_q(target_params,obses,target_tau,key),axis=2)
+                q_k_targets = jnp.mean(self.get_q(target_params,obses,target_tau,key),axis=2)
             q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau*tau_log_pi
             munchausen_addon = jnp.take_along_axis(log_pi,jnp.squeeze(actions,axis=2),axis=1)

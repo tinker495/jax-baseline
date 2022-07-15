@@ -101,7 +101,7 @@ class DQN(Q_Network_Family):
     def _loss(self, params, obses, actions, targets, weights, key):
         vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         error = jnp.squeeze(vals - targets)
-        return jnp.mean(jnp.square(error) * weights), jnp.abs(error)
+        return jnp.mean(jnp.square(error) * weights / jnp.max(weights)), jnp.abs(error) #remove weight multiply cpprb weight is something wrong
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)
@@ -114,10 +114,7 @@ class DQN(Q_Network_Family):
             pi_next = jax.nn.softmax(next_sub_q/self.munchausen_entropy_tau)
             next_vals = jnp.sum(pi_next * (next_q - tau_log_pi_next),axis=1,keepdims=True) * not_dones
             
-            if self.double_q:
-                q_k_targets = self.get_q(params,obses,key)
-            else:
-                q_k_targets = self.get_q(target_params,obses,key)
+            q_k_targets = self.get_q(target_params,obses,key)
             q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau*tau_log_pi
             munchausen_addon = jnp.take_along_axis(log_pi,actions,axis=1)

@@ -18,23 +18,24 @@ class FQF(Q_Network_Family):
                  dueling_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, prioritized_replay=False,
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
                  param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
-                 full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
+                 full_tensorboard_log=False, seed=None, optimizer = 'adamw', compress_memory = False):
         
         super(FQF, self).__init__(env, gamma, learning_rate, buffer_size, exploration_fraction,
                  exploration_final_eps, exploration_initial_eps, train_freq, gradient_steps, batch_size, double_q,
                  dueling_model, n_step, learning_starts, target_network_update_freq, prioritized_replay,
                  prioritized_replay_alpha, prioritized_replay_beta0, prioritized_replay_eps, 
                  param_noise, munchausen, log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
-                 full_tensorboard_log, seed, optimizer)
+                 full_tensorboard_log, seed, optimizer, compress_memory)
         
         self.n_support = n_support
         self.delta = delta
+        self.ent_coef = 1e-2
         
         if _init_setup_model:
             self.setup_model() 
             
     def setup_model(self):
-        tau = jax.random.uniform(next(self.key_seq),(self.n_support,))
+        tau = jax.random.uniform(next(self.key_seq),(1,self.n_support))
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
         if 'cnn_mode' in self.policy_kwargs.keys():
             cnn_mode = self.policy_kwargs['cnn_mode']
@@ -43,7 +44,7 @@ class FQF(Q_Network_Family):
         self.model = hk.transform(lambda x,tau: Model(self.action_size,
                            dueling=self.dueling_model,noisy=self.param_noise,
                            **self.policy_kwargs)(x,tau))
-        self.fpf = hk.transform(lambda x: FractionProposal(**self.policy_kwargs)(x))
+        self.fpf = hk.transform(lambda x: FractionProposal(self.n_support, **self.policy_kwargs)(x))
         pre_param = self.preproc.init(next(self.key_seq),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
         model_param = self.model.init(next(self.key_seq),
@@ -119,22 +120,18 @@ class FQF(Q_Network_Family):
         tau, tau_hats, entropy = self.fpf.apply(params, key, feature)
         theta_loss_tile = jnp.take_along_axis(self.get_q(params, feature, jax.lax.stop_gradient(tau_hats), key), actions, axis=1) # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                          # batch x support x 1
-        hubber = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, jax.lax.stop_gradient(tau_hats), self.delta)
-        q_loss = jnp.mean(weights*hubber)
-        tau_vals = jnp.take_along_axis(self.get_q(jax.lax.stop_gradient(params), feature, tau[:,1:-1], key), actions, axis=1) # batch x 1 x support
-        quantile_loss = jnp.mean(FQFQuantileLosses(jnp.squeeze(tau_vals),jax.lax.stop_gradient(jnp.squeeze(theta_loss_tile)),tau,self.n_support))
-        entropy_loss = -self.ent_coef * jnp.mean(entropy)
+        hubber = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, jax.lax.stop_gradient(jnp.expand_dims(tau_hats,axis=1)), self.delta)
+        q_loss = jnp.mean( hubber * weights / jnp.max(weights)) #remove weight multiply cpprb weight is something wrong
+        tau_vals = jax.lax.stop_gradient(jnp.take_along_axis(self.get_q(params, feature, tau[:,1:-1], key), actions, axis=1)) # batch x 1 x support
+        quantile_loss = jnp.mean(FQFQuantileLosses(jnp.squeeze(tau_vals),jax.lax.stop_gradient(jnp.squeeze(theta_loss_tile)),tau))
+        entropy_loss = self.ent_coef * jnp.mean(entropy)
         total_loss = q_loss + quantile_loss + entropy_loss
         return total_loss, hubber
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
-        feature = self.preproc.apply(params, key, nxtobses)
-        tau, tau_hats, entropy = self.fpf.apply(params, key, feature)
+        feature = self.preproc.apply(target_params, key, nxtobses)
+        _, tau_hats, _ = self.fpf.apply(target_params, key, feature)
         next_q = self.get_q(target_params,self.preproc.apply(target_params, key, nxtobses),tau_hats,key)
-        if self.double_q:
-            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(feature,nxtobses,tau_hats,key),axis=2),axis=1),axis=(1,2))
-        else:
-            next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(next_q,axis=2),axis=1),axis=(1,2))
             
         if self.munchausen:
             next_q_mean = jnp.mean(next_q,axis=2)                                                                                                       # [batch x action]
@@ -151,10 +148,16 @@ class FQF(Q_Network_Family):
             
             rewards += self.munchausen_alpha*jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
+            if self.double_q:
+                feature = self.preproc.apply(params, key, nxtobses)
+                next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(self.get_q(params,feature,nxtobses,tau_hats,key),axis=2),axis=1),axis=(1,2))
+            else:
+                next_actions = jnp.expand_dims(jnp.argmax(jnp.mean(next_q,axis=2),axis=1),axis=(1,2))
             next_vals = not_dones * jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))  # batch x support
         return (next_vals * self._gamma) + rewards                                                  # batch x support
 
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="FQF",
               reset_num_timesteps=True, replay_wrapper=None):
+        tb_log_name = tb_log_name + "({:d})".format(self.n_support)
         super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)

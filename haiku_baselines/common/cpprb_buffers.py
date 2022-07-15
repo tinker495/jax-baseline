@@ -151,7 +151,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                 }
         
     def update_priorities(self, indexes, priorities):
-        self.buffer.update_priorities(indexes,priorities)
+        self.buffer.update_priorities(indexes, priorities)
 
 
 class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
