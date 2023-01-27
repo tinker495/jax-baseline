@@ -62,7 +62,7 @@ if __name__ == "__main__":
         else:
             from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
             env_type, env_id = get_env_type(env_name)
-            if env_type == 'atari':
+            if env_type == 'atari_env':
                 env = make_wrap_atari(env_name,clip_rewards=args.clip_rewards)
             else:
                 env = gym.make(env_name)
