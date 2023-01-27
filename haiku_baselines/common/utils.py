@@ -12,7 +12,7 @@ def hard_update(new_tensors, old_tensors, steps: int, update_period: int):
         
 @jax.jit
 def soft_update(new_tensors, old_tensors, tau : float):
-    return jax.tree_multimap(
+    return jax.tree_map(
       lambda new, old: tau * new + (1.0 - tau) * old,
       new_tensors, old_tensors)
 
@@ -21,7 +21,7 @@ def t_soft_function(new, old, W, tau, v):
 
 @jax.jit
 def t_soft_update(new_tensors, old_tensors, W_tensors,tau : float, v=1.0):
-  return jax.tree_multimap(
+  return jax.tree_map(
     lambda new, old: tau * new + (1.0 - tau) * old,
     new_tensors, old_tensors, W_tensors)
   
