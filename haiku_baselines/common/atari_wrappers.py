@@ -292,9 +292,12 @@ def get_env_type(env_id):
     # Re-parse the gym registry, since we could have new envs since last time.
     for name,env in gym.envs.registry.items():
         print(env.entry_point)
-        env_type = env.entry_point.split('.')[2].split(':')[0]
-        _game_envs[env_type].add(env.id)  # This is a set so add is idempotent
-
+        try:
+            env_type = env.entry_point.split('.')[2].split(':')[0]
+            _game_envs[env_type].add(env.id)  # This is a set so add is idempotent
+        except:
+            pass
+        
     if env_id in _game_envs.keys():
         env_type = env_id
         env_id = [g for g in _game_envs[env_type]][0]
