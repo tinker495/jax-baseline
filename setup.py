@@ -28,7 +28,7 @@ setup(
         'box2d',
         'box2d-py',
         #'box2d-kengz',
-        'jax',
+        'jax = "0.3.25"',
         'einops',
         'dm-haiku',
         'optax',
