@@ -33,7 +33,7 @@ class NoopResetEnv(gym.Wrapper):
         assert noops > 0
         obs = None
         for _ in range(noops):
-            obs, _, terminal, truncated, _ = self.env.step(self.noop_action)
+            obs, _, terminal, truncated, info = self.env.step(self.noop_action)
             if terminal:
                 obs, info = self.env.reset(**kwargs)
         return obs, info
