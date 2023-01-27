@@ -37,6 +37,7 @@ setup(
         'colabgymrender',
         'cpprb',
         'tensorboardX',
+        'imageio-ffmpeg',
         #'importlib; python_version >= "3.5"',
     ]
 )
