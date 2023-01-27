@@ -276,6 +276,7 @@ class Q_Network_Family(object):
             actions = self.actions(state,self.update_eps)
             next_state, reward, terminal, truncated, info = self.env.step(actions[0][0])
             next_state = [np.expand_dims(next_state,axis=0)]
+            print(state, actions[0], reward, next_state, terminal, truncated)
             self.replay_buffer.add(state, actions[0], reward, next_state, terminal, truncated)
             self.scores[0] += reward
             state = next_state
