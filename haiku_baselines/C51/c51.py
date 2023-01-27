@@ -117,7 +117,7 @@ class C51(Q_Network_Family):
                         jnp.squeeze(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1))
                         ,1e-5,1.0)
         loss = jnp.sum(-target_distribution * jnp.log(distribution),axis=1)
-        return jnp.mean(loss * weights / jnp.max(weights)), loss #remove weight multiply cpprb weight is something wrong
+        return jnp.mean(loss * weights), loss #remove weight multiply cpprb weight is something wrong
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)

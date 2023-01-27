@@ -121,7 +121,7 @@ class FQF(Q_Network_Family):
         theta_loss_tile = jnp.take_along_axis(self.get_q(params, feature, jax.lax.stop_gradient(tau_hats), key), actions, axis=1) # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                          # batch x support x 1
         hubber = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, jax.lax.stop_gradient(jnp.expand_dims(tau_hats,axis=1)), self.delta)
-        q_loss = jnp.mean( hubber * weights / jnp.max(weights)) #remove weight multiply cpprb weight is something wrong
+        q_loss = jnp.mean( hubber * weights) #remove weight multiply cpprb weight is something wrong
         tau_vals = jax.lax.stop_gradient(jnp.take_along_axis(self.get_q(params, feature, tau[:,1:-1], key), actions, axis=1)) # batch x 1 x support
         quantile_loss = jnp.mean(FQFQuantileLosses(jnp.squeeze(tau_vals),jax.lax.stop_gradient(jnp.squeeze(theta_loss_tile)),tau))
         entropy_loss = self.ent_coef * jnp.mean(entropy)

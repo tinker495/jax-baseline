@@ -116,7 +116,7 @@ class QRDQN(Q_Network_Family):
         theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)  # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x support x 1
         loss = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, self.quantile, self.delta)
-        return jnp.mean(loss * weights / jnp.max(weights)), loss #remove weight multiply cpprb weight is something wrong
+        return jnp.mean(loss * weights), loss #remove weight multiply cpprb weight is something wrong
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)
