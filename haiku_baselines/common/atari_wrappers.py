@@ -35,8 +35,8 @@ class NoopResetEnv(gym.Wrapper):
         for _ in range(noops):
             obs, _, terminal, truncated, _ = self.env.step(self.noop_action)
             if terminal:
-                obs = self.env.reset(**kwargs)
-        return obs
+                obs, info = self.env.reset(**kwargs)
+        return obs, info
 
     def step(self, action):
         return self.env.step(action)
@@ -53,13 +53,13 @@ class FireResetEnv(gym.Wrapper):
 
     def reset(self, **kwargs):
         self.env.reset(**kwargs)
-        obs, _, terminal, truncated, _ = self.env.step(1)
+        obs, _, terminal, truncated, info = self.env.step(1)
         if terminal:
             self.env.reset(**kwargs)
-        obs, _, terminal, truncated, _ = self.env.step(2)
+        obs, _, terminal, truncated, info = self.env.step(2)
         if terminal:
             self.env.reset(**kwargs)
-        return obs
+        return obs, info
 
     def step(self, action):
         return self.env.step(action)
@@ -99,12 +99,12 @@ class EpisodicLifeEnv(gym.Wrapper):
         :return: ([int] or [float]) the first observation of the environment
         """
         if self.was_real_done:
-            obs = self.env.reset(**kwargs)
+            obs, info = self.env.reset(**kwargs)
         else:
             # no-op step to advance from terminal/lost life state
             obs, _, _, _, _ = self.env.step(0)
         self.lives = self.env.unwrapped.ale.lives()
-        return obs
+        return obs, info
 
 class MaxAndSkipEnv(gym.Wrapper):
     def __init__(self, env, skip=4):
@@ -202,10 +202,10 @@ class FrameStack(gym.Wrapper):
                                             dtype=env.observation_space.dtype)
 
     def reset(self, **kwargs):
-        obs = self.env.reset(**kwargs)
+        obs, info = self.env.reset(**kwargs)
         for _ in range(self.n_frames):
             self.frames.append(obs)
-        return self._get_ob()
+        return self._get_ob(), info
 
     def step(self, action):
         obs, reward, terminal, truncated, info = self.env.step(action)
