@@ -291,7 +291,7 @@ def get_env_type(env_id):
     _game_envs = defaultdict(set)
     # Re-parse the gym registry, since we could have new envs since last time.
     for name,env in gym.envs.registry.items():
-        env_type = env.entry_point.split(':')[0].split('.')[-1]
+        env_type = env.entry_point.split('.')[2].split(':')[0]
         _game_envs[env_type].add(env.id)  # This is a set so add is idempotent
 
     if env_id in _game_envs.keys():
