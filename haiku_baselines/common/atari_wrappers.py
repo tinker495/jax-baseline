@@ -2,7 +2,7 @@ import numpy as np
 import os
 os.environ.setdefault('PATH', '')
 from collections import deque
-import gym
+import gymnasium as gym
 from gym import spaces
 import cv2
 cv2.ocl.setUseOpenCL(False)

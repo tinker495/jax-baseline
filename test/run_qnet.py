@@ -1,6 +1,6 @@
 import os
 import argparse
-import gym
+import gymnasium as gym
 
 from haiku_baselines.DQN.dqn import DQN
 from haiku_baselines.C51.c51 import C51
@@ -57,7 +57,7 @@ if __name__ == "__main__":
         env_type = "unity"
     else:
         if args.worker > 1:
-            from haiku_baselines.common.worker import gymMultiworker
+            from haiku_baselines.common.worker import gymnasium as gymMultiworker
             env = gymMultiworker(env_name, worker_num = args.worker)
         else:
             from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type

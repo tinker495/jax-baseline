@@ -24,8 +24,7 @@ setup(
     install_requires=[
         'requests',
         'mlagents_envs',
-        'gym',
-        'gym[atari,accept-rom-license,box2d]',
+        'gymnasium[all]',
         'box2d',
         'box2d-py',
         #'box2d-kengz',

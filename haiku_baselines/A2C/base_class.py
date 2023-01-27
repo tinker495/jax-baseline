@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 import jax
 import jax.numpy as jnp
 import haiku as hk
@@ -243,7 +243,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(state,steps)
-            next_state, reward, terminal, info = self.env.step(self.conv_action(actions))
+            next_state, reward, terminal, truncated, info = self.env.step(self.conv_action(actions))
             next_state = [np.expand_dims(next_state,axis=0)]
             done = terminal
             if "TimeLimit.truncated" in info:

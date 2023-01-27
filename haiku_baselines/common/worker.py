@@ -1,6 +1,6 @@
 import os
 import argparse
-import gym
+import gymnasium as gym
 
 import jax
 import jax.numpy as jnp

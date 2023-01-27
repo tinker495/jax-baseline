@@ -1,6 +1,6 @@
 import os
 import argparse
-import gym
+import gymnasium as gym
 
 from haiku_baselines.DDPG.ddpg import DDPG
 from haiku_baselines.TD3.td3 import TD3
@@ -56,7 +56,7 @@ if __name__ == "__main__":
     else:
         import mujoco_py
         if args.worker > 1:
-            from haiku_baselines.common.worker import gymMultiworker
+            from haiku_baselines.common.worker import gymnasium as gymMultiworker
             env = gymMultiworker(env_name, worker_num = args.worker)
         else:
             env = gym.make(env_name)

@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 import jax
 import jax.numpy as jnp
 import haiku as hk
@@ -274,22 +274,17 @@ class Q_Network_Family(object):
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(state,self.update_eps)
-            next_state, reward, terminal, info = self.env.step(actions[0][0])
+            next_state, reward, terminal, truncated, info = self.env.step(actions[0][0])
             next_state = [np.expand_dims(next_state,axis=0)]
-            done = terminal
-            if done and "TimeLimit.truncated" in info:
-                done = not info["TimeLimit.truncated"]
-                if info["TimeLimit.truncated"]:
-                    next_state = state
-            self.replay_buffer.add(state, actions[0], reward, next_state, done, terminal)
+            self.replay_buffer.add(state, actions[0], reward, next_state, terminal, truncated)
             self.scores[0] += reward
             state = next_state
-            if terminal:
+            if terminal or truncated:
                 self.scoreque.append(self.scores[0])
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", self.scores[0], steps)
                     self.summary.add_scalar("env/episode len",self.eplen[0],steps)
-                    self.summary.add_scalar("env/time over",float(not done),steps)
+                    self.summary.add_scalar("env/time over",float(truncated),steps)
                 self.scores[0] = 0
                 self.eplen[0] = 0
                 state = [np.expand_dims(self.env.reset(),axis=0)]
