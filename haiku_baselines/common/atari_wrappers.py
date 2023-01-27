@@ -290,6 +290,7 @@ def make_wrap_atari(env_id='Breakout-v0', clip_rewards=True):
 def get_env_type(env_id):
     _game_envs = defaultdict(set)
     # Re-parse the gym registry, since we could have new envs since last time.
+    print(gym.envs.registry)
     for env in gym.envs.registry:
         env_type = env.entry_point.split(':')[0].split('.')[-1]
         _game_envs[env_type].add(env.id)  # This is a set so add is idempotent
