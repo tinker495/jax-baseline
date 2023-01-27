@@ -266,7 +266,8 @@ class Q_Network_Family(object):
                 pbar.set_description(self.discription())
         
     def learn_gym(self, pbar, callback=None, log_interval=100):
-        state = [np.expand_dims(self.env.reset(),axis=0)]
+        state, info = self.env.reset()
+        state = [np.expand_dims(state,axis=0)]
         self.scores = np.zeros([self.worker_size])
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
@@ -288,7 +289,8 @@ class Q_Network_Family(object):
                     self.summary.add_scalar("env/time over",float(truncated),steps)
                 self.scores[0] = 0
                 self.eplen[0] = 0
-                state = [np.expand_dims(self.env.reset(),axis=0)]
+                state, info = self.env.reset()
+                state = [np.expand_dims(state,axis=0)]
                 
             if steps > self.learning_starts and steps % self.train_freq == 0:
                 self.update_eps = self.exploration.value(steps)
