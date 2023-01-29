@@ -101,7 +101,7 @@ class NstepReplayBuffer(ReplayBuffer):
 
     def add(self, obs_t, action, reward, nxtobs_t, done, terminal=False):
         super().add(obs_t, action, reward, nxtobs_t, done, terminal)
-        if terminal:
+        if done and terminal:
             self.buffer.on_episode_end()
 
     def multiworker_add(self, obs_t, action, reward, nxtobs_t, done, terminal=False):
@@ -109,7 +109,7 @@ class NstepReplayBuffer(ReplayBuffer):
             obsdict = dict(zip(self.obsdict.keys(),[o[w]for o in obs_t]))
             nextobsdict = dict(zip(self.nextobsdict.keys(),[no[w]for no in nxtobs_t]))
             self.local_buffers[w].add(**obsdict,action=action[w],reward=reward[w],**nextobsdict,done=done[w])
-            if terminal[w]:
+            if done[w] and terminal[w]:
                 self.local_buffers[w].on_episode_end()
                 self.buffer.add(**self.local_buffers[w].get_all_transitions())
                 self.local_buffers[w].clear()
