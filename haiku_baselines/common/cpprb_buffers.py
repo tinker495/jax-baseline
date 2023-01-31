@@ -5,7 +5,7 @@ import numpy as np
 import cpprb
 
 class ReplayBuffer(object):
-    def __init__(self, size: int, observation_space: list,action_space = 1,compress_memory = False):
+    def __init__(self, size: int, observation_space: list,action_space = 1,compress_memory = True):
         self.max_size = size
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
@@ -60,7 +60,7 @@ class ReplayBuffer(object):
                 }
 
 class NstepReplayBuffer(ReplayBuffer):
-    def __init__(self, size: int, observation_space: list,action_space = 1, worker_size = 1, n_step=1, gamma=0.99,compress_memory = False):
+    def __init__(self, size: int, observation_space: list,action_space = 1, worker_size = 1, n_step=1, gamma=0.99,compress_memory = True):
         self.max_size = size
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
@@ -115,7 +115,7 @@ class NstepReplayBuffer(ReplayBuffer):
                 self.local_buffers[w].clear()
         
 class PrioritizedReplayBuffer(ReplayBuffer):
-    def __init__(self, size: int, observation_space: list, alpha: float, action_space = 1,compress_memory = False):
+    def __init__(self, size: int, observation_space: list, alpha: float, action_space = 1,compress_memory = True):
         self.max_size = size
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
@@ -155,7 +155,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
 
 class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
-    def __init__(self, size: int, observation_space: list, action_space = 1, worker_size = 1, n_step=1, gamma=0.99, alpha = 0.4,compress_memory = False):
+    def __init__(self, size: int, observation_space: list, action_space = 1, worker_size = 1, n_step=1, gamma=0.99, alpha = 0.4,compress_memory = True):
         self.max_size = size
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
