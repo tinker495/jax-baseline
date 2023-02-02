@@ -5,7 +5,6 @@ from matplotlib import axes
 from matplotlib.pyplot import axis
 import numpy as np
 import optax
-from torch import clip_
 from functools import partial # reduces arguments to function by making some subset implicit
 
 from haiku_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
