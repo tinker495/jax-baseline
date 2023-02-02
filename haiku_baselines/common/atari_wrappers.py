@@ -50,7 +50,7 @@ class FireResetEnv(gym.Wrapper):
         gym.Wrapper.__init__(self, env)
         assert env.unwrapped.get_action_meanings()[1] == 'FIRE'
         assert len(env.unwrapped.get_action_meanings()) >= 3
-        self._action_space = gym.spaces.Discrete(self.action_space-2)
+        self._action_space = gym.spaces.Discrete(self.action_space.n-2)
 
     def reset(self, **kwargs):
         self.env.reset(**kwargs)
