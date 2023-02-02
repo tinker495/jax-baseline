@@ -269,7 +269,7 @@ def wrap_deepmind(env, episode_life=True, clip_rewards=True, frame_stack=True, s
     """
     if episode_life:
         env = EpisodicLifeEnv(env)
-    print("meaning : ", env.unwrapped.get_action_meanings())
+    print("Action meaning : ", env.unwrapped.get_action_meanings())
     if 'FIRE' in env.unwrapped.get_action_meanings():
         env = FireResetEnv(env)
     env = WarpFrame(env)
