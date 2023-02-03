@@ -346,8 +346,8 @@ class Q_Network_Family(object):
         pass
     
     def test_gym(self, episode,directory):
-        from colabgymrender.recorder import Recorder
-        Render_env = Recorder(self.env, directory)
+        from gymnasium.wrappers import RecordVideo
+        Render_env = RecordVideo(self.env, directory)
         for i in range(episode):
             state = [np.expand_dims(Render_env.reset(),axis=0)]
             terminal = False
