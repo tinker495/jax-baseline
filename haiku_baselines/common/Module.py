@@ -49,7 +49,8 @@ def visual_embedding(mode="simple"):
                     hk.Conv2D(32, kernel_shape=[8, 8], stride=[4, 4], padding='VALID'), jax.nn.relu,
                     hk.Conv2D(64, kernel_shape=[4, 4], stride=[2, 2], padding='VALID'), jax.nn.relu,
                     hk.Conv2D(64, kernel_shape=[3, 3], stride=[1, 1], padding='VALID'), jax.nn.relu,
-                    hk.Flatten()
+                    hk.Flatten(),
+                    hk.Linear(512), jax.nn.relu
                     ])(x)
     elif mode == "simple":
         net_fn = lambda x: hk.Sequential([
