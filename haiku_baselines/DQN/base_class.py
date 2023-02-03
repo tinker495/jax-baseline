@@ -349,12 +349,14 @@ class Q_Network_Family(object):
         from gymnasium.wrappers import RecordVideo
         Render_env = RecordVideo(self.env, directory)
         for i in range(episode):
-            state = [np.expand_dims(Render_env.reset(),axis=0)]
+            state, info = self.env.reset()
+            state = [np.expand_dims(state,axis=0)]
             terminal = False
+            truncated = False
             episode_rew = 0
-            while not terminal:
+            while not (terminal or truncated):
                 actions = self.actions(state,0.001)
-                observation, reward, terminal, info = Render_env.step(actions[0][0])
+                observation, reward, terminal, truncated, info = self.env.step(actions[0][0])
                 state = [np.expand_dims(observation,axis=0)]
                 episode_rew += reward
             print("episod reward :", episode_rew)
