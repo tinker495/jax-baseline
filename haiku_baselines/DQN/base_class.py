@@ -347,6 +347,7 @@ class Q_Network_Family(object):
     
     def test_gym(self, episode,directory):
         from gymnasium.wrappers import RecordVideo
+        self.env.render_mode = 'rgb_array'
         Render_env = RecordVideo(self.env, directory)
         for i in range(episode):
             state = [np.expand_dims(Render_env.reset(),axis=0)]
