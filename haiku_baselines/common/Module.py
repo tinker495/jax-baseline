@@ -56,18 +56,14 @@ def visual_embedding(mode="simple"):
         net_fn = lambda x: hk.Sequential([
                     hk.Conv2D(16, kernel_shape=[8, 8], stride=[4, 4], padding='VALID'), jax.nn.relu,
                     hk.Conv2D(32, kernel_shape=[4, 4], stride=[2, 2], padding='VALID'), jax.nn.relu,
-                    hk.Flatten()
+                    hk.Flatten(),
+                    hk.Linear(256), jax.nn.relu
                     ])(x)
     elif mode == "minimum":
         net_fn = lambda x: hk.Sequential([
                     hk.Conv2D(16, kernel_shape=[3, 3], stride=[1, 1], padding='VALID'), jax.nn.relu,
-                    hk.Flatten()
-                    ])(x)
-    elif mode == 'slide':
-        net_fn = lambda x: hk.Sequential([
-                    hk.Conv2D(512, kernel_shape=[3, 3], stride=[1, 1], padding='SAME'), jax.nn.relu,
-                    hk.Conv2D(512, kernel_shape=[3, 3], stride=[1, 1], padding='SAME'), jax.nn.relu,
-                    hk.Flatten()
+                    hk.Flatten(),
+                    hk.Linear(128), jax.nn.relu
                     ])(x)
     elif mode == "none":
         net_fn = hk.Flatten()
