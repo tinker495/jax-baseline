@@ -101,6 +101,8 @@ class DQN(Q_Network_Family):
     def _loss(self, params, obses, actions, targets, weights, key):
         vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         error = jnp.squeeze(vals - targets)
+        print(error.shape())
+        print(weights.shape())
         return jnp.mean(jnp.square(error) * weights), jnp.abs(error) #remove weight multiply cpprb weight is something wrong
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
