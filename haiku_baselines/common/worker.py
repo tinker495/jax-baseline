@@ -72,7 +72,8 @@ class gymRayworker:
             self.action_conv =  lambda a: a
         
     def get_reset(self):
-        return self.env.reset(),None,0,False,False
+        state, info = self.env.reset()
+        return state,None,0,False,False
     
     def get_info(self):
         return {'observation_space' : self.env.observation_space, 
@@ -81,13 +82,10 @@ class gymRayworker:
                 'env_id' : self.env_id}
         
     def step(self,action):
-        state, reward, terminal, info = self.env.step(self.action_conv(action))
-        done = terminal
-        if "TimeLimit.truncated" in info:
-            done = not info["TimeLimit.truncated"]
-        if terminal:
+        state, reward, terminal, truncated, info = self.env.step(self.action_conv(action))
+        if terminal or truncated:
             end_state = state
-            state = self.env.reset()
+            state, info = self.env.reset()
         else:
             end_state = None
-        return state, end_state, reward, done, terminal
+        return state, end_state, reward, terminal, truncated
