@@ -316,22 +316,24 @@ class Actor_Critic_Policy_Gradient_Family(object):
         pass
     
     def test_gymMultiworker(self, episode,directory):
-        from colabgymrender.recorder import Recorder
+        from gymnasium.wrappers import RecordVideo
         env_id = self.env.env_id
         from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
         env_type, env_id = get_env_type(env_id)
-        if env_type == 'atari':
-            env = make_wrap_atari(env_id)
+        if  env_type == 'atari_env':
+            env = make_wrap_atari(env_id,clip_rewards=True)
         else:
             env = gym.make(env_id)
-        Render_env = Recorder(env, directory)
+        Render_env = RecordVideo(self.env, directory)
         for i in range(episode):
-            state = [np.expand_dims(Render_env.reset(),axis=0)]
+            state, info = Render_env.reset()
+            state = [np.expand_dims(state,axis=0)]
             terminal = False
+            truncated = False
             episode_rew = 0
-            while not terminal:
+            while not (terminal or truncated):
                 actions = self.actions(state)
-                observation, reward, terminal, info = Render_env.step(actions[0][0] if self.action_type == 'discrete' else actions[0])
+                observation, reward, terminal, truncated, info = Render_env.step(actions[0][0] if self.action_type == 'discrete' else actions[0])
                 state = [np.expand_dims(observation,axis=0)]
                 episode_rew += reward
             print("episod reward :", episode_rew)
