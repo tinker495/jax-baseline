@@ -62,10 +62,10 @@ class gymRayworker:
     def __init__(self, env_name_):
         from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
         self.env_type, self.env_id = get_env_type(env_name_)
-        if self.env_type == 'atari':
-            self.env = make_wrap_atari(self.env_id)
+        if  self.env_type == 'atari_env':
+            self.env = make_wrap_atari(env_name_,clip_rewards=True)
         else:
-            self.env = gym.make(self.env_id)
+            self.env = gym.make(env_name_)
         if not isinstance(self.env.action_space, spaces.Box):
             self.action_conv =  lambda a: a[0]
         else:
