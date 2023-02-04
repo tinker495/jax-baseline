@@ -92,11 +92,11 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
                                     np.mean(self.scoreque), np.mean(self.lossque)
                                     )
     
-    def action_discrete(self,obs,steps):
+    def action_discrete(self,obs):
         prob = np.asarray(self._get_actions(self.params, obs))
         return np.expand_dims(np.stack([np.random.choice(self.action_size[0],p=p) for p in prob],axis=0),axis=1)
     
-    def action_continuous(self,obs,steps):
+    def action_continuous(self,obs):
         mu, std = self._get_actions(self.params, obs)
         return np.random.normal(mu, std)
     

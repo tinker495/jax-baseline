@@ -179,7 +179,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         obses = convert_states(dec.obs)
         for steps in pbar:
             self.eplen += 1
-            actions = self.actions(obses,steps)
+            actions = self.actions(obses)
             action_tuple = self.conv_action(actions)
             old_obses = obses
 
@@ -235,31 +235,30 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 pbar.set_description(self.discription())
         
     def learn_gym(self, pbar, callback=None, log_interval=100):
-        state = [np.expand_dims(self.env.reset(),axis=0)]
+        state, info = self.env.reset()
+        state = [np.expand_dims(state,axis=0)]
         self.scores = np.zeros([self.worker_size])
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
         self.lossque = deque(maxlen=10)
         for steps in pbar:
             self.eplen += 1
-            actions = self.actions(state,steps)
+            actions = self.actions(state)
             next_state, reward, terminal, truncated, info = self.env.step(self.conv_action(actions))
             next_state = [np.expand_dims(next_state,axis=0)]
-            done = terminal
-            if "TimeLimit.truncated" in info:
-                done = not info["TimeLimit.truncated"]
-            self.buffer.add(state, actions[0], reward, next_state, done, terminal)
+            self.buffer.add(state, actions[0], reward, next_state, terminal, truncated)
             self.scores[0] += reward
             state = next_state
-            if terminal:
+            if terminal or truncated:
                 self.scoreque.append(self.scores[0])
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", self.scores[0], steps)
                     self.summary.add_scalar("env/episode len",self.eplen[0],steps)
-                    self.summary.add_scalar("env/time over",float(not done),steps)
+                    self.summary.add_scalar("env/time over",float(truncated),steps)
                 self.scores[0] = 0
                 self.eplen[0] = 0
-                state = [np.expand_dims(self.env.reset(),axis=0)]
+                state, info = self.env.reset()
+                state = [np.expand_dims(state,axis=0)]
                 
             if (steps + 1) % self.batch_size == 0: #train in step the environments
                 loss = self.train_step(steps)
@@ -277,7 +276,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.lossque = deque(maxlen=10)
         for steps in pbar:
             self.eplen += 1
-            actions = self.actions([state],steps)
+            actions = self.actions([state])
             self.env.step(actions)
             
             next_states,rewards,dones,terminals,end_states,end_idx = self.env.get_steps()
@@ -302,9 +301,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
             
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
-    
-    def test_action(self, state):
-        return self.actions(state,0)
     
     def test(self, episode = 10, tb_log_name=None):
         if tb_log_name is None:
@@ -334,22 +330,24 @@ class Actor_Critic_Policy_Gradient_Family(object):
             terminal = False
             episode_rew = 0
             while not terminal:
-                actions = self.test_action(state)
+                actions = self.actions(state)
                 observation, reward, terminal, info = Render_env.step(actions[0][0] if self.action_type == 'discrete' else actions[0])
                 state = [np.expand_dims(observation,axis=0)]
                 episode_rew += reward
             print("episod reward :", episode_rew)
     
     def test_gym(self, episode,directory):
-        from colabgymrender.recorder import Recorder
-        Render_env = Recorder(self.env, directory)
+        from gymnasium.wrappers import RecordVideo
+        Render_env = RecordVideo(self.env, directory)
         for i in range(episode):
-            state = [np.expand_dims(Render_env.reset(),axis=0)]
+            state, info = Render_env.reset()
+            state = [np.expand_dims(state,axis=0)]
             terminal = False
+            truncated = False
             episode_rew = 0
-            while not terminal:
-                actions = self.test_action(state)
-                observation, reward, terminal, info = Render_env.step(actions[0][0] if self.action_type == 'discrete' else actions[0])
+            while not (terminal or truncated):
+                actions = self.actions(state)
+                observation, reward, terminal, truncated, info = Render_env.step(actions[0][0] if self.action_type == 'discrete' else actions[0])
                 state = [np.expand_dims(observation,axis=0)]
                 episode_rew += reward
             print("episod reward :", episode_rew)
