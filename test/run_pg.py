@@ -45,7 +45,7 @@ if __name__ == "__main__":
     else:
         #import mujoco_py
         if args.worker > 1:
-            from haiku_baselines.common.worker import gymnasium as gymMultiworker
+            from haiku_baselines.common.worker import gymMultiworker
             env = gymMultiworker(env_name, worker_num = args.worker)
         else:
             from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
