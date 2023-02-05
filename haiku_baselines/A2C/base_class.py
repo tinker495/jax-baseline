@@ -323,7 +323,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         if  env_type == 'atari_env':
             env = make_wrap_atari(env_id,clip_rewards=True)
         else:
-            env = gym.make(env_id)
+            env = gym.make(env_id, render_mode='rgb_array')
         Render_env = RecordVideo(env, directory)
         for i in range(episode):
             state, info = Render_env.reset()
