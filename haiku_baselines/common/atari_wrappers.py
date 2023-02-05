@@ -50,7 +50,7 @@ class FireResetEnv(gym.Wrapper):
         gym.Wrapper.__init__(self, env)
         assert env.unwrapped.get_action_meanings()[1] == 'FIRE'
         assert len(env.unwrapped.get_action_meanings()) >= 3
-        self._action_space = gym.spaces.Discrete(self.action_space.n-1)
+        #self._action_space = gym.spaces.Discrete(self.action_space.n-1)
 
     def reset(self, **kwargs):
         self.env.reset(**kwargs)
@@ -63,7 +63,7 @@ class FireResetEnv(gym.Wrapper):
         return obs, info
 
     def step(self, action):
-        return self.env.step(action+1)
+        return self.env.step(action)
 
 class EpisodicLifeEnv(gym.Wrapper):
     def __init__(self, env):
