@@ -53,7 +53,7 @@ if __name__ == "__main__":
             if env_type == 'atari_env':
                 env = make_wrap_atari(env_name)
             else:
-                env = gym.make(env_name)
+                env = gym.make(env_name, render_mode='rgb_array')
         env_type = "gym"
 
     
