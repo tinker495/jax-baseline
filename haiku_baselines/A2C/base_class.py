@@ -324,7 +324,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             env = make_wrap_atari(env_id,clip_rewards=True)
         else:
             env = gym.make(env_id)
-        Render_env = RecordVideo(self.env, directory)
+        Render_env = RecordVideo(env, directory)
         for i in range(episode):
             state, info = Render_env.reset()
             state = [np.expand_dims(state,axis=0)]
