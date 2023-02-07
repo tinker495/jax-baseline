@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import haiku as hk
 import numpy as np
 import optax
+from copy import deepcopy
 
 from haiku_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from haiku_baselines.TD4_QR.network import Actor, Critic
@@ -54,7 +55,7 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         actor_param = self.actor.init(next(self.key_seq), feature)
         critic_param = self.critic.init(next(self.key_seq), feature, np.zeros((1,self.action_size[0])))
         self.params = hk.data_structures.merge(pre_param, actor_param, critic_param)
-        self.target_params = self.params
+        self.target_params = deepcopy(self.params)
         
         self.opt_state = self.optimizer.init(self.params)
         

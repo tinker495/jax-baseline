@@ -5,6 +5,7 @@ import jax
 import pickle
 
 import optax
+from copy import deepcopy
 from optax._src import combine
 
 from tensorboardX import SummaryWriter

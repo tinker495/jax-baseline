@@ -5,6 +5,7 @@ from matplotlib import axes
 from matplotlib.pyplot import axis
 import numpy as np
 import optax
+from copy import deepcopy
 from functools import partial # reduces arguments to function by making some subset implicit
 
 from haiku_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
@@ -58,7 +59,7 @@ class IQA_TQC(Deteministic_Policy_Gradient_Family):
         actor_param = self.actor.init(next(self.key_seq), feature, np.zeros((1,self.action_support,self.action_size[0])))
         critic_param = self.critic.init(next(self.key_seq), feature, np.zeros((1,self.action_size[0])))
         self.params = hk.data_structures.merge(pre_param, actor_param, critic_param)
-        self.target_params = self.params
+        self.target_params = deepcopy(self.params)
         
         if isinstance(self.ent_coef, str) and self.ent_coef.startswith('auto'):
             init_value = np.log(1e-1)

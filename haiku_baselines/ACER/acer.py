@@ -4,6 +4,8 @@ import jax.numpy as jnp
 import haiku as hk
 import numpy as np
 import optax
+from copy import deepcopy
+from copy import deepcopy
 
 from collections import deque
 

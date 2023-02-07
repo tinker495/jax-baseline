@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import haiku as hk
 import numpy as np
 import optax
+from copy import deepcopy
 from einops import rearrange, reduce, repeat
 
 from haiku_baselines.DQN.base_class import Q_Network_Family
@@ -51,7 +52,7 @@ class IQN(Q_Network_Family):
                             self.preproc.apply(pre_param, 
                             None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]), tau)
         self.params = hk.data_structures.merge(pre_param, model_param)
-        self.target_params = self.params
+        self.target_params = deepcopy(self.params)
         
         self.opt_state = self.optimizer.init(self.params)
         
