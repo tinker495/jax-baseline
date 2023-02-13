@@ -29,7 +29,7 @@ setup(
         'box2d',
         'box2d-py',
         #'box2d-kengz',
-        'jax==0.3.25',
+        'jax==0.4.3',
         'einops',
         'dm-haiku',
         'optax',
@@ -39,6 +39,7 @@ setup(
         'cpprb',
         'tensorboardX',
         'imageio-ffmpeg',
+        'opencv-python'
         #'importlib; python_version >= "3.5"',
     ]
 )
