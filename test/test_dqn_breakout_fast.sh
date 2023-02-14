@@ -1,7 +1,7 @@
 export CUDA_VISIBLE_DEVICES=0
 export SDL_VIDEODRIVER=dummy
 ENV="--env BreakoutNoFrameskip-v4 --clip_rewards"
-TRAIN="--learning_rate 0.0003 --steps 3e6 --batch 64 --train_freq 1 --target_update 500 --final_eps 0.05 --learning_starts 1000 --gamma 0.995 --buffer_size 1e6 --exploration_fraction 0.3"
+TRAIN="--learning_rate 0.0003 --steps 3e6 --batch 16 --train_freq 1 --target_update 500 --final_eps 0.05 --learning_starts 1000 --gamma 0.99 --buffer_size 1e6 --exploration_fraction 0.3"
 MODEL="--node 128 --hidden_n 1"
 OPTIMIZER="--optimizer rmsprop"
 python run_qnet.py --algo DQN $ENV $TRAIN $MODEL $OPTIMIZER
