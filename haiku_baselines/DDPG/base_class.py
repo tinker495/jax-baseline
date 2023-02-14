@@ -310,7 +310,7 @@ class Deteministic_Policy_Gradient_Family(object):
     
     def test_gym(self, episode,directory):
         from gymnasium.wrappers import RecordVideo
-        Render_env = RecordVideo(self.env, directory)
+        Render_env = RecordVideo(self.env, directory, episode_trigger = lambda x: True)
         for i in range(episode):
             state, info = Render_env.reset()
             state = [np.expand_dims(state,axis=0)]
