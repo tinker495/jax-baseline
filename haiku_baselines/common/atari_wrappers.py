@@ -34,7 +34,7 @@ class NoopResetEnv(gym.Wrapper):
         obs = None
         for _ in range(noops):
             obs, _, terminal, truncated, info = self.env.step(self.noop_action)
-            if terminal:
+            if terminal or truncated:
                 obs, info = self.env.reset(**kwargs)
         return obs, info
 
@@ -54,11 +54,11 @@ class FireResetEnv(gym.Wrapper):
 
     def reset(self, **kwargs):
         self.env.reset(**kwargs)
-        obs, _, terminal, truncated, info = self.env.step(0)
-        if terminal:
-            self.env.reset(**kwargs)
         obs, _, terminal, truncated, info = self.env.step(1)
-        if terminal:
+        if terminal or truncated:
+            self.env.reset(**kwargs)
+        obs, _, terminal, truncated, info = self.env.step(2)
+        if terminal or truncated:
             self.env.reset(**kwargs)
         return obs, info
 
@@ -135,7 +135,7 @@ class MaxAndSkipEnv(gym.Wrapper):
             if i == self._skip - 1:
                 self._obs_buffer[1] = obs
             total_reward += reward
-            if terminal and truncated:
+            if terminal or truncated:
                 break
         # Note that the observation on the done=True frame
         # doesn't matter
@@ -273,10 +273,10 @@ def wrap_deepmind(env, episode_life=True, clip_rewards=True, frame_stack=True, s
     if 'FIRE' in env.unwrapped.get_action_meanings():
         env = FireResetEnv(env)
     env = WarpFrame(env)
-    if scale:
-        env = ScaledFloatFrame(env)
     if clip_rewards:
         env = ClipRewardEnv(env)
+    if scale:
+        env = ScaledFloatFrame(env)
     if frame_stack:
         env = FrameStack(env, 4)
     return env
