@@ -293,7 +293,7 @@ def get_env_type(env_id):
     
     # Re-parse the gym registry, since we could have new envs since last time.
     for name,env in gym.envs.registry.items():
-        #print(env.entry_point, env.id)
+        print(env.entry_point, env.id)
         if "gymnasium" in env.entry_point:
             env_type = env.entry_point.split('.')[2].split(':')[0]
         elif "shimmy" in env.entry_point:
