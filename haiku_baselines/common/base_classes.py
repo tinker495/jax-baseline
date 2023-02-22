@@ -7,6 +7,7 @@ import pickle
 import optax
 from copy import deepcopy
 from optax._src import combine
+from haiku_baselines.common.optimizer import lion
 
 from tensorboardX import SummaryWriter
     
@@ -74,8 +75,20 @@ def restore(ckpt_dir):
 
 def select_optimizer(optim_str, rl, eps=1e-2/256.0, grad_max=3):
     if optim_str == 'adam':
+        return optax.adam(rl,eps=eps)
+    elif optim_str == 'adamw':
+        return optax.adamw(rl,eps=eps)
+    elif optim_str == 'rmsprop':
+        return optax.rmsprop(rl,eps=eps)
+    elif optim_str == 'lion':
+        return lion(rl)
+    '''
+    if optim_str == 'adam':
         return combine.chain(optax.clip_by_global_norm(grad_max), optax.adam(rl,eps=eps))
     elif optim_str == 'adamw':
         return combine.chain(optax.clip_by_global_norm(grad_max), optax.adamw(rl,eps=eps))
     elif optim_str == 'rmsprop':
         return combine.chain(optax.clip_by_global_norm(grad_max), optax.rmsprop(rl,eps=eps))
+    elif optim_str == 'lion':
+        return combine.chain(optax.clip_by_global_norm(grad_max), lion(rl))
+    '''
