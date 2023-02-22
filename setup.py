@@ -28,7 +28,7 @@ setup(
         'gymnasium[atari,accept-rom-license,box2d]',
         'box2d',
         'box2d-py',
-        #'box2d-kengz',
+        'box2d-kengz',
         'jax==0.4.4',
         'einops',
         'dm-haiku',
