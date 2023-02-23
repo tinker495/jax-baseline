@@ -27,6 +27,7 @@ setup(
         'gymnasium',
         'gymnasium[atari,accept-rom-license,box2d,mujoco]',
         'mujoco',
+        'mujoco-py',
         'box2d',
         'box2d-py',
         'box2d-kengz',
