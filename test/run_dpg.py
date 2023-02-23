@@ -51,7 +51,7 @@ if __name__ == "__main__":
         engine_configuration_channel = EngineConfigurationChannel()
         channel = EnvironmentParametersChannel()
         engine_configuration_channel.set_configuration_parameters(time_scale=args.time_scale,capture_frame_rate=30)
-        env = UnityEnvironment(file_name=env_name,worker_id=args.worker_id,no_graphics=False,side_channels=[engine_configuration_channel,channel])
+        env = UnityEnvironment(file_name=env_name,worker_id=args.worker_id,no_graphics=True,side_channels=[engine_configuration_channel,channel])
         env_name = env_name.split('/')[-1].split('.')[0]
         env_type = "unity"
     else:
