@@ -54,7 +54,7 @@ if __name__ == "__main__":
         env_name = env_name.split('/')[-1].split('.')[0]
         env_type = "unity"
     else:
-        import mujoco_py
+        #import mujoco_py
         if args.worker > 1:
             from haiku_baselines.common.worker import gymnasium as gymMultiworker
             env = gymMultiworker(env_name, worker_num = args.worker)
