@@ -39,7 +39,7 @@ if __name__ == "__main__":
     parser.add_argument('--ent_coef', type=str,default='auto', help='sac entropy coefficient')
     parser.add_argument('--learning_starts', type=int, default=5000, help='learning start')
     parser.add_argument('--risk_avoidance', type=float,default=0.0, help='risk_avoidance')
-    parser.add_argument('--time_scale', type=float,default=12.0, help='risk_avoidance')
+    parser.add_argument('--time_scale', type=float,default=20.0, help='risk_avoidance')
     args = parser.parse_args() 
     env_name = args.env
     cnn_mode = "normal"
