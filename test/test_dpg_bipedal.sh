@@ -1,7 +1,7 @@
 export CUDA_VISIBLE_DEVICES=0
 export SDL_VIDEODRIVER=dummy
 
-ENV="--env BipedalWalker-v3"
+ENV="--env Humanoid-v4"
 RL="--learning_rate 0.0002"
 TRAIN="--steps 2e7 --batch 256 --target_update_tau 5e-4 --learning_starts 1000"
 MODEL="--node 512 --hidden_n 3"
