@@ -1,6 +1,6 @@
 import os
 import argparse
-import gym
+import gymnasium as gym
 
 from haiku_baselines.DDPG.ddpg import DDPG
 from haiku_baselines.TD3.td3 import TD3
@@ -39,6 +39,7 @@ if __name__ == "__main__":
     parser.add_argument('--ent_coef', type=str,default='auto', help='sac entropy coefficient')
     parser.add_argument('--learning_starts', type=int, default=5000, help='learning start')
     parser.add_argument('--risk_avoidance', type=float,default=0.0, help='risk_avoidance')
+    parser.add_argument('--time_scale', type=float,default=20.0, help='risk_avoidance')
     args = parser.parse_args() 
     env_name = args.env
     cnn_mode = "normal"
@@ -49,14 +50,14 @@ if __name__ == "__main__":
         
         engine_configuration_channel = EngineConfigurationChannel()
         channel = EnvironmentParametersChannel()
-        engine_configuration_channel.set_configuration_parameters(time_scale=12.0,capture_frame_rate=30)
+        engine_configuration_channel.set_configuration_parameters(time_scale=args.time_scale,capture_frame_rate=30)
         env = UnityEnvironment(file_name=env_name,worker_id=args.worker_id,no_graphics=True,side_channels=[engine_configuration_channel,channel])
         env_name = env_name.split('/')[-1].split('.')[0]
         env_type = "unity"
     else:
-        import mujoco_py
+        #import mujoco_py
         if args.worker > 1:
-            from haiku_baselines.common.worker import gymMultiworker
+            from haiku_baselines.common.worker import gymnasium as gymMultiworker
             env = gymMultiworker(env_name, worker_num = args.worker)
         else:
             env = gym.make(env_name)

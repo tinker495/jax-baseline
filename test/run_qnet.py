@@ -1,6 +1,6 @@
 import os
 import argparse
-import gym
+import gymnasium as gym
 
 from haiku_baselines.DQN.dqn import DQN
 from haiku_baselines.C51.c51 import C51
@@ -30,12 +30,13 @@ if __name__ == "__main__":
     parser.add_argument('--max', type=float, default=250, help='c51 max')
     parser.add_argument('--min', type=float, default=-250, help='c51 min')
     parser.add_argument('--n_support', type=int,default=32, help='n_support for QRDQN,IQN,FQF')
+    parser.add_argument('--delta', type=float,default=0.001, help='network node number')
     parser.add_argument('--CVaR', type=float, default=1.0, help='IQN risk avoiding factor')
     parser.add_argument('--node', type=int,default=256, help='network node number')
     parser.add_argument('--hidden_n', type=int,default=2, help='hidden layer number')
     parser.add_argument('--final_eps', type=float,default=0.1, help='final epsilon')
     parser.add_argument('--worker', type=int,default=1, help='gym_worker_size')
-    parser.add_argument('--optimizer', type=str,default='adam', help='optimaizer')
+    parser.add_argument('--optimizer', type=str,default='adamw', help='optimaizer')
     parser.add_argument('--train_freq', type=int, default=1, help='train_frequancy')
     parser.add_argument('--learning_starts', type=int, default=5000, help='learning start')
     parser.add_argument('--exploration_fraction', type=float, default=0.3, help='exploration fraction')
@@ -57,12 +58,12 @@ if __name__ == "__main__":
         env_type = "unity"
     else:
         if args.worker > 1:
-            from haiku_baselines.common.worker import gymMultiworker
+            from haiku_baselines.common.worker import gymnasium as gymMultiworker
             env = gymMultiworker(env_name, worker_num = args.worker)
         else:
             from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
             env_type, env_id = get_env_type(env_name)
-            if env_type == 'atari':
+            if env_type == 'atari_env':
                 env = make_wrap_atari(env_name,clip_rewards=args.clip_rewards)
             else:
                 env = gym.make(env_name)
@@ -89,19 +90,19 @@ if __name__ == "__main__":
         agent = QRDQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq, learning_starts=args.learning_starts,
-                    n_support = args.n_support, exploration_fraction = args.exploration_fraction,
+                    delta = args.delta, n_support = args.n_support, exploration_fraction = args.exploration_fraction,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory)
     elif args.algo == "IQN":
         agent = IQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq, learning_starts=args.learning_starts,
-                    n_support = args.n_support, exploration_fraction = args.exploration_fraction, CVaR= args.CVaR,
+                    delta = args.delta, n_support = args.n_support, exploration_fraction = args.exploration_fraction, CVaR= args.CVaR,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory)
     elif args.algo == "FQF":
         agent = FQF(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq, learning_starts=args.learning_starts,
-                    n_support = args.n_support, exploration_fraction = args.exploration_fraction,
+                    delta = args.delta, n_support = args.n_support, exploration_fraction = args.exploration_fraction,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory)
 
 

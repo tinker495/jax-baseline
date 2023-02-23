@@ -24,12 +24,13 @@ setup(
     install_requires=[
         'requests',
         'mlagents_envs',
-        'gym',
-        'gym[atari,accept-rom-license,box2d]',
+        'gymnasium',
+        'gymnasium[atari,accept-rom-license,box2d,mujoco]',
+        'mujoco',
         'box2d',
         'box2d-py',
-        #'box2d-kengz',
-        'jax',
+        'box2d-kengz',
+        'jax==0.4.4',
         'einops',
         'dm-haiku',
         'optax',
@@ -38,6 +39,8 @@ setup(
         'colabgymrender',
         'cpprb',
         'tensorboardX',
+        'imageio-ffmpeg',
+        'opencv-python'
         #'importlib; python_version >= "3.5"',
     ]
 )

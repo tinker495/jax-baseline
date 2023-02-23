@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import haiku as hk
 import numpy as np
 import optax
+from copy import deepcopy
 
 from haiku_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from haiku_baselines.PPO.network import Actor, Critic
@@ -92,11 +93,11 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
                                     np.mean(self.scoreque), np.mean(self.lossque)
                                     )
     
-    def action_discrete(self,obs,steps):
+    def action_discrete(self,obs):
         prob = np.asarray(self._get_actions(self.params, obs))
         return np.expand_dims(np.stack([np.random.choice(self.action_size[0],p=p) for p in prob],axis=0),axis=1)
     
-    def action_continuous(self,obs,steps):
+    def action_continuous(self,obs):
         mu, std = self._get_actions(self.params, obs)
         return np.random.normal(mu, std)
     

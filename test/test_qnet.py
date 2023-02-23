@@ -1,6 +1,6 @@
 import os
 import argparse
-import gym
+import gymnasium as gym
 
 from haiku_baselines.DQN.dqn import DQN
 from haiku_baselines.C51.c51 import C51

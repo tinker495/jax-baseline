@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import haiku as hk
 import numpy as np
 import optax
+from copy import deepcopy
 
 from haiku_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from haiku_baselines.TRPO.network import Actor, Critic

@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import haiku as hk
 import numpy as np
 import optax
+from copy import deepcopy
 
 from haiku_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from haiku_baselines.DDPG.network import Actor, Critic
@@ -15,7 +16,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, exploration_fraction=0.3,
                  exploration_final_eps=0.02, exploration_initial_eps=1.0, train_freq=1, gradient_steps=1, batch_size=32,
                  n_step = 1, learning_starts=1000, target_network_update_tau=5e-4, prioritized_replay=False,
-                 prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
+                 prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-3, 
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
@@ -49,7 +50,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         actor_param = self.actor.init(next(self.key_seq), feature)
         critic_param = self.critic.init(next(self.key_seq), feature, np.zeros((1,self.action_size[0])))
         self.params = hk.data_structures.merge(pre_param, actor_param, critic_param)
-        self.target_params = self.params
+        self.target_params = deepcopy(self.params)
         
         self.opt_state = self.optimizer.init(self.params)
         

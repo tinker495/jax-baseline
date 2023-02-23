@@ -1,6 +1,6 @@
 import os
 import argparse
-import gym
+import gymnasium as gym
 
 from haiku_baselines.A2C.a2c import A2C
 from haiku_baselines.PPO.ppo import PPO
@@ -43,17 +43,17 @@ if __name__ == "__main__":
         env_name = env_name.split('/')[-1].split('.')[0]
         env_type = "unity"
     else:
-        import mujoco_py
+        #import mujoco_py
         if args.worker > 1:
             from haiku_baselines.common.worker import gymMultiworker
             env = gymMultiworker(env_name, worker_num = args.worker)
         else:
             from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
             env_type, env_id = get_env_type(env_name)
-            if env_type == 'atari':
+            if env_type == 'atari_env':
                 env = make_wrap_atari(env_name)
             else:
-                env = gym.make(env_name)
+                env = gym.make(env_name, render_mode='rgb_array')
         env_type = "gym"
 
     

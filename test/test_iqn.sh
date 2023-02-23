@@ -1,3 +1,0 @@
-export CUDA_VISIBLE_DEVICES=0
-python run_qnet.py --algo IQN --env BreakoutNoFrameskip-v4 --steps 5e7 --batch 64 --target_update 10000 --node 512 --hidden_n 2 --final_eps 0.05 --learning_starts 100000 --gamma 0.995 --buffer_size 400000 --exploration_fraction 0.05 --CVaR 1.0 &
-python run_qnet.py --algo IQN --env BreakoutNoFrameskip-v4 --steps 5e7 --batch 64 --target_update 10000 --node 512 --hidden_n 2 --final_eps 0.05 --learning_starts 100000 --gamma 0.995 --buffer_size 400000 --exploration_fraction 0.05 --CVaR 0.3

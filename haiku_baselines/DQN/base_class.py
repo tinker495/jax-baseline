@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 import jax
 import jax.numpy as jnp
 import haiku as hk
@@ -20,7 +20,7 @@ class Q_Network_Family(object):
     def __init__(self, env, gamma=0.995, learning_rate=5e-5, buffer_size=50000, exploration_fraction=0.3,
                  exploration_final_eps=0.02, exploration_initial_eps=1.0, train_freq=1, gradient_steps=1, batch_size=32, double_q=False,
                  dueling_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, prioritized_replay=False,
-                 prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
+                 prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-3, 
                  param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw', compress_memory = False):
         
@@ -266,7 +266,8 @@ class Q_Network_Family(object):
                 pbar.set_description(self.discription())
         
     def learn_gym(self, pbar, callback=None, log_interval=100):
-        state = [np.expand_dims(self.env.reset(),axis=0)]
+        state, info = self.env.reset()
+        state = [np.expand_dims(state,axis=0)]
         self.scores = np.zeros([self.worker_size])
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
@@ -274,25 +275,21 @@ class Q_Network_Family(object):
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(state,self.update_eps)
-            next_state, reward, terminal, info = self.env.step(actions[0][0])
+            next_state, reward, terminal, truncated, info = self.env.step(actions[0][0])
             next_state = [np.expand_dims(next_state,axis=0)]
-            done = terminal
-            if done and "TimeLimit.truncated" in info:
-                done = not info["TimeLimit.truncated"]
-                if info["TimeLimit.truncated"]:
-                    next_state = state
-            self.replay_buffer.add(state, actions[0], reward, next_state, done, terminal)
+            self.replay_buffer.add(state, actions[0], reward, next_state, terminal, truncated)
             self.scores[0] += reward
             state = next_state
-            if terminal:
+            if terminal or truncated:
                 self.scoreque.append(self.scores[0])
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", self.scores[0], steps)
                     self.summary.add_scalar("env/episode len",self.eplen[0],steps)
-                    self.summary.add_scalar("env/time over",float(not done),steps)
+                    self.summary.add_scalar("env/time over",float(truncated),steps)
                 self.scores[0] = 0
                 self.eplen[0] = 0
-                state = [np.expand_dims(self.env.reset(),axis=0)]
+                state, info = self.env.reset()
+                state = [np.expand_dims(state,axis=0)]
                 
             if steps > self.learning_starts and steps % self.train_freq == 0:
                 self.update_eps = self.exploration.value(steps)
@@ -349,15 +346,18 @@ class Q_Network_Family(object):
         pass
     
     def test_gym(self, episode,directory):
-        from colabgymrender.recorder import Recorder
-        Render_env = Recorder(self.env, directory)
+        from gymnasium.wrappers import RecordVideo
+        Render_env = RecordVideo(self.env, directory, episode_trigger = lambda x: True)
         for i in range(episode):
-            state = [np.expand_dims(Render_env.reset(),axis=0)]
+            state, info = Render_env.reset()
+            state = [np.expand_dims(state,axis=0)]
             terminal = False
+            truncated = False
             episode_rew = 0
-            while not terminal:
+            while not (terminal or truncated):
                 actions = self.actions(state,0.001)
-                observation, reward, terminal, info = Render_env.step(actions[0][0])
+                observation, reward, terminal, truncated, info = Render_env.step(actions[0][0])
                 state = [np.expand_dims(observation,axis=0)]
                 episode_rew += reward
+            Render_env.close()
             print("episod reward :", episode_rew)

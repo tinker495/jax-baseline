@@ -1,9 +1,11 @@
-import gym
+import gymnasium as gym
 import jax
 import jax.numpy as jnp
 import haiku as hk
 import numpy as np
 import optax
+from copy import deepcopy
+from copy import deepcopy
 
 from collections import deque
 
@@ -18,7 +20,7 @@ from haiku_baselines.common.cpprb_buffers import ReplayBuffer, PrioritizedReplay
 class ACER(Actor_Critic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=50000, batch_size=32, val_coef=0.2, ent_coef = 0.5,
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, prioritized_replay=False,
-                 prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, n_step = 1,
+                 prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-3, n_step = 1,
                  full_tensorboard_log=False, seed=None, optimizer = 'rmsprop'):
         
         super(ACER, self).__init__(env, gamma, learning_rate, batch_size, val_coef, ent_coef,
@@ -244,7 +246,7 @@ class ACER(Actor_Critic_Policy_Gradient_Family):
         for steps in pbar:
             self.eplen += 1
             prob, actions = self.actions(state,steps)
-            next_state, reward, terminal, info = self.env.step(actions[0][0] if self.action_type == 'discrete' else actions[0])
+            next_state, reward, terminal, truncated, info = self.env.step(actions[0][0] if self.action_type == 'discrete' else actions[0])
             next_state = [np.expand_dims(next_state,axis=0)]
             done = terminal
             if "TimeLimit.truncated" in info:

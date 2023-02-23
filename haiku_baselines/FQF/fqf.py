@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import haiku as hk
 import numpy as np
 import optax
+from copy import deepcopy
 from einops import rearrange, reduce, repeat
 
 from haiku_baselines.DQN.base_class import Q_Network_Family
@@ -16,7 +17,7 @@ class FQF(Q_Network_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, exploration_fraction=0.3, n_support = 32, delta = 1.0,
                  exploration_final_eps=0.02, exploration_initial_eps=1.0, train_freq=1, gradient_steps=1, batch_size=32, double_q=True,
                  dueling_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, prioritized_replay=False,
-                 prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-6, 
+                 prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-3, 
                  param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw', compress_memory = False):
         
@@ -54,7 +55,7 @@ class FQF(Q_Network_Family):
                             self.preproc.apply(pre_param, 
                             None, [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space]))
         self.params = hk.data_structures.merge(pre_param, model_param, fpf_param)
-        self.target_params = self.params
+        self.target_params = deepcopy(self.params)
         
         self.opt_state = self.optimizer.init(self.params)
         
@@ -121,7 +122,7 @@ class FQF(Q_Network_Family):
         theta_loss_tile = jnp.take_along_axis(self.get_q(params, feature, jax.lax.stop_gradient(tau_hats), key), actions, axis=1) # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                          # batch x support x 1
         hubber = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, jax.lax.stop_gradient(jnp.expand_dims(tau_hats,axis=1)), self.delta)
-        q_loss = jnp.mean( hubber * weights / jnp.max(weights)) #remove weight multiply cpprb weight is something wrong
+        q_loss = jnp.mean( hubber * weights) #remove weight multiply cpprb weight is something wrong
         tau_vals = jax.lax.stop_gradient(jnp.take_along_axis(self.get_q(params, feature, tau[:,1:-1], key), actions, axis=1)) # batch x 1 x support
         quantile_loss = jnp.mean(FQFQuantileLosses(jnp.squeeze(tau_vals),jax.lax.stop_gradient(jnp.squeeze(theta_loss_tile)),tau))
         entropy_loss = self.ent_coef * jnp.mean(entropy)
