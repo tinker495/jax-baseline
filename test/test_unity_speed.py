@@ -20,6 +20,7 @@ group_name = list(env.behavior_specs.keys())[0]
 group_spec = env.behavior_specs[group_name]
 action_size = [group_spec.action_spec.continuous_size]
 
+env.reset()
 env.step()
 dec, term = env.get_steps(group_name)
 worker_size = len(dec.agent_id)
