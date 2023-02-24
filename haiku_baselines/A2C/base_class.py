@@ -181,7 +181,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.eplen += 1
             actions = self.actions(obses)
             action_tuple = self.conv_action(actions)
-            old_obses = obses
 
             self.env.set_actions(self.group_name, action_tuple)
             self.env.step()
@@ -200,8 +199,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                     term_obses = [np.concatenate((to,o),axis=0) for to,o in zip(term_obses,newterm_obs)]
                     term_rewards += list(term.reward)
                     term_done += list(term.interrupted)
-            obses = convert_states(dec.obs)
-            nxtobs = [np.copy(o) for o in obses]
+            nxtobs = convert_states(dec.obs)
             done = np.full((self.worker_size),False)
             terminal = np.full((self.worker_size),False)
             reward = dec.reward
@@ -216,7 +214,8 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 terminal[term_ids] = True
                 reward[term_ids] = term_rewards
             self.scores += reward
-            self.buffer.add(old_obses, actions, np.expand_dims(reward,axis=1), nxtobs, np.expand_dims(done,axis=1), np.expand_dims(terminal,axis=1))
+            self.buffer.add(obses, actions, np.expand_dims(reward,axis=1), nxtobs, np.expand_dims(done,axis=1), np.expand_dims(terminal,axis=1))
+            obses = nxtobs
             if term_on:
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", np.mean(self.scores[term_ids]), steps)
