@@ -30,6 +30,6 @@ for i in trange(int(1e7)):
     env.set_actions(group_name, ActionTuple(continuous=actions))
     env.step()
     dec, term = env.get_steps(group_name)
-    if len(dec) == 0:
+    while len(dec) == 0:
         env.step()
         dec, term = env.get_steps(group_name)
