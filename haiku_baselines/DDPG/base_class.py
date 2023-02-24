@@ -212,6 +212,7 @@ class Deteministic_Policy_Gradient_Family(object):
                 reward[term_ids] = term_rewards
             self.scores += reward
             self.replay_buffer.add(obses, actions, reward, nxtobs, done, terminal)
+            obses = nxtobs
             if term_on:
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", np.mean(self.scores[term_ids]), steps)
