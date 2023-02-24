@@ -11,7 +11,7 @@ env_name = "../../env/Walker.x86_64"
 
 engine_configuration_channel = EngineConfigurationChannel()
 channel = EnvironmentParametersChannel()
-engine_configuration_channel.set_configuration_parameters(time_scale=20,capture_frame_rate=30)
+engine_configuration_channel.set_configuration_parameters(time_scale=1,capture_frame_rate=30)
 env = UnityEnvironment(file_name=env_name,worker_id=0,no_graphics=True,side_channels=[engine_configuration_channel,channel])
 
 
