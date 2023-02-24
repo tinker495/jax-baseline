@@ -14,7 +14,8 @@ channel = EnvironmentParametersChannel()
 engine_configuration_channel.set_configuration_parameters(time_scale=20,capture_frame_rate=30)
 env = UnityEnvironment(file_name=env_name,worker_id=0,no_graphics=True,side_channels=[engine_configuration_channel,channel])
 
-group_name = list(env.behavior_specs.keys())[0]
+group_name = env.behavior_specs.keys()
+print(group_name)
 group_spec = env.behavior_specs[group_name]
 action_size = [group_spec.action_spec.continuous_size]
 
