@@ -3,7 +3,7 @@ export SDL_VIDEODRIVER=dummy
 
 ENV="--env ../../env/Walker.x86_64"
 RL="--learning_rate 0.0002"
-TRAIN="--steps 5e5 --batch 256 --target_update_tau 5e-4 --learning_starts 1000"
+TRAIN="--steps 1e6 --batch 256 --target_update_tau 1e-3 --learning_starts 1000"
 MODEL="--node 512 --hidden_n 3"
 OPTIONS="--time_scale 20 --mixture min"
 OPTIMIZER="--optimizer adam"
