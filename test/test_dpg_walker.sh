@@ -5,7 +5,7 @@ ENV="--env ../../env/Walker.x86_64"
 RL="--learning_rate 0.0002"
 TRAIN="--steps 5e5 --batch 256 --target_update_tau 1e-3 --learning_starts 1000"
 MODEL="--node 512 --hidden_n 3"
-OPTIONS="--time_scale 20"
+OPTIONS="--time_scale 20 --mixture min"
 OPTIMIZER="--optimizer adam"
 python  run_dpg.py --algo TD3 $ENV $RL $TRAIN $MODEL $OPTIMIZER $OPTIONS
 python  run_dpg.py --algo TD4_QR $ENV $RL $TRAIN $MODEL $OPTIMIZER $OPTIONS
