@@ -175,10 +175,7 @@ class Deteministic_Policy_Gradient_Family(object):
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(obses,steps)
-            action_tuple = ActionTuple(continuous=actions)
-            old_obses = obses
-
-            self.env.set_actions(self.group_name, action_tuple)
+            self.env.set_actions(self.group_name, ActionTuple(continuous=actions))
             self.env.step()
             
             if steps > self.learning_starts and steps % self.train_freq == 0: #train in step the environments
@@ -186,36 +183,35 @@ class Deteministic_Policy_Gradient_Family(object):
                 self.lossque.append(loss)
             
             dec, term = self.env.get_steps(self.group_name)
-            term_ids = list(term.agent_id)
+            term_ids = term.agent_id
             term_obses = convert_states(term.obs)
-            term_rewards = list(term.reward)
-            term_done = list(term.interrupted)
+            term_rewards = term.reward
+            term_done = term.interrupted
             while len(dec) == 0:
                 self.env.step()
                 dec, term = self.env.get_steps(self.group_name)
                 if len(term.agent_id) > 0:
-                    term_ids += list(term.agent_id)
+                    term_ids += term.agent_id
                     newterm_obs = convert_states(term.obs)
                     term_obses = [np.concatenate((to,o),axis=0) for to,o in zip(term_obses,newterm_obs)]
-                    term_rewards += list(term.reward)
-                    term_done += list(term.interrupted)
-            obses = convert_states(dec.obs)
-            nxtobs = [np.copy(o) for o in obses]
+                    term_rewards += term.reward
+                    term_done += term.interrupted
+            nxtobs = convert_states(dec.obs)
             done = np.full((self.worker_size),False)
             terminal = np.full((self.worker_size),False)
             reward = dec.reward
             term_on = len(term_ids) > 0
             if term_on:
-                term_ids = np.asarray(term_ids)
-                term_rewards = np.asarray(term_rewards)
-                term_done = np.asarray(term_done)
+                term_ids = term_ids
+                term_rewards = term_rewards
+                term_done = term_done
                 for n,t in zip(nxtobs,term_obses):
                     n[term_ids] = t
                 done[term_ids] = ~term_done
                 terminal[term_ids] = True
                 reward[term_ids] = term_rewards
             self.scores += reward
-            self.replay_buffer.add(old_obses, actions, reward, nxtobs, done, terminal)
+            self.replay_buffer.add(obses, actions, reward, nxtobs, done, terminal)
             if term_on:
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", np.mean(self.scores[term_ids]), steps)
