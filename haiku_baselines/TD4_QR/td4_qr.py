@@ -157,7 +157,7 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
               reset_num_timesteps=True, replay_wrapper=None):
         tb_log_name = tb_log_name + "({:d})".format(self.n_support)
         if self.mixture_type == "truncated":
-            tb_log_name = tb_log_name + "_truncated({:.2f})".format(self.quantile_drop)
+            tb_log_name = tb_log_name + "_truncated({:d})".format(self.quantile_drop)
         else:
             tb_log_name = tb_log_name + "_min"
         if self.risk_avoidance != 0.0:

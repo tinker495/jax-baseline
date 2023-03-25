@@ -1,9 +1,9 @@
 export CUDA_VISIBLE_DEVICES=1
 export SDL_VIDEODRIVER=dummy
 
-ENV="--env ../../env/Walker.x86_64"
-RL="--learning_rate 0.0005"
-TRAIN="--steps 5e6 --buffer_size 1e6 --batch 32 --target_update_tau 1e-3 --learning_starts 1000"
+ENV="--env Humanoid-v4"
+RL="--learning_rate 0.00005"
+TRAIN="--steps 5e6 --buffer_size 1e6 --batch 32 --target_update_tau 1e-3 --learning_starts 50000"
 MODEL="--node 512 --hidden_n 3"
 OPTIONS="--n_support 50 --time_scale 20 --mixture truncated --quantile_drop 0.02"
 OPTIMIZER="--optimizer adam"

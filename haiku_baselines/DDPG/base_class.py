@@ -201,12 +201,14 @@ class Deteministic_Policy_Gradient_Family(object):
             reward = dec.reward
             term_on = len(term_ids) > 0
             if term_on:
-                nxtobs = [n.at[term_ids].set(t) for n,t in zip(nxtobs,term_obses)]
+                nxtobs_t = [n.at[term_ids].set(t) for n,t in zip(nxtobs,term_obses)]
                 done[term_ids] = np.logical_not(term_done)
                 terminal[term_ids] = True
                 reward[term_ids] = term_rewards
+                self.replay_buffer.add(obses, actions, reward, nxtobs_t, done, terminal)
+            else:
+                self.replay_buffer.add(obses, actions, reward, nxtobs, done, terminal)
             self.scores += reward
-            self.replay_buffer.add(obses, actions, reward, nxtobs, done, terminal)
             obses = nxtobs
             if term_on:
                 if self.summary:
