@@ -34,6 +34,7 @@ if __name__ == "__main__":
     parser.add_argument('--hidden_n', type=int,default=2, help='hidden layer number')
     parser.add_argument('--action_noise', type=float,default=0.1, help='action_noise')
     parser.add_argument('--optimizer', type=str,default='adam', help='optimaizer')
+    parser.add_argument('--gradient_steps', type=int, default=1, help='gradient_steps')
     parser.add_argument('--train_freq', type=int, default=1, help='train_frequancy')
     parser.add_argument('--critic_num', type=int,default=2, help='tqc critic number')
     parser.add_argument('--ent_coef', type=str,default='auto', help='sac entropy coefficient')
@@ -70,34 +71,34 @@ if __name__ == "__main__":
         
     if args.algo == "DDPG":
         agent = DDPG(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts,
-                    prioritized_replay = args.per, exploration_final_eps = args.eps, n_step = args.n_step, train_freq=args.train_freq, seed = args.seed,
+                    prioritized_replay = args.per, exploration_final_eps = args.eps, n_step = args.n_step, train_freq=args.train_freq, seed = args.seed, gradient_steps = args.gradient_steps,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "TD3":
         agent = TD3(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts,
-                    prioritized_replay = args.per, action_noise = args.action_noise, n_step = args.n_step, train_freq=args.train_freq, seed = args.seed,
+                    prioritized_replay = args.per, action_noise = args.action_noise, n_step = args.n_step, train_freq=args.train_freq, seed = args.seed, gradient_steps = args.gradient_steps,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "TD4_QR":
         agent = TD4_QR(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, quantile_drop=args.quantile_drop,
-                    prioritized_replay = args.per, action_noise = args.action_noise, n_step = args.n_step, train_freq=args.train_freq, seed = args.seed,
+                    prioritized_replay = args.per, action_noise = args.action_noise, n_step = args.n_step, train_freq=args.train_freq, seed = args.seed, gradient_steps = args.gradient_steps,
                     n_support = args.n_support, mixture_type = args.mixture,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "TD4_IQN":
         agent = TD4_IQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, cvar = args.cvar, quantile_drop=args.quantile_drop,
-                    prioritized_replay = args.per, action_noise = args.action_noise, n_step = args.n_step, train_freq=args.train_freq, seed = args.seed,
+                    prioritized_replay = args.per, action_noise = args.action_noise, n_step = args.n_step, train_freq=args.train_freq, seed = args.seed, gradient_steps = args.gradient_steps,
                     n_support = args.n_support, mixture_type = args.mixture,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "SAC":
         agent = SAC(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts,
-                    prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef, seed = args.seed,
+                    prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef, seed = args.seed, gradient_steps = args.gradient_steps,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "TQC":
         agent = TQC(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, quantile_drop=args.quantile_drop,
-                    prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef, seed = args.seed,
+                    prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef, seed = args.seed, gradient_steps = args.gradient_steps,
                     n_support = args.n_support, critic_num = args.critic_num, mixture_type = args.mixture,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "TQC_IQN":
         agent = TQC_IQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, cvar = args.cvar, quantile_drop=args.quantile_drop,
-                    prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef, seed = args.seed,
+                    prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef, seed = args.seed, gradient_steps = args.gradient_steps,
                     n_support = args.n_support, critic_num = args.critic_num, mixture_type = args.mixture,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
         
