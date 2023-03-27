@@ -8,7 +8,7 @@ from haiku_baselines.TD4_QR.td4_qr import TD4_QR
 from haiku_baselines.TD4_IQN.td4_iqn import TD4_IQN
 from haiku_baselines.SAC.sac import SAC
 from haiku_baselines.TQC.tqc import TQC
-from haiku_baselines.IQA_TQC.iqa_tqc import IQA_TQC
+from haiku_baselines.TQC_IQN.tqc_iqn import TQC_IQN
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -82,7 +82,7 @@ if __name__ == "__main__":
                     n_support = args.n_support, mixture_type = args.mixture,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "TD4_IQN":
-        agent = TD4_IQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, risk_avoidance = args.risk_avoidance,
+        agent = TD4_IQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, risk_avoidance = args.risk_avoidance, quantile_drop=args.quantile_drop,
                     prioritized_replay = args.per, action_noise = args.action_noise, n_step = args.n_step, train_freq=args.train_freq, seed = args.seed,
                     n_support = args.n_support, mixture_type = args.mixture,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
@@ -95,8 +95,8 @@ if __name__ == "__main__":
                     prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef, seed = args.seed,
                     n_support = args.n_support, critic_num = args.critic_num, mixture_type = args.mixture,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
-    if args.algo == "IQA":
-        agent = IQA_TQC(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, risk_avoidance = args.risk_avoidance, quantile_drop=args.quantile_drop,
+    if args.algo == "TQC_IQN":
+        agent = TQC_IQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, risk_avoidance = args.risk_avoidance, quantile_drop=args.quantile_drop,
                     prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef, seed = args.seed,
                     n_support = args.n_support, critic_num = args.critic_num, mixture_type = args.mixture,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)

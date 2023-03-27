@@ -14,7 +14,7 @@ from haiku_baselines.common.losses import QuantileHuberLosses
 
 class TD4_IQN(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000,target_action_noise_mul = 2.0, 
-                 n_support = 200, delta = 1.0, action_noise = 0.1, train_freq=1, gradient_steps=1, batch_size=32, policy_delay = 3,
+                 n_support = 200, delta = 1.0, quantile_drop = 0.05, action_noise = 0.1, train_freq=1, gradient_steps=1, batch_size=32, policy_delay = 3,
                  n_step = 1, learning_starts=1000, target_network_update_tau=5e-4, prioritized_replay=False, mixture_type = 'truncated', risk_avoidance = 1.0,
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-3,
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
@@ -31,6 +31,8 @@ class TD4_IQN(Deteministic_Policy_Gradient_Family):
         self.action_noise_clamp = 0.5 #self.target_action_noise*1.5
         self.policy_delay = policy_delay
         self.n_support = n_support
+        self.quantile_drop = int(max(np.round(2.0 * self.n_support * quantile_drop),1))
+        self.middle_support = int(np.floor(n_support/2.0))
         self.mixture_type = mixture_type
         self.delta = delta
         self.risk_avoidance = risk_avoidance
@@ -152,10 +154,17 @@ class TD4_IQN(Deteministic_Policy_Gradient_Family):
         if self.mixture_type == 'min':
             next_q = jnp.minimum(q1,q2)
         elif self.mixture_type == 'truncated':
-            next_q = truncated_mixture((q1, q2),self.n_support*2 - 2)
+            next_q = truncated_mixture((q1, q2),self.quantile_drop)
         
         return (not_dones * next_q * self._gamma) + rewards
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TD4_IQN",
               reset_num_timesteps=True, replay_wrapper=None):
+        tb_log_name = tb_log_name + "({:d})".format(self.n_support)
+        if self.mixture_type == "truncated":
+            tb_log_name = tb_log_name + "_truncated({:d})".format(self.quantile_drop)
+        else:
+            tb_log_name = tb_log_name + "_min"
+        if self.risk_avoidance != 0.0:
+            tb_log_name = tb_log_name + "_riskavoid{:.2f}".format(self.risk_avoidance)
         super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)
