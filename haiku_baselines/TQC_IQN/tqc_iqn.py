@@ -77,7 +77,6 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
         self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[1:] + 
                          jnp.linspace(0.0,1.0,self.n_support+1,dtype=jnp.float32)[:-1]) / 2.0  # [support]
         self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1))).astype(jnp.float32)  # [1 x 1 x support]
-        self.policy_weight = jnp.tile(jnp.reshape(1.0 + self.risk_avoidance * 2.0 * (0.5 - self.quantile), (1, self.n_support)),(1,self.critic_num))
         
         print("----------------------model----------------------")
         print_param('preprocess',pre_param)
