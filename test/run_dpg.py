@@ -38,8 +38,8 @@ if __name__ == "__main__":
     parser.add_argument('--critic_num', type=int,default=2, help='tqc critic number')
     parser.add_argument('--ent_coef', type=str,default='auto', help='sac entropy coefficient')
     parser.add_argument('--learning_starts', type=int, default=5000, help='learning start')
-    parser.add_argument('--risk_avoidance', type=float,default=0.0, help='risk_avoidance')
-    parser.add_argument('--time_scale', type=float,default=20.0, help='risk_avoidance')
+    parser.add_argument('--cvar', type=float,default=1.0, help='cvar')
+    parser.add_argument('--time_scale', type=float,default=10.0, help='unity time scale')
     args = parser.parse_args() 
     env_name = args.env
     cnn_mode = "normal"
@@ -77,12 +77,12 @@ if __name__ == "__main__":
                     prioritized_replay = args.per, action_noise = args.action_noise, n_step = args.n_step, train_freq=args.train_freq, seed = args.seed,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "TD4_QR":
-        agent = TD4_QR(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, risk_avoidance = args.risk_avoidance, quantile_drop=args.quantile_drop,
+        agent = TD4_QR(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, quantile_drop=args.quantile_drop,
                     prioritized_replay = args.per, action_noise = args.action_noise, n_step = args.n_step, train_freq=args.train_freq, seed = args.seed,
                     n_support = args.n_support, mixture_type = args.mixture,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "TD4_IQN":
-        agent = TD4_IQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, risk_avoidance = args.risk_avoidance, quantile_drop=args.quantile_drop,
+        agent = TD4_IQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, cvar = args.cvar, quantile_drop=args.quantile_drop,
                     prioritized_replay = args.per, action_noise = args.action_noise, n_step = args.n_step, train_freq=args.train_freq, seed = args.seed,
                     n_support = args.n_support, mixture_type = args.mixture,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
@@ -91,12 +91,12 @@ if __name__ == "__main__":
                     prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef, seed = args.seed,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "TQC":
-        agent = TQC(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, risk_avoidance = args.risk_avoidance, quantile_drop=args.quantile_drop,
+        agent = TQC(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, quantile_drop=args.quantile_drop,
                     prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef, seed = args.seed,
                     n_support = args.n_support, critic_num = args.critic_num, mixture_type = args.mixture,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     if args.algo == "TQC_IQN":
-        agent = TQC_IQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, risk_avoidance = args.risk_avoidance, quantile_drop=args.quantile_drop,
+        agent = TQC_IQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau, learning_starts=args.learning_starts, cvar = args.cvar, quantile_drop=args.quantile_drop,
                     prioritized_replay = args.per, n_step = args.n_step, train_freq=args.train_freq, ent_coef = args.ent_coef, seed = args.seed,
                     n_support = args.n_support, critic_num = args.critic_num, mixture_type = args.mixture,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)

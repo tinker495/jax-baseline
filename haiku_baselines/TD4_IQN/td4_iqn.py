@@ -15,7 +15,7 @@ from haiku_baselines.common.losses import QuantileHuberLosses
 class TD4_IQN(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000,target_action_noise_mul = 2.0, 
                  n_support = 200, delta = 1.0, quantile_drop = 0.05, action_noise = 0.1, train_freq=1, gradient_steps=1, batch_size=32, policy_delay = 3,
-                 n_step = 1, learning_starts=1000, target_network_update_tau=5e-4, prioritized_replay=False, mixture_type = 'truncated', risk_avoidance = 1.0,
+                 n_step = 1, learning_starts=1000, target_network_update_tau=5e-4, prioritized_replay=False, mixture_type = 'truncated', cvar = 1.0,
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-3,
                  log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
@@ -35,7 +35,7 @@ class TD4_IQN(Deteministic_Policy_Gradient_Family):
         self.middle_support = int(np.floor(n_support/2.0))
         self.mixture_type = mixture_type
         self.delta = delta
-        self.risk_avoidance = risk_avoidance
+        self.cvar = cvar
         
         if _init_setup_model:
             self.setup_model() 
@@ -137,9 +137,8 @@ class TD4_IQN(Deteministic_Policy_Gradient_Family):
         huber2 = QuantileHuberLosses(q2_loss_tile, logit_valid_tile, huber_tau, self.delta)
         critic_loss = jnp.mean(weights*huber1) + jnp.mean(weights*huber2)
         policy = self.actor.apply(params, key, feature)
-        vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy, tau)
-        self.policy_weight = 1.0 + self.risk_avoidance * 2.0 * (0.5 - tau)
-        actor_loss = -jnp.mean(vals * self.policy_weight)
+        vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy, tau*self.cvar)
+        actor_loss = -jnp.mean(vals)
         total_loss = jax.lax.select(step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss)
         return total_loss, (critic_loss, actor_loss, huber1)
     
@@ -165,6 +164,6 @@ class TD4_IQN(Deteministic_Policy_Gradient_Family):
             tb_log_name = tb_log_name + "_truncated({:d})".format(self.quantile_drop)
         else:
             tb_log_name = tb_log_name + "_min"
-        if self.risk_avoidance != 0.0:
-            tb_log_name = tb_log_name + "_riskavoid{:.2f}".format(self.risk_avoidance)
+        if self.cvar != 1.0:
+            tb_log_name = tb_log_name + "_cvar({:.2f})".format(self.cvar)
         super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)

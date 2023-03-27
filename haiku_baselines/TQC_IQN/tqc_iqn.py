@@ -15,7 +15,7 @@ from haiku_baselines.common.losses import QuantileHuberLosses
 class TQC_IQN(Deteministic_Policy_Gradient_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, train_freq=1, gradient_steps=1, ent_coef = 'auto', 
                  n_support = 25, delta = 1.0, critic_num = 2, quantile_drop = 0.05, batch_size=32, policy_delay = 3, n_step = 1, learning_starts=1000, target_network_update_tau=5e-4,
-                 prioritized_replay=False, prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, mixture_type = 'truncated', risk_avoidance = 1.0,
+                 prioritized_replay=False, prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, mixture_type = 'truncated', cvar = 1.0,
                  prioritized_replay_eps=1e-6, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         
@@ -35,7 +35,7 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
         self.quantile_drop = int(max(np.round(self.critic_num * self.n_support * quantile_drop),1))
         self.middle_support = int(np.floor(n_support/2.0))
         self.mixture_type = mixture_type
-        self.risk_avoidance = risk_avoidance
+        self.cvar = cvar
         
         if _init_setup_model:
             self.setup_model() 
@@ -175,9 +175,8 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
         for q in qnets[1:]:
             critic_loss += jnp.mean(weights*QuantileHuberLosses(jnp.expand_dims(q,axis=1),logit_valid_tile,huber_tau,self.delta))
         policy, log_prob, mu, log_std, std = self._get_update_data(params, feature, key)
-        qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy, tau)
-        self.policy_weight = jnp.tile(1.0 + self.risk_avoidance * 2.0 * (0.5 - tau),(1,self.critic_num))
-        actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi,axis=1)*self.policy_weight,axis=1))
+        qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy, tau*self.cvar)
+        actor_loss = jnp.mean(ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi,axis=1),axis=1))
         total_loss = critic_loss + actor_loss
         return total_loss, (critic_loss, actor_loss, huber0, log_prob)
     
@@ -199,6 +198,6 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
             tb_log_name = tb_log_name + "_truncated({:d})".format(self.quantile_drop)
         else:
             tb_log_name = tb_log_name + "_min"
-        if self.risk_avoidance != 0.0:
-            tb_log_name = tb_log_name + "_riskavoid{:.2f}".format(self.risk_avoidance)
+        if self.cvar != 1.0:
+            tb_log_name = tb_log_name + "_cvar({:.2f})".format(self.cvar)
         super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)
