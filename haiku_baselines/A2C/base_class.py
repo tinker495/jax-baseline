@@ -209,7 +209,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 term_rewards = np.asarray(term_rewards)
                 term_done = np.asarray(term_done)
                 for n,t in zip(nxtobs,term_obses):
-                    n[term_ids] = t
+                    n.at[term_ids].set(t)
                 done[term_ids] = ~term_done
                 terminal[term_ids] = True
                 reward[term_ids] = term_rewards

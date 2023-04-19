@@ -42,6 +42,8 @@ if __name__ == "__main__":
     parser.add_argument('--exploration_fraction', type=float, default=0.3, help='exploration fraction')
     parser.add_argument('--clip_rewards', action='store_true')
     parser.add_argument('--compress_memory', action='store_true')
+    parser.add_argument('--time_scale', type=float,default=20.0, help='unity time scale')
+    parser.add_argument('--capture_frame_rate', type=int, default=1, help='unity capture frame rate')
     args = parser.parse_args() 
     env_name = args.env
     cnn_mode = "normal"
@@ -52,7 +54,7 @@ if __name__ == "__main__":
         
         engine_configuration_channel = EngineConfigurationChannel()
         channel = EnvironmentParametersChannel()
-        engine_configuration_channel.set_configuration_parameters(time_scale=12.0,capture_frame_rate=50)
+        engine_configuration_channel.set_configuration_parameters(time_scale=args.time_scale,capture_frame_rate=args.capture_frame_rate)
         env = UnityEnvironment(file_name=env_name,no_graphics=False, side_channels=[engine_configuration_channel,channel],timeout_wait=10000)
         env_name = env_name.split('/')[-1].split('.')[0]
         env_type = "unity"

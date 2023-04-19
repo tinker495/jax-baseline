@@ -1,5 +1,5 @@
 export CUDA_VISIBLE_DEVICES=0
-export SDL_VIDEODRIVER=dummy
+export DISPLAY=:0
 ENV="--env BreakoutNoFrameskip-v4"
 RL="--learning_rate 0.0002"
 TRAIN="--steps 5e5 --batch 32 --train_freq 1 --target_update 1000 --final_eps 0.01 --learning_starts 1000 --gamma 0.995 --buffer_size 1e5 --exploration_fraction 0.3"

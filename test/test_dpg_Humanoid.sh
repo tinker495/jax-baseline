@@ -1,6 +1,6 @@
 export CUDA_VISIBLE_DEVICES=0
 export XLA_PYTHON_CLIENT_PREALLOCATE=false
-export SDL_VIDEODRIVER=dummy
+export DISPLAY=:0
 
 ENV="--env Humanoid-v4"
 RL="--learning_rate 0.00005"
