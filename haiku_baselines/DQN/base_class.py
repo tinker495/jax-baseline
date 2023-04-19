@@ -229,28 +229,24 @@ class Q_Network_Family(object):
             while len(dec) == 0:
                 self.env.step()
                 dec, term = self.env.get_steps(self.group_name)
-                if len(term.agent_id) > 0:
-                    term_ids += term.agent_id
-                    newterm_obs = convert_states(term.obs)
-                    term_obses = [np.concatenate((to,o),axis=0) for to,o in zip(term_obses,newterm_obs)]
-                    term_rewards += term.reward
-                    term_done += term.interrupted
+                if len(term.agent_id):
+                    term_ids = np.append(term_ids, term.agent_id)
+                    term_obses = [np.concatenate((to,o),axis=0) for to,o in zip(term_obses,convert_states(term.obs))]
+                    term_rewards = np.append(term_rewards, term.reward)
+                    term_done = np.append(term_done, term.interrupted)
             nxtobs = convert_states(dec.obs)
             done = np.full((self.worker_size),False)
             terminal = np.full((self.worker_size),False)
             reward = dec.reward
             term_on = len(term_ids) > 0
             if term_on:
-                term_ids = np.asarray(term_ids)
-                term_rewards = np.asarray(term_rewards)
-                term_done = np.asarray(term_done)
-                for n,t in zip(nxtobs,term_obses):
-                    n.at[term_ids].set(t)
-                done[term_ids] = ~term_done
+                nxtobs_t = [n.at[term_ids].set(t) for n,t in zip(nxtobs,term_obses)]
+                done[term_ids] = np.logical_not(term_done)
                 terminal[term_ids] = True
                 reward[term_ids] = term_rewards
-            self.scores += reward
-            self.replay_buffer.add(obses, actions, reward, nxtobs, done, terminal)
+                self.replay_buffer.add(obses, actions, reward, nxtobs_t, done, terminal)
+            else:
+                self.replay_buffer.add(obses, actions, reward, nxtobs, done, terminal)
             obses = nxtobs
             if term_on:
                 if self.summary:
