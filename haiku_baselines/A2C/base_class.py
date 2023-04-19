@@ -219,7 +219,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                     self.summary.add_scalar("env/episode len",np.mean(self.eplen[term_ids]),steps)
                     self.summary.add_scalar("env/time over",np.mean(1 - done[term_ids].astype(np.float32)),steps)
                 self.scoreque.extend(self.scores[term_ids])
-                self.scores[term_ids] = 0
+                self.scores[term_ids] = reward[term_ids]
                 self.eplen[term_ids] = 0
             
             if (steps + 1) % self.batch_size == 0: #train in step the environments
