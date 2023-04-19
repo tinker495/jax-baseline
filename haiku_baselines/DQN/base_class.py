@@ -247,6 +247,7 @@ class Q_Network_Family(object):
                 self.replay_buffer.add(obses, actions, reward, nxtobs_t, done, terminal)
             else:
                 self.replay_buffer.add(obses, actions, reward, nxtobs, done, terminal)
+            self.scores += reward
             obses = nxtobs
             if term_on:
                 if self.summary:
