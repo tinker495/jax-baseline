@@ -76,3 +76,5 @@ if __name__ == "__main__":
     agent.learn(int(args.steps))
     
     agent.test()
+
+    env.close()

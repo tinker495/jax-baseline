@@ -8,7 +8,7 @@ from tqdm.auto import trange
 from collections import deque
 
 from haiku_baselines.common.base_classes import TensorboardWriter, save, restore, select_optimizer
-from haiku_baselines.common.buffers import EpochBuffer
+from haiku_baselines.common.cpprb_buffers import EpochBuffer
 from haiku_baselines.common.utils import convert_states
 from haiku_baselines.common.worker import gymMultiworker
 
@@ -84,7 +84,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             else:
                 self.action_size = [action_space.shape[0]]
                 self.action_type = 'continuous'
-                self.conv_action = lambda a: a[0]
+                self.conv_action = lambda a: np.clip(a[0], -3.0, 3.0) / 3.0
             self.worker_size = 1
             self.env_type = "gym"
             
@@ -95,9 +95,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
             if not isinstance(env_info['action_space'], spaces.Box):
                 self.action_size = [env_info['action_space'].n]
                 self.action_type = 'discrete'
+                self.conv_action = lambda a: a
             else:
                 self.action_size = [env_info['action_space'].shape[0]]
                 self.action_type = 'continuous'
+                self.conv_action = lambda a: np.clip(a, -3.0, 3.0) / 3.0
             self.worker_size = self.env.worker_num
             self.env_type = "gymMultiworker"
     
@@ -152,7 +154,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
     def learn(self, total_timesteps, callback=None, log_interval=1000, tb_log_name="Q_network",
               reset_num_timesteps=True, replay_wrapper=None):
         
-        self.buffer.clear()
         pbar = trange(total_timesteps, miniters=log_interval, smoothing=0.01)
         with TensorboardWriter(self.tensorboard_log, tb_log_name) as (self.summary, self.save_path):
             if self.env_type == "unity":
@@ -225,7 +226,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
             if (steps + 1) % self.batch_size == 0: #train in step the environments
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
-                self.buffer.clear()
             
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
@@ -259,7 +259,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
             if (steps + 1) % self.batch_size == 0: #train in step the environments
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
-                self.buffer.clear()
             
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
@@ -273,7 +272,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         for steps in pbar:
             self.eplen += 1
             actions = self.actions([state])
-            self.env.step(actions)
+            self.env.step(self.conv_action(actions))
             
             next_states,rewards,dones,terminals,end_states,end_idx = self.env.get_steps()
             nxtstates = np.copy(next_states)
@@ -293,7 +292,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
             if (steps + 1) % self.batch_size == 0: #train in step the environments
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
-                self.buffer.clear()
             
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
@@ -320,7 +318,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             env = make_wrap_atari(env_id,clip_rewards=True)
         else:
             env = gym.make(env_id, render_mode='rgb_array')
-        Render_env = RecordVideo(env, directory)
+        Render_env = RecordVideo(env, directory, episode_trigger = lambda x: True)
         for i in range(episode):
             state, info = Render_env.reset()
             state = [np.expand_dims(state,axis=0)]

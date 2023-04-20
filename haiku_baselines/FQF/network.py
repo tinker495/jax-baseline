@@ -2,6 +2,7 @@ import numpy as np
 import haiku as hk
 import jax
 import jax.numpy as jnp
+from functools import partial
 from einops import rearrange, reduce, repeat
 from haiku_baselines.common.layers import NoisyLinear
 

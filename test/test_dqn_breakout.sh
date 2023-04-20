@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=1
 export DISPLAY=:0
 ENV="--env BreakoutNoFrameskip-v4"
 RL="--learning_rate 0.0002"

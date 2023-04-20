@@ -21,11 +21,11 @@ class Multiworker(ABC):
         pass
 
 class gymMultiworker(Multiworker):
-    def __init__(self,env_id, worker_num = 8):
-        ray.init()
+    def __init__(self,env_id, worker_num = 8, render = False):
+        ray.init(num_cpus=worker_num)
         self.env_id = env_id
         self.worker_num = worker_num
-        self.workers = [gymRayworker.remote(env_id) for _ in range(worker_num)]
+        self.workers = [gymRayworker.remote(env_id, render= (w == 0) if render else False) for w in range(worker_num)]
         self.env_info = ray.get(self.workers[0].get_info.remote())
         self.steps = [w.get_reset.remote() for w in self.workers]
         
@@ -59,7 +59,7 @@ class gymMultiworker(Multiworker):
 
 @ray.remote
 class gymRayworker:
-    def __init__(self, env_name_):
+    def __init__(self, env_name_, render = False):
         from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
         self.env_type, self.env_id = get_env_type(env_name_)
         if  self.env_type == 'atari_env':
@@ -70,6 +70,7 @@ class gymRayworker:
             self.action_conv =  lambda a: a[0]
         else:
             self.action_conv =  lambda a: a
+        self.render = render
         
     def get_reset(self):
         state, info = self.env.reset()
@@ -82,6 +83,8 @@ class gymRayworker:
                 'env_id' : self.env_id}
         
     def step(self,action):
+        if self.render:
+            self.env.render()
         state, reward, terminal, truncated, info = self.env.step(self.action_conv(action))
         if terminal or truncated:
             end_state = state

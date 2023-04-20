@@ -4,6 +4,52 @@ from typing import Optional, List, Union
 import numpy as np
 import cpprb
 
+class EpochBuffer(object):
+    def __init__(self, epoch_size : int, observation_space: list, worker_size = 1, action_space = 1):
+        self.epoch_size = epoch_size
+        self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
+                            for idx,o in enumerate(observation_space))
+        self.nextobsdict = dict(("next_obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
+                            for idx,o in enumerate(observation_space))
+        self.obscompress = None
+        self.worker_size = worker_size
+        self.local_buffers = [cpprb.ReplayBuffer(epoch_size,
+                        env_dict={**self.obsdict,
+                            "action": {"shape": action_space},
+                            "reward": {},
+                            **self.nextobsdict,
+                            "done": {},
+                            "terminal": {}
+                        }) for _ in range(worker_size)]
+        
+    def add(self, obs_t, action, reward, nxtobs_t, done, terminal):
+        for w in range(self.worker_size):
+            obsdict = dict(zip(self.obsdict.keys(),[o[w]for o in obs_t]))
+            nextobsdict = dict(zip(self.nextobsdict.keys(),[no[w]for no in nxtobs_t]))
+            self.local_buffers[w].add(**obsdict,action=action[w],reward=reward[w],**nextobsdict,done=done[w],terminal=terminal[w])
+            if done[w] or terminal[w]:
+                self.local_buffers[w].on_episode_end()
+
+    def get_buffer(self):
+        transitions = {
+            'obses'     : [],
+            'actions'   : [],
+            'rewards'   : [],
+            'nxtobses'  : [],
+            'dones'     : [],
+            'terminals' : []
+        }
+        for w in range(self.worker_size):
+            trans = self.local_buffers[w].get_all_transitions()
+            transitions['obses'].append([trans[o] for o in self.obsdict.keys()])
+            transitions['actions'].append(trans['action'])
+            transitions['rewards'].append(trans['reward'])
+            transitions['nxtobses'].append([trans[o] for o in self.nextobsdict.keys()])
+            transitions['dones'].append(trans['done'])
+            transitions['terminals'].append(trans['terminal'])
+            self.local_buffers[w].clear()
+        return transitions
+
 class ReplayBuffer(object):
     def __init__(self, size: int, observation_space: list,action_space = 1,compress_memory = False):
         self.max_size = size

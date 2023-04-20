@@ -2,6 +2,7 @@ import numpy as np
 import haiku as hk
 import jax
 import jax.numpy as jnp
+from functools import partial
 
 LOG_STD_MAX = 2
 LOG_STD_MIN = -20
@@ -15,6 +16,7 @@ class Actor(hk.Module):
         self.node = node
         self.hidden_n = hidden_n
         self.layer = hk.Linear
+        self.layer = partial(self.layer, w_init=hk.initializers.VarianceScaling(scale=2), b_init=hk.initializers.VarianceScaling(scale=2))
         
     def __call__(self,feature: jnp.ndarray) -> jnp.ndarray:
             linear = hk.Sequential(

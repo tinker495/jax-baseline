@@ -2,6 +2,7 @@ import numpy as np
 import haiku as hk
 import jax
 import jax.numpy as jnp
+from functools import partial
 from einops import rearrange, reduce, repeat
 from haiku_baselines.common.layers import NoisyLinear
 
@@ -18,6 +19,7 @@ class Model(hk.Module):
             self.layer = hk.Linear
         else:
             self.layer = NoisyLinear
+        self.layer = partial(self.layer, w_init=hk.initializers.VarianceScaling(scale=2), b_init=hk.initializers.VarianceScaling(scale=2))
             
         self.pi_mtx = jax.lax.stop_gradient(
                         repeat(jnp.pi* np.arange(0,128, dtype=np.float32),'m -> o m',o=1)

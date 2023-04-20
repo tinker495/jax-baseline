@@ -1,5 +1,4 @@
-export CUDA_VISIBLE_DEVICES=0
-export XLA_PYTHON_CLIENT_PREALLOCATE=false
+export CUDA_VISIBLE_DEVICES=1
 export DISPLAY=:0
 
 ENV="--env ../../env/Walker.x86_64"

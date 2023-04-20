@@ -2,6 +2,7 @@ import numpy as np
 import haiku as hk
 import jax
 import jax.numpy as jnp
+from functools import partial
 from haiku_baselines.common.layers import NoisyLinear
 
 
@@ -18,6 +19,7 @@ class Model(hk.Module):
             self.layer = hk.Linear
         else:
             self.layer = NoisyLinear
+        self.layer = partial(self.layer, w_init=hk.initializers.VarianceScaling(scale=2), b_init=hk.initializers.VarianceScaling(scale=2))
         
     def __call__(self,feature: jnp.ndarray) -> jnp.ndarray:
         if not self.dueling:
