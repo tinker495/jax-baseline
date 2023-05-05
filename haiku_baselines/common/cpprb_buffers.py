@@ -1,8 +1,10 @@
 import random
 from typing import Optional, List, Union
 
+import multiprocessing as mp
 import numpy as np
 import cpprb
+import copy
 
 class EpochBuffer(object):
     def __init__(self, epoch_size : int, observation_space: list, worker_size = 1, action_space = 1):
@@ -51,30 +53,35 @@ class EpochBuffer(object):
         return transitions
 
 class ReplayBuffer(object):
-    def __init__(self, size: int, observation_space: list,action_space = 1,compress_memory = False):
+    def __init__(self, size: int, observation_space: list = [], action_space = 1,compress_memory = False, env_dict = None, n_s = None):
         self.max_size = size
-        self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
-                            for idx,o in enumerate(observation_space))
-        self.nextobsdict = dict(("next_obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
-                            for idx,o in enumerate(observation_space))
-        self.obscompress = None
-        if compress_memory:
-            self.obscompress = []
-            for k in self.obsdict:
-                if len(self.obsdict[k]["shape"]) >= 3:
-                    self.obscompress.append(k)
-                    del self.nextobsdict[f'next_{k}']
-        
-        self.buffer = cpprb.ReplayBuffer(size,
-                    env_dict={**self.obsdict,
-                        "action": {"shape": action_space},
-                        "reward": {},
-                        **self.nextobsdict,
-                        "done": {}
-                    },next_of = self.obscompress, stack_compress = self.obscompress)
+        if env_dict is None:
+            self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
+                                for idx,o in enumerate(observation_space))
+            self.nextobsdict = dict(("next_obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
+                                for idx,o in enumerate(observation_space))
+            self.obscompress = None
+            if compress_memory:
+                self.obscompress = []
+                for k in self.obsdict:
+                    if len(self.obsdict[k]["shape"]) >= 3:
+                        self.obscompress.append(k)
+                        del self.nextobsdict[f'next_{k}']
+            
+            self.buffer = cpprb.ReplayBuffer(size,
+                        env_dict={**self.obsdict,
+                            "action": {"shape": action_space},
+                            "reward": {},
+                            **self.nextobsdict,
+                            "done": {}
+                        },next_of = self.obscompress, stack_compress = self.obscompress)
+        else:
+            self.obsdict = dict((o,None) for o in env_dict.keys() if o.startswith("obs"))
+            self.nextobsdict = dict((o,None) for o in env_dict.keys() if o.startswith("next_obs"))
+            self.buffer = cpprb.ReplayBuffer(size, env_dict = env_dict, Nstep=n_s)
     
     def __len__(self) -> int:
-        return len(self.buffer)
+        return self.buffer.get_stored_size()
 
     @property
     def storage(self):
@@ -95,6 +102,9 @@ class ReplayBuffer(object):
         nextobsdict = dict(zip(self.nextobsdict.keys(),nxtobs_t))
         self.buffer.add(**obsdict,action=action,reward=reward,**nextobsdict,done=done)
 
+    def episode_end(self):
+        self.buffer.on_episode_end()
+
     def sample(self, batch_size: int):
         smpl = self.buffer.sample(batch_size)
         return {
@@ -104,6 +114,21 @@ class ReplayBuffer(object):
             'nxtobses'  : [smpl[no] for no in self.nextobsdict.keys()],
             'dones'     : smpl['done']
                 }
+    
+    def get_buffer(self):
+        return self.buffer.get_all_transitions()
+
+    def conv_transitions(self, transitions):
+        return {
+            'obses'     : [transitions[o] for o in self.obsdict.keys()],
+            'actions'   : transitions['action'],
+            'rewards'   : transitions['reward'],
+            'nxtobses'  : [transitions[no] for no in self.nextobsdict.keys()],
+            'dones'     : transitions['done']
+                }
+    
+    def clear(self):
+        self.buffer.clear()
 
 class NstepReplayBuffer(ReplayBuffer):
     def __init__(self, size: int, observation_space: list,action_space = 1, worker_size = 1, n_step=1, gamma=0.99,compress_memory = False):
@@ -127,23 +152,32 @@ class NstepReplayBuffer(ReplayBuffer):
                 "gamma": gamma,
                 "next": list(self.nextobsdict.keys())
                 }
-        self.buffer = cpprb.ReplayBuffer(size,
+        
+        if worker_size > 1:
+            self.buffer = cpprb.ReplayBuffer(size,
                     env_dict={**self.obsdict,
                         "action": {"shape": action_space},
                         "reward": {},
                         **self.nextobsdict,
                         "done": {}
-                    },
-                    Nstep=n_s,next_of = self.obscompress, stack_compress = self.obscompress)
-        if worker_size > 1:
+                    }, next_of = self.obscompress, stack_compress = self.obscompress)
             self.local_buffers = [cpprb.ReplayBuffer(2000,
                         env_dict={**self.obsdict,
                             "action": {"shape": action_space},
                             "reward": {},
                             **self.nextobsdict,
                             "done": {}
-                        }) for _ in range(worker_size)]
+                        }, Nstep=n_s) for _ in range(worker_size)]
             self.add = self.multiworker_add
+        else:
+            self.buffer = cpprb.ReplayBuffer(size,
+                    env_dict={**self.obsdict,
+                        "action": {"shape": action_space},
+                        "reward": {},
+                        **self.nextobsdict,
+                        "done": {}
+                    }, Nstep=n_s, next_of = self.obscompress, stack_compress = self.obscompress)
+            
 
     def add(self, obs_t, action, reward, nxtobs_t, done, terminal=False):
         super().add(obs_t, action, reward, nxtobs_t, done, terminal)
@@ -222,15 +256,37 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
                 "gamma": gamma,
                 "next": list(self.nextobsdict.keys())
                 }
-        self.buffer = cpprb.PrioritizedReplayBuffer(size,
-                    env_dict={**self.obsdict,
-                        "action": {"shape": action_space},
-                        "reward": {},
-                        **self.nextobsdict,
-                        "done": {}
-                    },
-                    alpha=alpha,
-                    Nstep=n_s,next_of = self.obscompress, stack_compress = self.obscompress)
+        
+        
+        if worker_size > 1:
+            self.buffer = cpprb.PrioritizedReplayBuffer(size,
+                        env_dict={**self.obsdict,
+                            "action": {"shape": action_space},
+                            "reward": {},
+                            **self.nextobsdict,
+                            "done": {}
+                        },
+                        alpha=alpha,
+                        next_of = self.obscompress, stack_compress = self.obscompress)
+            self.local_buffers = [cpprb.ReplayBuffer(2000,
+                        env_dict={**self.obsdict,
+                            "action": {"shape": action_space},
+                            "reward": {},
+                            **self.nextobsdict,
+                            "done": {}
+                        }, Nstep=n_s) for _ in range(worker_size)]
+            self.add = self.multiworker_add
+        else:
+            self.buffer = cpprb.PrioritizedReplayBuffer(size,
+                        env_dict={**self.obsdict,
+                            "action": {"shape": action_space},
+                            "reward": {},
+                            **self.nextobsdict,
+                            "done": {}
+                        },
+                        alpha=alpha,
+                        Nstep=n_s, next_of = self.obscompress, stack_compress = self.obscompress)
+
         if worker_size > 1:
             self.local_buffers = [cpprb.ReplayBuffer(2000,
                         env_dict={**self.obsdict,
@@ -255,3 +311,62 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
         
     def update_priorities(self, indexes, priorities):
         self.buffer.update_priorities(indexes,priorities)
+
+
+class MultiPrioritizedReplayBuffer:
+    
+    def __init__(self, size: int, observation_space: list, alpha: float, action_space = 1, n_step = 1, gamma = 0.99, manager = None, compress_memory = False):
+        self.max_size = size
+        self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
+                        for idx,o in enumerate(observation_space))
+        self.nextobsdict = dict(("next_obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
+                        for idx,o in enumerate(observation_space))
+        self.obscompress = None
+        if compress_memory:
+            self.obscompress = []
+            for k in self.obsdict:
+                if len(self.obsdict[k]["shape"]) >= 3:
+                    self.obscompress.append(k)
+                    del self.nextobsdict[f'next_{k}']
+
+        self.env_dict = {**self.obsdict,
+                    "action": {"shape": action_space},
+                    "reward": {},
+                    **self.nextobsdict,
+                    "done": {}
+                    }
+        
+        self.n_s = None
+        if n_step > 1:
+            self.n_s = {
+                    "size": n_step,
+                    "rew": "reward",
+                    "gamma": gamma,
+                    "next": list(self.nextobsdict.keys())
+                    }
+        
+        self.buffer = cpprb.MPPrioritizedReplayBuffer(size,
+                env_dict=self.env_dict,
+                alpha=alpha,
+                ctx=manager, backend="SharedMemory")
+        
+    def __len__(self):
+        return self.buffer.get_stored_size()
+        
+    def buffer_info(self):
+        return self.buffer, self.env_dict, self.n_s
+
+    def sample(self, batch_size: int, beta=0.5):
+        smpl = self.buffer.sample(batch_size, beta)
+        return {
+            'obses'     : [smpl[o] for o in self.obsdict.keys()],
+            'actions'   : smpl['action'],
+            'rewards'   : smpl['reward'],
+            'nxtobses'  : [smpl[no] for no in self.nextobsdict.keys()],
+            'dones'     : smpl['done'],
+            'weights'   : smpl['weights'],
+            'indexes'   : smpl['indexes']
+                }
+        
+    def update_priorities(self, indexes, priorities):
+        self.buffer.update_priorities(indexes, priorities)

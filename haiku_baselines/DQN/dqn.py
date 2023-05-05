@@ -8,6 +8,7 @@ from copy import deepcopy
 from haiku_baselines.DQN.base_class import Q_Network_Family
 from haiku_baselines.DQN.network import Model
 from haiku_baselines.common.Module import PreProcess
+from haiku_baselines.common.losses import hubberloss
 from haiku_baselines.common.utils import hard_update, convert_jax, print_param, q_log_pi
 
 class DQN(Q_Network_Family):
@@ -102,7 +103,9 @@ class DQN(Q_Network_Family):
     def _loss(self, params, obses, actions, targets, weights, key):
         vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         error = jnp.squeeze(vals - targets)
-        return jnp.mean(jnp.square(error) * weights), jnp.abs(error) #remove weight multiply cpprb weight is something wrong
+        #loss = jnp.square(error)
+        loss = hubberloss(error, delta=1.0)
+        return jnp.mean(loss * weights), jnp.abs(error) #remove weight multiply cpprb weight is something wrong
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)

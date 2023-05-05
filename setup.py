@@ -20,27 +20,7 @@ setup(
               'haiku_baselines.A2C',
               'haiku_baselines.TRPO',
               'haiku_baselines.ACER',
-              'haiku_baselines.PPO',],
-    install_requires=[
-        'requests',
-        'mlagents_envs',
-        'gymnasium',
-        'gymnasium[atari,accept-rom-license,box2d,mujoco]',
-        'mujoco',
-        'box2d',
-        'box2d-py',
-        'box2d-kengz',
-        'jax==0.4.4',
-        'einops',
-        'dm-haiku',
-        'optax',
-        'numpy',
-        'ray[default]',
-        'colabgymrender',
-        'cpprb',
-        'tensorboardX',
-        'imageio-ffmpeg',
-        'opencv-python'
-        #'importlib; python_version >= "3.5"',
-    ]
+              'haiku_baselines.PPO',
+              'haiku_baselines.APE_X',
+              'haiku_baselines.IMPALA',]
 )

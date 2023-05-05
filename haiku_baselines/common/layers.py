@@ -26,7 +26,7 @@ class NoisyLinear(hk.Module):
         self.output_size = output_size
         self.with_bias = with_bias
         self.w_init = w_init
-        self.b_init = b_init or jnp.zeros
+        self.b_init = b_init
         
     def __call__(
         self,

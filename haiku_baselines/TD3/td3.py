@@ -25,7 +25,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
                  full_tensorboard_log, seed, optimizer)
         
         self.action_noise = action_noise
-        self.traget_action_noise = action_noise*target_action_noise_mul
+        self.target_action_noise = action_noise*target_action_noise_mul
         self.action_noise_clamp = 0.5 #self.target_action_noise*1.5
         self.policy_delay = policy_delay
         
@@ -126,7 +126,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         next_feature = self.preproc.apply(target_params, key, nxtobses)
         next_action = jnp.clip(
                       self.actor.apply(target_params, key, next_feature) \
-                      + jnp.clip(self.traget_action_noise*jax.random.normal(key,(self.batch_size,self.action_size[0])),-self.action_noise_clamp,self.action_noise_clamp)
+                      + jnp.clip(self.target_action_noise*jax.random.normal(key,(self.batch_size,self.action_size[0])),-self.action_noise_clamp,self.action_noise_clamp)
                       ,-1.0,1.0)
         q1, q2 = self.critic.apply(target_params, key, next_feature, next_action)
         next_q = jnp.minimum(q1,q2)

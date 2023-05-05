@@ -114,7 +114,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error + self.prioritized_replay_eps
-        return params, target_params, opt_state, critic_loss, -actor_loss, new_priorities
+        return params, target_params, opt_state, critic_loss, actor_loss, new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, key):
         feature = self.preproc.apply(params, key, obses)

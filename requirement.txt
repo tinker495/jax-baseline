@@ -1,0 +1,19 @@
+requests
+mlagents_envs
+gymnasium
+gymnasium[atari,accept-rom-license,box2d,mujoco]
+mujoco
+box2d
+box2d-py
+box2d-kengz
+jax>=0.4.7
+einops
+dm-haiku
+optax
+numpy
+ray[default]
+colabgymrender
+cpprb @ git+https://github.com/TinkTheBoush/cpprb.git
+tensorboardX
+imageio-ffmpeg
+opencv-python

@@ -11,12 +11,12 @@ from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import hard_update, convert_jax, print_param, q_log_pi
 
 class C51(Q_Network_Family):
-    def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, exploration_fraction=0.3, categorial_bar_n = 51,
+    def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, exploration_fraction=0.3, 
                  exploration_final_eps=0.02, exploration_initial_eps=1.0, train_freq=1, gradient_steps=1, batch_size=32, double_q=True,
                  dueling_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, prioritized_replay=False,
                  prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-3, 
                  param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None,
-                 categorial_max = 250, categorial_min = -250,
+                 categorial_bar_n = 51, categorial_max = 250, categorial_min = -250,
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw', compress_memory = False):
         
         super(C51, self).__init__(env, gamma, learning_rate, buffer_size, exploration_fraction,
@@ -40,7 +40,7 @@ class C51(Q_Network_Family):
             del self.policy_kwargs['cnn_mode']
         self.preproc = hk.transform(lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x))
         self.model = hk.transform(lambda x: Model(self.action_size,
-                           dueling=self.dueling_model,noisy=self.param_noise,
+                           dueling=self.dueling_model,noisy=self.param_noise, categorial_bar_n=self.categorial_bar_n,
                            **self.policy_kwargs)(x))
         pre_param = self.preproc.init(next(self.key_seq),
                             [np.zeros((1,*o),dtype=np.float32) for o in self.observation_space])
@@ -120,7 +120,7 @@ class C51(Q_Network_Family):
         loss = jnp.sum(-target_distribution * jnp.log(distribution),axis=1)
         return jnp.mean(loss * weights), loss #remove weight multiply cpprb weight is something wrong
     
-    def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
+    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)
         if self.double_q:
             next_actions = jnp.expand_dims(jnp.argmax(

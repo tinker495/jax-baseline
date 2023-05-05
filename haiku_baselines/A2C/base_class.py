@@ -275,8 +275,8 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.env.step(self.conv_action(actions))
             
             next_states,rewards,dones,terminals,end_states,end_idx = self.env.get_steps()
-            nxtstates = np.copy(next_states)
             if end_states is not None:
+                nxtstates = np.copy(next_states)
                 nxtstates[end_idx] = end_states
                 if self.summary:
                     self.summary.add_scalar("env/episode_reward", np.mean(self.scores[end_idx]), steps)
@@ -285,7 +285,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 self.scoreque.extend(self.scores[end_idx])
                 self.scores[end_idx] = 0
                 self.eplen[end_idx] = 0
-            self.buffer.add([state], actions, np.expand_dims(rewards,axis=1), [nxtstates], np.expand_dims(dones,axis=1), np.expand_dims(terminals,axis=1))
+                self.buffer.add([state], actions, np.expand_dims(rewards,axis=1), [nxtstates], np.expand_dims(dones,axis=1), np.expand_dims(terminals,axis=1))
+            else:
+                self.buffer.add([state], actions, np.expand_dims(rewards,axis=1), [next_states], np.expand_dims(dones,axis=1), np.expand_dims(terminals,axis=1))
             self.scores += rewards
             state = next_states
             

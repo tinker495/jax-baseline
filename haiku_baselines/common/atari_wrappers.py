@@ -66,7 +66,7 @@ class FireResetEnv(gym.Wrapper):
         return self.env.step(action)
 
 class EpisodicLifeEnv(gym.Wrapper):
-    def __init__(self, env):
+    def __init__(self, env, kill_on_life_loss=False):
         """
         Make end-of-life == end-of-episode, but only reset on true game over.
         Done by DeepMind for the DQN and co. since it helps value estimation.
@@ -75,14 +75,16 @@ class EpisodicLifeEnv(gym.Wrapper):
         gym.Wrapper.__init__(self, env)
         self.lives = 0
         self.was_real_done = True
+        self.kill_on_life_loss = kill_on_life_loss
 
     def step(self, action):
         obs, reward, terminal, truncated, info = self.env.step(action)
-        self.was_real_done = terminal
+        self.was_real_done = terminal or truncated
         # check current lives, make loss of life terminal,
         # then update lives to handle bonus lives
-        lives = self.env.unwrapped.ale.lives()
+        lives = info['lives'] #self.env.unwrapped.ale.lives()
         if 0 < lives < self.lives:
+            #print("Lives lost: ", self.lives - lives)
             # for Qbert sometimes we stay in lives == 0 condtion for a few frames
             # so its important to keep lives > 0, so that we only reset once
             # the environment advertises done.
@@ -99,12 +101,12 @@ class EpisodicLifeEnv(gym.Wrapper):
         :param kwargs: Extra keywords passed to env.reset() call
         :return: ([int] or [float]) the first observation of the environment
         """
-        if self.was_real_done:
+        if self.was_real_done or self.kill_on_life_loss:
             obs, info = self.env.reset(**kwargs)
         else:
             # no-op step to advance from terminal/lost life state
             obs, _, _, _, info = self.env.step(0)
-        self.lives = self.env.unwrapped.ale.lives()
+        self.lives = info['lives'] #self.env.unwrapped.ale.lives()
         return obs, info
 
 class MaxAndSkipEnv(gym.Wrapper):
@@ -260,28 +262,28 @@ class LazyFrames(object):
 def make_atari(env_id, max_episode_steps=None):
     env = gym.make(env_id, render_mode='rgb_array')
     env = NoopResetEnv(env, noop_max=30)
-    if 'NoFrameskip' in env.spec.id:
-        env = MaxAndSkipEnv(env, skip=4)
+    #if 'NoFrameskip' in env.spec.id:
+    env = MaxAndSkipEnv(env, skip=4)
     return env
 
-def wrap_deepmind(env, episode_life=True, clip_rewards=True, frame_stack=True, scale=False):
+def wrap_deepmind(env, episode_life=True, kill_on_life_loss = True, clip_rewards=True, frame_stack=True, scale=False):
     """Configure environment for DeepMind-style Atari.
     """
     if episode_life:
-        env = EpisodicLifeEnv(env)
+        env = EpisodicLifeEnv(env, kill_on_life_loss)
     print("Action meaning : ", env.unwrapped.get_action_meanings())
     if 'FIRE' in env.unwrapped.get_action_meanings():
         env = FireResetEnv(env)
     env = WarpFrame(env)
-    if clip_rewards:
-        env = ClipRewardEnv(env)
     if scale:
         env = ScaledFloatFrame(env)
+    if clip_rewards:
+        env = ClipRewardEnv(env)
     if frame_stack:
         env = FrameStack(env, 4)
     return env
 
-def make_wrap_atari(env_id='Breakout-v0', clip_rewards=True):
+def make_wrap_atari(env_id='Breakout-v0', clip_rewards=False):
 	#env = gym.make(env_id)
 	env = make_atari(env_id)
 	env = wrap_deepmind(env, clip_rewards=clip_rewards, frame_stack=True)

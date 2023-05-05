@@ -5,6 +5,7 @@
 *~
 *.vscode
 *__pycache__
+repositories/
 build/
 log/
 csv/

@@ -26,13 +26,13 @@ class TensorboardWriter:
         self.new_tb_log = new_tb_log
 
     def __enter__(self):
-        if self.tensorboard_log_path is not None:
+        if self.writer is None:
             latest_run_id = self._get_latest_run_id()
             if self.new_tb_log:
                 latest_run_id = latest_run_id + 1
-            save_path = os.path.join(self.tensorboard_log_path, "{}_{}".format(self.tb_log_name, latest_run_id))
-            self.writer = SummaryWriter(save_path)
-        return self.writer, save_path
+            self.save_path = os.path.join(self.tensorboard_log_path, "{}_{}".format(self.tb_log_name, latest_run_id))
+            self.writer = SummaryWriter(self.save_path)
+        return self.writer, self.save_path
 
     def _get_latest_run_id(self):
         """
@@ -55,7 +55,7 @@ class TensorboardWriter:
 
 def save(ckpt_dir: str, state) -> None:
     with open(os.path.join(ckpt_dir, "arrays.npy"), "wb") as f:
-        for x in jax.tree_leaves(state):
+        for x in jax.tree_util.tree_leaves(state):
             np.save(f, x, allow_pickle=False)
 
     tree_struct = jax.tree_map(lambda t: 0, state)
@@ -72,7 +72,8 @@ def restore(ckpt_dir):
 
     return jax.tree_unflatten(treedef, flat_state)
 
-def select_optimizer(optim_str, rl, eps=1e-2/256.0, grad_max=3):
+def select_optimizer(optim_str, rl, eps=1e-2/256.0, grad_max=10):
+    '''
     if optim_str == 'adam':
         return optax.adam(rl,b1=0.9,b2=0.99,eps=eps)
     elif optim_str == 'adamw':
@@ -83,11 +84,10 @@ def select_optimizer(optim_str, rl, eps=1e-2/256.0, grad_max=3):
         return optax.lion(rl)
     '''
     if optim_str == 'adam':
-        return combine.chain(optax.clip_by_global_norm(grad_max), optax.adam(rl,eps=eps))
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.adam(rl,b1=0.9,b2=0.99,eps=eps))
     elif optim_str == 'adamw':
-        return combine.chain(optax.clip_by_global_norm(grad_max), optax.adamw(rl,eps=eps))
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.adamw(rl,b1=0.9,b2=0.99,eps=eps))
     elif optim_str == 'rmsprop':
-        return combine.chain(optax.clip_by_global_norm(grad_max), optax.rmsprop(rl,eps=eps))
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.rmsprop(rl,b1=0.9,b2=0.99,eps=eps))
     elif optim_str == 'lion':
-        return combine.chain(optax.clip_by_global_norm(grad_max), lion(rl))
-    '''
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.lion(rl))

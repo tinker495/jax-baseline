@@ -38,6 +38,7 @@ if __name__ == "__main__":
     parser.add_argument('--worker', type=int,default=1, help='gym_worker_size')
     parser.add_argument('--optimizer', type=str,default='adamw', help='optimaizer')
     parser.add_argument('--train_freq', type=int, default=1, help='train_frequancy')
+    parser.add_argument('--gradient_steps', type=int, default=1, help='gradient steps')
     parser.add_argument('--learning_starts', type=int, default=5000, help='learning start')
     parser.add_argument('--exploration_fraction', type=float, default=0.3, help='exploration fraction')
     parser.add_argument('--clip_rewards', action='store_true')
@@ -66,7 +67,7 @@ if __name__ == "__main__":
             from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
             env_type, env_id = get_env_type(env_name)
             if env_type == 'atari_env':
-                env = make_wrap_atari(env_name,clip_rewards=args.clip_rewards)
+                env = make_wrap_atari(env_name,clip_rewards=True)
             else:
                 env = gym.make(env_name)
         env_type = "gym"
@@ -79,31 +80,31 @@ if __name__ == "__main__":
     if args.algo == "DQN":
         agent = DQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
-                    param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq, learning_starts=args.learning_starts,
+                    param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, gradient_steps= args.gradient_steps, train_freq=args.train_freq, learning_starts=args.learning_starts,
                     exploration_fraction = args.exploration_fraction,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory)
     elif args.algo == "C51":
         agent = C51(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
-                    param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq, learning_starts=args.learning_starts,
+                    param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, gradient_steps= args.gradient_steps, train_freq=args.train_freq, learning_starts=args.learning_starts,
                     categorial_max = args.max, categorial_min = args.min, exploration_fraction = args.exploration_fraction,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory)
     elif args.algo == "QRDQN":
         agent = QRDQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
-                    param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq, learning_starts=args.learning_starts,
+                    param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, gradient_steps= args.gradient_steps, train_freq=args.train_freq, learning_starts=args.learning_starts,
                     delta = args.delta, n_support = args.n_support, exploration_fraction = args.exploration_fraction,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory)
     elif args.algo == "IQN":
         agent = IQN(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
-                    param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq, learning_starts=args.learning_starts,
+                    param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, gradient_steps= args.gradient_steps, train_freq=args.train_freq, learning_starts=args.learning_starts,
                     delta = args.delta, n_support = args.n_support, exploration_fraction = args.exploration_fraction, CVaR= args.CVaR,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory)
     elif args.algo == "FQF":
         agent = FQF(env, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_freq = args.target_update,
                     prioritized_replay = args.per, double_q = args.double, dueling_model = args.dueling, exploration_final_eps = args.final_eps,
-                    param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, train_freq=args.train_freq, learning_starts=args.learning_starts,
+                    param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, gradient_steps= args.gradient_steps, train_freq=args.train_freq, learning_starts=args.learning_starts,
                     delta = args.delta, n_support = args.n_support, exploration_fraction = args.exploration_fraction,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory)
 

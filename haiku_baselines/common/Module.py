@@ -46,24 +46,21 @@ class FractionProposal(hk.Module):
 def visual_embedding(mode="simple"):
     if mode == "normal":
         net_fn = lambda x: hk.Sequential([
-                    hk.Conv2D(32, kernel_shape=[8, 8], stride=[4, 4], padding='VALID'), jax.nn.relu,
-                    hk.Conv2D(64, kernel_shape=[4, 4], stride=[2, 2], padding='VALID'), jax.nn.relu,
-                    hk.Conv2D(64, kernel_shape=[3, 3], stride=[1, 1], padding='VALID'), jax.nn.relu,
+                    hk.Conv2D(32, kernel_shape=[8, 8], stride=[4, 4], padding='VALID', w_init=hk.initializers.VarianceScaling(scale=2), b_init=hk.initializers.VarianceScaling(scale=2)), jax.nn.relu,
+                    hk.Conv2D(64, kernel_shape=[4, 4], stride=[2, 2], padding='VALID', w_init=hk.initializers.VarianceScaling(scale=2), b_init=hk.initializers.VarianceScaling(scale=2)), jax.nn.relu,
+                    hk.Conv2D(64, kernel_shape=[3, 3], stride=[1, 1], padding='VALID', w_init=hk.initializers.VarianceScaling(scale=2), b_init=hk.initializers.VarianceScaling(scale=2)), jax.nn.relu,
                     hk.Flatten(),
-                    hk.Linear(512), jax.nn.relu
                     ])(x)
     elif mode == "simple":
         net_fn = lambda x: hk.Sequential([
-                    hk.Conv2D(16, kernel_shape=[8, 8], stride=[4, 4], padding='VALID'), jax.nn.relu,
-                    hk.Conv2D(32, kernel_shape=[4, 4], stride=[2, 2], padding='VALID'), jax.nn.relu,
+                    hk.Conv2D(16, kernel_shape=[8, 8], stride=[4, 4], padding='VALID', w_init=hk.initializers.VarianceScaling(scale=2), b_init=hk.initializers.VarianceScaling(scale=2)), jax.nn.relu,
+                    hk.Conv2D(32, kernel_shape=[4, 4], stride=[2, 2], padding='VALID', w_init=hk.initializers.VarianceScaling(scale=2), b_init=hk.initializers.VarianceScaling(scale=2)), jax.nn.relu,
                     hk.Flatten(),
-                    hk.Linear(256), jax.nn.relu
                     ])(x)
     elif mode == "minimum":
         net_fn = lambda x: hk.Sequential([
-                    hk.Conv2D(16, kernel_shape=[3, 3], stride=[1, 1], padding='VALID'), jax.nn.relu,
+                    hk.Conv2D(16, kernel_shape=[3, 3], stride=[1, 1], padding='VALID', w_init=hk.initializers.VarianceScaling(scale=2), b_init=hk.initializers.VarianceScaling(scale=2)), jax.nn.relu,
                     hk.Flatten(),
-                    hk.Linear(128), jax.nn.relu
                     ])(x)
     elif mode == "none":
         net_fn = hk.Flatten()
