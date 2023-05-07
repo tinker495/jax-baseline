@@ -127,7 +127,7 @@ class APE_X_C51(Ape_X_Family):
                 target_distribution = jnp.reshape(target_distribution,(size,categorial_bar_n))
 
                 loss = jnp.sum(-target_distribution * jnp.log(distribution),axis=1)
-                return jnp.squeeze(loss + prioritized_replay_eps)
+                return jnp.squeeze(loss)
 
             def actor(model, preproc, params, obses, key):
                 q_values = jnp.sum(model.apply(params, key, preproc.apply(params, key, convert_jax(obses))) * categorial_bar,axis=2)

@@ -82,7 +82,7 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
                 q_values = critic.apply(params, key, feature, actions)
                 target = rewards + gamma * (1.0 - dones) * next_q
                 td_error = q_values - target
-                return jnp.squeeze(jnp.abs(td_error) + prioritized_replay_eps)
+                return jnp.squeeze(jnp.abs(td_error))
 
             def actor(actor, preproc, params, obses, key):
                 return actor.apply(params, key, preproc.apply(params, key, convert_jax(obses)))

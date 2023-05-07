@@ -100,7 +100,7 @@ class APE_X_QRDQN(Ape_X_Family):
                 next_vals = jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1)) # batch x support
                 target = rewards + gamma * (1.0 - dones) * next_vals
                 loss = QuantileHuberLosses(q_values, jnp.expand_dims(target,axis=2), quantile, delta)
-                return jnp.squeeze(loss + prioritized_replay_eps)
+                return jnp.squeeze(loss)
 
             def actor(model, preproc, params, obses, key):
                 q_values = model.apply(params, key, preproc.apply(params, key, convert_jax(obses)))

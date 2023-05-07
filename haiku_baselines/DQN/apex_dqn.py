@@ -87,7 +87,7 @@ class APE_X_DQN(Ape_X_Family):
                 next_q_values = jnp.max(model.apply(params, key, preproc.apply(params, key, convert_jax(nxtobses))),axis=1, keepdims=True)
                 target = rewards + gamma * (1.0 - dones) * next_q_values
                 td_error = q_values - target
-                return jnp.squeeze(jnp.abs(td_error) + prioritized_replay_eps)
+                return jnp.squeeze(jnp.abs(td_error))
 
             def actor(model, preproc, params, obses, key):
                 q_values = model.apply(params, key, preproc.apply(params, key, convert_jax(obses)))
