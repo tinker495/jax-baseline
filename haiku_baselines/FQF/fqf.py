@@ -113,7 +113,7 @@ class FQF(Q_Network_Family):
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
-            new_priorities = abs_error + self.prioritized_replay_eps
+            new_priorities = abs_error
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, key):

@@ -136,7 +136,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
         target_params = soft_update(params, target_params, self.target_network_update_tau)
         new_priorities = None
         if self.prioritized_replay:
-            new_priorities = abs_error + self.prioritized_replay_eps
+            new_priorities = abs_error
         return params, target_params, opt_state, critic_loss, -actor_loss, log_prob, new_priorities
     
     def _train_ent_coef(self,log_coef,log_prob):

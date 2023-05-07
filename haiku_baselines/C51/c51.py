@@ -110,7 +110,7 @@ class C51(Q_Network_Family):
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
-            new_priorities = abs_error + self.prioritized_replay_eps
+            new_priorities = abs_error
         return params, target_params, opt_state, loss, jnp.mean(jnp.sum(target_distribution*self.categorial_bar,axis=1)), new_priorities
     
     def _loss(self, params, obses, actions, target_distribution, weights, key):
@@ -118,27 +118,25 @@ class C51(Q_Network_Family):
                         jnp.squeeze(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1))
                         ,1e-5,1.0)
         loss = jnp.sum(-target_distribution * jnp.log(distribution),axis=1)
-        return jnp.mean(loss * weights), loss #remove weight multiply cpprb weight is something wrong
+        return jnp.mean(loss * weights), loss
     
     def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)
         if self.double_q:
-            next_actions = jnp.expand_dims(jnp.argmax(
-                            jnp.sum(self.get_q(params,nxtobses,key)*self._categorial_bar,axis=2)
-                            ,axis=1),axis=(1,2))
+            next_action_q = jnp.sum(self.get_q(params,nxtobses,key)*self._categorial_bar,axis=2)
+            next_actions = jnp.expand_dims(jnp.argmax(next_action_q , axis=1) ,axis=(1,2))
         else:
-            next_actions = jnp.expand_dims(jnp.argmax(
-                            jnp.sum(next_q*self._categorial_bar,axis=2)
-                            ,axis=1),axis=(1,2))
+            next_action_q = jnp.sum(next_q * self._categorial_bar, axis=2)
+            next_actions = jnp.expand_dims(jnp.argmax(next_action_q , axis=1) ,axis=(1,2))
         next_distribution = jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))
         
         if self.munchausen:
-            next_q_mean = jnp.sum(next_q*self.categorial_bar,axis=2)
-            _, tau_log_pi_next, pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
-            next_categorial = (self.categorial_bar - jnp.sum(pi_next * tau_log_pi_next, axis=1, keepdims=True)) * not_dones
+            next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
+            pi_next = jax.nn.softmax(next_sub_q/self.munchausen_entropy_tau)
+            next_categorial = not_dones * (self.categorial_bar - jnp.sum(pi_next * tau_log_pi_next, axis=1, keepdims=True))
             
             q_k_targets = jnp.sum(self.get_q(target_params,obses,key)*self.categorial_bar,axis=2)
-            q_sub_targets, tau_log_pi, _ = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau*tau_log_pi
             munchausen_addon = jnp.take_along_axis(log_pi,jnp.squeeze(actions,axis=2),axis=1)
             

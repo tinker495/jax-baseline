@@ -53,12 +53,8 @@ class QRDQN(Q_Network_Family):
         
         self.opt_state = self.optimizer.init(self.params)
         
-        if not self.dueling_model:
-            self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support+1)[:-1])/2.0   # [support]
-            self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                                        # [1 x 1 x support]
-        else:
-            self.quantile = (jnp.linspace(0.0,1.0,self.n_support*self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support*self.n_support+1)[:-1])/2.0   # [support]
-            self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                                        # [1 x 1 x support]
+        self.quantile = (jnp.linspace(0.0,1.0,self.n_support+1)[1:] + jnp.linspace(0.0,1.0,self.n_support+1)[:-1])/2.0   # [support]
+        self.quantile = jax.device_put(jnp.expand_dims(self.quantile,axis=(0,1)))                                        # [1 x 1 x support]
         
         print("----------------------model----------------------")
         print_param('preprocess',pre_param)
@@ -110,14 +106,14 @@ class QRDQN(Q_Network_Family):
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
-            new_priorities = abs_error + self.prioritized_replay_eps
+            new_priorities = abs_error
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, key):
         theta_loss_tile = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)  # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets,axis=2)                                      # batch x support x 1
         loss = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, self.quantile, self.delta)
-        return jnp.mean(loss * weights), loss #remove weight multiply cpprb weight is something wrong
+        return jnp.mean(loss * weights), loss
     
     def _target(self,params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params,nxtobses,key)
@@ -128,17 +124,9 @@ class QRDQN(Q_Network_Family):
             else:
                 next_q_mean = jnp.mean(next_q,axis=2)
             next_sub_q, tau_log_pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
-            pi_next = jax.nn.softmax(next_sub_q/self.munchausen_entropy_tau,axis=1)
-            p_cuml = jnp.expand_dims(jnp.cumsum(pi_next,axis=1),axis=2).tile(32)
-            r = jax.random.uniform(key, (32,1,32), dtype=p_cuml.dtype)
-            ind = jnp.swapaxes(jax.vmap(jax.vmap(lambda p,r: jnp.searchsorted(p, r),in_axes=(1,1)))(p_cuml,r),1,2)
-            sampled_q = jnp.take_along_axis(next_q - jnp.expand_dims(tau_log_pi_next,axis=2),ind,axis=1).squeeze()
-            next_vals = sampled_q * not_dones
+            pi_next = jnp.expand_dims(jax.nn.softmax(next_sub_q/self.munchausen_entropy_tau),axis=2)
+            next_vals = jnp.sum(pi_next * (next_q - jnp.expand_dims(tau_log_pi_next,axis=2)),axis=1) * not_dones
             
-            if self.double_q:
-                q_k_targets = jnp.mean(self.get_q(params,obses,key),axis=2)
-            else:
-                q_k_targets = jnp.mean(self.get_q(target_params,obses,key),axis=2)
             q_k_targets = jnp.mean(self.get_q(target_params,obses,key),axis=2)
             q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau*tau_log_pi

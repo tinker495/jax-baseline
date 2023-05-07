@@ -121,7 +121,7 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         target_params = soft_update(params, target_params, self.target_network_update_tau)
-        new_priorities = abs_error + self.prioritized_replay_eps
+        new_priorities = abs_error
         return params, target_params, opt_state, critic_loss, actor_loss, new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, key):

@@ -92,7 +92,7 @@ class Ape_X_Family(object):
 	def get_memory_setup(self):
 		self.m = mp.get_context().Manager()
 		self.replay_buffer = MultiPrioritizedReplayBuffer(self.buffer_size, self.observation_space, self.prioritized_replay_alpha, 1,
-						    self.n_step, self.gamma, self.m, self.compress_memory)
+						    self.n_step, self.gamma, self.m, self.compress_memory, self.prioritized_replay_eps)
 
 	def setup_model(self):
 		pass

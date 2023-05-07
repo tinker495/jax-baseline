@@ -195,7 +195,7 @@ class NstepReplayBuffer(ReplayBuffer):
                 self.local_buffers[w].clear()
         
 class PrioritizedReplayBuffer(ReplayBuffer):
-    def __init__(self, size: int, observation_space: list, alpha: float, action_space = 1,compress_memory = False):
+    def __init__(self, size: int, observation_space: list, alpha: float, action_space = 1,compress_memory = False, eps=1e-4):
         self.max_size = size
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
@@ -216,7 +216,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                         **self.nextobsdict,
                         "done": {}
                     },
-                    alpha=alpha,next_of = self.obscompress, stack_compress = self.obscompress)
+                    alpha=alpha, eps=eps, next_of = self.obscompress, stack_compress = self.obscompress)
 
     def sample(self, batch_size: int, beta=0.5):
         smpl = self.buffer.sample(batch_size, beta)
@@ -235,7 +235,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
 
 class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
-    def __init__(self, size: int, observation_space: list, action_space = 1, worker_size = 1, n_step=1, gamma=0.99, alpha = 0.4,compress_memory = False):
+    def __init__(self, size: int, observation_space: list, action_space = 1, worker_size = 1, n_step=1, gamma=0.99, alpha = 0.4,compress_memory = False, eps=1e-4):
         self.max_size = size
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                             for idx,o in enumerate(observation_space))
@@ -266,7 +266,7 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
                             **self.nextobsdict,
                             "done": {}
                         },
-                        alpha=alpha,
+                        alpha=alpha, eps = eps,
                         next_of = self.obscompress, stack_compress = self.obscompress)
             self.local_buffers = [cpprb.ReplayBuffer(2000,
                         env_dict={**self.obsdict,
@@ -284,18 +284,8 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
                             **self.nextobsdict,
                             "done": {}
                         },
-                        alpha=alpha,
+                        alpha=alpha, eps=eps,
                         Nstep=n_s, next_of = self.obscompress, stack_compress = self.obscompress)
-
-        if worker_size > 1:
-            self.local_buffers = [cpprb.ReplayBuffer(2000,
-                        env_dict={**self.obsdict,
-                            "action": {"shape": action_space},
-                            "reward": {},
-                            **self.nextobsdict,
-                            "done": {}
-                        }) for _ in range(worker_size)]
-            self.add = self.multiworker_add
 
     def sample(self, batch_size: int, beta=0.5):
         smpl = self.buffer.sample(batch_size, beta)
@@ -315,7 +305,7 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
 
 class MultiPrioritizedReplayBuffer:
     
-    def __init__(self, size: int, observation_space: list, alpha: float, action_space = 1, n_step = 1, gamma = 0.99, manager = None, compress_memory = False):
+    def __init__(self, size: int, observation_space: list, alpha: float, action_space = 1, n_step = 1, gamma = 0.99, manager = None, compress_memory = False, eps=1e-4):
         self.max_size = size
         self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
                         for idx,o in enumerate(observation_space))
@@ -347,7 +337,7 @@ class MultiPrioritizedReplayBuffer:
         
         self.buffer = cpprb.MPPrioritizedReplayBuffer(size,
                 env_dict=self.env_dict,
-                alpha=alpha,
+                alpha=alpha, eps = eps,
                 ctx=manager, backend="SharedMemory")
         
     def __len__(self):

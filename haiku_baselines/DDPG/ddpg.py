@@ -113,7 +113,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         target_params = soft_update(params, target_params, self.target_network_update_tau)
         new_priorities = None
         if self.prioritized_replay:
-            new_priorities = abs_error + self.prioritized_replay_eps
+            new_priorities = abs_error
         return params, target_params, opt_state, critic_loss, actor_loss, new_priorities
     
     def _loss(self, params, obses, actions, targets, weights, key):

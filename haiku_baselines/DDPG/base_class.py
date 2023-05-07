@@ -117,9 +117,9 @@ class Deteministic_Policy_Gradient_Family(object):
         if self.prioritized_replay:
             if self.n_step_method:
                 self.replay_buffer = PrioritizedNstepReplayBuffer(self.buffer_size,self.observation_space, self.action_size, self.worker_size,
-                                                                     self.n_step, self.gamma, self.prioritized_replay_alpha)
+                                                                     self.n_step, self.gamma, self.prioritized_replay_alpha, False, self.prioritized_replay_eps)
             else:
-                self.replay_buffer = PrioritizedReplayBuffer(self.buffer_size,self.observation_space, self.action_size)
+                self.replay_buffer = PrioritizedReplayBuffer(self.buffer_size,self.observation_space, self.prioritized_replay_alpha, self.action_size, False, self.prioritized_replay_eps)
 
         else:
             if self.n_step_method:

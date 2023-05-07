@@ -53,8 +53,7 @@ class Model(hk.Module):
                 ,'(b t) a -> b a t',b=batch_size, t=quaitle_shape[1])                                                   #[ batch x action x tau ]
             return q_net
         else:
-            v = repeat(
-                rearrange(
+            v = rearrange(
                 hk.Sequential(
                 [
                     self.layer(self.node) if i%2 == 0 else jax.nn.relu for i in range(2*self.hidden_n)
@@ -64,7 +63,6 @@ class Model(hk.Module):
                 ]
                 )(mul_embedding)
                 ,'(b t) o -> b o t',b=batch_size, t=quaitle_shape[1])                                                   #[ batch x 1 x tau ]
-                ,'b o t -> b a o t',a=self.action_size[0])                                                            #[ batch x action x tau ]
             a = rearrange(
                 hk.Sequential(
                 [
@@ -74,6 +72,6 @@ class Model(hk.Module):
                     self.layer(self.action_size[0])
                 ]
                 )(mul_embedding)
-                ,'(b t) a -> b a o t',b=batch_size, o=1, t=quaitle_shape[1])                                                   #[ batch x action x tau ]
-            q = hk.Reshape((self.action_size[0],self.support_n*self.support_n))(v + a - jnp.max(a, axis=(1,2), keepdims=True))
+                ,'(b t) a -> b a t',b=batch_size, t=quaitle_shape[1])                                                    #[ batch x action x tau ]
+            q = v + a - jnp.mean(a, axis=(1), keepdims=True)
             return q

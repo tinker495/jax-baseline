@@ -130,9 +130,9 @@ class Q_Network_Family(object):
         if self.prioritized_replay:
             if self.n_step_method:
                 self.replay_buffer = PrioritizedNstepReplayBuffer(self.buffer_size,self.observation_space, 1, self.worker_size,
-                                                                     self.n_step, self.gamma, self.prioritized_replay_alpha)
+                                                                     self.n_step, self.gamma, self.prioritized_replay_alpha, False, self.prioritized_replay_eps)
             else:
-                self.replay_buffer = PrioritizedReplayBuffer(self.buffer_size,self.observation_space, 1)
+                self.replay_buffer = PrioritizedReplayBuffer(self.buffer_size,self.observation_space, self.prioritized_replay_alpha, 1, False, self.prioritized_replay_eps)
 
         else:
             if self.n_step_method:
