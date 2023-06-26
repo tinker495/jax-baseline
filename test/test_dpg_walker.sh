@@ -1,6 +1,8 @@
 export CUDA_VISIBLE_DEVICES=1
 export DISPLAY=:0
 
+pip install -q ..
+
 ENV="--env ../../env/Walker.x86_64"
 RL="--learning_rate 0.00005"
 TRAIN="--steps 1e6 --buffer_size 1e6 --batch 64 --target_update_tau 1e-3 --learning_starts 5000 --gradient_steps 10"

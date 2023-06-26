@@ -125,10 +125,10 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
         
         prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
-        actor_loss = -jnp.mean(log_prob*adv)
+        actor_loss = -jnp.mean(log_prob*jax.lax.stop_gradient(adv))
         entropy = prob * jnp.log(prob)
         entropy_loss = jnp.mean(entropy)
-        total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
+        total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss)
     
     def _loss_continuous(self, params, obses, actions, targets, adv, ent_coef, key):
@@ -137,10 +137,10 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
         
         prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
-        actor_loss = -jnp.mean(log_prob*adv)
+        actor_loss = -jnp.mean(log_prob*jax.lax.stop_gradient(adv))
         mu, log_std = prob
-        entropy_loss = jnp.mean(0.5 + 0.5 * jnp.log(2 * np.pi) + log_std) #jnp.mean(jnp.square(mu) + jnp.square(log_std))
-        total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
+        entropy_loss = - jnp.mean(0.5 + 0.5 * jnp.log(2 * np.pi) + log_std) #jnp.mean(jnp.square(mu) + jnp.square(log_std))
+        total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss)
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="A2C",

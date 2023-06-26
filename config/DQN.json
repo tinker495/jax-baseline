@@ -1,0 +1,15 @@
+{
+    "CartPole-v0": [
+        {
+            "learning_rate" : 0.001,
+            "gamma" : 0.99,
+            "steps" : 1e5,
+            "batch_size" : 64,
+            "memory_size" : 10000,
+            "target_update" : 1000,
+            "epsilon" : 0.1,
+            "epsilon_decay" : 0.999,
+            "epsilon_min" : 0.01,
+        }
+    ]
+}

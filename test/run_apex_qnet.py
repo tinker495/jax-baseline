@@ -2,6 +2,7 @@ import os
 import argparse
 import gymnasium as gym
 import ray
+import multiprocessing as mp
 
 from haiku_baselines.APE_X.worker import Ape_X_Worker
 from haiku_baselines.DQN.apex_dqn import APE_X_DQN
@@ -48,6 +49,8 @@ if __name__ == "__main__":
     env_name = args.env
     cnn_mode = "normal"
 
+    manger = mp.get_context().Manager()
+
     ray.init(num_cpus=args.worker + 2, num_gpus=0)
 
     workers = [Ape_X_Worker.remote(env_name) for i in range(args.worker)]
@@ -59,18 +62,18 @@ if __name__ == "__main__":
                      'cnn_mode': cnn_mode}
     
     if args.algo == "DQN":
-        agent = APE_X_DQN(workers, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size),
+        agent = APE_X_DQN(workers, manger, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size),
                     target_network_update_freq = args.target_update, double_q = args.double, dueling_model = args.dueling, exploration_initial_eps = args.initial_eps, exploration_decay=args.eps_decay,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, gradient_steps= args.gradient_steps, learning_starts=args.learning_starts,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory)
     elif args.algo == "C51":
-        agent = APE_X_C51(workers, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size),
+        agent = APE_X_C51(workers, manger, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size),
                     target_network_update_freq = args.target_update, double_q = args.double, dueling_model = args.dueling, exploration_initial_eps = args.initial_eps, exploration_decay=args.eps_decay,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, gradient_steps= args.gradient_steps, learning_starts=args.learning_starts,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory, 
                     categorial_max=args.max, categorial_min=args.min)
     elif args.algo == "QRDQN":
-        agent = APE_X_QRDQN(workers, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size),
+        agent = APE_X_QRDQN(workers, manger, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size),
                     target_network_update_freq = args.target_update, double_q = args.double, dueling_model = args.dueling, exploration_initial_eps = args.initial_eps, exploration_decay=args.eps_decay,
                     param_noise = args.noisynet, n_step = args.n_step, munchausen = args.munchausen, gradient_steps= args.gradient_steps, learning_starts=args.learning_starts,
                     tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer, compress_memory=args.compress_memory, 

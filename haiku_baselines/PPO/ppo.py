@@ -109,20 +109,22 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             self._preprocess(self.params, next(self.key_seq),
                                 **data)
             
-        critic_loss = []; actor_loss = []
+        critic_loss = []; actor_loss = []; entropy_loss = []
         for epoch in range(self.epoch_num):
             idxes = np.random.permutation(value.shape[0])
             for i in range(len(idxes) // self.minibatch_size):
                 start = i * self.minibatch_size
                 end = (i + 1) * self.minibatch_size
                 batchidx = idxes[start:end]
-                self.params, self.opt_state, c_loss, a_loss = self._optimize_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, 
+                self.params, self.opt_state, c_loss, a_loss, e_loss = self._optimize_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, 
                                 [o[batchidx] for o in obses], actions[batchidx], targets[batchidx], value[batchidx], act_prob[batchidx], adv[batchidx])
-                critic_loss.append(c_loss); actor_loss.append(a_loss)
-        critic_loss = np.array(critic_loss).mean(); actor_loss = np.array(actor_loss).mean()
+                critic_loss.append(c_loss); actor_loss.append(a_loss); entropy_loss.append(e_loss)
+        critic_loss = np.array(critic_loss).mean(); actor_loss = np.array(actor_loss).mean(); entropy_loss = np.array(entropy_loss).mean()
         if self.summary:
             self.summary.add_scalar("loss/critic_loss", critic_loss, steps)
             self.summary.add_scalar("loss/actor_loss", actor_loss, steps)
+            self.summary.add_scalar("loss/entropy_loss", entropy_loss, steps)
+            self.summary.add_scalar("loss/mean_target", float(jnp.mean(targets)), steps)
             
         return critic_loss
     def _preprocess(self, params, key, obses, actions, rewards, nxtobses, dones, terminals):
@@ -140,12 +142,12 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     
     def _optimize_step(self, params, opt_state, key, ent_coef,
                     obsbatch, actbatch, targetbatch, valuebatch, act_probbatch, advbatch):
-        (total_loss, (c_loss, a_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
+        (total_loss, (c_loss, a_loss, entropy_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
                                                                 obsbatch, actbatch, targetbatch,
                                                                 valuebatch, act_probbatch, advbatch, ent_coef, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        return params, opt_state, c_loss, a_loss
+        return params, opt_state, c_loss, a_loss, entropy_loss
     
     def _loss_discrete(self, params, obses, actions, targets, old_value, old_prob, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
@@ -158,9 +160,8 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1,cross_entropy2))
         entropy = prob * jnp.log(prob)
         entropy_loss = jnp.mean(entropy)
-        total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
-            
-        return total_loss, (critic_loss, actor_loss)
+        total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
+        return total_loss, (critic_loss, actor_loss, entropy_loss)
     
     def _loss_continuous(self, params, obses, actions, targets, old_value, old_prob, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
@@ -172,9 +173,9 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         cross_entropy1 = -adv*ratio; cross_entropy2 = -adv*jnp.clip(ratio,1.0 - self.ppo_eps,1.0 + self.ppo_eps)
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1,cross_entropy2))
         mu, log_std = prob
-        entropy_loss = jnp.mean(0.5 + 0.5 * jnp.log(2 * np.pi) + log_std) #jnp.mean(jnp.square(mu) + jnp.square(log_std))
-        total_loss = self.val_coef * critic_loss + actor_loss - ent_coef * entropy_loss
-        return total_loss, (critic_loss, actor_loss)
+        entropy_loss = - jnp.mean(0.5 + 0.5 * jnp.log(2 * np.pi) + log_std) #jnp.mean(jnp.square(mu) + jnp.square(log_std))
+        total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
+        return total_loss, (critic_loss, actor_loss, entropy_loss)
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="PPO",
               reset_num_timesteps=True, replay_wrapper=None):

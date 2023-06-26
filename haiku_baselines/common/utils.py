@@ -36,7 +36,7 @@ def convert_states(obs : List):
 
 @jax.jit
 def convert_jax(obs : List):
-  return [jax.device_get(o).astype(jnp.float32)*(1.0/255.0) if len(o.shape) >= 4 else jax.device_get(o) for o in obs]
+  return [(jax.device_get(o).astype(jnp.float32) - 128.0)/128.0 if len(o.shape) >= 4 else jax.device_get(o) for o in obs]
 
 def q_log_pi(q,entropy_tau):
   q_submax = q - jnp.max(q, axis=1, keepdims=True)
@@ -73,12 +73,12 @@ def discount_with_terminal(rewards, dones, terminals, next_values, gamma):
   return discounted[::-1]
 '''
 def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
+  deltas = rewards +  gamma * (1. - dones) * next_values - values
   def f(last_gae_lam, info):
-    reward, done, value, nextval, term = info
-    delta = reward +  gamma* (nextval * (1. - done)) - value
-    last_gae_lam = delta + gamma * lamda * (1. - term) * last_gae_lam
+    delta, don, term = info
+    last_gae_lam = delta + gamma * lamda * (1. - don) * (1. - term) * last_gae_lam
     return last_gae_lam, last_gae_lam
-  _, advs = jax.lax.scan(f, jnp.zeros((1,),dtype=jnp.float32), (rewards, dones, values, next_values, terminals),reverse=True)
+  _, advs = jax.lax.scan(f, jnp.zeros((1,),dtype=jnp.float32), (deltas, dones, terminals),reverse=True)
   return advs
 
 '''
@@ -94,6 +94,24 @@ def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
   advs = jnp.array(advs[::-1])
   return advs
 '''
+
+def get_vtrace(rewards, rhos, c_ts, dones, terminals, values, next_values, gamma): #why??????
+  deltas = rhos*(rewards +  gamma * (1. - dones) * next_values - values)
+  def f(vt, info):
+    delta, v, nv, c_t, don, term = info
+    vt = v + delta + gamma * (1. - don) * (1. - term) * c_t * (vt - nv)
+    return vt, vt
+  _, v = jax.lax.scan(f, jnp.zeros((1,),dtype=jnp.float32), (deltas, values, next_values, c_ts, dones, terminals), reverse=True)
+  return  v
+
+def get_vtrace_gaes(rewards, rhos, c_ts, dones, terminals, values, next_values, gamma):
+  deltas = rhos*(rewards +  gamma * (1. - dones) * next_values - values)
+  def f(last_v, info):
+    delta, c_t, don, term = info
+    last_v = delta + gamma *  c_t * (1. - don) * (1. - term) * last_v
+    return last_v, last_v
+  _, A = jax.lax.scan(f, jnp.zeros((1,),dtype=jnp.float32), (deltas, c_ts, dones, terminals), reverse=True)
+  return  A
 
 def formatData(t,s):
   if not isinstance(t,dict) and not isinstance(t,list):

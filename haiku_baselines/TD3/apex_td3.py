@@ -13,13 +13,13 @@ from haiku_baselines.common.utils import soft_update, convert_jax, print_param
 
 class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
 
-    def __init__(self, workers, gamma=0.995, learning_rate=5e-5, buffer_size=50000, exploration_initial_eps=0.9, exploration_decay=0.7, 
+    def __init__(self, workers, manager = None, gamma=0.995, learning_rate=5e-5, buffer_size=50000, exploration_initial_eps=0.9, exploration_decay=0.7, 
                     target_action_noise_mul = 1.5, batch_size=32, policy_delay = 3,
                     n_step = 1, learning_starts=1000, target_network_update_tau=5e-4, gradient_steps = 1, 
                     prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-3,
                     log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                     full_tensorboard_log=False, seed=None, optimizer = 'adamw', compress_memory = False):
-        super().__init__(workers, gamma, learning_rate, buffer_size, exploration_initial_eps, exploration_decay, batch_size,
+        super().__init__(workers, manager, gamma, learning_rate, buffer_size, exploration_initial_eps, exploration_decay, batch_size,
                     n_step, learning_starts, target_network_update_tau, gradient_steps, 
                     prioritized_replay_alpha, prioritized_replay_beta0, prioritized_replay_eps,
                     log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
@@ -113,7 +113,7 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
                 actions = np.clip(np.asarray(actor(params ,obs, key)) + noise()*epsilon,-1,1)[0]
                 return actions
 
-            def random_action(params, obs, epsilon, key):
+            def random_action(params, obs, noise, epsilon, key):
                 return np.random.uniform(-1.0,1.0,size=(action_size))
             
             return get_abs_td_error, actor, get_action, random_action, noise, key_seq

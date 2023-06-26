@@ -2,6 +2,7 @@ import os
 import argparse
 import gymnasium as gym
 import ray
+import multiprocessing as mp
 
 from haiku_baselines.APE_X.dpg_worker import Ape_X_Worker
 from haiku_baselines.DDPG.apex_ddpg import APE_X_DDPG
@@ -43,6 +44,8 @@ if __name__ == "__main__":
     env_name = args.env
     cnn_mode = "normal"
 
+    manger = mp.get_context().Manager()
+
     ray.init(num_cpus=args.worker + 2, num_gpus=0)
 
     workers = [Ape_X_Worker.remote(env_name) for i in range(args.worker)]
@@ -54,12 +57,12 @@ if __name__ == "__main__":
                      'cnn_mode': cnn_mode}
     
     if args.algo == "DDPG":
-        agent = APE_X_DDPG(workers, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau,
+        agent = APE_X_DDPG(workers, manger, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau,
                         learning_starts=args.learning_starts, exploration_initial_eps = args.initial_eps, exploration_decay=args.eps_decay, 
                         n_step = args.n_step, seed = args.seed, gradient_steps = args.gradient_steps,
                         tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
     elif args.algo == "TD3":
-        agent = APE_X_TD3(workers, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau,
+        agent = APE_X_TD3(workers, manger, gamma=args.gamma, learning_rate=args.learning_rate, batch_size = args.batch, buffer_size= int(args.buffer_size), target_network_update_tau = args.target_update_tau,
                         learning_starts=args.learning_starts, exploration_initial_eps = args.initial_eps, exploration_decay=args.eps_decay, 
                         n_step = args.n_step, seed = args.seed, gradient_steps = args.gradient_steps,
                         tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)

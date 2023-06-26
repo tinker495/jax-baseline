@@ -17,7 +17,7 @@ class IQN(Q_Network_Family):
     def __init__(self, env, gamma=0.995, learning_rate=3e-4, buffer_size=100000, exploration_fraction=0.3, n_support = 32, delta = 0.1,
                  exploration_final_eps=0.02, exploration_initial_eps=1.0, train_freq=1, gradient_steps=1, batch_size=32, double_q=True,
                  dueling_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, prioritized_replay=False,
-                 prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-3, CVaR = 1.0,
+                 prioritized_replay_alpha=0.9, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-3, CVaR = 1.0,
                  param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
                  full_tensorboard_log=False, seed=None, optimizer = 'adamw', compress_memory = False):
         
@@ -157,5 +157,5 @@ class IQN(Q_Network_Family):
     
     def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="IQN",
               reset_num_timesteps=True, replay_wrapper=None):
-        tb_log_name = tb_log_name + ("({:d})_CVaR{:.2f}".format(self.n_support,self.CVaR) if self.risk_avoid else "({:d})".format(self.n_support))
+        tb_log_name = tb_log_name + ("({:d})_CVaR({:.2f})".format(self.n_support,self.CVaR) if self.risk_avoid else "({:d})".format(self.n_support))
         super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)

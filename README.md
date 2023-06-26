@@ -9,11 +9,11 @@ This implementation is configured to flexibly solve the commonly used gym and un
 
 ## Implemented Environments
 
-| **Name**                | **Q-Net based**              | **Actor-Critic based**       | **DDPG based**               | 
-| ----------------------  | ---------------------------- | ---------------------------- | ---------------------------- |
-| Gymnasium               | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           |
-| MultiworkerGym with Ray | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           |
-| Unity-ML Environments   | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           |
+| **Name**                | **Q-Net based**              | **Actor-Critic based**       | **DDPG based**               | **Distributed**              | 
+| ----------------------  | ---------------------------- | ---------------------------- | ---------------------------- | ---------------------------- |
+| Gymnasium               | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           |                              |
+| MultiworkerGym with Ray | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           |
+| Unity-ML Environments   | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           | :x:                          |
 
 ## Implemented Algorithms
 
@@ -34,7 +34,7 @@ This implementation is configured to flexibly solve the commonly used gym and un
 | TQC                 | :heavy_check_mark:           | :heavy_check_mark: | :x:                | TODO               |:heavy_check_mark:  | :heavy_check_mark: | :x:                | :x:                |
 | Ape-X-Qnets         | :heavy_check_mark:           | :x:                | :heavy_check_mark: | TODO               |:heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | Ape-X-DPGs    	  | :heavy_check_mark:           | :heavy_check_mark: | :x:                | TODO               |:heavy_check_mark:  | :heavy_check_mark: | :x:                | :x:                |
-| IMPALA              | TODO           		         |                    |                    |                    |                    |                    |                    |                    |
+| IMPALA              | :heavy_check_mark:           | :heavy_check_mark: | :heavy_check_mark: | TODO               |:x:                 | :x:                | :x:                | :x:                |
 
 ## Test 
 

@@ -3,94 +3,226 @@ import jax
 import jax.numpy as jnp
 import haiku as hk
 import numpy as np
+import multiprocessing as mp
+import time
+import ray
 import os
 
 from tqdm.auto import trange
 from collections import deque
 
 from haiku_baselines.common.base_classes import TensorboardWriter, save, restore, select_optimizer
-from haiku_baselines.common.buffers import EpochBuffer
 from haiku_baselines.common.utils import convert_states
-from haiku_baselines.common.worker import gymMultiworker
+from haiku_baselines.IMPALA.worker import Impala_Worker
+from haiku_baselines.IMPALA.cpprb_buffers import ImpalaBuffer
 from haiku_baselines.common.utils import convert_jax, discount_with_terminal, print_param
 
 from mlagents_envs.environment import UnityEnvironment, ActionTuple
-from gym import spaces
-import ray
+from gymnasium import spaces
 
-class IMPALA_base(object):
-    def __init__(self, env_name, worker_size=16, worker_id=0, time_scale=20, capture_frame_rate=1, **kwargs):
-        self.env_name = env_name
+class IMPALA_Family(object):
+    def __init__(self, workers, manager = None, buffer_size=0,gamma=0.995,learning_rate=3e-4, update_freq = 100, batch_size=1024, sample_size=1, mini_batch=32, val_coef=0.2, ent_coef=0.01, rho_max = 1.0,
+                 log_interval=1, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
+        self.workers = workers
+        self.m = manager if manager is not None else mp.Manager()
+        self.buffer_size = buffer_size
+        self.log_interval = log_interval
+        self.policy_kwargs = policy_kwargs
+        self.seed = 42 if seed is None else seed
+        self.key_seq = hk.PRNGSequence(self.seed)
+        self.update_freq = update_freq
+
+        self.batch_size = batch_size
+        self.sample_size = sample_size
+        self.mini_batch = mini_batch
+        self.learning_rate = learning_rate
+        self.gamma = gamma
+        self.val_coef = val_coef
+        self.ent_coef = ent_coef
+        self.rho_max = rho_max
+        self.cut_max = 1.0
+        self.tensorboard_log = tensorboard_log
+
+        self.params = None
+        self.target_params = None
+        self.save_path = None
+        self.optimizer = select_optimizer(optimizer,self.learning_rate,1e-2/self.batch_size, grad_max=40.0)
+        self.network_builder = None
+        self.actor_builder = None
         
-        if os.path.exists(env_name):
-            """Unity Environment"""
-            """not implemented yet"""
-        else:
-            self.worker_size = worker_size
-            ray.init(num_cpus=self.worker_size + 2)
-            env_type = "gym"
-            self.workers = [IMPALA_gym_worker.remote(env_name) for _ in range(self.worker_size)]
+        self.get_env_setup()
+
+    def save_params(self, path):
+        save(path, self.params)
+            
+    def load_params(self, path):
+        self.params = self.target_params = restore(path)
         
-    def set_model(self, model, trainer):
-        self.model = model
-        self.trainer = trainer
+    def get_env_setup(self):
+        print("----------------------env------------------------")
+        if isinstance(self.workers,UnityEnvironment):
+            pass
+            
+        elif isinstance(self.workers,list) or isinstance(self.env,gym.Wrapper):
+            print("openai gym environmet")
+            self.worker_num = len(self.workers)
+            env_dict = ray.get(self.workers[0].get_info.remote())
+            self.observation_space = [list(env_dict['observation_space'].shape)]
+            if not isinstance(env_dict['action_space'], spaces.Box):
+                self.action_size = [env_dict['action_space'].n]
+                self.action_type = 'discrete'
+            else:
+                self.action_size = [env_dict['action_space'].shape[0]]
+                self.action_type = 'continuous'
+            self.env_type = "gym"
+
+        print("observation size : ", self.observation_space)
+        print("action size : ", self.action_size)
+        print("worker_size : ", len(self.workers))
+        print("-------------------------------------------------")
+
+        self.get_logprob = self.get_logprob_discrete if self.action_type == 'discrete' else self.get_logprob_continuous
+
+    def network_builder(self):
+        pass
+
+    def actor_builder(self):
+        pass
+
+    def get_logprob_discrete(self, prob, action):
+        pass
+
+    def get_logprob_continuous(self, prob, action):
+        pass
+
+    def get_memory_setup(self):
+        self.buffer = ImpalaBuffer(self.buffer_size, self.worker_num, self.observation_space, discrete=(self.action_type == 'discrete'), action_space = self.action_size, manager = self.m)
+    def setup_model(self):
+        pass
+
+    def _train_step(self, steps):
+        pass
+
+    def _get_actions(self, params, obses) -> np.ndarray:
+        pass
+
+    def discription(self):
+        return "loss : {:.3f} |".format(np.mean(self.lossque))
+    
+    def learn(self, total_trainstep, callback=None, log_interval=1000, tb_log_name="IMPALA",
+                reset_num_timesteps=True, replay_wrapper=None):
+            
+        pbar = trange(total_trainstep, miniters=log_interval)
+
+        self.logger_server = Logger_server.remote(self.tensorboard_log, tb_log_name)
+
+        if self.env_type == "unity":
+            self.learn_unity(pbar, callback, log_interval)
+        if self.env_type == "gym":
+            self.learn_gym(pbar, callback, log_interval)
+        
+        self.save_params(ray.get(self.logger_server.get_log_dir.remote()))
+
+    def learn_unity(self, pbar, callback, log_interval):
+        pass
+
+    def learn_gym(self, pbar, callback, log_interval):
+
+        stop = self.m.Event()
+        update = [self.m.Event() for i in range(self.worker_num)]
+        stop.clear()
+        for u in update:
+            u.set()
+
+        cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
+        param_server = Param_server.remote(cpu_param)
+
+        jobs = []
+        for idx in range(self.worker_num):
+            jobs.append(self.workers[idx].run.remote(self.batch_size, self.buffer.queue_info(),
+                        self.network_builder, self.actor_builder,
+                        param_server, update[idx], self.logger_server, stop))
+        
+        print("Start Warmup")
+        while self.buffer.queue_is_empty():
+            time.sleep(1)
+            if stop.is_set():
+                print("Stop Training")
+                _, still_running = ray.wait(jobs, timeout=300)
+                self.m.shutdown()
+                return
+        
+        print("Start Training")
+        self.lossque = deque(maxlen=10)
+        for steps in pbar:
+            if stop.is_set():
+                print("Stop Training")
+                break
+            loss, rho = self.train_step(steps)
+            self.lossque.append(loss)
+            if steps % log_interval == 0:
+                pbar.set_description(self.discription())
+            
+            if steps % self.update_freq == 0:
+                cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
+                param_server.update_params.remote(cpu_param)
+                for u in update:
+                    u.set()
+        stop.set()
+        while not self.buffer.queue.empty():
+            self.buffer.queue.get()
+        _, still_running = ray.wait(jobs, timeout=300)
+        time.sleep(1)
+        self.m.shutdown()
 
 @ray.remote
-class IMPALA_gym_worker:
-    def __init__(self, env_name_, model) -> None:
-        from haiku_baselines.common.atari_wrappers import make_wrap_atari,get_env_type
-        self.env_type, self.env_id = get_env_type(env_name_)
-        if  self.env_type == 'atari_env':
-            self.env = make_wrap_atari(env_name_,clip_rewards=True)
+class Param_server(object):
+	def __init__(self, params) -> None:
+		self.params = params
+
+	def get_params(self):
+		return self.params
+	
+	def update_params(self, params):
+		self.params = params
+
+@ray.remote
+class Logger_server(object):
+    def __init__(self, log_dir, log_name) -> None:
+        self.writer = TensorboardWriter(log_dir, log_name)
+        self.step = 0
+        self.old_step = 0
+        self.save_dict = dict()
+        with self.writer as (summary, save_path):
+            self.save_path = save_path
+
+    def get_log_dir(self):
+        return self.save_path
+
+    def add_multiline(self, eps):
+        with self.writer as (summary, _):
+            layout = {"env": {"episode_reward": ["Multiline", [f"env/episode_reward/eps{e:.2f}" for e in eps] + ["env/episode_reward"]]
+                                ,"episode_len": ["Multiline", [f"env/episode_len/eps{e:.2f}" for e in eps] + ["env/episode_len"]]
+                                ,"time_over": ["Multiline", [f"env/time_over/eps{e:.2f}" for e in eps] + ["env/time_over"]]},
+                        }
+            summary.add_custom_scalars(layout)
+
+    def log_trainer(self, step, log_dict):
+        self.step = step
+        with self.writer as (summary, _):
+            for key, value in log_dict.items():
+                summary.add_scalar(key, value, self.step)
+
+    def log_worker(self, log_dict, episode):
+        if self.old_step == self.step:
+            for key, value in log_dict.items():
+                if key in self.save_dict:
+                    self.save_dict[key].append(value)
+                else:
+                    self.save_dict[key] = [value]
         else:
-            self.env = gym.make(env_name_)
-
-        self.action_type = 'continuous' if isinstance(self.env.action_space, spaces.Box) else 'discrete'
-        if self.action_type == 'discrete':
-            self.action_conv =  lambda a: a[0]
-            self._get_actions = self._get_actions_discrete
-            self.actions = self.action_discrete
-        elif self.action_type == 'continuous':
-            self.action_conv =  lambda a: a
-            self._get_actions = self._get_actions_continuous
-            self.actions = self.action_continuous
-
-        self.actions = jax.jit(self._get_actions)
-
-    def set_model(self, preproc, actor):
-        self.preproc = preproc
-        self.actor = actor
-
-    def get_info(self):
-        return {'observation_space' : self.env.observation_space, 
-                'action_space' : self.env.action_space,
-                'env_type' : self.env_type,
-                'env_id' : self.env_id}
-    
-    def _get_actions_discrete(self, params, obses, key = None) -> jnp.ndarray:
-        prob = jax.nn.softmax(self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))),axis=1,)
-        return prob
-    
-    def _get_actions_continuous(self, params, obses, key = None) -> jnp.ndarray:
-        mu,std = self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))
-        return mu, jnp.exp(std)
-
-    def action_discrete(self,obs):
-        prob = np.asarray(self._get_actions(self.params, obs))
-        return np.expand_dims(np.stack([np.random.choice(self.action_size[0],p=p) for p in prob],axis=0),axis=1), prob
-    
-    def action_continuous(self,obs):
-        mu, std = self._get_actions(self.params, obs)
-        return np.random.normal(np.array(mu), np.array(std)), np.array(mu), np.array(std)
-    
-    def run(self, params, n_step, render=False):
-        state, info = self.env.reset()
-        state = [np.expand_dims(state,axis=0)]
-        while True:
-            action = self.action_conv(self.actions(state))
-            state, reward, done, info = self.env.step(action)
-            state = [np.expand_dims(state,axis=0)]
-            if render:
-                self.env.render()
-            if done:
-                break
+            with self.writer as (summary, _):
+                for key, value in self.save_dict.items():
+                    summary.add_scalar(key, np.mean(value), self.old_step)
+                self.save_dict = dict()
+                self.old_step = self.step

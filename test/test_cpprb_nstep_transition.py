@@ -1,12 +1,12 @@
 from haiku_baselines.common.cpprb_buffers import ReplayBuffer, MultiPrioritizedReplayBuffer
 import numpy as np
 
-n=2
+n=4
 gamma = 0.995
 mprb = MultiPrioritizedReplayBuffer(200, [[4]], 0.6, 1, n_step=n, gamma=gamma)
 gloabal_buffer, env_dict, n_s = mprb.buffer_info()
 rb = ReplayBuffer(100, env_dict = env_dict, n_s=n_s)
-true_done = True
+true_done = False
 
 for i in range(11):
     if i % 20 == 10:
@@ -18,23 +18,15 @@ for i in range(11):
 
 transition = rb.get_buffer()
 rb.clear()
-#print(transition)
 
-gloabal_buffer.add(**transition)
-
-mptransition = gloabal_buffer.get_all_transitions()
-#print(mptransition)
-
-for i in range(len(mptransition['done'])):
+for i in range(len(transition['done'])):
     st = ""
-    for k in mptransition.keys():
-        st += f"{k}: {mptransition[k][i]}, "
+    for k in transition.keys():
+        st += f"{k}: {transition[k][i]}, "
     print(st)
 
-for i in range(n):
-    d = mptransition[k][-(n - i)]
-    print((1 - d) * np.power(gamma,(n-i)))
+for i in range(n,0,-1):
+    d = transition[k][-i]
+    print(d, (1 - d) * np.power(gamma,n), " = ", np.power(gamma,i))
 
 print((1 - true_done) * np.power(gamma,n))
-
-#print()

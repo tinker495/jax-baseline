@@ -7,8 +7,8 @@ from functools import partial
 import os, psutil
 import copy
 
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 import numpy as np
 import ray
 import haiku as hk
