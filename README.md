@@ -9,32 +9,42 @@ This implementation is configured to flexibly solve the commonly used gym and un
 
 ## Implemented Environments
 
-| **Name**                | **Q-Net based**              | **Actor-Critic based**       | **DDPG based**               | **Distributed**              | 
-| ----------------------  | ---------------------------- | ---------------------------- | ---------------------------- | ---------------------------- |
-| Gymnasium               | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           |                              |
-| MultiworkerGym with Ray | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           |
-| Unity-ML Environments   | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           | :x:                          |
+| **Name**                | **Q-Net based**              | **Actor-Critic based**       | **DPG based**               |
+| ----------------------  | ---------------------------- | ---------------------------- | ---------------------------- |
+| Gymnasium               | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           |
+| MultiworkerGym with Ray | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           |
+| Unity-ML Environments   | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           |
 
 ## Implemented Algorithms
 
-| **Name**            | **Complete**                 | ```Box```          | ```Discrete```     | ```LSTM```         | ```Per```          | ```N-step```       | ```NoisyNet```     | ```Munchausen```   |
-| ------------------- | ---------------------------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
-| DQN                 | :heavy_check_mark:           | :x:                | :heavy_check_mark: | TODO               |:heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| C51                 | :heavy_check_mark:           | :x:                | :heavy_check_mark: | TODO               |:heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| QRDQN               | :heavy_check_mark:           | :x:                | :heavy_check_mark: | TODO               |:heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| IQN                 | :heavy_check_mark:           | :x:                | :heavy_check_mark: | TODO               |:heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| FQF                 | :heavy_check_mark:           | :x:                | :heavy_check_mark: | TODO               |:heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| A2C                 | :heavy_check_mark: 			 | :heavy_check_mark: | :heavy_check_mark: | TODO               |:x:                 | :x:                | :x:                | :x:                |
-| TRPO                | TODO           		         |                    |                    | 	                |                    |                    |                    |                    |
-| PPO                 | :heavy_check_mark:           | :heavy_check_mark: | :heavy_check_mark: | TODO               |:x:                 | :x:                | :x:                | :x:                |
-| ACER                | TODO           		         |                    |                    | 	                |                    |                    |                    |                    |
-| DDPG                | :heavy_check_mark:           | :heavy_check_mark: | :x:                | TODO               |:heavy_check_mark:  | :heavy_check_mark: | :x:                | :x:                |
-| SAC                 | :heavy_check_mark:           | :heavy_check_mark: | :x:                | TODO               |:heavy_check_mark:  | :heavy_check_mark: | :x:                | :x:                |
-| TD3                 | :heavy_check_mark:           | :heavy_check_mark: | :x:                | TODO               |:heavy_check_mark:  | :heavy_check_mark: | :x:                | :x:                |
-| TQC                 | :heavy_check_mark:           | :heavy_check_mark: | :x:                | TODO               |:heavy_check_mark:  | :heavy_check_mark: | :x:                | :x:                |
-| Ape-X-Qnets         | :heavy_check_mark:           | :x:                | :heavy_check_mark: | TODO               |:heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| Ape-X-DPGs    	  | :heavy_check_mark:           | :heavy_check_mark: | :x:                | TODO               |:heavy_check_mark:  | :heavy_check_mark: | :x:                | :x:                |
-| IMPALA              | :heavy_check_mark:           | :heavy_check_mark: | :heavy_check_mark: | TODO               |:x:                 | :x:                | :x:                | :x:                |
+### Q-Net bases
+
+| **Name**            | **Complete**                 | ```Per```          | ```N-step```       | ```NoisyNet```     | ```Munchausen```   |
+| ------------------- | ---------------------------- | ------------------ | ------------------ | ------------------ | ------------------ |
+| DQN                 | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| C51                 | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| QRDQN               | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| IQN                 | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| FQF                 | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| Ape-X-Qnets         | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+
+### Actor-Critic based
+
+| **Name**            | **Complete**                 | ```Box```          | ```Discrete```     | ```LSTM```         |
+| ------------------- | ---------------------------- | ------------------ | ------------------ | ------------------ |
+| A2C                 | :heavy_check_mark: 			 | :heavy_check_mark: | :heavy_check_mark: | TODO               |
+| PPO                 | :heavy_check_mark:           | :heavy_check_mark: | :heavy_check_mark: | TODO               |
+| IMPALA              | :heavy_check_mark:           | :heavy_check_mark: | :heavy_check_mark: | TODO               |
+
+### DPG bases
+
+| **Name**            | **Complete**                 | ```Per```          | ```N-step```       |
+| ------------------- | ---------------------------- | ------------------ | ------------------ |
+| DDPG                | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: |
+| TD3                 | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: |
+| SAC                 | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: |
+| TQC                 | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: |
+| Ape-X-DPGs    	  | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: |
 
 ## Test 
 

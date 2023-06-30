@@ -36,7 +36,8 @@ def convert_states(obs : List):
 
 @jax.jit
 def convert_jax(obs : List):
-  return [(jax.device_get(o).astype(jnp.float32) - 128.0)/128.0 if len(o.shape) >= 4 else jax.device_get(o) for o in obs]
+  return [jax.device_get(o).astype(jnp.float32) for o in obs]
+  #return [jax.device_get(o).astype(jnp.float32)/255.0 if len(o.shape) >= 4 else jax.device_get(o) for o in obs]
 
 def q_log_pi(q,entropy_tau):
   q_submax = q - jnp.max(q, axis=1, keepdims=True)
@@ -95,20 +96,21 @@ def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
   return advs
 '''
 
-def get_vtrace(rewards, rhos, c_ts, dones, terminals, values, next_values, gamma): #why??????
+def get_vtrace(rewards, rhos, c_ts, dones, terminals, values, next_values, gamma):
   deltas = rhos*(rewards +  gamma * (1. - dones) * next_values - values)
-  def f(vt, info):
-    delta, v, nv, c_t, don, term = info
-    vt = v + delta + gamma * (1. - don) * (1. - term) * c_t * (vt - nv)
-    return vt, vt
-  _, v = jax.lax.scan(f, jnp.zeros((1,),dtype=jnp.float32), (deltas, values, next_values, c_ts, dones, terminals), reverse=True)
+  def f(last_v, info):
+    delta, c_t, don, term = info
+    last_v = delta + gamma * c_t * (1. - don) * (1. - term) * last_v
+    return last_v, last_v
+  _, A = jax.lax.scan(f, jnp.zeros((1,),dtype=jnp.float32), (deltas, c_ts, dones, terminals), reverse=True)
+  v = A + values
   return  v
 
 def get_vtrace_gaes(rewards, rhos, c_ts, dones, terminals, values, next_values, gamma):
   deltas = rhos*(rewards +  gamma * (1. - dones) * next_values - values)
   def f(last_v, info):
     delta, c_t, don, term = info
-    last_v = delta + gamma *  c_t * (1. - don) * (1. - term) * last_v
+    last_v = delta + gamma * c_t * (1. - don) * (1. - term) * last_v
     return last_v, last_v
   _, A = jax.lax.scan(f, jnp.zeros((1,),dtype=jnp.float32), (deltas, c_ts, dones, terminals), reverse=True)
   return  A

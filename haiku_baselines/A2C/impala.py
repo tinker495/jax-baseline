@@ -12,9 +12,9 @@ from haiku_baselines.common.utils import convert_jax, discount_with_terminal, ge
 from haiku_baselines.common.losses import hubberloss
 
 class IMPALA(IMPALA_Family):
-    def __init__(self, workers, manager=None, buffer_size=0, gamma=0.995, learning_rate=0.0003, update_freq = 100, batch_size=1024, sample_size=1, mini_batch=32, val_coef=0.2, ent_coef=0.01, rho_max=1.2,
+    def __init__(self, workers, manager=None, buffer_size=0, gamma=0.995, lamda=0.95, learning_rate=0.0003, update_freq = 100, batch_size=1024, sample_size=1, val_coef=0.2, ent_coef=0.01, rho_max=1.2,
                  log_interval=1, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False, seed=None, optimizer='adamw'):
-        super().__init__(workers, manager, buffer_size, gamma, learning_rate, update_freq, batch_size, sample_size, mini_batch, val_coef, ent_coef, rho_max, 
+        super().__init__(workers, manager, buffer_size, gamma, lamda, learning_rate, update_freq, batch_size, sample_size, val_coef, ent_coef, rho_max, 
                          log_interval, tensorboard_log, _init_setup_model, policy_kwargs, full_tensorboard_log, seed, optimizer)
         
         self.get_memory_setup()
@@ -139,9 +139,8 @@ class IMPALA(IMPALA_Family):
         pi_prob = [self.get_logprob(self.actor.apply(params, key, f), a, key) for f,a in zip(feature, actions)]
         rho_raw = [jnp.exp(pi - mu) for pi,mu in zip(pi_prob, mu_log_prob)]
         rho = [jnp.minimum(p, self.rho_max) for p in rho_raw]
-        c_t = [jnp.minimum(p, self.cut_max) for p in rho_raw]
-        A_t = [get_vtrace_gaes(rw, p, c, d, t, v, nv, self.gamma) for rw, p, c, d, t, v, nv in zip(rewards, rho, c_t, dones, terminals, value, next_value)]
-        vs = [a + v for a,v in zip(A_t, value)]
+        c_t = [self.lamda * jnp.minimum(p, self.cut_max) for p in rho_raw]
+        vs = [get_vtrace(rw, p, c, d, t, v, nv, self.gamma) for rw, p, c, d, t, v, nv in zip(rewards, rho, c_t, dones, terminals, value, next_value)]
         vs_t_plus_1 = [jnp.concatenate([v[1:],jnp.expand_dims(nv[-1],axis=-1)]) for v,nv in zip(vs,next_value)]
         vs_t_plus_1 = [jnp.where(t==1, nv, vp) for t,nv,vp in zip(terminals,next_value,vs_t_plus_1)]
         adv = [p*(r + self.gamma * (1. - d) * nv - v) for p,r,d,nv,v in zip(rho, rewards, dones, vs_t_plus_1, value)]

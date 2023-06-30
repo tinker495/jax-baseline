@@ -17,11 +17,11 @@ if __name__ == "__main__":
     parser.add_argument('--update_freq', type=int,default=100, help='update frequency')
     parser.add_argument('--algo', type=str, default="A2C", help='algo ID')
     parser.add_argument('--gamma', type=float, default=0.995, help='gamma')
+    parser.add_argument('--lamda', type=float, default=0.95, help='lamda')
     parser.add_argument('--rho_max', type=float, default=1.0, help='rho max')
     parser.add_argument('--buffer_size', type=int, default=0, help='buffer size')
     parser.add_argument('--sample_size', type=int, default=1, help='sample_size')
     parser.add_argument('--batch', type=int, default=256, help='batch size')
-    parser.add_argument('--mini_batch', type=int, default=32, help='batch size')
     parser.add_argument('--steps', type=float, default=1e5, help='step size')
     parser.add_argument('--verbose', type=int, default=0, help='verbose')
     parser.add_argument('--logdir',type=str, default='log/',help='log file dir')
@@ -54,12 +54,12 @@ if __name__ == "__main__":
                      'cnn_mode': cnn_mode}
     
     if args.algo == "A2C":
-        agent = IMPALA(workers, manger, gamma=args.gamma, learning_rate=args.learning_rate, update_freq=args.update_freq, batch_size = args.batch, sample_size=args.sample_size, buffer_size= int(args.buffer_size),
+        agent = IMPALA(workers, manger, gamma=args.gamma, lamda=args.lamda, learning_rate=args.learning_rate, update_freq=args.update_freq, batch_size = args.batch, sample_size=args.sample_size, buffer_size= int(args.buffer_size),
                        policy_kwargs=policy_kwargs, optimizer=args.optimizer, val_coef=args.val_coef, ent_coef=args.ent_coef, rho_max=args.rho_max,
                         tensorboard_log=args.logdir + env_type + "/" +env_name)
         
     elif args.algo == "PPO":
-        agent = IMPALA_PPO(workers, manger, gamma=args.gamma, learning_rate=args.learning_rate, update_freq=args.update_freq, batch_size = args.batch, mini_batch= args.mini_batch, sample_size=args.sample_size, buffer_size= int(args.buffer_size),
+        agent = IMPALA_PPO(workers, manger, gamma=args.gamma, lamda=args.lamda, learning_rate=args.learning_rate, update_freq=args.update_freq, batch_size = args.batch, sample_size=args.sample_size, buffer_size= int(args.buffer_size),
                        policy_kwargs=policy_kwargs, optimizer=args.optimizer, val_coef=args.val_coef, ent_coef=args.ent_coef, rho_max=args.rho_max,
                         tensorboard_log=args.logdir + env_type + "/" +env_name)
     

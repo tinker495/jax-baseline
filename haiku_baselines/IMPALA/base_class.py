@@ -21,7 +21,7 @@ from mlagents_envs.environment import UnityEnvironment, ActionTuple
 from gymnasium import spaces
 
 class IMPALA_Family(object):
-    def __init__(self, workers, manager = None, buffer_size=0,gamma=0.995,learning_rate=3e-4, update_freq = 100, batch_size=1024, sample_size=1, mini_batch=32, val_coef=0.2, ent_coef=0.01, rho_max = 1.0,
+    def __init__(self, workers, manager = None, buffer_size=0,gamma=0.995, lamda=0.95, learning_rate=3e-4, update_freq = 100, batch_size=1024, sample_size=1, val_coef=0.2, ent_coef=0.01, rho_max = 1.0,
                  log_interval=1, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
         self.workers = workers
         self.m = manager if manager is not None else mp.Manager()
@@ -34,9 +34,9 @@ class IMPALA_Family(object):
 
         self.batch_size = batch_size
         self.sample_size = sample_size
-        self.mini_batch = mini_batch
         self.learning_rate = learning_rate
         self.gamma = gamma
+        self.lamda = lamda
         self.val_coef = val_coef
         self.ent_coef = ent_coef
         self.rho_max = rho_max
