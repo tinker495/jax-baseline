@@ -7,9 +7,14 @@ Using JAX's JIT(Just In Time) compilation, we optimized a series of courses for 
 
 This implementation is configured to flexibly solve the commonly used gym and unity ml environment for testing algorithms in various complex environments.
 
+## Installation
+```
+pip install -r requirement.txt
+pip install .
+```
 ## Implemented Environments
 
-| **Name**                | **Q-Net based**              | **Actor-Critic based**       | **DPG based**               |
+| **Name**                | **Q-Net based**              | **Actor-Critic based**       | **DPG based**                |
 | ----------------------  | ---------------------------- | ---------------------------- | ---------------------------- |
 | Gymnasium               | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           |
 | MultiworkerGym with Ray | :heavy_check_mark:           | :heavy_check_mark:           | :heavy_check_mark:           |
@@ -35,6 +40,7 @@ This implementation is configured to flexibly solve the commonly used gym and un
 | A2C                 | :heavy_check_mark: 			 | :heavy_check_mark: | :heavy_check_mark: | TODO               |
 | PPO                 | :heavy_check_mark:           | :heavy_check_mark: | :heavy_check_mark: | TODO               |
 | IMPALA              | :heavy_check_mark:           | :heavy_check_mark: | :heavy_check_mark: | TODO               |
+| IMPALA-PPO          | :heavy_check_mark:           | :heavy_check_mark: | :heavy_check_mark: | TODO               |
 
 ### DPG bases
 

@@ -8,17 +8,16 @@ from itertools import repeat
 from haiku_baselines.IMPALA.base_class import IMPALA_Family
 from haiku_baselines.PPO.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import convert_jax, get_vtrace, get_vtrace_gaes, print_param
+from haiku_baselines.common.utils import get_vtrace, print_param
 
 class IMPALA_PPO(IMPALA_Family):
-    def __init__(self, workers, manager=None, buffer_size=0, gamma=0.995, lamda=0.95, learning_rate=0.0003, update_freq = 100, batch_size=1024, sample_size=1, epoch_num=3, val_coef=0.2, ent_coef=0.01, rho_max=1.2, 
-                 clip_value = 100.0, ppo_eps = 0.2, log_interval=1, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False, seed=None, optimizer='adamw'):
+    def __init__(self, workers, manager=None, buffer_size=0, gamma=0.995, lamda=0.95, learning_rate=0.0003, update_freq = 100, batch_size=1024, sample_size=1, epoch_num=3, val_coef=0.2, ent_coef=0.01, rho_max=1.0,
+                 ppo_eps = 0.2, log_interval=1, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False, seed=None, optimizer='adamw'):
         super().__init__(workers, manager, buffer_size, gamma, lamda, learning_rate, update_freq, batch_size, sample_size, val_coef, ent_coef, rho_max, 
                          log_interval, tensorboard_log, _init_setup_model, policy_kwargs, full_tensorboard_log, seed, optimizer)
         
         self.ppo_eps = ppo_eps
         self.epoch_num = epoch_num
-        self.clip_value = clip_value
         self.get_memory_setup()
 
         if _init_setup_model:
@@ -152,6 +151,7 @@ class IMPALA_PPO(IMPALA_Family):
         adv = [p*(r + self.gamma * (1. - d) * nv - v) for p,r,d,nv,v in zip(rho, rewards, dones, vs_t_plus_1, value)]
         obses = [jnp.vstack(list(zo)) for zo in zip(*obses)]; 
         actions = jnp.vstack(actions); vs = jnp.vstack(vs); old_prob = jnp.vstack(pi_prob); rho = jnp.vstack(rho); adv = jnp.vstack(adv)
+        #adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
         return obses, actions, vs, old_prob, rho, adv
     
     def _train_step(self, params, opt_state, key, ent_coef, obses, actions, targets, old_prob, adv):
@@ -195,3 +195,9 @@ class IMPALA_PPO(IMPALA_Family):
     def learn(self, total_trainstep, callback=None, log_interval=10, tb_log_name="IMPALA_PPO",
                 reset_num_timesteps=True, replay_wrapper=None):
         super().learn(total_trainstep, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)
+
+from typing import List
+
+@jax.jit
+def convert_jax(obs : List):
+  return [jax.device_get(o).astype(jnp.float32) for o in obs]

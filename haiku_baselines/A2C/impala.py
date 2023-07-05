@@ -8,11 +8,11 @@ from itertools import repeat
 from haiku_baselines.IMPALA.base_class import IMPALA_Family
 from haiku_baselines.A2C.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import convert_jax, discount_with_terminal, get_vtrace, get_vtrace_gaes, print_param
+from haiku_baselines.common.utils import get_vtrace, print_param
 from haiku_baselines.common.losses import hubberloss
 
 class IMPALA(IMPALA_Family):
-    def __init__(self, workers, manager=None, buffer_size=0, gamma=0.995, lamda=0.95, learning_rate=0.0003, update_freq = 100, batch_size=1024, sample_size=1, val_coef=0.2, ent_coef=0.01, rho_max=1.2,
+    def __init__(self, workers, manager=None, buffer_size=0, gamma=0.995, lamda=0.95, learning_rate=0.0003, update_freq = 100, batch_size=1024, sample_size=1, val_coef=0.2, ent_coef=0.01, rho_max=1.0,
                  log_interval=1, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False, seed=None, optimizer='adamw'):
         super().__init__(workers, manager, buffer_size, gamma, lamda, learning_rate, update_freq, batch_size, sample_size, val_coef, ent_coef, rho_max, 
                          log_interval, tensorboard_log, _init_setup_model, policy_kwargs, full_tensorboard_log, seed, optimizer)
@@ -146,6 +146,7 @@ class IMPALA(IMPALA_Family):
         adv = [p*(r + self.gamma * (1. - d) * nv - v) for p,r,d,nv,v in zip(rho, rewards, dones, vs_t_plus_1, value)]
         obses = [jnp.vstack(list(zo)) for zo in zip(*obses)]; 
         actions = jnp.vstack(actions); vs = jnp.vstack(vs); rho = jnp.vstack(rho); adv = jnp.vstack(adv)
+        #adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
         return obses, actions, vs, rho, adv
     
     def _train_step(self, params, opt_state, key, ent_coef, obses, actions, mu_log_prob, rewards, nxtobses, dones, terminals):
@@ -158,7 +159,7 @@ class IMPALA(IMPALA_Family):
     def _loss_discrete(self, params, obses, actions, vs, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
         vals = self.critic.apply(params, key, feature)
-        critic_loss = jnp.mean(jnp.square(jnp.squeeze(jax.lax.stop_gradient(vs) - vals))) #is sooooo large!!!
+        critic_loss = jnp.mean(jnp.square(jnp.squeeze(jax.lax.stop_gradient(vs) - vals)))
         #critic_loss =  jnp.mean(hubberloss(vs - vals, 1.0))
         
         logit = self.actor.apply(params, key, feature)
@@ -172,7 +173,7 @@ class IMPALA(IMPALA_Family):
     def _loss_continuous(self, params, obses, actions, vs, adv, ent_coef, key):
         feature = self.preproc.apply(params, key, obses)
         vals = self.critic.apply(params, key, feature)
-        critic_loss = jnp.mean(jnp.square(jnp.squeeze(jax.lax.stop_gradient(vs) - vals))) #is sooooo large!!!
+        critic_loss = jnp.mean(jnp.square(jnp.squeeze(jax.lax.stop_gradient(vs) - vals)))
         #critic_loss =  jnp.mean(hubberloss(vs - vals, 1.0))
         
         prob = self.actor.apply(params, key, feature)
@@ -186,3 +187,9 @@ class IMPALA(IMPALA_Family):
     def learn(self, total_trainstep, callback=None, log_interval=10, tb_log_name="IMPALA_AC",
                 reset_num_timesteps=True, replay_wrapper=None):
         super().learn(total_trainstep, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)
+
+from typing import List
+
+@jax.jit
+def convert_jax(obs : List):
+  return [jax.device_get(o).astype(jnp.float32) for o in obs]

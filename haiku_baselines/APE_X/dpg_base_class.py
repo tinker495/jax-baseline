@@ -139,7 +139,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
 		jobs = []
 		for idx in range(worker_num):
 			eps = self.exploration_initial_eps**(1 + self.exploration_decay * idx / (worker_num-1))
-			jobs.append(self.workers[idx].run.remote(10000, self.replay_buffer.buffer_info(),
+			jobs.append(self.workers[idx].run.remote(1000, self.replay_buffer.buffer_info(),
 					    self.network_builder, self.actor_builder,
 						param_server, self.logger_server,
 					    update[idx], stop, eps))
@@ -169,7 +169,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
 				param_server.update_params.remote(cpu_param)
 				for u in update:
 					u.set()
-
+		self.logger_server.last_update.remote()
 		stop.set()
 		_, still_running = ray.wait(jobs, timeout=300)
 		time.sleep(1)
@@ -193,6 +193,8 @@ class Logger_server(object):
 	def __init__(self, log_dir, log_name) -> None:
 		self.writer = TensorboardWriter(log_dir, log_name)
 		self.step = 0
+		self.old_step = 0
+		self.save_dict = dict()
 		with self.writer as (summary, save_path):
 			self.save_path = save_path
 
@@ -214,6 +216,19 @@ class Logger_server(object):
 				summary.add_scalar(key, value, self.step)
 
 	def log_worker(self, log_dict, episode):
+		if self.old_step != self.step:
+			with self.writer as (summary, _):
+				for key, value in self.save_dict.items():
+					summary.add_scalar(key, np.mean(value), self.step)
+				self.save_dict = dict()
+				self.old_step = self.step
+		for key, value in log_dict.items():
+			if key in self.save_dict:
+				self.save_dict[key].append(value)
+			else:
+				self.save_dict[key] = [value]
+
+	def last_update(self):
 		with self.writer as (summary, _):
-			for key, value in log_dict.items():
-				summary.add_scalar(key, value, self.step)
+			for key, value in self.save_dict.items():
+				summary.add_scalar(key, np.mean(value), self.step)
