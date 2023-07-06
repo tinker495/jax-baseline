@@ -20,10 +20,10 @@ from gym import spaces
 
 class Ape_X_Family(object):
 	def __init__(self, workers, manager = None, gamma=0.995, learning_rate=5e-5, buffer_size=50000, exploration_initial_eps=0.9, exploration_decay=0.7, batch_size=32, double_q=False,
-                 dueling_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, gradient_steps = 1,
-                 prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-3, 
-                 param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
-                 full_tensorboard_log=False, seed=None, optimizer = 'adamw', compress_memory = False):
+				 dueling_model = False, n_step = 1, learning_starts=1000, target_network_update_freq=2000, gradient_steps = 1,
+				 prioritized_replay_alpha=0.6, prioritized_replay_beta0=0.4, prioritized_replay_eps=1e-3, 
+				 param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
+				 full_tensorboard_log=False, seed=None, optimizer = 'adamw', compress_memory = False):
 		self.workers = workers
 		self.m = manager if manager is not None else mp.Manager()
 		self.log_interval = log_interval
@@ -89,11 +89,11 @@ class Ape_X_Family(object):
 		print("action size : ", self.action_size)
 		print("worker_size : ", len(self.workers))
 		print("-------------------------------------------------")
-        
+		
 	def get_memory_setup(self):
 		#self.m = mp.get_context().Manager()
 		self.replay_buffer = MultiPrioritizedReplayBuffer(self.buffer_size, self.observation_space, self.prioritized_replay_alpha, 1,
-						    self.n_step, self.gamma, self.m, self.compress_memory, self.prioritized_replay_eps)
+							self.n_step, self.gamma, self.m, self.compress_memory, self.prioritized_replay_eps)
 
 	def setup_model(self):
 		pass
@@ -155,9 +155,9 @@ class Ape_X_Family(object):
 			else:
 				eps = self.exploration_initial_eps**(1 + self.exploration_decay * idx / (worker_num-1))
 			jobs.append(self.workers[idx].run.remote(1000, self.replay_buffer.buffer_info(),
-					    self.network_builder, self.actor_builder,
+						self.network_builder, self.actor_builder,
 						param_server, self.logger_server,
-					    update[idx], stop, eps))
+						update[idx], stop, eps))
 			time.sleep(0.1)
 
 		print("Start Warmup")
