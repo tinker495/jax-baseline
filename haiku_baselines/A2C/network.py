@@ -5,7 +5,7 @@ import jax.numpy as jnp
 from functools import partial
 
 LOG_STD_MAX = 2
-LOG_STD_MIN = -20
+LOG_STD_MIN = -5
 LOG_STD_SCALE = (LOG_STD_MAX - LOG_STD_MIN)/2.0
 LOG_STD_MEAN = (LOG_STD_MAX + LOG_STD_MIN)/2.0
 

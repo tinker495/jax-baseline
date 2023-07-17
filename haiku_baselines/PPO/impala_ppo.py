@@ -11,13 +11,11 @@ from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import get_vtrace, print_param
 
 class IMPALA_PPO(IMPALA_Family):
-	def __init__(self, workers, manager=None, buffer_size=0, gamma=0.995, lamda=0.95, learning_rate=0.0003, update_freq = 100, batch_size=1024, sample_size=1, epoch_num=3, val_coef=0.2, ent_coef=0.01, rho_max=1.0,
+	def __init__(self, workers, manager=None, buffer_size=0, gamma=0.995, lamda=0.95, learning_rate=0.0003, update_freq = 100, batch_size=1024, sample_size=1, val_coef=0.2, ent_coef=0.01, rho_max=1.0,
 				 ppo_eps = 0.2, log_interval=1, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False, seed=None, optimizer='adamw'):
 		super().__init__(workers, manager, buffer_size, gamma, lamda, learning_rate, update_freq, batch_size, sample_size, val_coef, ent_coef, rho_max, 
 						 log_interval, tensorboard_log, _init_setup_model, policy_kwargs, full_tensorboard_log, seed, optimizer)
-		
 		self.ppo_eps = ppo_eps
-		self.epoch_num = epoch_num
 		self.get_memory_setup()
 
 		if _init_setup_model:
@@ -123,13 +121,9 @@ class IMPALA_PPO(IMPALA_Family):
 	def train_step(self, steps):
 		data = self.buffer.sample(self.sample_size)
 
-
-		obses, actions, targets, old_prob, rho, adv = self.preprocess(self.params, next(self.key_seq), data[0], data[1], data[2], data[3], data[4], data[5], data[6])
-
-		for i in range(self.epoch_num):
-			self.params, self.opt_state, critic_loss, actor_loss, entropy_loss = \
-			self._train_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, obses, actions, targets, old_prob, adv)
-					
+		self.params, self.opt_state, critic_loss, actor_loss, entropy_loss, rho, targets = self._train_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, 
+																											data[0], data[1], data[2], data[3], data[4], data[5], data[6])
+				
 		if steps % self.log_interval == 0:
 			log_dict = {"loss/critic_loss": float(critic_loss), "loss/actor_loss": float(actor_loss), "loss/entropy_loss": float(entropy_loss),
 						"loss/mean_rho": float(jnp.mean(rho)), "loss/mean_target": float(jnp.mean(targets))}
@@ -150,25 +144,26 @@ class IMPALA_PPO(IMPALA_Family):
 		vs_t_plus_1 = [jnp.where(t==1, nv, vp) for t,nv,vp in zip(terminals,next_value,vs_t_plus_1)]
 		adv = [p*(r + self.gamma * (1. - d) * nv - v) for p,r,d,nv,v in zip(rho, rewards, dones, vs_t_plus_1, value)]
 		obses = [jnp.vstack(list(zo)) for zo in zip(*obses)]; 
-		actions = jnp.vstack(actions); vs = jnp.vstack(vs); old_prob = jnp.vstack(pi_prob); rho = jnp.vstack(rho); adv = jnp.vstack(adv)
-		#adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
-		return obses, actions, vs, old_prob, rho, adv
+		actions = jnp.vstack(actions); vs = jnp.vstack(vs); mu_prob = jnp.vstack(mu_log_prob); rho = jnp.vstack(rho); adv = jnp.vstack(adv)
+		adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
+		return obses, actions, vs, mu_prob, rho, adv
 	
-	def _train_step(self, params, opt_state, key, ent_coef, obses, actions, targets, old_prob, adv):
-		(total_loss, (critic_loss, actor_loss, entropy_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, targets, old_prob, adv, ent_coef, key)
+	def _train_step(self, params, opt_state, key, ent_coef, obses, actions, mu_log_prob, rewards, nxtobses, dones, terminals):
+		obses, actions, vs, mu_prob, rho, adv = self.preprocess(params, key, obses, actions, mu_log_prob, rewards, nxtobses, dones, terminals)
+		(total_loss, (critic_loss, actor_loss, entropy_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, vs, mu_prob, adv, ent_coef, key)
 		updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
 		params = optax.apply_updates(params, updates)
-		return params, opt_state, critic_loss, actor_loss, entropy_loss
+		return params, opt_state, critic_loss, actor_loss, entropy_loss, rho, vs
 
-	def _loss_discrete(self, params, obses, actions, vs, old_prob, adv, ent_coef, key):
+	def _loss_discrete(self, params, obses, actions, vs, mu_prob, adv, ent_coef, key):
 		feature = self.preproc.apply(params, key, obses)
 		vals = self.critic.apply(params, key, feature)
-		critic_loss = jnp.mean(jnp.square(jnp.squeeze(jax.lax.stop_gradient(vs) - vals))) #is sooooo large!!!
+		critic_loss = jnp.mean(jnp.square(jnp.squeeze(jax.lax.stop_gradient(vs) - vals)))
 		#critic_loss =  jnp.mean(hubberloss(vs - vals, 1.0))
 		
 		logit = self.actor.apply(params, key, feature)
 		prob, log_prob = self.get_logprob(logit, actions, key, out_prob=True)
-		ratio = jnp.exp(log_prob - old_prob)
+		ratio = jnp.exp(log_prob - mu_prob)
 		cross_entropy1 = -adv*ratio; cross_entropy2 = -adv*jnp.clip(ratio,1.0 - self.ppo_eps,1.0 + self.ppo_eps)
 		actor_loss = jnp.mean(jnp.maximum(cross_entropy1,cross_entropy2))
 		entropy = prob * jnp.log(prob)
@@ -176,7 +171,7 @@ class IMPALA_PPO(IMPALA_Family):
 		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
 		return total_loss, (critic_loss, actor_loss, entropy_loss)
 	
-	def _loss_continuous(self, params, obses, actions, vs, old_prob, adv, ent_coef, key):
+	def _loss_continuous(self, params, obses, actions, vs, mu_prob, adv, ent_coef, key):
 		feature = self.preproc.apply(params, key, obses)
 		vals = self.critic.apply(params, key, feature)
 		critic_loss = jnp.mean(jnp.square(jnp.squeeze(jax.lax.stop_gradient(vs) - vals))) #is sooooo large!!!
@@ -184,11 +179,11 @@ class IMPALA_PPO(IMPALA_Family):
 		
 		prob = self.actor.apply(params, key, feature)
 		prob, log_prob = self.get_logprob(prob, actions, key, out_prob=True)
-		ratio = jnp.exp(log_prob - old_prob)
+		ratio = jnp.exp(log_prob - mu_prob)
 		cross_entropy1 = -adv*ratio; cross_entropy2 = -adv*jnp.clip(ratio,1.0 - self.ppo_eps,1.0 + self.ppo_eps)
 		actor_loss = jnp.mean(jnp.maximum(cross_entropy1,cross_entropy2))
 		mu, log_std = prob
-		entropy_loss = - jnp.mean(0.5 + 0.5 * jnp.log(2 * np.pi) + log_std) #jnp.mean(jnp.square(mu) + jnp.square(log_std))
+		entropy_loss = jnp.mean(jnp.square(mu) - log_std)
 		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
 		return total_loss, (critic_loss, actor_loss, entropy_loss)
 	

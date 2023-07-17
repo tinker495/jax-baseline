@@ -180,7 +180,7 @@ class IMPALA(IMPALA_Family):
 		prob, log_prob = self.get_logprob(prob, actions, key, out_prob=True)
 		actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
 		mu, log_std = prob
-		entropy_loss = - jnp.mean(0.5 + 0.5 * jnp.log(2 * np.pi) + log_std) #jnp.mean(jnp.square(mu) + jnp.square(log_std))
+		entropy_loss = jnp.mean(jnp.square(mu) - log_std)
 		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
 		return total_loss, (critic_loss, actor_loss, entropy_loss)
 	
