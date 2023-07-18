@@ -4,13 +4,11 @@ import numpy as np
 
 from typing import List
  
-@jax.jit
 def hard_update(new_tensors, old_tensors, steps: int, update_period: int):
 	update = (steps % update_period == 0)
 	return jax.tree_map(
 			lambda new, old: jax.lax.select(update, new, old), new_tensors, old_tensors)
 				
-@jax.jit
 def soft_update(new_tensors, old_tensors, tau : float):
 		return jax.tree_map(
 			lambda new, old: tau * new + (1.0 - tau) * old,
@@ -19,7 +17,6 @@ def soft_update(new_tensors, old_tensors, tau : float):
 def t_soft_function(new, old, W, tau, v):
 	pass
 
-@jax.jit
 def t_soft_update(new_tensors, old_tensors, W_tensors,tau : float, v=1.0):
 	return jax.tree_map(
 		lambda new, old: tau * new + (1.0 - tau) * old,
@@ -30,14 +27,12 @@ def truncated_mixture(quantiles, cut):
 	sorted = jnp.sort(quantiles,axis=1)
 	return sorted[:,:-cut]
 		
-@jax.jit
 def convert_states(obs : List):
 	return [(o* 255.0).astype(np.uint8) if len(o.shape) >= 4 else o for o in obs]
 
-@jax.jit
 def convert_jax(obs : List):
-	#return [jax.device_get(o).astype(jnp.float32) for o in obs]
-	return [jax.device_get(o).astype(jnp.float32)/256.0 - 0.5 if len(o.shape) >= 4 else jax.device_get(o) for o in obs]
+	return [jax.device_get(o).astype(jnp.float32) for o in obs]
+	#return [jax.device_get(o).astype(jnp.float32)/256.0 - 0.5 if len(o.shape) >= 4 else jax.device_get(o) for o in obs]
 
 def q_log_pi(q,entropy_tau):
 	q_submax = q - jnp.max(q, axis=1, keepdims=True)
@@ -45,7 +40,6 @@ def q_log_pi(q,entropy_tau):
 	tau_log_pi = (q_submax - entropy_tau*logsum)
 	return q_submax, tau_log_pi
 
-@jax.jit
 def discounted(rewards,gamma=0.99): #lfilter([1],[1,-gamma],x[::-1])[::-1]
 	_gamma = 1
 	out = 0

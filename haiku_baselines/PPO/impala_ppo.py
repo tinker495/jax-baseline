@@ -16,6 +16,7 @@ class IMPALA_PPO(IMPALA_Family):
 		super().__init__(workers, manager, buffer_size, gamma, lamda, learning_rate, update_freq, batch_size, sample_size, val_coef, ent_coef, rho_max, 
 						 log_interval, tensorboard_log, _init_setup_model, policy_kwargs, full_tensorboard_log, seed, optimizer)
 		self.mu_ratio = mu_ratio
+		self.minibatch_size = 256
 		self.epoch_num = epoch_num
 		self.ppo_eps = ppo_eps
 		self.get_memory_setup()
@@ -133,7 +134,7 @@ class IMPALA_PPO(IMPALA_Family):
 		return critic_loss, float(jnp.mean(rho))
 	
 	def preprocess(self, params, key, obses, actions, mu_log_prob, rewards, nxtobses, dones, terminals):
-		# ((b x h x w x c), (b x n)) x x -> (x x b x h x w x c), (x x b x n)
+		# ((b x h x w x c), (b x n)) x worker -> (worker x b x h x w x c), (worker x b x n)
 		obses = [jnp.stack(zo) for zo in zip(*obses)]; nxtobses = [jnp.stack(zo) for zo in zip(*nxtobses)]; actions = jnp.stack(actions)
 		mu_log_prob = jnp.stack(mu_log_prob); rewards = jnp.stack(rewards); dones = jnp.stack(dones); terminals = jnp.stack(terminals)
 		obses = jax.vmap(convert_jax)(obses); nxtobses = jax.vmap(convert_jax)(nxtobses)
@@ -161,7 +162,7 @@ class IMPALA_PPO(IMPALA_Family):
 		def i_f(idx, vals):
 			params, opt_state, key, critic_loss, actor_loss, entropy_loss = vals
 			use_key, key = jax.random.split(key)
-			batch_idxes = jax.random.permutation(use_key, jnp.arange(vs.shape[0])).reshape(-1,self.sample_size)
+			batch_idxes = jax.random.permutation(use_key, jnp.arange(vs.shape[0])).reshape(-1,self.minibatch_size)
 			obses_batch = [o[batch_idxes] for o in obses]
 			actions_batch = actions[batch_idxes]
 			vs_batch = vs[batch_idxes]
@@ -187,8 +188,7 @@ class IMPALA_PPO(IMPALA_Family):
 	def _loss_discrete(self, params, obses, actions, vs, mu_prob, adv, ent_coef, key):
 		feature = self.preproc.apply(params, key, obses)
 		vals = self.critic.apply(params, key, feature)
-		critic_loss = jnp.mean(jnp.square(jnp.squeeze(jax.lax.stop_gradient(vs) - vals)))
-		#critic_loss =  jnp.mean(hubberloss(vs - vals, 1.0))
+		critic_loss = jnp.mean(jnp.square(vs - vals))
 		
 		logit = self.actor.apply(params, key, feature)
 		prob, log_prob = self.get_logprob(logit, actions, key, out_prob=True)
@@ -203,8 +203,7 @@ class IMPALA_PPO(IMPALA_Family):
 	def _loss_continuous(self, params, obses, actions, vs, mu_prob, adv, ent_coef, key):
 		feature = self.preproc.apply(params, key, obses)
 		vals = self.critic.apply(params, key, feature)
-		critic_loss = jnp.mean(jnp.square(jnp.squeeze(jax.lax.stop_gradient(vs) - vals)))
-		#critic_loss =  jnp.mean(hubberloss(vs - vals, 1.0))
+		critic_loss = jnp.mean(jnp.square(vs - vals))
 		
 		prob = self.actor.apply(params, key, feature)
 		prob, log_prob = self.get_logprob(prob, actions, key, out_prob=True)

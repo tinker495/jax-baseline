@@ -8,7 +8,7 @@ from itertools import repeat
 from haiku_baselines.IMPALA.base_class import IMPALA_Family
 from haiku_baselines.A2C.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import get_vtrace, print_param
+from haiku_baselines.common.utils import convert_jax, get_vtrace, print_param
 from haiku_baselines.common.losses import hubberloss
 
 class IMPALA(IMPALA_Family):
@@ -74,8 +74,7 @@ class IMPALA(IMPALA_Family):
 				def get_action_prob(actor, params, obses, key):
 					prob = actor(params, obses, key)
 					action = jax.random.categorical(key, prob)
-					prob = jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0)
-					return action, jnp.log(jnp.take_along_axis(prob, jnp.expand_dims(action,axis=1), axis=1))
+					return action, jnp.log(jnp.take_along_axis(jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0), jnp.expand_dims(action,axis=1), axis=1))
 				
 				def convert_action(action):
 					return int(action)
@@ -161,12 +160,11 @@ class IMPALA(IMPALA_Family):
 	def _loss_discrete(self, params, obses, actions, vs, adv, ent_coef, key):
 		feature = self.preproc.apply(params, key, obses)
 		vals = self.critic.apply(params, key, feature)
-		critic_loss = jnp.mean(jnp.square(jnp.squeeze(jax.lax.stop_gradient(vs) - vals)))
-		#critic_loss =  jnp.mean(hubberloss(vs - vals, 1.0))
+		critic_loss = jnp.mean(jnp.square(vs - vals))
 		
 		logit = self.actor.apply(params, key, feature)
 		prob, log_prob = self.get_logprob(logit, actions, key, out_prob=True)
-		actor_loss = - jnp.mean(log_prob * jax.lax.stop_gradient(adv))
+		actor_loss = - jnp.mean(adv * log_prob)
 		entropy = prob * jnp.log(prob)
 		entropy_loss = jnp.mean(entropy)
 		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
@@ -175,12 +173,11 @@ class IMPALA(IMPALA_Family):
 	def _loss_continuous(self, params, obses, actions, vs, adv, ent_coef, key):
 		feature = self.preproc.apply(params, key, obses)
 		vals = self.critic.apply(params, key, feature)
-		critic_loss = jnp.mean(jnp.square(jnp.squeeze(jax.lax.stop_gradient(vs) - vals)))
-		#critic_loss =  jnp.mean(hubberloss(vs - vals, 1.0))
+		critic_loss = jnp.mean(jnp.square(vs - vals))
 		
 		prob = self.actor.apply(params, key, feature)
 		prob, log_prob = self.get_logprob(prob, actions, key, out_prob=True)
-		actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
+		actor_loss = - jnp.mean(adv * log_prob)
 		mu, log_std = prob
 		entropy_loss = jnp.mean(jnp.square(mu) - log_std)
 		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
@@ -189,9 +186,3 @@ class IMPALA(IMPALA_Family):
 	def learn(self, total_trainstep, callback=None, log_interval=10, tb_log_name="IMPALA_AC",
 				reset_num_timesteps=True, replay_wrapper=None):
 		super().learn(total_trainstep, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)
-
-from typing import List
-
-@jax.jit
-def convert_jax(obs : List):
-  return [jax.device_get(o).astype(jnp.float32) for o in obs]
