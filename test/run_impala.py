@@ -35,6 +35,7 @@ if __name__ == "__main__":
 	parser.add_argument('--no_gae_normalize', dest='gae_normalize', action='store_false')
 	parser.add_argument('--time_scale', type=float,default=20.0, help='unity time scale')
 	parser.add_argument('--capture_frame_rate', type=int, default=1, help='unity capture frame rate')
+	parser.add_argument('--mu_ratio', type=float, default=0.0, help='impala ppo mu ratio')
 	args = parser.parse_args() 
 	env_name = args.env
 	cnn_mode = "normal"
@@ -55,12 +56,12 @@ if __name__ == "__main__":
 	
 	if args.algo == "A2C":
 		agent = IMPALA(workers, manger, gamma=args.gamma, lamda=args.lamda, learning_rate=args.learning_rate, update_freq=args.update_freq, batch_size = args.batch, sample_size=args.sample_size, buffer_size= int(args.buffer_size),
-					   policy_kwargs=policy_kwargs, optimizer=args.optimizer, val_coef=args.val_coef, ent_coef=args.ent_coef, rho_max=args.rho_max,
+						policy_kwargs=policy_kwargs, optimizer=args.optimizer, val_coef=args.val_coef, ent_coef=args.ent_coef, rho_max=args.rho_max,
 						tensorboard_log=args.logdir + env_type + "/" +env_name)
 		
 	elif args.algo == "PPO":
 		agent = IMPALA_PPO(workers, manger, gamma=args.gamma, lamda=args.lamda, learning_rate=args.learning_rate, update_freq=args.update_freq, batch_size = args.batch, sample_size=args.sample_size, buffer_size= int(args.buffer_size),
-					   policy_kwargs=policy_kwargs, optimizer=args.optimizer, val_coef=args.val_coef, ent_coef=args.ent_coef, rho_max=args.rho_max,
+						mu_ratio = args.mu_ratio, policy_kwargs=policy_kwargs, optimizer=args.optimizer, val_coef=args.val_coef, ent_coef=args.ent_coef, rho_max=args.rho_max,
 						tensorboard_log=args.logdir + env_type + "/" +env_name)
 	
 	agent.learn(int(args.steps))

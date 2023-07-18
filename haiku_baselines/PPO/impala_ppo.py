@@ -12,9 +12,11 @@ from haiku_baselines.common.utils import get_vtrace, print_param
 
 class IMPALA_PPO(IMPALA_Family):
 	def __init__(self, workers, manager=None, buffer_size=0, gamma=0.995, lamda=0.95, learning_rate=0.0003, update_freq = 100, batch_size=1024, sample_size=1, val_coef=0.2, ent_coef=0.01, rho_max=1.0,
-				 ppo_eps = 0.2, log_interval=1, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False, seed=None, optimizer='adamw'):
+				 ppo_eps = 0.2, mu_ratio = 0.0, epoch_num = 3,  log_interval=1, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False, seed=None, optimizer='adamw'):
 		super().__init__(workers, manager, buffer_size, gamma, lamda, learning_rate, update_freq, batch_size, sample_size, val_coef, ent_coef, rho_max, 
 						 log_interval, tensorboard_log, _init_setup_model, policy_kwargs, full_tensorboard_log, seed, optimizer)
+		self.mu_ratio = mu_ratio
+		self.epoch_num = epoch_num
 		self.ppo_eps = ppo_eps
 		self.get_memory_setup()
 
@@ -144,16 +146,41 @@ class IMPALA_PPO(IMPALA_Family):
 		vs_t_plus_1 = [jnp.where(t==1, nv, vp) for t,nv,vp in zip(terminals,next_value,vs_t_plus_1)]
 		adv = [p*(r + self.gamma * (1. - d) * nv - v) for p,r,d,nv,v in zip(rho, rewards, dones, vs_t_plus_1, value)]
 		obses = [jnp.vstack(list(zo)) for zo in zip(*obses)]; 
-		actions = jnp.vstack(actions); vs = jnp.vstack(vs); mu_prob = jnp.vstack(mu_log_prob); rho = jnp.vstack(rho); adv = jnp.vstack(adv)
-		adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
-		return obses, actions, vs, mu_prob, rho, adv
-	
+		actions = jnp.vstack(actions); vs = jnp.vstack(vs); pi_prob = jnp.vstack(pi_prob); rho = jnp.vstack(rho); adv = jnp.vstack(adv)
+		if self.mu_ratio != 0.0:
+			mu_prob = jnp.vstack(mu_log_prob)
+			out_prob = (self.mu_ratio * mu_prob + (1.0 - self.mu_ratio) * pi_prob)
+			return obses, actions, vs, out_prob, rho, adv
+		else:
+			return obses, actions, vs, pi_prob, rho, adv
+
 	def _train_step(self, params, opt_state, key, ent_coef, obses, actions, mu_log_prob, rewards, nxtobses, dones, terminals):
-		obses, actions, vs, mu_prob, rho, adv = self.preprocess(params, key, obses, actions, mu_log_prob, rewards, nxtobses, dones, terminals)
-		(total_loss, (critic_loss, actor_loss, entropy_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obses, actions, vs, mu_prob, adv, ent_coef, key)
-		updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-		params = optax.apply_updates(params, updates)
-		return params, opt_state, critic_loss, actor_loss, entropy_loss, rho, vs
+		obses, actions, vs, pi_prob, rho, adv = self.preprocess(params, key, obses, actions, mu_log_prob, rewards, nxtobses, dones, terminals)
+		def i_f(idx, vals):
+			params, opt_state, key, critic_loss, actor_loss, entropy_loss = vals
+			use_key, key = jax.random.split(key)
+			batch_idxes = jax.random.permutation(use_key, jnp.arange(vs.shape[0])).reshape(-1,self.batch_size)
+			obses_batch = [o[batch_idxes] for o in obses]
+			actions_batch = actions[batch_idxes]
+			vs_batch = vs[batch_idxes]
+			pi_prob_batch = pi_prob[batch_idxes]
+			adv_batch = adv[batch_idxes]
+			def f(updates, input):
+				params, opt_state, key = updates
+				obs, act, vs, pi_prob, adv = input
+				use_key, key = jax.random.split(key)
+				(total_loss, (critic_loss, actor_loss, entropy_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obs, act, vs, pi_prob, adv, ent_coef, use_key)
+				updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+				params = optax.apply_updates(params, updates)
+				return (params, opt_state, key), (critic_loss, actor_loss, entropy_loss)
+			updates, losses  = jax.lax.scan(f, (params, opt_state, key), (obses_batch, actions_batch, vs_batch, pi_prob_batch, adv_batch))
+			params, opt_state, key = updates
+			cl, al, el = losses
+			critic_loss += jnp.mean(cl); actor_loss += jnp.mean(al); entropy_loss += jnp.mean(el)
+			return params, opt_state, key, critic_loss, actor_loss, entropy_loss
+		val = jax.lax.fori_loop(0, self.epoch_num, i_f, (params, opt_state, key, 0.0, 0.0, 0.0))
+		params, opt_state, key, critic_loss, actor_loss, entropy_loss = val
+		return params, opt_state, critic_loss/self.epoch_num, actor_loss/self.epoch_num, entropy_loss/self.epoch_num, rho, vs
 
 	def _loss_discrete(self, params, obses, actions, vs, mu_prob, adv, ent_coef, key):
 		feature = self.preproc.apply(params, key, obses)
@@ -174,7 +201,7 @@ class IMPALA_PPO(IMPALA_Family):
 	def _loss_continuous(self, params, obses, actions, vs, mu_prob, adv, ent_coef, key):
 		feature = self.preproc.apply(params, key, obses)
 		vals = self.critic.apply(params, key, feature)
-		critic_loss = jnp.mean(jnp.square(jnp.squeeze(jax.lax.stop_gradient(vs) - vals))) #is sooooo large!!!
+		critic_loss = jnp.mean(jnp.square(jnp.squeeze(jax.lax.stop_gradient(vs) - vals)))
 		#critic_loss =  jnp.mean(hubberloss(vs - vals, 1.0))
 		
 		prob = self.actor.apply(params, key, feature)
@@ -189,6 +216,8 @@ class IMPALA_PPO(IMPALA_Family):
 	
 	def learn(self, total_trainstep, callback=None, log_interval=10, tb_log_name="IMPALA_PPO",
 				reset_num_timesteps=True, replay_wrapper=None):
+		if self.mu_ratio != 0.0:
+			tb_log_name += f"({self.mu_ratio:.2f})"
 		super().learn(total_trainstep, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)
 
 from typing import List
