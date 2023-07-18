@@ -116,17 +116,19 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
 		return critic_loss
 	
 	def _preprocess(self, params, key, obses, actions, rewards, nxtobses, dones, terminals):
-		obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
-		feature = [self.preproc.apply(params, key, o) for o in obses]
-		value = [self.critic.apply(params, key, f) for f in feature]
-		act_prob = [self.get_logprob(self.actor.apply(params, key, f), a, key) for f,a in zip(feature,actions)]
-		next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
-		adv = [get_gaes(r, d, t, v, nv, self.gamma, self.lamda) for r,d,t,v,nv in zip(rewards,dones,terminals,value,next_value)]
-		obses = [jnp.vstack(list(zo)) for zo in zip(*obses)]; actions = jnp.vstack(actions); value = jnp.vstack(value); act_prob = jnp.vstack(act_prob)
+		obses = [jnp.stack(zo) for zo in zip(*obses)]; nxtobses = [jnp.stack(zo) for zo in zip(*nxtobses)]; actions = jnp.stack(actions)
+		rewards = jnp.stack(rewards); dones = jnp.stack(dones); terminals = jnp.stack(terminals)
+		obses = jax.vmap(convert_jax)(obses); nxtobses = jax.vmap(convert_jax)(nxtobses)
+		feature = jax.vmap(self.preproc.apply, in_axes=(None,None,0))(params, key, obses)
+		value = jax.vmap(self.critic.apply, in_axes=(None,None,0))(params, key, feature)
+		next_value = jax.vmap(self.critic.apply, in_axes=(None,None,0))(params, key, jax.vmap(self.preproc.apply, in_axes=(None,None,0))(params, key, nxtobses))
+		pi_prob = jax.vmap(self.get_logprob, in_axes=(0,0,None))(jax.vmap(self.actor.apply,in_axes=(None,None,0))(params, key, feature), actions, key)
+		adv = jax.vmap(get_gaes, in_axes=(0,0,0,0,0,None,None))(rewards,dones,terminals,value,next_value,self.gamma,self.lamda)
+		obses = [jnp.vstack(o) for o in obses]; actions = jnp.vstack(actions); value = jnp.vstack(value); pi_prob = jnp.vstack(pi_prob)
 		adv = jnp.vstack(adv); targets = value + adv
 		if self.gae_normalize:
 			adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
-		return obses, actions, targets, act_prob, adv
+		return obses, actions, targets, pi_prob, adv
 	
 	def _train_step(self, params, opt_state, key, ent_coef, obses, actions, rewards, nxtobses, dones, terminals):
 		obses, actions, targets, act_prob, adv = self._preprocess(params, key, obses, actions, rewards, nxtobses, dones, terminals)

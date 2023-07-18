@@ -132,19 +132,21 @@ class IMPALA(IMPALA_Family):
 		return critic_loss, float(jnp.mean(rho))
 	
 	def preprocess(self, params, key, obses, actions, mu_log_prob, rewards, nxtobses, dones, terminals):
-		obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
-		feature = [self.preproc.apply(params, key, o) for o in obses]
-		value = [self.critic.apply(params, key, f) for f in feature]
-		next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
-		pi_prob = [self.get_logprob(self.actor.apply(params, key, f), a, key) for f,a in zip(feature, actions)]
-		rho_raw = [jnp.exp(pi - mu) for pi,mu in zip(pi_prob, mu_log_prob)]
-		rho = [jnp.minimum(p, self.rho_max) for p in rho_raw]
-		c_t = [self.lamda * jnp.minimum(p, self.cut_max) for p in rho_raw]
-		vs = [get_vtrace(rw, p, c, d, t, v, nv, self.gamma) for rw, p, c, d, t, v, nv in zip(rewards, rho, c_t, dones, terminals, value, next_value)]
-		vs_t_plus_1 = [jnp.concatenate([v[1:],jnp.expand_dims(nv[-1],axis=-1)]) for v,nv in zip(vs,next_value)]
-		vs_t_plus_1 = [jnp.where(t==1, nv, vp) for t,nv,vp in zip(terminals,next_value,vs_t_plus_1)]
-		adv = [p*(r + self.gamma * (1. - d) * nv - v) for p,r,d,nv,v in zip(rho, rewards, dones, vs_t_plus_1, value)]
-		obses = [jnp.vstack(list(zo)) for zo in zip(*obses)]; 
+		# ((b x h x w x c), (b x n)) x x -> (x x b x h x w x c), (x x b x n)
+		obses = [jnp.stack(zo) for zo in zip(*obses)]; nxtobses = [jnp.stack(zo) for zo in zip(*nxtobses)]; actions = jnp.stack(actions)
+		mu_log_prob = jnp.stack(mu_log_prob); rewards = jnp.stack(rewards); dones = jnp.stack(dones); terminals = jnp.stack(terminals)
+		obses = jax.vmap(convert_jax)(obses); nxtobses = jax.vmap(convert_jax)(nxtobses)
+		feature = jax.vmap(self.preproc.apply, in_axes=(None,None,0))(params, key, obses)
+		value = jax.vmap(self.critic.apply, in_axes=(None,None,0))(params, key, feature)
+		next_value = jax.vmap(self.critic.apply, in_axes=(None,None,0))(params, key, jax.vmap(self.preproc.apply, in_axes=(None,None,0))(params, key, nxtobses))
+		pi_prob = jax.vmap(self.get_logprob, in_axes=(0,0,None))(jax.vmap(self.actor.apply,in_axes=(None,None,0))(params, key, feature), actions, key)
+		rho_raw = jnp.exp(pi_prob - mu_log_prob)
+		rho = jnp.minimum(rho_raw, self.rho_max)
+		c_t = self.lamda * jnp.minimum(rho, self.cut_max)
+		vs = jax.vmap(get_vtrace, in_axes=(0,0,0,0,0,0,0,None))(rewards, rho, c_t, dones, terminals, value, next_value, self.gamma)
+		vs_t_plus_1 = jax.vmap(lambda v,nv,t: jnp.where(t==1, nv, jnp.concatenate([v[1:],jnp.expand_dims(nv[-1],axis=-1)])), in_axes=(0,0,0))(vs,next_value,terminals)
+		adv = rho * (rewards + self.gamma * (1. - dones) * vs_t_plus_1 - value)
+		obses = [jnp.vstack(o) for o in obses]
 		actions = jnp.vstack(actions); vs = jnp.vstack(vs); rho = jnp.vstack(rho); adv = jnp.vstack(adv)
 		#adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
 		return obses, actions, vs, rho, adv

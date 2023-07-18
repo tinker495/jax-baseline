@@ -107,12 +107,14 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
 
 	def _train_step(self, params, opt_state, key, ent_coef,
 					obses, actions, rewards, nxtobses, dones, terminals):
-		obses = [convert_jax(o) for o in obses]; nxtobses = [convert_jax(n) for n in nxtobses]
-		value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
-		next_value = [self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses]
-		targets = [discount_with_terminal(r,d,t,nv,self.gamma) for r,d,t,nv in zip(rewards,dones,terminals,next_value)]
-		obses = [jnp.vstack(list(zo)) for zo in zip(*obses)]; actions = jnp.vstack(actions);
-		value = jnp.vstack(value); targets = jnp.vstack(targets); adv = targets - value
+		obses = [jnp.stack(zo) for zo in zip(*obses)]; nxtobses = [jnp.stack(zo) for zo in zip(*nxtobses)]; actions = jnp.stack(actions)
+		rewards = jnp.stack(rewards); dones = jnp.stack(dones); terminals = jnp.stack(terminals)
+		obses = jax.vmap(convert_jax)(obses); nxtobses = jax.vmap(convert_jax)(nxtobses)
+		value = jax.vmap(self.critic.apply, in_axes=(None,None,0))(params, key, jax.vmap(self.preproc.apply,in_axes=(None,None,0))(params, key, obses))
+		next_value = jax.vmap(self.critic.apply, in_axes=(None,None,0))(params, key, jax.vmap(self.preproc.apply,in_axes=(None,None,0))(params, key, nxtobses))
+		targets = jax.vmap(discount_with_terminal, in_axes=(0,0,0,0))(rewards,dones,terminals,next_value)
+		obses = [jnp.vstack(o) for o in obses]
+		actions = jnp.vstack(actions); value = jnp.vstack(value); targets = jnp.vstack(targets); adv = targets - value
 		(total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, 
 														obses, actions, targets, adv, ent_coef, key)
 		updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
