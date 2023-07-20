@@ -1,9 +1,13 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+from functools import partial
 
 from typing import List
  
+cpu_jit = partial(jax.jit, backend='cpu')
+gpu_jit = partial(jax.jit, backend='gpu')
+
 def hard_update(new_tensors, old_tensors, steps: int, update_period: int):
 	update = (steps % update_period == 0)
 	return jax.tree_map(
@@ -27,6 +31,7 @@ def truncated_mixture(quantiles, cut):
 	sorted = jnp.sort(quantiles,axis=1)
 	return sorted[:,:-cut]
 		
+@cpu_jit
 def convert_states(obs : List):
 	return [(o* 255.0).astype(np.uint8) if len(o.shape) >= 4 else o for o in obs]
 

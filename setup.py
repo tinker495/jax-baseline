@@ -21,6 +21,7 @@ setup(
 			  'haiku_baselines.TRPO',
 			  'haiku_baselines.ACER',
 			  'haiku_baselines.PPO',
+			  'haiku_baselines.TPPO',
 			  'haiku_baselines.APE_X',
 			  'haiku_baselines.IMPALA',]
 )

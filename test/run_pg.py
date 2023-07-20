@@ -4,6 +4,7 @@ import gymnasium as gym
 
 from haiku_baselines.A2C.a2c import A2C
 from haiku_baselines.PPO.ppo import PPO
+from haiku_baselines.TPPO.tppo import TPPO
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
@@ -70,7 +71,10 @@ if __name__ == "__main__":
 		agent = PPO(env, gamma=args.gamma, lamda=args.lamda, gae_normalize=args.gae_normalize, batch_size = args.batch ,minibatch_size = args.mini_batch, 
 					val_coef = args.val_coef, ent_coef = args.ent_coef,
 					tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
-
+	if args.algo == "TPPO":
+		agent = TPPO(env, gamma=args.gamma, lamda=args.lamda, gae_normalize=args.gae_normalize, batch_size = args.batch ,minibatch_size = args.mini_batch, 
+					val_coef = args.val_coef, ent_coef = args.ent_coef,
+					tensorboard_log=args.logdir + env_type + "/" +env_name, policy_kwargs=policy_kwargs, optimizer=args.optimizer)
 
 
 	agent.learn(int(args.steps))

@@ -39,10 +39,10 @@ class Impala_Worker(object):
 			queue, env_dict, actor_num = buffer_info
 			local_buffer = EpochBuffer(local_size, env_dict)
 			preproc, model, _ = network_builder()
-			actor, get_action_prob, convert_action, key_seq = actor_builder()
+			actor, get_action_prob, convert_action = actor_builder()
 
 			actor = jax.jit(partial(actor, model, preproc))
-			get_action_prob = jax.jit(partial(get_action_prob, actor))
+			get_action_prob = partial(get_action_prob, actor)
 
 			score = 0
 			state, info = self.env.reset()
@@ -59,7 +59,7 @@ class Impala_Worker(object):
 					update.clear()
 				for i in range(local_size):
 					eplen += 1
-					actions, log_prob = get_action_prob(params, state, next(key_seq))
+					actions, log_prob = get_action_prob(params, state)
 					next_state, reward, terminal, truncated, info = self.env.step(convert_action(actions))
 					next_state = [np.expand_dims(next_state,axis=0)]
 					local_buffer.add(state, actions, log_prob, reward, next_state, terminal or truncated, truncated)

@@ -7,6 +7,7 @@ import multiprocessing as mp
 from haiku_baselines.IMPALA.worker import Impala_Worker
 from haiku_baselines.A2C.impala import IMPALA
 from haiku_baselines.PPO.impala_ppo import IMPALA_PPO
+from haiku_baselines.TPPO.impala_tppo import IMPALA_TPPO
 
 if __name__ == "__main__":
 	parser = argparse.ArgumentParser()
@@ -64,4 +65,9 @@ if __name__ == "__main__":
 						mu_ratio = args.mu_ratio, policy_kwargs=policy_kwargs, optimizer=args.optimizer, val_coef=args.val_coef, ent_coef=args.ent_coef, rho_max=args.rho_max,
 						tensorboard_log=args.logdir + env_type + "/" +env_name)
 	
+	elif args.algo == "TPPO":
+		agent = IMPALA_TPPO(workers, manger, gamma=args.gamma, lamda=args.lamda, learning_rate=args.learning_rate, update_freq=args.update_freq, batch_size = args.batch, sample_size=args.sample_size, buffer_size= int(args.buffer_size),
+						mu_ratio = args.mu_ratio, policy_kwargs=policy_kwargs, optimizer=args.optimizer, val_coef=args.val_coef, ent_coef=args.ent_coef, rho_max=args.rho_max,
+						tensorboard_log=args.logdir + env_type + "/" +env_name)
+
 	agent.learn(int(args.steps))

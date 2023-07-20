@@ -103,8 +103,42 @@ class IMPALA_Family(object):
 	def _train_step(self, steps):
 		pass
 
-	def _get_actions(self, params, obses) -> np.ndarray:
-		pass
+	def get_actor_builder(self):
+		action_type = self.action_type
+		action_size = self.action_size
+		def builder():
+			
+			if action_type == 'discrete':
+				def actor(actor_model, preproc, params, obses, key = None):
+					prob = actor_model.apply(params, key, preproc.apply(params, key, convert_jax(obses)))
+					return jax.nn.softmax(prob)
+				
+				def get_action_prob(actor, params, obses):
+					prob = np.asarray(actor(params, obses))
+					action = np.random.choice(action_size[0],p=prob[0])
+					return action, np.log(prob[0][action])
+
+				def convert_action(action):
+					return int(action)
+				
+			elif action_type == 'continuous':
+				def actor(actor_model, preproc, params, obses, key = None):
+					mean, log_std = actor_model.apply(params, key, preproc.apply(params, key, convert_jax(obses)))
+					return mean, log_std
+				
+				def get_action_prob(actor, params, obses):
+					mean, log_std = actor(params, obses)
+					std = np.exp(log_std)
+					action = np.random.normal(mean, std)
+					return action, - (0.5 * np.sum(np.square((action - mean) / (std + 1e-7)),axis=-1,keepdims=True) +
+										np.sum(log_std,axis=-1,keepdims=True) +
+										0.5 * np.log(2 * np.pi)* np.asarray(action.shape[-1],dtype=np.float32))
+				
+				def convert_action(action):
+					return np.clip(action[0], -3.0, 3.0) / 3.0
+
+			return actor, get_action_prob, convert_action
+		return builder
 
 	def discription(self):
 		return "loss : {:.3f} |".format(np.mean(self.lossque))

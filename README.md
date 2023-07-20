@@ -39,6 +39,7 @@ pip install .
 | ------------------- | ---------------------------- | ------------------ | ------------------ | ------------------ |
 | A2C                 | :heavy_check_mark: 			 | :heavy_check_mark: | :heavy_check_mark: | TODO               |
 | PPO                 | :heavy_check_mark:           | :heavy_check_mark: | :heavy_check_mark: | TODO               |
+| Truly PPO           | :heavy_check_mark:           | :heavy_check_mark: | :heavy_check_mark: | TODO               |
 | IMPALA              | :heavy_check_mark:           | :heavy_check_mark: | :heavy_check_mark: | TODO               |
 | IMPALA-PPO          | :heavy_check_mark:           | :heavy_check_mark: | :heavy_check_mark: | TODO               |
 

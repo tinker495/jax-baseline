@@ -65,7 +65,7 @@ class ImpalaBuffer:
 					"terminal": {}
 					}
 		
-		self.queue = Queue(maxsize=actor_num*2)
+		self.queue = Queue(maxsize=max(actor_num*2,size))
 		if self.replay:
 			self.replay_buffer = deque(maxlen=size)
 			self.sample = self.replay_sample

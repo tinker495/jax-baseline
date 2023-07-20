@@ -63,44 +63,6 @@ class IMPALA_PPO(IMPALA_Family):
 		self.preprocess = jax.jit(self.preprocess)
 		self._loss = jax.jit(self._loss_discrete) if self.action_type == 'discrete' else jax.jit(self._loss_continuous)
 
-	def get_actor_builder(self):
-		action_type = self.action_type
-		def builder():
-			key_seq = hk.PRNGSequence(42)
-			
-			if action_type == 'discrete':
-				def actor(actor_model, preproc, params, obses, key):
-					prob = actor_model.apply(params, key, preproc.apply(params, key, convert_jax(obses)))
-					return prob
-				
-				def get_action_prob(actor, params, obses, key):
-					prob = actor(params, obses, key)
-					action = jax.random.categorical(key, prob)
-					prob = jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0)
-					return action, jnp.log(jnp.take_along_axis(prob, jnp.expand_dims(action,axis=1), axis=1))
-				
-				def convert_action(action):
-					return int(action)
-				
-			elif action_type == 'continuous':
-				def actor(actor_model, preproc, params, obses, key):
-					mean, log_std = actor_model.apply(params, key, preproc.apply(params, key, convert_jax(obses)))
-					return mean, log_std
-				
-				def get_action_prob(actor, params, obses, key):
-					mean, log_std = actor(params, obses, key)
-					std = jnp.exp(log_std)
-					action = jax.random.normal(key, mean.shape) * std + mean
-					return action, - (0.5 * jnp.sum(jnp.square((action - mean) / (std + 1e-7)),axis=-1,keepdims=True) + 
-								   jnp.sum(log_std,axis=-1,keepdims=True) + 
-								   0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32))
-				
-				def convert_action(action):
-					return np.clip(action[0], -3.0, 3.0) / 3.0
-
-			return actor, get_action_prob, convert_action, key_seq
-		return builder
-
 	def get_logprob_discrete(self, prob, action, key, out_prob=False):
 		prob = jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0)
 		action = action.astype(jnp.int32)
@@ -129,9 +91,9 @@ class IMPALA_PPO(IMPALA_Family):
 				
 		if steps % self.log_interval == 0:
 			log_dict = {"loss/critic_loss": float(critic_loss), "loss/actor_loss": float(actor_loss), "loss/entropy_loss": float(entropy_loss),
-						"loss/mean_rho": float(jnp.mean(rho)), "loss/mean_target": float(jnp.mean(targets))}
+						"loss/mean_rho": float(rho), "loss/mean_target": float(targets)}
 			self.logger_server.log_trainer.remote(steps, log_dict)
-		return critic_loss, float(jnp.mean(rho))
+		return critic_loss, float(rho)
 	
 	def preprocess(self, params, key, obses, actions, mu_log_prob, rewards, nxtobses, dones, terminals):
 		# ((b x h x w x c), (b x n)) x worker -> (worker x b x h x w x c), (worker x b x n)
@@ -147,12 +109,14 @@ class IMPALA_PPO(IMPALA_Family):
 		c_t = self.lamda * jnp.minimum(rho, self.cut_max)
 		vs = jax.vmap(get_vtrace, in_axes=(0,0,0,0,0,0,0,None))(rewards, rho, c_t, dones, terminals, value, next_value, self.gamma)
 		vs_t_plus_1 = jax.vmap(lambda v,nv,t: jnp.where(t==1, nv, jnp.concatenate([v[1:],jnp.expand_dims(nv[-1],axis=-1)])), in_axes=(0,0,0))(vs,next_value,terminals)
-		adv = rho * (rewards + self.gamma * (1. - dones) * vs_t_plus_1 - value)
+		adv = rewards + self.gamma * (1. - dones) * vs_t_plus_1 - value
+		#adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
+		adv = rho * adv
 		obses = [jnp.vstack(o) for o in obses]
 		actions = jnp.vstack(actions); vs = jnp.vstack(vs); pi_prob = jnp.vstack(pi_prob); rho = jnp.vstack(rho); adv = jnp.vstack(adv)
 		if self.mu_ratio != 0.0:
 			mu_prob = jnp.vstack(mu_log_prob)
-			out_prob = (self.mu_ratio * mu_prob + (1.0 - self.mu_ratio) * pi_prob)
+			out_prob = jnp.log(self.mu_ratio * jnp.exp(mu_prob) + (1.0 - self.mu_ratio) * jnp.exp(pi_prob))
 			return obses, actions, vs, out_prob, rho, adv
 		else:
 			return obses, actions, vs, pi_prob, rho, adv
@@ -183,7 +147,7 @@ class IMPALA_PPO(IMPALA_Family):
 			return params, opt_state, key, critic_loss, actor_loss, entropy_loss
 		val = jax.lax.fori_loop(0, self.epoch_num, i_f, (params, opt_state, key, 0.0, 0.0, 0.0))
 		params, opt_state, key, critic_loss, actor_loss, entropy_loss = val
-		return params, opt_state, critic_loss/self.epoch_num, actor_loss/self.epoch_num, entropy_loss/self.epoch_num, rho, vs
+		return params, opt_state, critic_loss/self.epoch_num, actor_loss/self.epoch_num, entropy_loss/self.epoch_num, jnp.mean(rho), jnp.mean(vs)
 
 	def _loss_discrete(self, params, obses, actions, vs, mu_prob, adv, ent_coef, key):
 		feature = self.preproc.apply(params, key, obses)

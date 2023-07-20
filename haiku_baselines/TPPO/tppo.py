@@ -6,22 +6,23 @@ import optax
 from copy import deepcopy
 
 from haiku_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
-from haiku_baselines.PPO.network import Actor, Critic
+from haiku_baselines.TPPO.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
 from haiku_baselines.common.utils import convert_jax, get_gaes, print_param
 
-class PPO(Actor_Critic_Policy_Gradient_Family):
-	def __init__(self, env, gamma=0.995, lamda = 0.95, gae_normalize = False, learning_rate=3e-4, batch_size=256, minibatch_size=32, epoch_num=4,val_coef=0.5, ent_coef = 0.001
-	      		, ppo_eps = 0.2, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
-				full_tensorboard_log=False, seed=None, optimizer = 'rmsprop'):
+class TPPO(Actor_Critic_Policy_Gradient_Family):
+	def __init__(self, env, gamma=0.995, lamda = 0.95, gae_normalize = False, learning_rate=3e-4, batch_size=256, minibatch_size=32, epoch_num=4,val_coef=0.5, ent_coef = 0.001, 
+				 kl_range = 0.0008, kl_coef = 30, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
+				 full_tensorboard_log=False, seed=None, optimizer = 'rmsprop'):
 		
-		super(PPO, self).__init__(env, gamma, learning_rate, batch_size, val_coef, ent_coef,
+		super(TPPO, self).__init__(env, gamma, learning_rate, batch_size, val_coef, ent_coef,
 				 log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
 				 full_tensorboard_log, seed, optimizer)
 		
 		self.lamda = lamda
 		self.gae_normalize = gae_normalize
-		self.ppo_eps = ppo_eps
+		self.kl_range = kl_range
+		self.kl_coef = kl_coef
 		self.minibatch_size = minibatch_size
 		self.batch_size = int(np.ceil(batch_size * self.worker_size / minibatch_size) * minibatch_size / self.worker_size)
 		self.epoch_num = epoch_num
@@ -121,16 +122,16 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
 		feature = jax.vmap(self.preproc.apply, in_axes=(None,None,0))(params, key, obses)
 		value = jax.vmap(self.critic.apply, in_axes=(None,None,0))(params, key, feature)
 		next_value = jax.vmap(self.critic.apply, in_axes=(None,None,0))(params, key, jax.vmap(self.preproc.apply, in_axes=(None,None,0))(params, key, nxtobses))
-		pi_prob = jax.vmap(self.get_logprob, in_axes=(0,0,None))(jax.vmap(self.actor.apply,in_axes=(None,None,0))(params, key, feature), actions, key)
+		prob, pi_prob = jax.vmap(self.get_logprob, in_axes=(0,0,None,None))(jax.vmap(self.actor.apply,in_axes=(None,None,0))(params, key, feature), actions, key, True)
 		adv = jax.vmap(get_gaes, in_axes=(0,0,0,0,0,None,None))(rewards,dones,terminals,value,next_value,self.gamma,self.lamda)
-		obses = [jnp.vstack(o) for o in obses]; actions = jnp.vstack(actions); value = jnp.vstack(value); pi_prob = jnp.vstack(pi_prob)
+		obses = [jnp.vstack(o) for o in obses]; actions = jnp.vstack(actions); value = jnp.vstack(value); prob = jnp.vstack(prob); pi_prob = jnp.vstack(pi_prob)
 		adv = jnp.vstack(adv); targets = value + adv
 		if self.gae_normalize:
 			adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
-		return obses, actions, targets, pi_prob, adv
+		return obses, actions, targets, prob, pi_prob, adv
 	
 	def _train_step(self, params, opt_state, key, ent_coef, obses, actions, rewards, nxtobses, dones, terminals):
-		obses, actions, targets, act_prob, adv = self._preprocess(params, key, obses, actions, rewards, nxtobses, dones, terminals)
+		obses, actions, targets, old_prob, old_act_prob, adv = self._preprocess(params, key, obses, actions, rewards, nxtobses, dones, terminals)
 		def i_f(idx, vals):
 			params, opt_state, key, critic_loss, actor_loss, entropy_loss = vals
 			use_key, key = jax.random.split(key)
@@ -138,18 +139,19 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
 			obses_batch = [o[batch_idxes] for o in obses]
 			actions_batch = actions[batch_idxes]
 			targets_batch = targets[batch_idxes]
-			act_prob_batch = act_prob[batch_idxes]
+			old_prob_batch = old_prob[batch_idxes]
+			old_act_prob_batch = old_act_prob[batch_idxes]
 			adv_batch = adv[batch_idxes]
 			def f(updates, input):
 				params, opt_state, key = updates
-				obs, act, target, act_prob, adv = input
+				obs, act, target, old_prob, old_act_prob, adv = input
 				use_key, key = jax.random.split(key)
 				(total_loss, (c_loss, a_loss, entropy_loss)), grad = \
-					jax.value_and_grad(self._loss,has_aux = True)(params, obs, act, target, act_prob, adv, ent_coef, use_key)
+					jax.value_and_grad(self._loss,has_aux = True)(params, obs, act, target, old_prob, old_act_prob, adv, ent_coef, use_key)
 				updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
 				params = optax.apply_updates(params, updates)
 				return (params, opt_state, key), (c_loss, a_loss, entropy_loss)
-			updates, losses  = jax.lax.scan(f, (params, opt_state, key), (obses_batch, actions_batch, targets_batch, act_prob_batch, adv_batch))
+			updates, losses  = jax.lax.scan(f, (params, opt_state, key), (obses_batch, actions_batch, targets_batch, old_prob_batch, old_act_prob_batch, adv_batch))
 			params, opt_state, key = updates
 			cl, al, el = losses
 			critic_loss += jnp.mean(cl); actor_loss += jnp.mean(al); entropy_loss += jnp.mean(el)
@@ -158,35 +160,36 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
 		params, opt_state, key, critic_loss, actor_loss, entropy_loss = val
 		return params, opt_state, critic_loss/self.epoch_num, actor_loss/self.epoch_num, entropy_loss/self.epoch_num, targets
 
-	def _loss_discrete(self, params, obses, actions, targets, old_prob, adv, ent_coef, key):
+	def _loss_discrete(self, params, obses, actions, targets, old_prob, old_act_prob, adv, ent_coef, key):
 		feature = self.preproc.apply(params, key, obses)
 		vals = self.critic.apply(params, key, feature)
 		critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
 		
 		prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
-		ratio = jnp.exp(log_prob - old_prob)
-		cross_entropy1 = -adv*ratio; cross_entropy2 = -adv*jnp.clip(ratio,1.0 - self.ppo_eps,1.0 + self.ppo_eps)
-		actor_loss = jnp.mean(jnp.maximum(cross_entropy1,cross_entropy2))
+		ratio = jnp.exp(log_prob - old_act_prob)
+		kl = jnp.sum(old_prob * (jnp.log(old_prob) - jnp.log(prob)),axis=1, keepdims=True)
+		actor_loss = - jnp.mean(jnp.where((kl >= self.kl_range) & (ratio >= 1.0), adv * ratio - self.kl_coef * kl, adv * ratio))
 		entropy = prob * jnp.log(prob)
 		entropy_loss = jnp.mean(entropy)
 		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
 		return total_loss, (critic_loss, actor_loss, entropy_loss)
 	
-	def _loss_continuous(self, params, obses, actions, targets, old_prob, adv, ent_coef, key):
+	def _loss_continuous(self, params, obses, actions, targets, old_prob, old_act_prob, adv, ent_coef, key):
 		feature = self.preproc.apply(params, key, obses)
 		vals = self.critic.apply(params, key, feature)
 		critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
 		
 		prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
-		ratio = jnp.exp(log_prob - old_prob)
-		cross_entropy1 = -adv*ratio; cross_entropy2 = -adv*jnp.clip(ratio,1.0 - self.ppo_eps,1.0 + self.ppo_eps)
-		actor_loss = jnp.mean(jnp.maximum(cross_entropy1,cross_entropy2))
+		ratio = jnp.exp(log_prob - old_act_prob)
+		old_mu, old_std = old_prob
 		mu, log_std = prob
+		kl = old_std - log_std + (jnp.square(old_std) + jnp.square(old_mu - mu)) / (2.0 * jnp.square(jnp.exp(log_std))) - 0.5
+		actor_loss = - jnp.mean(jnp.where((kl >= self.kl_range) & (ratio >= 1.0), adv * ratio - self.kl_coef * kl, adv * ratio))
 		entropy_loss = jnp.mean(jnp.square(mu) - log_std)
 		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
 		return total_loss, (critic_loss, actor_loss, entropy_loss)
 	
-	def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="PPO",
+	def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TPPO",
 			  reset_num_timesteps=True, replay_wrapper=None):
 		
 		super().learn(total_timesteps, callback, log_interval, tb_log_name, reset_num_timesteps, replay_wrapper)

@@ -9,3 +9,4 @@ from haiku_baselines.TQC.tqc import TQC
 from haiku_baselines.TQC_IQN.tqc_iqn import TQC_IQN
 from haiku_baselines.A2C.a2c import A2C
 from haiku_baselines.PPO.ppo import PPO
+from haiku_baselines.TPPO.tppo import TPPO
