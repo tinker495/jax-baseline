@@ -132,7 +132,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
 		actor_loss = jnp.mean(jnp.maximum(cross_entropy1,cross_entropy2))
 		entropy = prob * jnp.log(prob)
 		entropy_loss = jnp.mean(entropy)
-		total_loss = self.val_coef * critic_loss + actor_loss # + ent_coef * entropy_loss
+		total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
 		return total_loss, (critic_loss, actor_loss, entropy_loss)
 	
 	def _loss_continuous(self, params, obses, actions, targets, old_prob, adv, key):
@@ -146,7 +146,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
 		actor_loss = jnp.mean(jnp.maximum(cross_entropy1,cross_entropy2))
 		mu, log_std = prob
 		entropy_loss = jnp.mean(jnp.square(mu) - log_std)
-		total_loss = self.val_coef * critic_loss + actor_loss # + ent_coef * entropy_loss
+		total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
 		return total_loss, (critic_loss, actor_loss, entropy_loss)
 	
 	def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="PPO",
