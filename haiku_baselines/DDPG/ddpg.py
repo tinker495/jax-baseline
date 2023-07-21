@@ -26,6 +26,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
 				 log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
 				 full_tensorboard_log, seed, optimizer)
 				
+		self.name = "DDPG"
 		self.exploration_final_eps = exploration_final_eps
 		self.exploration_initial_eps = exploration_initial_eps
 		self.exploration_fraction = exploration_fraction

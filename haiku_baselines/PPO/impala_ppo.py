@@ -15,11 +15,12 @@ class IMPALA_PPO(IMPALA_Family):
 				 ppo_eps = 0.2, mu_ratio = 0.0, epoch_num = 3,  log_interval=1, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False, seed=None, optimizer='adamw'):
 		super().__init__(workers, manager, buffer_size, gamma, lamda, learning_rate, update_freq, batch_size, sample_size, val_coef, ent_coef, rho_max, 
 						 log_interval, tensorboard_log, _init_setup_model, policy_kwargs, full_tensorboard_log, seed, optimizer)
+		
+		self.name = "IMPALA_PPO"
 		self.mu_ratio = mu_ratio
 		self.minibatch_size = 256
 		self.epoch_num = epoch_num
 		self.ppo_eps = ppo_eps
-		self.get_memory_setup()
 
 		if _init_setup_model:
 			self.setup_model() 

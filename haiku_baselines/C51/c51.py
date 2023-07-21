@@ -26,6 +26,7 @@ class C51(Q_Network_Family):
 				 param_noise, munchausen, log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
 				 full_tensorboard_log, seed, optimizer, compress_memory)
 		
+		self.name = "C51"
 		self.categorial_bar_n = categorial_bar_n
 		self.categorial_max = categorial_max
 		self.categorial_min = categorial_min

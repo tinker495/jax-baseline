@@ -20,6 +20,7 @@ class TRPO(Actor_Critic_Policy_Gradient_Family):
 				 log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
 				 full_tensorboard_log, seed, optimizer)
 		
+		self.name = "TRPO"
 		self.lamda = lamda
 		self.gae_normalize = gae_normalize
 		self.ppo_eps = ppo_eps

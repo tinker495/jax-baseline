@@ -11,7 +11,7 @@ from haiku_baselines.common.base_classes import TensorboardWriter, save, restore
 #from haiku_baselines.common.buffers import ReplayBuffer, PrioritizedReplayBuffer, EpisodicReplayBuffer, PrioritizedEpisodicReplayBuffer
 from haiku_baselines.common.cpprb_buffers import ReplayBuffer, NstepReplayBuffer, PrioritizedReplayBuffer, PrioritizedNstepReplayBuffer
 from haiku_baselines.common.schedules import LinearSchedule, ConstantSchedule
-from haiku_baselines.common.utils import convert_states
+from haiku_baselines.common.utils import convert_states, add_hparams
 from haiku_baselines.common.worker import gymMultiworker
 
 from mlagents_envs.environment import UnityEnvironment, ActionTuple
@@ -24,6 +24,7 @@ class Q_Network_Family(object):
 				 param_noise=False, munchausen=False, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
 				 full_tensorboard_log=False, seed=None, optimizer = 'adamw', compress_memory = False):
 		
+		self.name = "Q_Network_Family"
 		self.env = env
 		self.log_interval = log_interval
 		self.policy_kwargs = policy_kwargs
@@ -197,6 +198,7 @@ class Q_Network_Family(object):
 				self.learn_gym(pbar, callback, log_interval)
 			if self.env_type == "gymMultiworker":
 				self.learn_gymMultiworker(pbar, callback, log_interval)
+			add_hparams(self, self.summary, ['env/episode_reward'])
 			self.save_params(self.save_path)
 	
 	def learn_unity(self, pbar, callback=None, log_interval=100):

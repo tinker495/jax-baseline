@@ -25,6 +25,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
 				 log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
 				 full_tensorboard_log, seed, optimizer)
 		
+		self.name = "TQC"
 		self.policy_delay = policy_delay
 		self.ent_coef = ent_coef
 		self.target_entropy = -2.0*np.prod(self.action_size).astype(np.float32) #-np.sqrt(np.prod(self.action_size).astype(np.float32))

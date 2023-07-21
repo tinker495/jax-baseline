@@ -22,6 +22,8 @@ from gymnasium import spaces
 class IMPALA_Family(object):
 	def __init__(self, workers, manager = None, buffer_size=0,gamma=0.995, lamda=0.95, learning_rate=3e-4, update_freq = 100, batch_size=1024, sample_size=1, val_coef=0.2, ent_coef=0.01, rho_max = 1.0,
 				 log_interval=1, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
+		
+		self.name = "IMPALA_Family"
 		self.workers = workers
 		self.m = manager if manager is not None else mp.Manager()
 		self.buffer_size = buffer_size
@@ -50,6 +52,7 @@ class IMPALA_Family(object):
 		self.actor_builder = None
 		
 		self.get_env_setup()
+		self.get_memory_setup()
 
 	def save_params(self, path):
 		save(path, self.params)

@@ -20,6 +20,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
 				 log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
 				 full_tensorboard_log=False, seed=None, optimizer = 'adamw'):
 		
+		self.name = "Actor_Critic_Policy_Gradient_Family"
 		self.env = env
 		self.log_interval = log_interval
 		self.policy_kwargs = policy_kwargs

@@ -19,6 +19,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
 				 log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
 				 full_tensorboard_log, seed, optimizer)
 		
+		self.name = "TPPO"
 		self.lamda = lamda
 		self.gae_normalize = gae_normalize
 		self.kl_range = kl_range

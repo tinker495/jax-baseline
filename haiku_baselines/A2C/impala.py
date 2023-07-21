@@ -17,7 +17,7 @@ class IMPALA(IMPALA_Family):
 		super().__init__(workers, manager, buffer_size, gamma, lamda, learning_rate, update_freq, batch_size, sample_size, val_coef, ent_coef, rho_max, 
 						 log_interval, tensorboard_log, _init_setup_model, policy_kwargs, full_tensorboard_log, seed, optimizer)
 		
-		self.get_memory_setup()
+		self.name = "IMPALA_AC"
 
 		if _init_setup_model:
 			self.setup_model() 

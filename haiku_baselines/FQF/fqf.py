@@ -28,6 +28,7 @@ class FQF(Q_Network_Family):
 				 param_noise, munchausen, log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
 				 full_tensorboard_log, seed, optimizer, compress_memory)
 		
+		self.name = "FQF"
 		self.n_support = n_support
 		self.delta = delta
 		self.ent_coef = 1e-2

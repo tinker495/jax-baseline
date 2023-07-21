@@ -28,6 +28,7 @@ class IQN(Q_Network_Family):
 				 param_noise, munchausen, log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
 				 full_tensorboard_log, seed, optimizer, compress_memory)
 		
+		self.name = "IQN"
 		self.n_support = n_support
 		self.delta = delta
 		self.CVaR = CVaR

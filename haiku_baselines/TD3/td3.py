@@ -24,6 +24,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
 				 log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
 				 full_tensorboard_log, seed, optimizer)
 		
+		self.name = "TD3"
 		self.action_noise = action_noise
 		self.target_action_noise = action_noise*target_action_noise_mul
 		self.action_noise_clamp = 0.5 #self.target_action_noise*1.5

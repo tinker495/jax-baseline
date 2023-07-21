@@ -28,6 +28,7 @@ class QRDQN(Q_Network_Family):
 				 param_noise, munchausen, log_interval, tensorboard_log, _init_setup_model, policy_kwargs, 
 				 full_tensorboard_log, seed, optimizer, compress_memory)
 		
+		self.name = "QRDQN"
 		self.n_support = n_support
 		self.delta = delta
 		
