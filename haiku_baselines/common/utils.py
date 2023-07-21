@@ -125,15 +125,17 @@ def formatData(t,s):
 def get_hyper_params(agent):
     return dict([(attr, getattr(agent, attr)) for attr in dir(agent) if not callable(getattr(agent, attr)) and not attr.startswith("__") and not attr.startswith("_") and isinstance(getattr(agent, attr), (int, float, str, bool))])
 
-def add_hparams(agent, writer, metric):
+def add_hparams(agent, writer, metric_dict, step):
 	from tensorboardX.summary import hparams
 	hparam_dict = get_hyper_params(agent)
-	metric_dict = dict([m,None] for m in metric)
+	#metric_dict = dict([m,None] for m in metric)
 	exp, ssi, sei = hparams(hparam_dict, metric_dict)
 
 	writer.file_writer.add_summary(exp)
 	writer.file_writer.add_summary(ssi)
 	writer.file_writer.add_summary(sei)
+	for k, v in metric_dict.items():
+		writer.add_scalar(k, v, step)
 
 def print_param(name,params):
 	print(name, end ="")

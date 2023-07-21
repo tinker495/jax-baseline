@@ -176,12 +176,12 @@ class Actor_Critic_Policy_Gradient_Family(object):
 		pbar = trange(total_timesteps, miniters=log_interval, smoothing=0.01)
 		with TensorboardWriter(self.tensorboard_log, tb_log_name) as (self.summary, self.save_path):
 			if self.env_type == "unity":
-				self.learn_unity(pbar, callback, log_interval)
+				score_mean = self.learn_unity(pbar, callback, log_interval)
 			if self.env_type == "gym":
-				self.learn_gym(pbar, callback, log_interval)
+				score_mean = self.learn_gym(pbar, callback, log_interval)
 			if self.env_type == "gymMultiworker":
-				self.learn_gymMultiworker(pbar, callback, log_interval)
-			add_hparams(self, self.summary, ['env/episode_reward'])
+				score_mean = self.learn_gymMultiworker(pbar, callback, log_interval)
+			add_hparams(self, self.summary, {"env/episode_reward":score_mean},total_timesteps)
 			self.save_params(self.save_path)
 	
 	def discription(self):
@@ -249,6 +249,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
 			
 			if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
 				pbar.set_description(self.discription())
+		return np.mean(self.scoreque)
 		
 	def learn_gym(self, pbar, callback=None, log_interval=100):
 		state, info = self.env.reset()
@@ -282,6 +283,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
 			
 			if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
 				pbar.set_description(self.discription())
+		return np.mean(self.scoreque)
 				
 	def learn_gymMultiworker(self, pbar, callback=None, log_interval=100):
 		state,_,_,_,_,_ = self.env.get_steps()
@@ -317,6 +319,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
 			
 			if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
 				pbar.set_description(self.discription())
+		return np.mean(self.scoreque)
 	
 	def test(self, episode = 10, tb_log_name=None):
 		if tb_log_name is None:
