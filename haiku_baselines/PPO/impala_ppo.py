@@ -86,7 +86,7 @@ class IMPALA_PPO(IMPALA_Family):
 	def train_step(self, steps):
 		data = self.buffer.sample(self.sample_size)
 
-		self.params, self.opt_state, critic_loss, actor_loss, entropy_loss, rho, targets = self._train_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, 
+		self.params, self.opt_state, critic_loss, actor_loss, entropy_loss, rho, targets = self._train_step(self.params, self.opt_state, next(self.key_seq), 
 																											data[0], data[1], data[2], data[3], data[4], data[5], data[6])
 				
 		if steps % self.log_interval == 0:
@@ -121,7 +121,7 @@ class IMPALA_PPO(IMPALA_Family):
 		else:
 			return obses, actions, vs, pi_prob, rho, adv
 
-	def _train_step(self, params, opt_state, key, ent_coef, obses, actions, mu_log_prob, rewards, nxtobses, dones, terminals):
+	def _train_step(self, params, opt_state, key, obses, actions, mu_log_prob, rewards, nxtobses, dones, terminals):
 		obses, actions, vs, pi_prob, rho, adv = self.preprocess(params, key, obses, actions, mu_log_prob, rewards, nxtobses, dones, terminals)
 		def i_f(idx, vals):
 			params, opt_state, key, critic_loss, actor_loss, entropy_loss = vals
@@ -136,7 +136,7 @@ class IMPALA_PPO(IMPALA_Family):
 				params, opt_state, key = updates
 				obs, act, vs, pi_prob, adv = input
 				use_key, key = jax.random.split(key)
-				(total_loss, (critic_loss, actor_loss, entropy_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obs, act, vs, pi_prob, adv, ent_coef, use_key)
+				(total_loss, (critic_loss, actor_loss, entropy_loss)), grad = jax.value_and_grad(self._loss,has_aux = True)(params, obs, act, vs, pi_prob, adv, use_key)
 				updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
 				params = optax.apply_updates(params, updates)
 				return (params, opt_state, key), (critic_loss, actor_loss, entropy_loss)
@@ -149,7 +149,7 @@ class IMPALA_PPO(IMPALA_Family):
 		params, opt_state, key, critic_loss, actor_loss, entropy_loss = val
 		return params, opt_state, critic_loss/self.epoch_num, actor_loss/self.epoch_num, entropy_loss/self.epoch_num, jnp.mean(rho), jnp.mean(vs)
 
-	def _loss_discrete(self, params, obses, actions, vs, mu_prob, adv, ent_coef, key):
+	def _loss_discrete(self, params, obses, actions, vs, mu_prob, adv, key):
 		feature = self.preproc.apply(params, key, obses)
 		vals = self.critic.apply(params, key, feature)
 		critic_loss = jnp.mean(jnp.square(vs - vals))
@@ -161,10 +161,10 @@ class IMPALA_PPO(IMPALA_Family):
 		actor_loss = jnp.mean(jnp.maximum(cross_entropy1,cross_entropy2))
 		entropy = prob * jnp.log(prob)
 		entropy_loss = jnp.mean(entropy)
-		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
+		total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
 		return total_loss, (critic_loss, actor_loss, entropy_loss)
 	
-	def _loss_continuous(self, params, obses, actions, vs, mu_prob, adv, ent_coef, key):
+	def _loss_continuous(self, params, obses, actions, vs, mu_prob, adv, key):
 		feature = self.preproc.apply(params, key, obses)
 		vals = self.critic.apply(params, key, feature)
 		critic_loss = jnp.mean(jnp.square(vs - vals))
@@ -176,7 +176,7 @@ class IMPALA_PPO(IMPALA_Family):
 		actor_loss = jnp.mean(jnp.maximum(cross_entropy1,cross_entropy2))
 		mu, log_std = prob
 		entropy_loss = jnp.mean(jnp.square(mu) - log_std)
-		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
+		total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
 		return total_loss, (critic_loss, actor_loss, entropy_loss)
 	
 	def learn(self, total_trainstep, callback=None, log_interval=10, tb_log_name="IMPALA_PPO",

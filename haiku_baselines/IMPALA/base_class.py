@@ -12,10 +12,9 @@ from tqdm.auto import trange
 from collections import deque
 
 from haiku_baselines.common.base_classes import TensorboardWriter, save, restore, select_optimizer
-from haiku_baselines.common.utils import convert_states
+from haiku_baselines.common.utils import convert_states, convert_jax, add_hparams
 from haiku_baselines.IMPALA.worker import Impala_Worker
 from haiku_baselines.IMPALA.cpprb_buffers import ImpalaBuffer
-from haiku_baselines.common.utils import convert_jax, discount_with_terminal, print_param
 
 from mlagents_envs.environment import UnityEnvironment, ActionTuple
 from gymnasium import spaces
@@ -154,7 +153,8 @@ class IMPALA_Family(object):
 			self.learn_unity(pbar, callback, log_interval)
 		if self.env_type == "gym":
 			self.learn_gym(pbar, callback, log_interval)
-		
+			
+		#add_hparams(self, self.logger_server, ["score", "loss"])
 		self.save_params(ray.get(self.logger_server.get_log_dir.remote()))
 
 	def learn_unity(self, pbar, callback, log_interval):

@@ -105,6 +105,14 @@ def get_vtrace(rewards, rhos, c_ts, dones, terminals, values, next_values, gamma
 	v = A + values
 	return  v
 
+def kl_divergence_discrete(p, q, eps: float = 2 ** -17):
+    return p.dot(jnp.log(p + eps) - jnp.log(q + eps))
+
+def kl_divergence_continuous(p, q):
+    p_mu, p_std = p
+    q_mu, q_std = q
+    return p_std - q_std + (q_std ** 2 + (q_mu - p_mu) ** 2) / (2.0 * p_std ** 2) - 0.5
+
 def formatData(t,s):
 	if not isinstance(t,dict) and not isinstance(t,list):
 		print(": "+str(t), end ="")
@@ -113,6 +121,19 @@ def formatData(t,s):
 			print("\n"+"\t"*s+str(key), end ="")
 			if not isinstance(t,list):
 				formatData(t[key],s+1)
+    
+def get_hyper_params(agent):
+    return dict([(attr, getattr(agent, attr)) for attr in dir(agent) if not callable(getattr(agent, attr)) and not attr.startswith("__") and not attr.startswith("_") and isinstance(getattr(agent, attr), (int, float, str, bool))])
+
+def add_hparams(agent, writer, metric):
+	from tensorboardX.summary import hparams
+	hparam_dict = get_hyper_params(agent)
+	metric_dict = dict([m,None] for m in metric)
+	exp, ssi, sei = hparams(hparam_dict, metric_dict)
+
+	writer.file_writer.add_summary(exp)
+	writer.file_writer.add_summary(ssi)
+	writer.file_writer.add_summary(sei)
 
 def print_param(name,params):
 	print(name, end ="")

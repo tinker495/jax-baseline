@@ -9,7 +9,7 @@ from collections import deque
 
 from haiku_baselines.common.base_classes import TensorboardWriter, save, restore, select_optimizer
 from haiku_baselines.common.cpprb_buffers import EpochBuffer
-from haiku_baselines.common.utils import convert_states
+from haiku_baselines.common.utils import convert_states, convert_jax, add_hparams
 from haiku_baselines.common.worker import gymMultiworker
 
 from mlagents_envs.environment import UnityEnvironment, ActionTuple
@@ -123,32 +123,50 @@ class Actor_Critic_Policy_Gradient_Family(object):
 	
 	def _train_step(self, steps):
 		pass
+		
+	def _get_actions_discrete(self, params, obses, key = None) -> jnp.ndarray:
+		prob = jax.nn.softmax(self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))),axis=1,)
+		return prob
 	
-	def _get_actions_discrete(self):
-		pass
+	def _get_actions_continuous(self, params, obses, key = None) -> jnp.ndarray:
+		mu,std = self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))
+		return mu, jnp.exp(std)
+
+	def action_discrete(self,obs):
+		prob = np.asarray(self._get_actions(self.params, obs))
+		return np.expand_dims(np.stack([np.random.choice(self.action_size[0],p=p) for p in prob],axis=0),axis=1)
 	
-	def _get_actions_continuous(self):
+	def action_continuous(self,obs):
+		mu, std = self._get_actions(self.params, obs)
+		return np.random.normal(mu, std)
+
+	def get_logprob_discrete(self, prob, action, key, out_prob=False):
+		prob = jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0)
+		action = action.astype(jnp.int32)
+		if out_prob:
+			return prob, jnp.log(jnp.take_along_axis(prob, action, axis=1))
+		else:
+			return jnp.log(jnp.take_along_axis(prob, action, axis=1))
+	
+	def get_logprob_continuous(self, prob, action, key, out_prob=False):
+		mu, log_std = prob
+		std = jnp.exp(log_std)
+		if out_prob:
+			return prob, - (0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)),axis=-1,keepdims=True) + 
+								   jnp.sum(log_std,axis=-1,keepdims=True) + 
+								   0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32))
+		else:
+			return - (0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)),axis=-1,keepdims=True) + 
+							 jnp.sum(log_std,axis=-1,keepdims=True) + 
+							 0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32))
+	
+	def _loss_continuous(self):
 		pass
 	
 	def _loss_discrete(self):
 		pass
 	
 	def _get_actions(self, params, obses) -> np.ndarray:
-		pass
-	
-	def action_discrete(self,obs,steps):
-		pass
-	
-	def action_continuous(self,obs,steps):
-		pass
-	
-	def _loss_continuous(self):
-		pass
-	
-	def get_logprob_discrete(self,params, feature, action, key, out_prob=False):
-		pass
-	
-	def get_logprob_continuous(self,params, feature, action, key, out_prob=False):
 		pass
 		
 	def learn(self, total_timesteps, callback=None, log_interval=1000, tb_log_name="Q_network",
@@ -162,6 +180,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
 				self.learn_gym(pbar, callback, log_interval)
 			if self.env_type == "gymMultiworker":
 				self.learn_gymMultiworker(pbar, callback, log_interval)
+			add_hparams(self, self.summary, ['env/episode_reward'])
 			self.save_params(self.save_path)
 	
 	def discription(self):

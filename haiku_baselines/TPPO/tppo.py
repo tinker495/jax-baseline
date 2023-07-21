@@ -8,11 +8,11 @@ from copy import deepcopy
 from haiku_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from haiku_baselines.TPPO.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import convert_jax, get_gaes, print_param
+from haiku_baselines.common.utils import convert_jax, get_gaes, print_param, kl_divergence_discrete, kl_divergence_continuous
 
 class TPPO(Actor_Critic_Policy_Gradient_Family):
 	def __init__(self, env, gamma=0.995, lamda = 0.95, gae_normalize = False, learning_rate=3e-4, batch_size=256, minibatch_size=32, epoch_num=4,val_coef=0.5, ent_coef = 0.001, 
-				 kl_range = 0.0008, kl_coef = 30, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
+				 kl_range = 0.05, kl_coef = 5, log_interval=200, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, 
 				 full_tensorboard_log=False, seed=None, optimizer = 'rmsprop'):
 		
 		super(TPPO, self).__init__(env, gamma, learning_rate, batch_size, val_coef, ent_coef,
@@ -58,60 +58,25 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
 		self._get_actions = jax.jit(self._get_actions)
 		self._preprocess = jax.jit(self._preprocess)
 		self._train_step = jax.jit(self._train_step)
-		
-	def _get_actions_discrete(self, params, obses, key = None) -> jnp.ndarray:
-		prob = jax.nn.softmax(self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))),axis=1,)
-		return prob
-	
-	def _get_actions_continuous(self, params, obses, key = None) -> jnp.ndarray:
-		mu,std = self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))
-		return mu, jnp.exp(std)
-	
-	def get_logprob_discrete(self, prob, action, key, out_prob=False):
-		prob = jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0)
-		action = action.astype(jnp.int32)
-		if out_prob:
-			return prob, jnp.log(jnp.take_along_axis(prob, action, axis=1))
-		else:
-			return jnp.log(jnp.take_along_axis(prob, action, axis=1))
-	
-	def get_logprob_continuous(self, prob, action, key, out_prob=False):
-		mu, log_std = prob
-		std = jnp.exp(log_std)
-		if out_prob:
-			return prob, - (0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)),axis=-1,keepdims=True) + 
-								   jnp.sum(log_std,axis=-1,keepdims=True) + 
-								   0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32))
-		else:
-			return - (0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)),axis=-1,keepdims=True) + 
-							 jnp.sum(log_std,axis=-1,keepdims=True) + 
-							 0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32))
-	
 	
 	def discription(self):
 		return "score : {:.3f}, loss : {:.3f} |".format(
 									np.mean(self.scoreque), np.mean(self.lossque)
 									)
-	
-	def action_discrete(self,obs):
-		prob = np.asarray(self._get_actions(self.params, obs))
-		return np.expand_dims(np.stack([np.random.choice(self.action_size[0],p=p) for p in prob],axis=0),axis=1)
-	
-	def action_continuous(self,obs):
-		mu, std = self._get_actions(self.params, obs)
-		return np.random.normal(mu, std)
+
 	
 	def train_step(self, steps):
 		# Sample a batch from the replay buffer
 		data = self.buffer.get_buffer()
 		
-		self.params, self.opt_state, critic_loss, actor_loss, entropy_loss, targets = self._train_step(self.params, self.opt_state, next(self.key_seq), self.ent_coef, **data)
+		self.params, self.opt_state, critic_loss, actor_loss, entropy_loss, kls, targets = self._train_step(self.params, self.opt_state, next(self.key_seq), **data)
 		
 		if self.summary:
 			self.summary.add_scalar("loss/critic_loss", critic_loss, steps)
 			self.summary.add_scalar("loss/actor_loss", actor_loss, steps)
 			self.summary.add_scalar("loss/entropy_loss", entropy_loss, steps)
-			self.summary.add_scalar("loss/mean_target", float(jnp.mean(targets)), steps)
+			self.summary.add_scalar("loss/mean_target", targets, steps)
+			self.summary.add_scalar("loss/kl_divergense", kls, steps)
 			
 		return critic_loss
 	
@@ -130,10 +95,10 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
 			adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
 		return obses, actions, targets, prob, pi_prob, adv
 	
-	def _train_step(self, params, opt_state, key, ent_coef, obses, actions, rewards, nxtobses, dones, terminals):
+	def _train_step(self, params, opt_state, key, obses, actions, rewards, nxtobses, dones, terminals):
 		obses, actions, targets, old_prob, old_act_prob, adv = self._preprocess(params, key, obses, actions, rewards, nxtobses, dones, terminals)
 		def i_f(idx, vals):
-			params, opt_state, key, critic_loss, actor_loss, entropy_loss = vals
+			params, opt_state, key, critic_loss, actor_loss, entropy_loss, kls = vals
 			use_key, key = jax.random.split(key)
 			batch_idxes = jax.random.permutation(use_key, jnp.arange(targets.shape[0])).reshape(-1,self.minibatch_size)
 			obses_batch = [o[batch_idxes] for o in obses]
@@ -146,48 +111,47 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
 				params, opt_state, key = updates
 				obs, act, target, old_prob, old_act_prob, adv = input
 				use_key, key = jax.random.split(key)
-				(total_loss, (c_loss, a_loss, entropy_loss)), grad = \
-					jax.value_and_grad(self._loss,has_aux = True)(params, obs, act, target, old_prob, old_act_prob, adv, ent_coef, use_key)
+				(total_loss, (c_loss, a_loss, entropy_loss, kl)), grad = \
+					jax.value_and_grad(self._loss,has_aux = True)(params, obs, act, target, old_prob, old_act_prob, adv, use_key)
 				updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
 				params = optax.apply_updates(params, updates)
-				return (params, opt_state, key), (c_loss, a_loss, entropy_loss)
+				return (params, opt_state, key), (c_loss, a_loss, entropy_loss, kl)
 			updates, losses  = jax.lax.scan(f, (params, opt_state, key), (obses_batch, actions_batch, targets_batch, old_prob_batch, old_act_prob_batch, adv_batch))
 			params, opt_state, key = updates
-			cl, al, el = losses
-			critic_loss += jnp.mean(cl); actor_loss += jnp.mean(al); entropy_loss += jnp.mean(el)
-			return params, opt_state, key, critic_loss, actor_loss, entropy_loss
-		val = jax.lax.fori_loop(0, self.epoch_num, i_f, (params, opt_state, key, 0.0, 0.0, 0.0))
-		params, opt_state, key, critic_loss, actor_loss, entropy_loss = val
-		return params, opt_state, critic_loss/self.epoch_num, actor_loss/self.epoch_num, entropy_loss/self.epoch_num, targets
+			cl, al, el, kl = losses
+			critic_loss += jnp.mean(cl); actor_loss += jnp.mean(al); entropy_loss += jnp.mean(el); kls += jnp.mean(kl)
+			return params, opt_state, key, critic_loss, actor_loss, entropy_loss, kls
+		val = jax.lax.fori_loop(0, self.epoch_num, i_f, (params, opt_state, key, 0.0, 0.0, 0.0, 0.0))
+		params, opt_state, key, critic_loss, actor_loss, entropy_loss, kls = val
+		return params, opt_state, critic_loss/self.epoch_num, actor_loss/self.epoch_num, entropy_loss/self.epoch_num, kls/self.epoch_num, jnp.mean(targets)
 
-	def _loss_discrete(self, params, obses, actions, targets, old_prob, old_act_prob, adv, ent_coef, key):
+	def _loss_discrete(self, params, obses, actions, targets, old_prob, old_act_prob, adv, key):
 		feature = self.preproc.apply(params, key, obses)
 		vals = self.critic.apply(params, key, feature)
 		critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
 		
 		prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
 		ratio = jnp.exp(log_prob - old_act_prob)
-		kl = jnp.sum(old_prob * (jnp.log(old_prob) - jnp.log(prob)),axis=1, keepdims=True)
-		actor_loss = - jnp.mean(jnp.where((kl >= self.kl_range) & (ratio >= 1.0), adv * ratio - self.kl_coef * kl, adv * ratio))
+		kl = jax.vmap(kl_divergence_discrete)(old_prob, prob)
+		actor_loss = - jnp.mean(jnp.where((kl >= self.kl_range) & (ratio > 1.0), adv * ratio - self.kl_coef * kl, adv * ratio))
 		entropy = prob * jnp.log(prob)
 		entropy_loss = jnp.mean(entropy)
-		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
-		return total_loss, (critic_loss, actor_loss, entropy_loss)
+		total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
+		return total_loss, (critic_loss, actor_loss, entropy_loss, jnp.mean(kl))
 	
-	def _loss_continuous(self, params, obses, actions, targets, old_prob, old_act_prob, adv, ent_coef, key):
+	def _loss_continuous(self, params, obses, actions, targets, old_prob, old_act_prob, adv, key):
 		feature = self.preproc.apply(params, key, obses)
 		vals = self.critic.apply(params, key, feature)
 		critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
 		
 		prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
 		ratio = jnp.exp(log_prob - old_act_prob)
-		old_mu, old_std = old_prob
+		kl = jax.vmap(kl_divergence_continuous)(old_prob, prob)
+		actor_loss = - jnp.mean(jnp.where((kl >= self.kl_range) & (ratio > 1.0), adv * ratio - self.kl_coef * kl, adv * ratio))
 		mu, log_std = prob
-		kl = old_std - log_std + (jnp.square(old_std) + jnp.square(old_mu - mu)) / (2.0 * jnp.square(jnp.exp(log_std))) - 0.5
-		actor_loss = - jnp.mean(jnp.where((kl >= self.kl_range) & (ratio >= 1.0), adv * ratio - self.kl_coef * kl, adv * ratio))
 		entropy_loss = jnp.mean(jnp.square(mu) - log_std)
-		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
-		return total_loss, (critic_loss, actor_loss, entropy_loss)
+		total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
+		return total_loss, (critic_loss, actor_loss, entropy_loss, jnp.mean(kl))
 	
 	def learn(self, total_timesteps, callback=None, log_interval=100, tb_log_name="TPPO",
 			  reset_num_timesteps=True, replay_wrapper=None):

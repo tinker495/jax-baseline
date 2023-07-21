@@ -8,11 +8,11 @@ from itertools import repeat
 from haiku_baselines.IMPALA.base_class import IMPALA_Family
 from haiku_baselines.TPPO.network import Actor, Critic
 from haiku_baselines.common.Module import PreProcess
-from haiku_baselines.common.utils import convert_jax, get_vtrace, print_param
+from haiku_baselines.common.utils import convert_jax, get_vtrace, print_param, kl_divergence_discrete, kl_divergence_continuous
 
 class IMPALA_TPPO(IMPALA_Family):
 	def __init__(self, workers, manager=None, buffer_size=0, gamma=0.995, lamda=0.95, learning_rate=0.0003, update_freq = 100, batch_size=1024, sample_size=1, val_coef=0.2, ent_coef=0.01, rho_max=1.0,
-				 kl_range = 0.0008, kl_coef = 10, mu_ratio = 0.0, epoch_num = 3,  log_interval=1, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False, seed=None, optimizer='adamw'):
+				 kl_range = 0.05, kl_coef = 5, mu_ratio = 0.0, epoch_num = 3,  log_interval=1, tensorboard_log=None, _init_setup_model=True, policy_kwargs=None, full_tensorboard_log=False, seed=None, optimizer='adamw'):
 		super().__init__(workers, manager, buffer_size, gamma, lamda, learning_rate, update_freq, batch_size, sample_size, val_coef, ent_coef, rho_max, 
 						 log_interval, tensorboard_log, _init_setup_model, policy_kwargs, full_tensorboard_log, seed, optimizer)
 		self.mu_ratio = mu_ratio
@@ -158,8 +158,8 @@ class IMPALA_TPPO(IMPALA_Family):
 		
 		prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
 		ratio = jnp.exp(log_prob - old_act_prob)
-		kl = jnp.sum(old_prob * (jnp.log(old_prob) - jnp.log(prob)),axis=1, keepdims=True)
-		actor_loss = - jnp.mean(jnp.where((kl >= self.kl_range) & (ratio >= 1.0), adv * ratio - self.kl_coef * kl, adv * ratio))
+		kl = jax.vmap(kl_divergence_discrete)(old_prob, prob)
+		actor_loss = - jnp.mean(jnp.where((kl >= self.kl_range) & (ratio > 1.0), adv * ratio - self.kl_coef * kl, adv * ratio))
 		entropy = prob * jnp.log(prob)
 		entropy_loss = jnp.mean(entropy)
 		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
@@ -172,10 +172,9 @@ class IMPALA_TPPO(IMPALA_Family):
 		
 		prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
 		ratio = jnp.exp(log_prob - old_act_prob)
-		old_mu, old_std = old_prob
+		kl = jax.vmap(kl_divergence_continuous)(old_prob, prob)
+		actor_loss = - jnp.mean(jnp.where((kl >= self.kl_range) & (ratio > 1.0), adv * ratio - self.kl_coef * kl, adv * ratio))
 		mu, log_std = prob
-		kl = old_std - log_std + (jnp.square(old_std) + jnp.square(old_mu - mu)) / (2.0 * jnp.square(jnp.exp(log_std))) - 0.5
-		actor_loss = - jnp.mean(jnp.where((kl >= self.kl_range) & (ratio >= 1.0), adv * ratio - self.kl_coef * kl, adv * ratio))
 		entropy_loss = jnp.mean(jnp.square(mu) - log_std)
 		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
 		return total_loss, (critic_loss, actor_loss, entropy_loss)
