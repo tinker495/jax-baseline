@@ -8,7 +8,7 @@ import numpy as np
 import ray
 
 from abc import ABC
-from gym import spaces
+from gymnasium import spaces
 
 class Multiworker(ABC):
 	def __init__(self,env_id, worker_num = 8):
