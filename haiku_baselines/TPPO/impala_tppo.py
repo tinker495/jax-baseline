@@ -159,7 +159,7 @@ class IMPALA_TPPO(IMPALA_Family):
 		prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
 		ratio = jnp.exp(log_prob - old_act_prob)
 		kl = jax.vmap(kl_divergence_discrete)(old_prob, prob)
-		actor_loss = - jnp.mean(jnp.where((kl >= self.kl_range) & (ratio > 1.0), adv * ratio - self.kl_coef * kl, adv * ratio))
+		actor_loss = - jnp.mean(jnp.where((kl >= self.kl_range) & (adv*(ratio - 1.0) > 0.0), adv * ratio - self.kl_coef * kl, adv * ratio))
 		entropy = prob * jnp.log(prob)
 		entropy_loss = jnp.mean(entropy)
 		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
@@ -173,7 +173,7 @@ class IMPALA_TPPO(IMPALA_Family):
 		prob, log_prob = self.get_logprob(self.actor.apply(params, key, feature), actions, key, out_prob=True)
 		ratio = jnp.exp(log_prob - old_act_prob)
 		kl = jax.vmap(kl_divergence_continuous)(old_prob, prob)
-		actor_loss = - jnp.mean(jnp.where((kl >= self.kl_range) & (ratio > 1.0), adv * ratio - self.kl_coef * kl, adv * ratio))
+		actor_loss = - jnp.mean(jnp.where((kl >= self.kl_range) & (adv*(ratio - 1.0) > 0.0), adv * ratio - self.kl_coef * kl, adv * ratio))
 		mu, log_std = prob
 		entropy_loss = jnp.mean(jnp.square(mu) - log_std)
 		total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
