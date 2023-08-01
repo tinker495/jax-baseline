@@ -13,7 +13,7 @@ optax
 numpy
 ray[default]
 colabgymrender
-cpprb @ git+https://github.com/TinkTheBoush/cpprb.git
+cpprb @ git+https://github.com/tinker495/cpprb.git
 tensorboardX
 imageio-ffmpeg
 opencv-python
