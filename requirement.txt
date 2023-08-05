@@ -1,5 +1,6 @@
 requests
 mlagents_envs
+swig
 gymnasium
 gymnasium[atari,accept-rom-license,box2d,mujoco]
 mujoco
