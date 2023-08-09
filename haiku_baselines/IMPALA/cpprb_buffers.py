@@ -93,8 +93,10 @@ class ImpalaBuffer:
 		return transitions
 
 	def replay_sample(self, stack_size: int):
-		while len(self.replay_buffer) < stack_size or not self.queue.empty():
+		while True:
 			self.replay_buffer.extend(self.queue.get_nowait_batch(self.queue.size()))
+			if len(self.replay_buffer) >= stack_size:
+				break
 		gets = random.sample(self.replay_buffer, stack_size)
 		transitions = batch([get[0] for get in gets],
 							[get[1] for get in gets],

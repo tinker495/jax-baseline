@@ -77,7 +77,7 @@ class Impala_Worker(object):
 						score = 0
 						eplen = 0
 						episode += 1
-				queue.put(local_buffer.get_buffer(), block=True)
+				queue.put(local_buffer.get_buffer())
 		finally:
 			if stop.is_set():
 				print("worker stoped")
