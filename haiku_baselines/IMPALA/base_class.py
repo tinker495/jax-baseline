@@ -172,7 +172,7 @@ class IMPALA_Family(object):
 			u.set()
 
 		cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
-		param_server = Param_server.remote(cpu_param)
+		param_server = Param_server.remote(ray.put(cpu_param))
 
 		jobs = []
 		for idx in range(self.worker_num):
