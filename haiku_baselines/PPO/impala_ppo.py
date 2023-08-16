@@ -85,7 +85,7 @@ class IMPALA_PPO(IMPALA_Family):
 							 0.5 * jnp.log(2 * np.pi)* jnp.asarray(action.shape[-1],dtype=jnp.float32))
 
 	def train_step(self, steps):
-		data = self.buffer.sample(self.sample_size)
+		data = self.buffer.sample()
 
 		self.params, self.opt_state, critic_loss, actor_loss, entropy_loss, rho, targets = self._train_step(self.params, self.opt_state, next(self.key_seq), 
 																											data[0], data[1], data[2], data[3], data[4], data[5], data[6])

@@ -98,7 +98,7 @@ class IMPALA_Family(object):
 		pass
 
 	def get_memory_setup(self):
-		self.buffer = ImpalaBuffer(self.buffer_size, self.worker_num, self.observation_space, discrete=(self.action_type == 'discrete'), action_space = self.action_size, manager = self.m)
+		self.buffer = ImpalaBuffer(self.buffer_size, self.worker_num, self.observation_space, discrete=(self.action_type == 'discrete'), action_space = self.action_size, sample_size=self.sample_size)
 	def setup_model(self):
 		pass
 
@@ -202,7 +202,7 @@ class IMPALA_Family(object):
 			
 			if steps % self.update_freq == 0:
 				cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
-				param_server.update_params.remote(cpu_param)
+				param_server.update_params.remote(ray.put(cpu_param))
 				for u in update:
 					u.set()
 		self.logger_server.last_update.remote()

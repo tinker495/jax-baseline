@@ -45,7 +45,7 @@ if __name__ == "__main__":
 
 	manger = mp.get_context().Manager()
 
-	ray.init(num_cpus=args.worker + 3, num_gpus=0)
+	ray.init(num_cpus=args.worker + 4, num_gpus=0)
 
 	workers = [Impala_Worker.remote(env_name) for i in range(args.worker)]
 	

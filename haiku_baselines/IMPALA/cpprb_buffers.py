@@ -5,6 +5,7 @@ from collections import deque, namedtuple
 import multiprocessing as mp
 import numpy as np
 import cpprb
+import ray
 from ray.util.queue import Queue
 import copy
 
@@ -39,22 +40,46 @@ class EpochBuffer:
 							trans['terminal'])
 		return transitions
 
-class ImpalaBuffer:
-	def __init__(self, size: int, actor_num : int, observation_space: list, discrete=True, action_space = 1, manager = None, compress_memory = False):
-		self.max_size = size
+@ray.remote(num_cpus=1)
+class Buffer_getter:
+	def __init__(self, queue, env_dict, actor_num, size, sample_size):
+		self.queue = queue
+		self.env_dict = env_dict
 		self.actor_num = actor_num
+		self.size = size
 		self.replay = size > 0
+		self.sample_size = sample_size
+		if self.replay:
+			self.replay_buffer = deque(maxlen=size)
+			self._sample = self.replay_sample
+		else:
+			self._sample = self.queue_sample
+
+	def sample(self):
+		return self._sample()
+
+	def queue_sample(self):
+		gets = [self.queue.get() for idx in range(self.sample_size)]
+		transitions = batch(*zip(*gets))
+		return transitions
+	
+	def replay_sample(self):
+		while True:
+			self.replay_buffer.extend(self.queue.get_nowait_batch(self.queue.size()))
+			if len(self.replay_buffer) >= self.sample_size:
+				break
+		gets = random.sample(self.replay_buffer, self.sample_size)
+		transitions = batch(*zip(*gets))
+		return transitions
+
+class ImpalaBuffer:
+	def __init__(self, replay_size: int, actor_num : int, observation_space: list, discrete=True, action_space = 1, sample_size = 32):
+		self.max_size = replay_size
+		self.actor_num = actor_num
 		self.obsdict = dict(("obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
 						for idx,o in enumerate(observation_space))
 		self.nextobsdict = dict(("next_obs{}".format(idx),{"shape": o,"dtype": np.uint8} if len(o) >= 3 else {"shape": o,"dtype": np.float32})
 						for idx,o in enumerate(observation_space))
-		self.obscompress = None
-		if compress_memory:
-			self.obscompress = []
-			for k in self.obsdict:
-				if len(self.obsdict[k]["shape"]) >= 3:
-					self.obscompress.append(k)
-					del self.nextobsdict[f'next_{k}']
 
 		self.env_dict = {**self.obsdict,
 					"action": {"shape": 1 if discrete else action_space},
@@ -65,12 +90,9 @@ class ImpalaBuffer:
 					"terminal": {}
 					}
 		
-		self.queue = Queue(maxsize=max(actor_num*2,size))
-		if self.replay:
-			self.replay_buffer = deque(maxlen=size)
-			self.sample = self.replay_sample
-		else:
-			self.sample = self.queue_sample
+		self.queue = Queue(maxsize=max(actor_num*2,replay_size))
+		self.getter = Buffer_getter.remote(self.queue, self.env_dict, actor_num, replay_size, sample_size)
+		self.get = self.getter.sample.remote()
 
 	def queue_info(self):
 		return self.queue, self.env_dict, self.actor_num
@@ -81,28 +103,7 @@ class ImpalaBuffer:
 	def queue_is_empty(self):
 		return self.queue.empty()
 	
-	def queue_sample(self, stack_size: int):
-		gets = [self.queue.get() for idx in range(stack_size)]
-		transitions = batch([get[0] for get in gets],
-							[get[1] for get in gets],
-							[get[2] for get in gets],
-							[get[3] for get in gets],
-							[get[4] for get in gets],
-							[get[5] for get in gets],
-							[get[6] for get in gets])
-		return transitions
-
-	def replay_sample(self, stack_size: int):
-		while True:
-			self.replay_buffer.extend(self.queue.get_nowait_batch(self.queue.size()))
-			if len(self.replay_buffer) >= stack_size:
-				break
-		gets = random.sample(self.replay_buffer, stack_size)
-		transitions = batch([get[0] for get in gets],
-							[get[1] for get in gets],
-							[get[2] for get in gets],
-							[get[3] for get in gets],
-							[get[4] for get in gets],
-							[get[5] for get in gets],
-							[get[6] for get in gets])
-		return transitions
+	def sample(self):
+		out = ray.get(self.get)
+		self.get = self.getter.sample.remote()
+		return out
