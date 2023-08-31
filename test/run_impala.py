@@ -4,10 +4,10 @@ import gymnasium as gym
 import ray
 import multiprocessing as mp
 
-from haiku_baselines.IMPALA.worker import Impala_Worker
-from haiku_baselines.A2C.impala import IMPALA
-from haiku_baselines.PPO.impala_ppo import IMPALA_PPO
-from haiku_baselines.TPPO.impala_tppo import IMPALA_TPPO
+from jax_baselines.IMPALA.worker import Impala_Worker
+from jax_baselines.A2C.impala import IMPALA
+from jax_baselines.PPO.impala_ppo import IMPALA_PPO
+from jax_baselines.TPPO.impala_tppo import IMPALA_TPPO
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

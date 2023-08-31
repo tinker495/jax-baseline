@@ -2,13 +2,13 @@ import os
 import argparse
 import gymnasium as gym
 
-from haiku_baselines.DDPG.ddpg import DDPG
-from haiku_baselines.TD3.td3 import TD3
-from haiku_baselines.TD4_QR.td4_qr import TD4_QR
-from haiku_baselines.TD4_IQN.td4_iqn import TD4_IQN
-from haiku_baselines.SAC.sac import SAC
-from haiku_baselines.TQC.tqc import TQC
-from haiku_baselines.TQC_IQN.tqc_iqn import TQC_IQN
+from jax_baselines.DDPG.ddpg import DDPG
+from jax_baselines.TD3.td3 import TD3
+from jax_baselines.TD4_QR.td4_qr import TD4_QR
+from jax_baselines.TD4_IQN.td4_iqn import TD4_IQN
+from jax_baselines.SAC.sac import SAC
+from jax_baselines.TQC.tqc import TQC
+from jax_baselines.TQC_IQN.tqc_iqn import TQC_IQN
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -79,7 +79,7 @@ if __name__ == "__main__":
     else:
         # import mujoco_py
         if args.worker > 1:
-            from haiku_baselines.common.worker import gymnasium as gymMultiworker
+            from jax_baselines.common.worker import gymnasium as gymMultiworker
 
             env = gymMultiworker(env_name, worker_num=args.worker)
         else:

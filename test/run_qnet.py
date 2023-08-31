@@ -2,11 +2,11 @@ import os
 import argparse
 import gymnasium as gym
 
-from haiku_baselines.DQN.dqn import DQN
-from haiku_baselines.C51.c51 import C51
-from haiku_baselines.QRDQN.qrdqn import QRDQN
-from haiku_baselines.IQN.iqn import IQN
-from haiku_baselines.FQF.fqf import FQF
+from jax_baselines.DQN.dqn import DQN
+from jax_baselines.C51.c51 import C51
+from jax_baselines.QRDQN.qrdqn import QRDQN
+from jax_baselines.IQN.iqn import IQN
+from jax_baselines.FQF.fqf import FQF
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -81,11 +81,11 @@ if __name__ == "__main__":
         env_type = "unity"
     else:
         if args.worker > 1:
-            from haiku_baselines.common.worker import gymnasium as gymMultiworker
+            from jax_baselines.common.worker import gymnasium as gymMultiworker
 
             env = gymMultiworker(env_name, worker_num=args.worker)
         else:
-            from haiku_baselines.common.atari_wrappers import (
+            from jax_baselines.common.atari_wrappers import (
                 make_wrap_atari,
                 get_env_type,
             )

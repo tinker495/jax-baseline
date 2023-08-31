@@ -2,9 +2,9 @@ import os
 import argparse
 import gymnasium as gym
 
-from haiku_baselines.A2C.a2c import A2C
-from haiku_baselines.PPO.ppo import PPO
-from haiku_baselines.TPPO.tppo import TPPO
+from jax_baselines.A2C.a2c import A2C
+from jax_baselines.PPO.ppo import PPO
+from jax_baselines.TPPO.tppo import TPPO
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -61,11 +61,11 @@ if __name__ == "__main__":
     else:
         # import mujoco_py
         if args.worker > 1:
-            from haiku_baselines.common.worker import gymMultiworker
+            from jax_baselines.common.worker import gymMultiworker
 
             env = gymMultiworker(env_name, worker_num=args.worker)
         else:
-            from haiku_baselines.common.atari_wrappers import (
+            from jax_baselines.common.atari_wrappers import (
                 make_wrap_atari,
                 get_env_type,
             )

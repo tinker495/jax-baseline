@@ -4,9 +4,9 @@ import gymnasium as gym
 import ray
 import multiprocessing as mp
 
-from haiku_baselines.APE_X.dpg_worker import Ape_X_Worker
-from haiku_baselines.DDPG.apex_ddpg import APE_X_DDPG
-from haiku_baselines.TD3.apex_td3 import APE_X_TD3
+from jax_baselines.APE_X.dpg_worker import Ape_X_Worker
+from jax_baselines.DDPG.apex_ddpg import APE_X_DDPG
+from jax_baselines.TD3.apex_td3 import APE_X_TD3
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

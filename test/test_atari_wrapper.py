@@ -3,7 +3,7 @@ import gym
 
 env_name = "BreakoutNoFrameskip-v4"
 
-from haiku_baselines.common.atari_wrappers import make_wrap_atari, get_env_type
+from jax_baselines.common.atari_wrappers import make_wrap_atari, get_env_type
 
 env_type, env_id = get_env_type(env_name)
 if env_type == "atari_env":

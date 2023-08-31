@@ -1,4 +1,4 @@
-from haiku_baselines.common.cpprb_buffers import (
+from jax_baselines.common.cpprb_buffers import (
     ReplayBuffer,
     MultiPrioritizedReplayBuffer,
 )

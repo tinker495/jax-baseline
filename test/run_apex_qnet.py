@@ -4,10 +4,10 @@ import gymnasium as gym
 import ray
 import multiprocessing as mp
 
-from haiku_baselines.APE_X.worker import Ape_X_Worker
-from haiku_baselines.DQN.apex_dqn import APE_X_DQN
-from haiku_baselines.C51.apex_c51 import APE_X_C51
-from haiku_baselines.QRDQN.apex_qrdqn import APE_X_QRDQN
+from jax_baselines.APE_X.worker import Ape_X_Worker
+from jax_baselines.DQN.apex_dqn import APE_X_DQN
+from jax_baselines.C51.apex_c51 import APE_X_C51
+from jax_baselines.QRDQN.apex_qrdqn import APE_X_QRDQN
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
