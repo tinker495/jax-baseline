@@ -19,3 +19,4 @@ cpprb @ git+https://github.com/tinker495/cpprb.git
 tensorboardX
 imageio-ffmpeg
 opencv-python
+pre-commit

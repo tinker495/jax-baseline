@@ -85,7 +85,5 @@ class Impala_Trainer(object):
         else:
             data = self.buffer
             data = {k: np.array([data[k]]) for k in data.keys()}
-        self.params, loss = self._train_step(
-            self.params, self.opt_state, next(self.key_seq)
-        )
+        self.params, loss = self._train_step(self.params, self.opt_state, next(self.key_seq))
         self.logger_server.append_loss.remote(loss)

@@ -89,9 +89,7 @@ class Ape_X_Family(object):
         self.params = None
         self.target_params = None
         self.save_path = None
-        self.optimizer = select_optimizer(
-            optimizer, self.learning_rate, 1e-2 / self.batch_size
-        )
+        self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-2 / self.batch_size)
         self.network_builder = None
         self.actor_builder = None
 
@@ -289,13 +287,11 @@ class Logger_server(object):
                 "env": {
                     "episode_reward": [
                         "Multiline",
-                        [f"env/episode_reward/eps{e:.2f}" for e in eps]
-                        + ["env/episode_reward"],
+                        [f"env/episode_reward/eps{e:.2f}" for e in eps] + ["env/episode_reward"],
                     ],
                     "episode_len": [
                         "Multiline",
-                        [f"env/episode_len/eps{e:.2f}" for e in eps]
-                        + ["env/episode_len"],
+                        [f"env/episode_len/eps{e:.2f}" for e in eps] + ["env/episode_len"],
                     ],
                     "time_over": [
                         "Multiline",

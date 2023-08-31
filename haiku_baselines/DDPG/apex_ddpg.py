@@ -153,14 +153,10 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
                 return jnp.squeeze(jnp.abs(td_error))
 
             def actor(actor, preproc, params, obses, key):
-                return actor.apply(
-                    params, key, preproc.apply(params, key, convert_jax(obses))
-                )
+                return actor.apply(params, key, preproc.apply(params, key, convert_jax(obses)))
 
             def get_action(actor, params, obs, noise, epsilon, key):
-                actions = np.clip(
-                    np.asarray(actor(params, obs, key)) + noise() * epsilon, -1, 1
-                )[0]
+                actions = np.clip(np.asarray(actor(params, obs, key)) + noise() * epsilon, -1, 1)[0]
                 return actions
 
             def random_action(params, obs, noise, epsilon, key):
@@ -173,9 +169,7 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
-            data = self.replay_buffer.sample(
-                self.batch_size, self.prioritized_replay_beta0
-            )
+            data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
 
             (
                 self.params,
@@ -184,9 +178,7 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
                 loss,
                 t_mean,
                 new_priorities,
-            ) = self._train_step(
-                self.params, self.target_params, self.opt_state, None, **data
-            )
+            ) = self._train_step(self.params, self.target_params, self.opt_state, None, **data)
 
             self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
@@ -219,9 +211,7 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
         )(params, obses, actions, targets, weights, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = soft_update(
-            params, target_params, self.target_network_update_tau
-        )
+        target_params = soft_update(params, target_params, self.target_network_update_tau)
         new_priorities = abs_error
         return params, target_params, opt_state, critic_loss, actor_loss, new_priorities
 

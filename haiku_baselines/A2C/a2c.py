@@ -138,9 +138,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         next_value = jax.vmap(self.critic.apply, in_axes=(None, None, 0))(
             params,
             key,
-            jax.vmap(self.preproc.apply, in_axes=(None, None, 0))(
-                params, key, nxtobses
-            ),
+            jax.vmap(self.preproc.apply, in_axes=(None, None, 0))(params, key, nxtobses),
         )
         targets = jax.vmap(discount_with_terminal, in_axes=(0, 0, 0, 0))(
             rewards, dones, terminals, next_value
@@ -168,9 +166,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
         entropy = prob * jnp.log(prob)
         entropy_loss = jnp.mean(entropy)
-        total_loss = (
-            self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
-        )
+        total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss)
 
     def _loss_continuous(self, params, obses, actions, targets, adv, key):
@@ -184,9 +180,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
         mu, log_std = prob
         entropy_loss = jnp.mean(jnp.square(mu) - log_std)
-        total_loss = (
-            self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
-        )
+        total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss)
 
     def learn(

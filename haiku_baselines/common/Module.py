@@ -11,14 +11,11 @@ class PreProcess(hk.Module):
     def __init__(self, state_size, cnn_mode="normal"):
         super(PreProcess, self).__init__()
         self.embedding = [
-            visual_embedding(cnn_mode) if len(st) == 3 else lambda x: x
-            for st in state_size
+            visual_embedding(cnn_mode) if len(st) == 3 else lambda x: x for st in state_size
         ]
 
     def __call__(self, states: List[jnp.ndarray]) -> jnp.ndarray:
-        return jnp.concatenate(
-            [pre(x) for pre, x in zip(self.embedding, states)], axis=1
-        )
+        return jnp.concatenate([pre(x) for pre, x in zip(self.embedding, states)], axis=1)
 
 
 class FractionProposal(hk.Module):

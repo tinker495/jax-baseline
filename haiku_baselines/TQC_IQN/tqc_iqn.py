@@ -85,9 +85,7 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
         self.n_support = n_support
         self.delta = delta
         self.critic_num = critic_num
-        self.quantile_drop = int(
-            max(np.round(self.critic_num * self.n_support * quantile_drop), 1)
-        )
+        self.quantile_drop = int(max(np.round(self.critic_num * self.n_support * quantile_drop), 1))
         self.middle_support = int(np.floor(n_support / 2.0))
         self.mixture_type = mixture_type
         self.cvar = cvar
@@ -104,16 +102,12 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
         self.preproc = hk.transform(
             lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x)
         )
-        self.actor = hk.transform(
-            lambda x: Actor(self.action_size, **self.policy_kwargs)(x)
-        )
+        self.actor = hk.transform(lambda x: Actor(self.action_size, **self.policy_kwargs)(x))
 
         def critic(x, a, tau):
             batch_size = a.shape[0]
             qauntile_size = tau.shape[1]
-            embedding = Quantile_Embeding(embedding_size=self.policy_kwargs["node"])(
-                x, a, tau
-            )
+            embedding = Quantile_Embeding(embedding_size=self.policy_kwargs["node"])(x, a, tau)
             return (
                 Critic(**self.policy_kwargs)(embedding, batch_size, qauntile_size),
                 Critic(**self.policy_kwargs)(embedding, batch_size, qauntile_size),
@@ -140,9 +134,7 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
             init_value = np.log(1e-1)
             if "_" in self.ent_coef:
                 init_value = np.log(float(self.ent_coef.split("_")[1]))
-                assert (
-                    init_value > 0.0
-                ), "The initial value of ent_coef must be greater than 0"
+                assert init_value > 0.0, "The initial value of ent_coef must be greater than 0"
             self.log_ent_coef = jax.device_put(init_value)
             self.ent_coef = jnp.exp(self.log_ent_coef)
         else:
@@ -154,9 +146,7 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
             jnp.linspace(0.0, 1.0, self.n_support + 1, dtype=jnp.float32)[1:]
             + jnp.linspace(0.0, 1.0, self.n_support + 1, dtype=jnp.float32)[:-1]
         ) / 2.0  # [support]
-        self.quantile = jax.device_put(
-            jnp.expand_dims(self.quantile, axis=(0, 1))
-        ).astype(
+        self.quantile = jax.device_put(jnp.expand_dims(self.quantile, axis=(0, 1))).astype(
             jnp.float32
         )  # [1 x 1 x support]
 
@@ -176,8 +166,7 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
         x_t = mu + std * jax.random.normal(key, std.shape)
         pi = jax.nn.tanh(x_t)
         log_prob = jnp.sum(
-            -0.5
-            * (jnp.square((x_t - mu) / (std + 1e-6)) + 2 * log_std + jnp.log(2 * np.pi))
+            -0.5 * (jnp.square((x_t - mu) / (std + 1e-6)) + 2 * log_std + jnp.log(2 * np.pi))
             - jnp.log(1 - jnp.square(pi) + 1e-6),
             axis=1,
             keepdims=True,
@@ -199,22 +188,16 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
 
     def actions(self, obs, steps):
         if self.learning_starts < steps:
-            actions = np.asarray(
-                self._get_actions(self.params, obs, next(self.key_seq))
-            )
+            actions = np.asarray(self._get_actions(self.params, obs, next(self.key_seq)))
         else:
-            actions = np.random.uniform(
-                -1.0, 1.0, size=(self.worker_size, self.action_size[0])
-            )
+            actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
         return actions
 
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
             if self.prioritized_replay:
-                data = self.replay_buffer.sample(
-                    self.batch_size, self.prioritized_replay_beta0
-                )
+                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
                 data = self.replay_buffer.sample(self.batch_size)
 
@@ -237,9 +220,7 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
             )
 
             if not isinstance(self.ent_coef, float):
-                self.log_ent_coef, self.ent_coef = self._train_ent_coef(
-                    self.log_ent_coef, log_prob
-                )
+                self.log_ent_coef, self.ent_coef = self._train_ent_coef(self.log_ent_coef, log_prob)
 
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
@@ -271,20 +252,13 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
         nxtobses = convert_jax(nxtobses)
         not_dones = 1.0 - dones
         key1, key2 = jax.random.split(key, 2)
-        targets = self._target(
-            params, target_params, rewards, nxtobses, not_dones, key1, ent_coef
-        )
-        (
-            total_loss,
-            (critic_loss, actor_loss, abs_error, log_prob),
-        ), grad = jax.value_and_grad(self._loss, has_aux=True)(
-            params, obses, actions, targets, weights, key2, step, ent_coef
-        )
+        targets = self._target(params, target_params, rewards, nxtobses, not_dones, key1, ent_coef)
+        (total_loss, (critic_loss, actor_loss, abs_error, log_prob),), grad = jax.value_and_grad(
+            self._loss, has_aux=True
+        )(params, obses, actions, targets, weights, key2, step, ent_coef)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = soft_update(
-            params, target_params, self.target_network_update_tau
-        )
+        target_params = soft_update(params, target_params, self.target_network_update_tau)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
@@ -333,9 +307,7 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
         total_loss = critic_loss + actor_loss
         return total_loss, (critic_loss, actor_loss, huber0, log_prob)
 
-    def _target(
-        self, params, target_params, rewards, nxtobses, not_dones, key, ent_coef
-    ):
+    def _target(self, params, target_params, rewards, nxtobses, not_dones, key, ent_coef):
         tau = jax.random.uniform(key, (self.batch_size, self.n_support))
         next_feature = self.preproc.apply(target_params, key, nxtobses)
         policy, log_prob, mu, log_std, std = self._get_update_data(
@@ -343,13 +315,9 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
         )
         qnets_pi = self.critic.apply(target_params, key, next_feature, policy, tau)
         if self.mixture_type == "min":
-            next_q = (
-                jnp.min(jnp.stack(qnets_pi, axis=-1), axis=-1) - ent_coef * log_prob
-            )
+            next_q = jnp.min(jnp.stack(qnets_pi, axis=-1), axis=-1) - ent_coef * log_prob
         elif self.mixture_type == "truncated":
-            next_q = (
-                truncated_mixture(qnets_pi, self.quantile_drop) - ent_coef * log_prob
-            )
+            next_q = truncated_mixture(qnets_pi, self.quantile_drop) - ent_coef * log_prob
         return (not_dones * next_q * self._gamma) + rewards
 
     def learn(

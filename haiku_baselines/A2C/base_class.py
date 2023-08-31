@@ -84,13 +84,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
             dec, term = self.env.get_steps(group_name)
             self.group_name = group_name
 
-            self.observation_space = [
-                list(spec.shape) for spec in group_spec.observation_specs
-            ]
+            self.observation_space = [list(spec.shape) for spec in group_spec.observation_specs]
             if group_spec.action_spec.continuous_size == 0:
-                self.action_size = [
-                    branch for branch in group_spec.action_spec.discrete_branches
-                ]
+                self.action_size = [branch for branch in group_spec.action_spec.discrete_branches]
                 self.action_type = "discrete"
                 self.conv_action = lambda a: ActionTuple(discrete=a)
             else:
@@ -156,25 +152,19 @@ class Actor_Critic_Policy_Gradient_Family(object):
 
     def _get_actions_discrete(self, params, obses, key=None) -> jnp.ndarray:
         prob = jax.nn.softmax(
-            self.actor.apply(
-                params, key, self.preproc.apply(params, key, convert_jax(obses))
-            ),
+            self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))),
             axis=1,
         )
         return prob
 
     def _get_actions_continuous(self, params, obses, key=None) -> jnp.ndarray:
-        mu, std = self.actor.apply(
-            params, key, self.preproc.apply(params, key, convert_jax(obses))
-        )
+        mu, std = self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))
         return mu, jnp.exp(std)
 
     def action_discrete(self, obs):
         prob = np.asarray(self._get_actions(self.params, obs))
         return np.expand_dims(
-            np.stack(
-                [np.random.choice(self.action_size[0], p=p) for p in prob], axis=0
-            ),
+            np.stack([np.random.choice(self.action_size[0], p=p) for p in prob], axis=0),
             axis=1,
         )
 
@@ -195,25 +185,15 @@ class Actor_Critic_Policy_Gradient_Family(object):
         std = jnp.exp(log_std)
         if out_prob:
             return prob, -(
-                0.5
-                * jnp.sum(
-                    jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True
-                )
+                0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True)
                 + jnp.sum(log_std, axis=-1, keepdims=True)
-                + 0.5
-                * jnp.log(2 * np.pi)
-                * jnp.asarray(action.shape[-1], dtype=jnp.float32)
+                + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
             )
         else:
             return -(
-                0.5
-                * jnp.sum(
-                    jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True
-                )
+                0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True)
                 + jnp.sum(log_std, axis=-1, keepdims=True)
-                + 0.5
-                * jnp.log(2 * np.pi)
-                * jnp.asarray(action.shape[-1], dtype=jnp.float32)
+                + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
             )
 
     def _loss_continuous(self):
@@ -245,9 +225,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 score_mean = self.learn_gym(pbar, callback, log_interval)
             if self.env_type == "gymMultiworker":
                 score_mean = self.learn_gymMultiworker(pbar, callback, log_interval)
-            add_hparams(
-                self, self.summary, {"env/episode_reward": score_mean}, total_timesteps
-            )
+            add_hparams(self, self.summary, {"env/episode_reward": score_mean}, total_timesteps)
             self.save_params(self.save_path)
 
     def discription(self):
@@ -322,9 +300,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                     self.summary.add_scalar(
                         "env/episode_reward", np.mean(self.scores[term_ids]), steps
                     )
-                    self.summary.add_scalar(
-                        "env/episode len", np.mean(self.eplen[term_ids]), steps
-                    )
+                    self.summary.add_scalar("env/episode len", np.mean(self.eplen[term_ids]), steps)
                     self.summary.add_scalar(
                         "env/time over",
                         np.mean(1 - done[term_ids].astype(np.float32)),
@@ -338,11 +314,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
 
-            if (
-                steps % log_interval == 0
-                and len(self.scoreque) > 0
-                and len(self.lossque) > 0
-            ):
+            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
         return np.mean(self.scoreque)
 
@@ -356,9 +328,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(state)
-            next_state, reward, terminal, truncated, info = self.env.step(
-                self.conv_action(actions)
-            )
+            next_state, reward, terminal, truncated, info = self.env.step(self.conv_action(actions))
             next_state = [np.expand_dims(next_state, axis=0)]
             self.buffer.add(state, actions[0], reward, next_state, terminal, truncated)
             self.scores[0] += reward
@@ -378,11 +348,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
 
-            if (
-                steps % log_interval == 0
-                and len(self.scoreque) > 0
-                and len(self.lossque) > 0
-            ):
+            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
         return np.mean(self.scoreque)
 
@@ -412,9 +378,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                     self.summary.add_scalar(
                         "env/episode_reward", np.mean(self.scores[end_idx]), steps
                     )
-                    self.summary.add_scalar(
-                        "env/episode len", np.mean(self.eplen[end_idx]), steps
-                    )
+                    self.summary.add_scalar("env/episode len", np.mean(self.eplen[end_idx]), steps)
                     self.summary.add_scalar(
                         "env/time over",
                         np.mean(1 - dones[end_idx].astype(np.float32)),
@@ -447,11 +411,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
 
-            if (
-                steps % log_interval == 0
-                and len(self.scoreque) > 0
-                and len(self.lossque) > 0
-            ):
+            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
         return np.mean(self.scoreque)
 

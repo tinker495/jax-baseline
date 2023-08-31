@@ -106,9 +106,7 @@ class FQF(Q_Network_Family):
                 **self.policy_kwargs
             )(x, tau)
         )
-        self.fpf = hk.transform(
-            lambda x: FractionProposal(self.n_support, **self.policy_kwargs)(x)
-        )
+        self.fpf = hk.transform(lambda x: FractionProposal(self.n_support, **self.policy_kwargs)(x))
         pre_param = self.preproc.init(
             next(self.key_seq),
             [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
@@ -163,9 +161,7 @@ class FQF(Q_Network_Family):
     def train_step(self, steps, gradient_steps):
         for _ in range(gradient_steps):
             if self.prioritized_replay:
-                data = self.replay_buffer.sample(
-                    self.batch_size, self.prioritized_replay_beta0
-                )
+                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
                 data = self.replay_buffer.sample(self.batch_size)
 
@@ -221,9 +217,7 @@ class FQF(Q_Network_Family):
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = hard_update(
-            params, target_params, steps, self.target_network_update_freq
-        )
+        target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
@@ -248,9 +242,7 @@ class FQF(Q_Network_Family):
             hubber * weights
         )  # remove weight multiply cpprb weight is something wrong
         tau_vals = jax.lax.stop_gradient(
-            jnp.take_along_axis(
-                self.get_q(params, feature, tau[:, 1:-1], key), actions, axis=1
-            )
+            jnp.take_along_axis(self.get_q(params, feature, tau[:, 1:-1], key), actions, axis=1)
         )  # batch x 1 x support
         quantile_loss = jnp.mean(
             FQFQuantileLosses(
@@ -263,9 +255,7 @@ class FQF(Q_Network_Family):
         total_loss = q_loss + quantile_loss + entropy_loss
         return total_loss, hubber
 
-    def _target(
-        self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key
-    ):
+    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         feature = self.preproc.apply(target_params, key, nxtobses)
         _, tau_hats, _ = self.fpf.apply(target_params, key, feature)
         next_q = self.get_q(
@@ -297,10 +287,7 @@ class FQF(Q_Network_Family):
                 jnp.sum(
                     (
                         pi_target
-                        * (
-                            jnp.take_along_axis(next_q, next_actions, axis=1)
-                            - tau_log_pi_next
-                        )
+                        * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next)
                     ),
                     axis=1,
                 )
@@ -327,17 +314,13 @@ class FQF(Q_Network_Family):
             )
             munchausen_addon = jnp.take_along_axis(log_pi, actions, axis=1)
 
-            rewards += self.munchausen_alpha * jnp.clip(
-                munchausen_addon, a_min=-1, a_max=0
-            )
+            rewards += self.munchausen_alpha * jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
             if self.double_q:
                 feature = self.preproc.apply(params, key, nxtobses)
                 next_actions = jnp.expand_dims(
                     jnp.argmax(
-                        jnp.mean(
-                            self.get_q(params, feature, nxtobses, tau_hats, key), axis=2
-                        ),
+                        jnp.mean(self.get_q(params, feature, nxtobses, tau_hats, key), axis=2),
                         axis=1,
                     ),
                     axis=(1, 2),

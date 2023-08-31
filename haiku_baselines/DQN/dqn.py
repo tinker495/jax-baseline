@@ -139,9 +139,7 @@ class DQN(Q_Network_Family):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
             if self.prioritized_replay:
-                data = self.replay_buffer.sample(
-                    self.batch_size, self.prioritized_replay_beta0
-                )
+                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
                 data = self.replay_buffer.sample(self.batch_size)
 
@@ -197,9 +195,7 @@ class DQN(Q_Network_Family):
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = hard_update(
-            params, target_params, steps, self.target_network_update_freq
-        )
+        target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
@@ -214,9 +210,7 @@ class DQN(Q_Network_Family):
             error
         )  # remove weight multiply cpprb weight is something wrong
 
-    def _target(
-        self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key
-    ):
+    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params, nxtobses, key)
 
         if self.munchausen:
@@ -225,19 +219,14 @@ class DQN(Q_Network_Family):
                     self.get_q(params, nxtobses, key), self.munchausen_entropy_tau
                 )
             else:
-                next_sub_q, tau_log_pi_next = q_log_pi(
-                    next_q, self.munchausen_entropy_tau
-                )
+                next_sub_q, tau_log_pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
             next_vals = (
-                jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True)
-                * not_dones
+                jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True) * not_dones
             )
 
             q_k_targets = self.get_q(target_params, obses, key)
-            q_sub_targets, tau_log_pi = q_log_pi(
-                q_k_targets, self.munchausen_entropy_tau
-            )
+            q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
             munchausen_addon = jnp.take_along_axis(log_pi, actions, axis=1)
 
@@ -246,9 +235,7 @@ class DQN(Q_Network_Family):
             )
         else:
             if self.double_q:
-                next_actions = jnp.argmax(
-                    self.get_q(params, nxtobses, key), axis=1, keepdims=True
-                )
+                next_actions = jnp.argmax(self.get_q(params, nxtobses, key), axis=1, keepdims=True)
             else:
                 next_actions = jnp.argmax(next_q, axis=1, keepdims=True)
             next_vals = not_dones * jnp.take_along_axis(next_q, next_actions, axis=1)

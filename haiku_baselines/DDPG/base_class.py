@@ -80,9 +80,7 @@ class Deteministic_Policy_Gradient_Family(object):
         self.params = None
         self.target_params = None
         self.save_path = None
-        self.optimizer = select_optimizer(
-            optimizer, self.learning_rate, 1e-2 / self.batch_size
-        )
+        self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-2 / self.batch_size)
 
         self.get_env_setup()
         self.get_memory_setup()
@@ -104,9 +102,7 @@ class Deteministic_Policy_Gradient_Family(object):
             dec, term = self.env.get_steps(group_name)
             self.group_name = group_name
 
-            self.observation_space = [
-                list(spec.shape) for spec in group_spec.observation_specs
-            ]
+            self.observation_space = [list(spec.shape) for spec in group_spec.observation_specs]
             self.action_size = [group_spec.action_spec.continuous_size]
             self.worker_size = len(dec.agent_id)
             self.env_type = "unity"
@@ -224,9 +220,7 @@ class Deteministic_Policy_Gradient_Family(object):
                 score_mean = self.learn_gym(pbar, callback, log_interval)
             if self.env_type == "gymMultiworker":
                 score_mean = self.learn_gymMultiworker(pbar, callback, log_interval)
-            add_hparams(
-                self, self.summary, {"env/episode_reward": score_mean}, total_timesteps
-            )
+            add_hparams(self, self.summary, {"env/episode_reward": score_mean}, total_timesteps)
             self.save_params(self.save_path)
 
     def discription(self):
@@ -291,9 +285,7 @@ class Deteministic_Policy_Gradient_Family(object):
                     self.summary.add_scalar(
                         "env/episode_reward", np.mean(self.scores[term_ids]), steps
                     )
-                    self.summary.add_scalar(
-                        "env/episode len", np.mean(self.eplen[term_ids]), steps
-                    )
+                    self.summary.add_scalar("env/episode len", np.mean(self.eplen[term_ids]), steps)
                     self.summary.add_scalar(
                         "env/time over",
                         np.mean(1 - done[term_ids].astype(np.float32)),
@@ -303,11 +295,7 @@ class Deteministic_Policy_Gradient_Family(object):
                 self.scores[term_ids] = reward[term_ids]
                 self.eplen[term_ids] = 0
 
-            if (
-                steps % log_interval == 0
-                and len(self.scoreque) > 0
-                and len(self.lossque) > 0
-            ):
+            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
         return np.mean(self.scoreque)
 
@@ -323,9 +311,7 @@ class Deteministic_Policy_Gradient_Family(object):
             actions = self.actions(state, steps)
             next_state, reward, terminal, truncated, info = self.env.step(actions[0])
             next_state = [np.expand_dims(next_state, axis=0)]
-            self.replay_buffer.add(
-                state, actions[0], reward, next_state, terminal, truncated
-            )
+            self.replay_buffer.add(state, actions[0], reward, next_state, terminal, truncated)
             self.scores[0] += reward
             state = next_state
             if terminal or truncated:
@@ -343,11 +329,7 @@ class Deteministic_Policy_Gradient_Family(object):
                 loss = self.train_step(steps, self.gradient_steps)
                 self.lossque.append(loss)
 
-            if (
-                steps % log_interval == 0
-                and len(self.scoreque) > 0
-                and len(self.lossque) > 0
-            ):
+            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
         return np.mean(self.scoreque)
 
@@ -381,9 +363,7 @@ class Deteministic_Policy_Gradient_Family(object):
                     self.summary.add_scalar(
                         "env/episode_reward", np.mean(self.scores[end_idx]), steps
                     )
-                    self.summary.add_scalar(
-                        "env/episode len", np.mean(self.eplen[end_idx]), steps
-                    )
+                    self.summary.add_scalar("env/episode len", np.mean(self.eplen[end_idx]), steps)
                     self.summary.add_scalar(
                         "env/time over",
                         np.mean(1 - dones[end_idx].astype(np.float32)),
@@ -392,17 +372,11 @@ class Deteministic_Policy_Gradient_Family(object):
                 self.scoreque.extend(self.scores[end_idx])
                 self.scores[end_idx] = 0
                 self.eplen[end_idx] = 0
-            self.replay_buffer.add(
-                [state], actions, rewards, [nxtstates], dones, terminals
-            )
+            self.replay_buffer.add([state], actions, rewards, [nxtstates], dones, terminals)
             self.scores += rewards
             state = next_states
 
-            if (
-                steps % log_interval == 0
-                and len(self.scoreque) > 0
-                and len(self.lossque) > 0
-            ):
+            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
         return np.mean(self.scoreque)
 
@@ -432,9 +406,7 @@ class Deteministic_Policy_Gradient_Family(object):
             episode_rew = 0
             while not (terminal or truncated):
                 actions = self.test_action(state)
-                observation, reward, terminal, truncated, info = Render_env.step(
-                    actions[0]
-                )
+                observation, reward, terminal, truncated, info = Render_env.step(actions[0])
                 state = [np.expand_dims(observation, axis=0)]
                 episode_rew += reward
             print("episod reward :", episode_rew)

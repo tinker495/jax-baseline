@@ -46,9 +46,7 @@ class TensorboardWriter:
         :return: (int) latest run number
         """
         max_run_id = 0
-        for path in glob.glob(
-            "{}/{}_[0-9]*".format(self.tensorboard_log_path, self.tb_log_name)
-        ):
+        for path in glob.glob("{}/{}_[0-9]*".format(self.tensorboard_log_path, self.tb_log_name)):
             file_name = path.split(os.sep)[-1]
             ext = file_name.split("_")[-1]
             if (
@@ -97,21 +95,15 @@ def select_optimizer(optim_str, rl, eps=1e-2 / 256.0, grad_max=10):
             return optax.lion(rl)
     """
     if optim_str == "adam":
-        return combine.chain(
-            optax.clip_by_global_norm(grad_max), optax.adam(rl, eps=eps)
-        )
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.adam(rl, eps=eps))
     elif optim_str == "adamw":
         return combine.chain(
             optax.clip_by_global_norm(grad_max),
             optax.adamw(rl, eps=eps, weight_decay=1e-5),
         )
     elif optim_str == "rmsprop":
-        return combine.chain(
-            optax.clip_by_global_norm(grad_max), optax.rmsprop(rl, eps=eps)
-        )
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.rmsprop(rl, eps=eps))
     elif optim_str == "sgd":
         return combine.chain(optax.clip_by_global_norm(grad_max), optax.sgd(rl))
     elif optim_str == "lion":
-        return combine.chain(
-            optax.clip_by_global_norm(grad_max), optax.lion(rl, weight_decay=1e-5)
-        )
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.lion(rl, weight_decay=1e-5))

@@ -66,9 +66,7 @@ class ReplayBuffer(object):
     def add(self, obs_t, action, reward, nxtobs_t, done, terminal=False):
         obsdict = dict(zip(self.obsdict.keys(), obs_t))
         nextobsdict = dict(zip(self.nextobsdict.keys(), nxtobs_t))
-        self.buffer.add(
-            **obsdict, action=action, reward=reward, **nextobsdict, done=done
-        )
+        self.buffer.add(**obsdict, action=action, reward=reward, **nextobsdict, done=done)
         if self.n_step and terminal:
             self.buffer.on_episode_end()
 

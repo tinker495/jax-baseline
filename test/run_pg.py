@@ -9,9 +9,7 @@ from haiku_baselines.TPPO.tppo import TPPO
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", type=str, default="Pendulum-v1", help="environment")
-    parser.add_argument(
-        "--worker_id", type=int, default=0, help="unlty ml agent's worker id"
-    )
+    parser.add_argument("--worker_id", type=int, default=0, help="unlty ml agent's worker id")
     parser.add_argument("--worker", type=int, default=1, help="gym_worker_size")
     parser.add_argument("--algo", type=str, default="A2C", help="algo ID")
     parser.add_argument("--gamma", type=float, default=0.995, help="gamma")
@@ -25,17 +23,11 @@ if __name__ == "__main__":
     parser.add_argument("--node", type=int, default=256, help="network node number")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
     parser.add_argument("--optimizer", type=str, default="adamw", help="optimaizer")
-    parser.add_argument(
-        "--ent_coef", type=float, default=0.001, help="entropy coefficient"
-    )
+    parser.add_argument("--ent_coef", type=float, default=0.001, help="entropy coefficient")
     parser.add_argument("--val_coef", type=float, default=0.6, help="val coefficient")
     parser.add_argument("--gae_normalize", dest="gae_normalize", action="store_true")
-    parser.add_argument(
-        "--no_gae_normalize", dest="gae_normalize", action="store_false"
-    )
-    parser.add_argument(
-        "--time_scale", type=float, default=20.0, help="unity time scale"
-    )
+    parser.add_argument("--no_gae_normalize", dest="gae_normalize", action="store_false")
+    parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )

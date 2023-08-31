@@ -101,17 +101,13 @@ class TRPO(Actor_Critic_Policy_Gradient_Family):
 
     def _get_actions_discrete(self, params, obses, key=None) -> jnp.ndarray:
         prob = jax.nn.softmax(
-            self.actor.apply(
-                params, key, self.preproc.apply(params, key, convert_jax(obses))
-            ),
+            self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))),
             axis=1,
         )
         return prob
 
     def _get_actions_continuous(self, params, obses, key=None) -> jnp.ndarray:
-        mu, std = self.actor.apply(
-            params, key, self.preproc.apply(params, key, convert_jax(obses))
-        )
+        mu, std = self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))
         return mu, jnp.exp(std)
 
     def get_logprob_discrete(self, prob, action, key, out_prob=False):
@@ -127,25 +123,15 @@ class TRPO(Actor_Critic_Policy_Gradient_Family):
         std = jnp.exp(log_std)
         if out_prob:
             return prob, -(
-                0.5
-                * jnp.sum(
-                    jnp.square((action - mu) / (std + 1e-6)), axis=-1, keepdims=True
-                )
+                0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)), axis=-1, keepdims=True)
                 + jnp.sum(log_std, axis=-1, keepdims=True)
-                + 0.5
-                * jnp.log(2 * np.pi)
-                * jnp.asarray(action.shape[-1], dtype=jnp.float32)
+                + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
             )
         else:
             return -(
-                0.5
-                * jnp.sum(
-                    jnp.square((action - mu) / (std + 1e-6)), axis=-1, keepdims=True
-                )
+                0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)), axis=-1, keepdims=True)
                 + jnp.sum(log_std, axis=-1, keepdims=True)
-                + 0.5
-                * jnp.log(2 * np.pi)
-                * jnp.asarray(action.shape[-1], dtype=jnp.float32)
+                + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
             )
 
     def discription(self):
@@ -156,9 +142,7 @@ class TRPO(Actor_Critic_Policy_Gradient_Family):
     def action_discrete(self, obs, steps):
         prob = self._get_actions(self.params, obs)
         return np.expand_dims(
-            np.stack(
-                [np.random.choice(self.action_size[0], p=p) for p in prob], axis=0
-            ),
+            np.stack([np.random.choice(self.action_size[0], p=p) for p in prob], axis=0),
             axis=1,
         )
 
@@ -204,9 +188,7 @@ class TRPO(Actor_Critic_Policy_Gradient_Family):
 
         return critic_loss
 
-    def _preprocess(
-        self, params, key, obses, actions, rewards, nxtobses, dones, terminals
-    ):
+    def _preprocess(self, params, key, obses, actions, rewards, nxtobses, dones, terminals):
         obses = [convert_jax(o) for o in obses]
         nxtobses = [convert_jax(n) for n in nxtobses]
         feature = [self.preproc.apply(params, key, o) for o in obses]
@@ -216,8 +198,7 @@ class TRPO(Actor_Critic_Policy_Gradient_Family):
             for f, a in zip(feature, actions)
         ]
         next_value = [
-            self.critic.apply(params, key, self.preproc.apply(params, key, n))
-            for n in nxtobses
+            self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses
         ]
         adv = [
             get_gaes(r, d, t, v, nv, self.gamma, self.lamda)
@@ -230,9 +211,7 @@ class TRPO(Actor_Critic_Policy_Gradient_Family):
         adv = jnp.vstack(adv)
         targets = value + adv
         if self.gae_normalize:
-            adv = (adv - jnp.mean(adv, keepdims=True)) / (
-                jnp.std(adv, keepdims=True) + 1e-12
-            )
+            adv = (adv - jnp.mean(adv, keepdims=True)) / (jnp.std(adv, keepdims=True) + 1e-12)
         return obses, actions, targets, value, act_prob, adv
 
     def _optimize_step(
@@ -248,9 +227,7 @@ class TRPO(Actor_Critic_Policy_Gradient_Family):
         act_probbatch,
         advbatch,
     ):
-        (total_loss, (c_loss, a_loss)), grad = jax.value_and_grad(
-            self._loss, has_aux=True
-        )(
+        (total_loss, (c_loss, a_loss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params,
             obsbatch,
             actbatch,

@@ -80,9 +80,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         self.preproc = hk.transform(
             lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x)
         )
-        self.actor = hk.transform(
-            lambda x: Actor(self.action_size, **self.policy_kwargs)(x)
-        )
+        self.actor = hk.transform(lambda x: Actor(self.action_size, **self.policy_kwargs)(x))
         self.critic = hk.transform(
             lambda x, a: (
                 Critic(**self.policy_kwargs)(x, a),
@@ -117,9 +115,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         self._train_step = jax.jit(self._train_step)
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        return self.actor.apply(
-            params, key, self.preproc.apply(params, key, convert_jax(obses))
-        )  #
+        return self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))  #
 
     def discription(self):
         return "score : {:.3f}, loss : {:.3f} |".format(
@@ -137,18 +133,14 @@ class TD3(Deteministic_Policy_Gradient_Family):
                 1,
             )
         else:
-            actions = np.random.uniform(
-                -1.0, 1.0, size=(self.worker_size, self.action_size[0])
-            )
+            actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
         return actions
 
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
             if self.prioritized_replay:
-                data = self.replay_buffer.sample(
-                    self.batch_size, self.prioritized_replay_beta0
-                )
+                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
                 data = self.replay_buffer.sample(self.batch_size)
 
@@ -160,12 +152,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
                 t_mean,
                 new_priorities,
             ) = self._train_step(
-                self.params,
-                self.target_params,
-                self.opt_state,
-                next(self.key_seq),
-                steps,
-                **data
+                self.params, self.target_params, self.opt_state, next(self.key_seq), steps, **data
             )
 
             if self.prioritized_replay:
@@ -201,9 +188,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         )(params, obses, actions, targets, weights, key, step)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = soft_update(
-            params, target_params, self.target_network_update_tau
-        )
+        target_params = soft_update(params, target_params, self.target_network_update_tau)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error

@@ -16,9 +16,7 @@ class OUNoise(object):
         noise = (
             self.noise_prev
             - self._theta * self.noise_prev
-            + np.random.normal(
-                0, self._sigma, size=(self.worker_size, self.action_size)
-            )
+            + np.random.normal(0, self._sigma, size=(self.worker_size, self.action_size))
         )
         self.noise_prev = noise
         return noise

@@ -141,15 +141,11 @@ class IQN(Q_Network_Family):
         self._train_step = jax.jit(self._train_step)
 
     def get_q(self, params, obses, tau, key=None) -> jnp.ndarray:
-        return self.model.apply(
-            params, key, self.preproc.apply(params, key, obses), tau
-        )
+        return self.model.apply(params, key, self.preproc.apply(params, key, obses), tau)
 
     def actions(self, obs, epsilon):
         if epsilon <= np.random.uniform(0, 1) or self.param_noise:
-            actions = np.asarray(
-                self._get_actions(self.params, obs, next(self.key_seq))
-            )
+            actions = np.asarray(self._get_actions(self.params, obs, next(self.key_seq)))
         else:
             actions = np.random.choice(self.action_size[0], [self.worker_size, 1])
         return actions
@@ -167,9 +163,7 @@ class IQN(Q_Network_Family):
     def train_step(self, steps, gradient_steps):
         for _ in range(gradient_steps):
             if self.prioritized_replay:
-                data = self.replay_buffer.sample(
-                    self.batch_size, self.prioritized_replay_beta0
-                )
+                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
                 data = self.replay_buffer.sample(self.batch_size)
 
@@ -181,12 +175,7 @@ class IQN(Q_Network_Family):
                 t_mean,
                 new_priorities,
             ) = self._train_step(
-                self.params,
-                self.target_params,
-                self.opt_state,
-                steps,
-                next(self.key_seq),
-                **data
+                self.params, self.target_params, self.opt_state, steps, next(self.key_seq), **data
             )
 
             if self.prioritized_replay:
@@ -226,9 +215,7 @@ class IQN(Q_Network_Family):
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = hard_update(
-            params, target_params, steps, self.target_network_update_freq
-        )
+        target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
@@ -245,22 +232,16 @@ class IQN(Q_Network_Family):
         )
         return jnp.mean(loss * weights), loss
 
-    def _target(
-        self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key
-    ):
+    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         target_tau = jax.random.uniform(key, (self.batch_size, self.n_support))
         next_q = self.get_q(target_params, nxtobses, target_tau, key)
 
         if self.munchausen:
             if self.double_q:
-                next_q_mean = jnp.mean(
-                    self.get_q(params, nxtobses, target_tau, key), axis=2
-                )
+                next_q_mean = jnp.mean(self.get_q(params, nxtobses, target_tau, key), axis=2)
             else:
                 next_q_mean = jnp.mean(next_q, axis=2)
-            next_sub_q, tau_log_pi_next = q_log_pi(
-                next_q_mean, self.munchausen_entropy_tau
-            )
+            next_sub_q, tau_log_pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
             pi_next = jnp.expand_dims(
                 jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau), axis=2
             )
@@ -272,16 +253,10 @@ class IQN(Q_Network_Family):
                 * not_dones
             )
 
-            q_k_targets = jnp.mean(
-                self.get_q(target_params, obses, target_tau, key), axis=2
-            )
-            q_sub_targets, tau_log_pi = q_log_pi(
-                q_k_targets, self.munchausen_entropy_tau
-            )
+            q_k_targets = jnp.mean(self.get_q(target_params, obses, target_tau, key), axis=2)
+            q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
-            munchausen_addon = jnp.take_along_axis(
-                log_pi, jnp.squeeze(actions, axis=2), axis=1
-            )
+            munchausen_addon = jnp.take_along_axis(log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0

@@ -10,13 +10,9 @@ from haiku_baselines.TD3.apex_td3 import APE_X_TD3
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--learning_rate", type=float, default=0.0000625, help="learning rate"
-    )
+    parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
     parser.add_argument("--env", type=str, default="Pendulum-v0", help="environment")
-    parser.add_argument(
-        "--worker_id", type=int, default=0, help="unlty ml agent's worker id"
-    )
+    parser.add_argument("--worker_id", type=int, default=0, help="unlty ml agent's worker id")
     parser.add_argument("--worker", type=int, default=1, help="gym_worker_size")
     parser.add_argument("--algo", type=str, default="DDPG", help="algo ID")
     parser.add_argument("--gamma", type=float, default=0.995, help="gamma")
@@ -35,35 +31,21 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", type=int, default=0, help="verbose")
     parser.add_argument("--logdir", type=str, default="log/", help="log file dir")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
-    parser.add_argument(
-        "--n_support", type=int, default=25, help="n_support for QRDQN,IQN,FQF"
-    )
+    parser.add_argument("--n_support", type=int, default=25, help="n_support for QRDQN,IQN,FQF")
     parser.add_argument("--mixture", type=str, default="truncated", help="mixture type")
-    parser.add_argument(
-        "--quantile_drop", type=float, default=0.1, help="quantile_drop ratio"
-    )
+    parser.add_argument("--quantile_drop", type=float, default=0.1, help="quantile_drop ratio")
     parser.add_argument("--node", type=int, default=256, help="network node number")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
     parser.add_argument("--action_noise", type=float, default=0.1, help="action_noise")
     parser.add_argument("--optimizer", type=str, default="adam", help="optimaizer")
     parser.add_argument("--gradient_steps", type=int, default=1, help="gradient_steps")
     parser.add_argument("--critic_num", type=int, default=2, help="tqc critic number")
-    parser.add_argument(
-        "--ent_coef", type=str, default="auto", help="sac entropy coefficient"
-    )
-    parser.add_argument(
-        "--learning_starts", type=int, default=5000, help="learning start"
-    )
-    parser.add_argument(
-        "--initial_eps", type=float, default=0.4, help="initial epsilon"
-    )
-    parser.add_argument(
-        "--eps_decay", type=float, default=3, help="exploration fraction"
-    )
+    parser.add_argument("--ent_coef", type=str, default="auto", help="sac entropy coefficient")
+    parser.add_argument("--learning_starts", type=int, default=5000, help="learning start")
+    parser.add_argument("--initial_eps", type=float, default=0.4, help="initial epsilon")
+    parser.add_argument("--eps_decay", type=float, default=3, help="exploration fraction")
     parser.add_argument("--cvar", type=float, default=1.0, help="cvar")
-    parser.add_argument(
-        "--time_scale", type=float, default=20.0, help="unity time scale"
-    )
+    parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )

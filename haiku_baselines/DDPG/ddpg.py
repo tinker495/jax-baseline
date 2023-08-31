@@ -70,9 +70,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         self.exploration_initial_eps = exploration_initial_eps
         self.exploration_fraction = exploration_fraction
 
-        self.noise = OUNoise(
-            action_size=self.action_size[0], worker_size=self.worker_size
-        )
+        self.noise = OUNoise(action_size=self.action_size[0], worker_size=self.worker_size)
 
         if _init_setup_model:
             self.setup_model()
@@ -85,9 +83,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         self.preproc = hk.transform(
             lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x)
         )
-        self.actor = hk.transform(
-            lambda x: Actor(self.action_size, **self.policy_kwargs)(x)
-        )
+        self.actor = hk.transform(lambda x: Actor(self.action_size, **self.policy_kwargs)(x))
         self.critic = hk.transform(lambda x, a: Critic(**self.policy_kwargs)(x, a))
         pre_param = self.preproc.init(
             next(self.key_seq),
@@ -117,9 +113,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         self._train_step = jax.jit(self._train_step)
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        return self.actor.apply(
-            params, key, self.preproc.apply(params, key, convert_jax(obses))
-        )  #
+        return self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))  #
 
     def discription(self):
         return "score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(
@@ -130,15 +124,12 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         if self.learning_starts < steps:
             self.epsilon = self.exploration.value(steps)
             actions = np.clip(
-                np.asarray(self._get_actions(self.params, obs, None))
-                + self.noise() * self.epsilon,
+                np.asarray(self._get_actions(self.params, obs, None)) + self.noise() * self.epsilon,
                 -1,
                 1,
             )
         else:
-            actions = np.random.uniform(
-                -1.0, 1.0, size=(self.worker_size, self.action_size[0])
-            )
+            actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
         return actions
 
     def test_action(self, state):
@@ -153,9 +144,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
             if self.prioritized_replay:
-                data = self.replay_buffer.sample(
-                    self.batch_size, self.prioritized_replay_beta0
-                )
+                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
                 data = self.replay_buffer.sample(self.batch_size)
 
@@ -166,9 +155,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                 loss,
                 t_mean,
                 new_priorities,
-            ) = self._train_step(
-                self.params, self.target_params, self.opt_state, None, **data
-            )
+            ) = self._train_step(self.params, self.target_params, self.opt_state, None, **data)
 
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
@@ -202,9 +189,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         )(params, obses, actions, targets, weights, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = soft_update(
-            params, target_params, self.target_network_update_tau
-        )
+        target_params = soft_update(params, target_params, self.target_network_update_tau)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error

@@ -10,9 +10,7 @@ from haiku_baselines.common.segment_tree import SumSegmentTree, MinSegmentTree
 
 
 class EpochBuffer(object):
-    def __init__(
-        self, epoch_size: int, observation_space: list, worker_size=1, action_space=1
-    ):
+    def __init__(self, epoch_size: int, observation_space: list, worker_size=1, action_space=1):
         self._maxsize = epoch_size
         self.worker_size = worker_size
         self.observation_space = observation_space
@@ -105,20 +103,14 @@ class EpochBuffer(object):
                 [self._storage[o][w, :] for o in self.obsdict.keys()]
                 for w in range(self.worker_size)
             ],
-            "actions": [
-                self._storage["actions"][w, :] for w in range(self.worker_size)
-            ],
-            "rewards": [
-                self._storage["rewards"][w, :] for w in range(self.worker_size)
-            ],
+            "actions": [self._storage["actions"][w, :] for w in range(self.worker_size)],
+            "rewards": [self._storage["rewards"][w, :] for w in range(self.worker_size)],
             "nxtobses": [
                 [self._storage[no][w, :] for no in self.nextobsdict.keys()]
                 for w in range(self.worker_size)
             ],
             "dones": [self._storage["dones"][w, :] for w in range(self.worker_size)],
-            "terminals": [
-                self._storage["terminals"][w, :] for w in range(self.worker_size)
-            ],
+            "terminals": [self._storage["terminals"][w, :] for w in range(self.worker_size)],
         }
 
     def clear(self):
@@ -185,9 +177,7 @@ def discounted(rewards, gamma=0.99):  # lfilter([1],[1,-gamma],x[::-1])[::-1]
 
 
 class ReplayBuffer(object):
-    def __init__(
-        self, size: int, observation_space: list, worker_size=1, action_space=1
-    ):
+    def __init__(self, size: int, observation_space: list, worker_size=1, action_space=1):
         """
         Implements a ring buffer (FIFO).
 

@@ -21,10 +21,7 @@ class Actor(hk.Module):
 
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         action = hk.Sequential(
-            [
-                self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                for i in range(2 * self.hidden_n)
-            ]
+            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [self.layer(self.action_size[0]), jax.nn.tanh]
         )(feature)
         return action
@@ -39,31 +36,22 @@ class Quantile_Embeding(hk.Module):
             repeat(jnp.pi * np.arange(0, 128, dtype=np.float32), "m -> o m", o=1)
         )
 
-    def __call__(
-        self, feature: jnp.ndarray, actions: jnp.ndarray, tau: jnp.ndarray
-    ) -> jnp.ndarray:
+    def __call__(self, feature: jnp.ndarray, actions: jnp.ndarray, tau: jnp.ndarray) -> jnp.ndarray:
         quaitle_shape = tau.shape  # [ tau ]
         concat = jnp.concatenate([feature, actions], axis=1)
-        feature_net = hk.Sequential([self.layer(self.embedding_size), jax.nn.relu])(
-            concat
-        )
+        feature_net = hk.Sequential([self.layer(self.embedding_size), jax.nn.relu])(concat)
         feature_tile = repeat(
             feature_net, "b f -> (b t) f", t=quaitle_shape[1]
         )  # [ (batch x tau) x self.embedding_size]
 
         costau = jnp.cos(
-            rearrange(repeat(tau, "b t -> b t m", m=128), "b t m -> (b t) m")
-            * self.pi_mtx
+            rearrange(repeat(tau, "b t -> b t m", m=128), "b t m -> (b t) m") * self.pi_mtx
         )  # [ (batch x tau) x 128]
-        quantile_embedding = hk.Sequential(
-            [self.layer(self.embedding_size), jax.nn.relu]
-        )(
+        quantile_embedding = hk.Sequential([self.layer(self.embedding_size), jax.nn.relu])(
             costau
         )  # [ (batch x tau) x self.embedding_size ]
 
-        mul_embedding = (
-            feature_tile * quantile_embedding
-        )  # [ (batch x tau) x self.embedding_size ]
+        mul_embedding = feature_tile * quantile_embedding  # [ (batch x tau) x self.embedding_size ]
         return mul_embedding
 
 

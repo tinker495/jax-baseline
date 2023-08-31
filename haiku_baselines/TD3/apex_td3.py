@@ -89,9 +89,7 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
                     lambda x: PreProcess(observation_space, cnn_mode=cnn_mode)(x)
                 )
                 actor = hk.transform(lambda x: Actor(action_size, **kwargs)(x))
-                critic = hk.transform(
-                    lambda x, a: (Critic(**kwargs)(x, a), Critic(**kwargs)(x, a))
-                )
+                critic = hk.transform(lambda x, a: (Critic(**kwargs)(x, a), Critic(**kwargs)(x, a)))
                 return preproc, actor, critic
 
             return builder
@@ -168,8 +166,7 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
                 next_action = jnp.clip(
                     actor.apply(params, key, next_feature)
                     + jnp.clip(
-                        target_action_noise
-                        * jax.random.normal(key, (size, action_size)),
+                        target_action_noise * jax.random.normal(key, (size, action_size)),
                         -action_noise_clamp,
                         action_noise_clamp,
                     ),
@@ -185,14 +182,10 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
                 return jnp.squeeze(td1_error)
 
             def actor(actor, preproc, params, obses, key):
-                return actor.apply(
-                    params, key, preproc.apply(params, key, convert_jax(obses))
-                )
+                return actor.apply(params, key, preproc.apply(params, key, convert_jax(obses)))
 
             def get_action(actor, params, obs, noise, epsilon, key):
-                actions = np.clip(
-                    np.asarray(actor(params, obs, key)) + noise() * epsilon, -1, 1
-                )[0]
+                actions = np.clip(np.asarray(actor(params, obs, key)) + noise() * epsilon, -1, 1)[0]
                 return actions
 
             def random_action(params, obs, noise, epsilon, key):
@@ -205,9 +198,7 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
-            data = self.replay_buffer.sample(
-                self.batch_size, self.prioritized_replay_beta0
-            )
+            data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
 
             (
                 self.params,
@@ -217,12 +208,7 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
                 t_mean,
                 new_priorities,
             ) = self._train_step(
-                self.params,
-                self.target_params,
-                self.opt_state,
-                next(self.key_seq),
-                steps,
-                **data
+                self.params, self.target_params, self.opt_state, next(self.key_seq), steps, **data
             )
 
             self.replay_buffer.update_priorities(data["indexes"], new_priorities)
@@ -257,9 +243,7 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
         )(params, obses, actions, targets, weights, key, step)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = soft_update(
-            params, target_params, self.target_network_update_tau
-        )
+        target_params = soft_update(params, target_params, self.target_network_update_tau)
         new_priorities = abs_error
         return (
             params,

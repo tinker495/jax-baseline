@@ -10,9 +10,7 @@ import numpy as np
 
 engine_configuration_channel = EngineConfigurationChannel()
 channel = EnvironmentParametersChannel()
-engine_configuration_channel.set_configuration_parameters(
-    time_scale=20.0, capture_frame_rate=1
-)
+engine_configuration_channel.set_configuration_parameters(time_scale=20.0, capture_frame_rate=1)
 env = UnityEnvironment(
     file_name="../env/Walker.x86_64",
     worker_id=0,

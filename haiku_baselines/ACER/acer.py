@@ -128,17 +128,13 @@ class ACER(Actor_Critic_Policy_Gradient_Family):
 
     def _get_actions_discrete(self, params, obses, key=None) -> jnp.ndarray:
         prob = jax.nn.softmax(
-            self.actor.apply(
-                params, key, self.preproc.apply(params, key, convert_jax(obses))
-            ),
+            self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))),
             axis=1,
         )
         return prob
 
     def _get_actions_continuous(self, params, obses, key=None) -> jnp.ndarray:
-        mu, std = self.actor.apply(
-            params, key, self.preproc.apply(params, key, convert_jax(obses))
-        )
+        mu, std = self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))
         return mu, jnp.exp(std)
 
     def get_logprob_discrete(self, prob, action, key, out_prob=False):
@@ -154,25 +150,15 @@ class ACER(Actor_Critic_Policy_Gradient_Family):
         std = jnp.exp(log_std)
         if out_prob:
             return prob, -(
-                0.5
-                * jnp.sum(
-                    jnp.square((action - mu) / (std + 1e-6)), axis=-1, keepdims=True
-                )
+                0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)), axis=-1, keepdims=True)
                 + jnp.sum(log_std, axis=-1, keepdims=True)
-                + 0.5
-                * jnp.log(2 * np.pi)
-                * jnp.asarray(action.shape[-1], dtype=jnp.float32)
+                + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
             )
         else:
             return -(
-                0.5
-                * jnp.sum(
-                    jnp.square((action - mu) / (std + 1e-6)), axis=-1, keepdims=True
-                )
+                0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-6)), axis=-1, keepdims=True)
                 + jnp.sum(log_std, axis=-1, keepdims=True)
-                + 0.5
-                * jnp.log(2 * np.pi)
-                * jnp.asarray(action.shape[-1], dtype=jnp.float32)
+                + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
             )
 
     def discription(self):
@@ -183,9 +169,7 @@ class ACER(Actor_Critic_Policy_Gradient_Family):
     def action_discrete(self, obs, steps):
         prob = self._get_actions(self.params, obs)
         return prob, np.expand_dims(
-            np.stack(
-                [np.random.choice(self.action_size[0], p=p) for p in prob], axis=0
-            ),
+            np.stack([np.random.choice(self.action_size[0], p=p) for p in prob], axis=0),
             axis=1,
         )
 
@@ -222,13 +206,9 @@ class ACER(Actor_Critic_Policy_Gradient_Family):
     ):
         obses = [convert_jax(o) for o in obses]
         nxtobses = [convert_jax(n) for n in nxtobses]
-        value = [
-            self.critic.apply(params, key, self.preproc.apply(params, key, o))
-            for o in obses
-        ]
+        value = [self.critic.apply(params, key, self.preproc.apply(params, key, o)) for o in obses]
         next_value = [
-            self.critic.apply(params, key, self.preproc.apply(params, key, n))
-            for n in nxtobses
+            self.critic.apply(params, key, self.preproc.apply(params, key, n)) for n in nxtobses
         ]
         targets = [
             discount_with_terminal(r, d, t, nv, self.gamma)
@@ -322,8 +302,7 @@ class ACER(Actor_Critic_Policy_Gradient_Family):
                     term_ids += list(term.agent_id)
                     newterm_obs = convert_states(term.obs)
                     term_obses = [
-                        np.concatenate((to, o), axis=0)
-                        for to, o in zip(term_obses, newterm_obs)
+                        np.concatenate((to, o), axis=0) for to, o in zip(term_obses, newterm_obs)
                     ]
                     term_rewards += list(term.reward)
                     term_done += list(term.interrupted)
@@ -356,9 +335,7 @@ class ACER(Actor_Critic_Policy_Gradient_Family):
                     self.summary.add_scalar(
                         "env/episode_reward", np.mean(self.scores[term_ids]), steps
                     )
-                    self.summary.add_scalar(
-                        "env/episode len", np.mean(self.eplen[term_ids]), steps
-                    )
+                    self.summary.add_scalar("env/episode len", np.mean(self.eplen[term_ids]), steps)
                     self.summary.add_scalar(
                         "env/time over",
                         np.mean(1 - done[term_ids].astype(np.float32)),
@@ -372,11 +349,7 @@ class ACER(Actor_Critic_Policy_Gradient_Family):
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
 
-            if (
-                steps % log_interval == 0
-                and len(self.scoreque) > 0
-                and len(self.lossque) > 0
-            ):
+            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
 
     def learn_gym(self, pbar, callback=None, log_interval=100):
@@ -395,9 +368,7 @@ class ACER(Actor_Critic_Policy_Gradient_Family):
             done = terminal
             if "TimeLimit.truncated" in info:
                 done = not info["TimeLimit.truncated"]
-            self.replay_buffer.add(
-                state, actions[0], reward, next_state, done, terminal
-            )
+            self.replay_buffer.add(state, actions[0], reward, next_state, done, terminal)
             self.scores[0] += reward
             state = next_state
             if terminal:
@@ -414,11 +385,7 @@ class ACER(Actor_Critic_Policy_Gradient_Family):
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
 
-            if (
-                steps % log_interval == 0
-                and len(self.scoreque) > 0
-                and len(self.lossque) > 0
-            ):
+            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
 
     def learn_gymMultiworker(self, pbar, callback=None, log_interval=100):
@@ -447,9 +414,7 @@ class ACER(Actor_Critic_Policy_Gradient_Family):
                     self.summary.add_scalar(
                         "env/episode_reward", np.mean(self.scores[end_idx]), steps
                     )
-                    self.summary.add_scalar(
-                        "env/episode len", np.mean(self.eplen[end_idx]), steps
-                    )
+                    self.summary.add_scalar("env/episode len", np.mean(self.eplen[end_idx]), steps)
                     self.summary.add_scalar(
                         "env/time over",
                         np.mean(1 - dones[end_idx].astype(np.float32)),
@@ -473,11 +438,7 @@ class ACER(Actor_Critic_Policy_Gradient_Family):
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
 
-            if (
-                steps % log_interval == 0
-                and len(self.scoreque) > 0
-                and len(self.lossque) > 0
-            ):
+            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
 
     def test_action(self, state):

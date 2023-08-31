@@ -20,9 +20,7 @@ class EpochBuffer:
         self.max_size = size
         self.env_dict = env_dict
         self.obsdict = dict((o, s) for o, s in env_dict.items() if o.startswith("obs"))
-        self.nextobsdict = dict(
-            (o, s) for o, s in env_dict.items() if o.startswith("next_obs")
-        )
+        self.nextobsdict = dict((o, s) for o, s in env_dict.items() if o.startswith("next_obs"))
         self.buffer = cpprb.ReplayBuffer(size, env_dict=env_dict)
 
     def __len__(self):

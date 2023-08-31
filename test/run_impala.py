@@ -11,15 +11,9 @@ from haiku_baselines.TPPO.impala_tppo import IMPALA_TPPO
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--learning_rate", type=float, default=0.0002, help="learning rate"
-    )
-    parser.add_argument(
-        "--env", type=str, default="BreakoutNoFrameskip-v4", help="environment"
-    )
-    parser.add_argument(
-        "--worker_id", type=int, default=0, help="unlty ml agent's worker id"
-    )
+    parser.add_argument("--learning_rate", type=float, default=0.0002, help="learning rate")
+    parser.add_argument("--env", type=str, default="BreakoutNoFrameskip-v4", help="environment")
+    parser.add_argument("--worker_id", type=int, default=0, help="unlty ml agent's worker id")
     parser.add_argument("--worker", type=int, default=16, help="gym_worker_size")
     parser.add_argument("--update_freq", type=int, default=100, help="update frequency")
     parser.add_argument("--algo", type=str, default="A2C", help="algo ID")
@@ -36,23 +30,15 @@ if __name__ == "__main__":
     parser.add_argument("--node", type=int, default=256, help="network node number")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
     parser.add_argument("--optimizer", type=str, default="rmsprop", help="optimaizer")
-    parser.add_argument(
-        "--ent_coef", type=float, default=0.1, help="entropy coefficient"
-    )
+    parser.add_argument("--ent_coef", type=float, default=0.1, help="entropy coefficient")
     parser.add_argument("--val_coef", type=float, default=0.6, help="val coefficient")
     parser.add_argument("--gae_normalize", dest="gae_normalize", action="store_true")
-    parser.add_argument(
-        "--no_gae_normalize", dest="gae_normalize", action="store_false"
-    )
-    parser.add_argument(
-        "--time_scale", type=float, default=20.0, help="unity time scale"
-    )
+    parser.add_argument("--no_gae_normalize", dest="gae_normalize", action="store_false")
+    parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
-    parser.add_argument(
-        "--mu_ratio", type=float, default=0.0, help="impala ppo mu ratio"
-    )
+    parser.add_argument("--mu_ratio", type=float, default=0.0, help="impala ppo mu ratio")
     args = parser.parse_args()
     env_name = args.env
     cnn_mode = "normal"

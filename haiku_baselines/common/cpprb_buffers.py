@@ -8,9 +8,7 @@ import copy
 
 
 class EpochBuffer(object):
-    def __init__(
-        self, epoch_size: int, observation_space: list, worker_size=1, action_space=1
-    ):
+    def __init__(self, epoch_size: int, observation_space: list, worker_size=1, action_space=1):
         self.epoch_size = epoch_size
         self.obsdict = dict(
             (
@@ -134,12 +132,8 @@ class ReplayBuffer(object):
                 stack_compress=self.obscompress,
             )
         else:
-            self.obsdict = dict(
-                (o, None) for o in env_dict.keys() if o.startswith("obs")
-            )
-            self.nextobsdict = dict(
-                (o, None) for o in env_dict.keys() if o.startswith("next_obs")
-            )
+            self.obsdict = dict((o, None) for o in env_dict.keys() if o.startswith("obs"))
+            self.nextobsdict = dict((o, None) for o in env_dict.keys() if o.startswith("next_obs"))
             self.buffer = cpprb.ReplayBuffer(size, env_dict=env_dict, Nstep=n_s)
 
     def __len__(self) -> int:
@@ -162,9 +156,7 @@ class ReplayBuffer(object):
     def add(self, obs_t, action, reward, nxtobs_t, done, terminal=False):
         obsdict = dict(zip(self.obsdict.keys(), obs_t))
         nextobsdict = dict(zip(self.nextobsdict.keys(), nxtobs_t))
-        self.buffer.add(
-            **obsdict, action=action, reward=reward, **nextobsdict, done=done
-        )
+        self.buffer.add(**obsdict, action=action, reward=reward, **nextobsdict, done=done)
 
     def episode_end(self):
         self.buffer.on_episode_end()

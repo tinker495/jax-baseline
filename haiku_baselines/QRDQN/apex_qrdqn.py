@@ -186,15 +186,11 @@ class APE_X_QRDQN(Ape_X_Family):
                 model, preproc, params, obses, actions, rewards, nxtobses, dones, key
             ):
                 q_values = jnp.take_along_axis(
-                    model.apply(
-                        params, key, preproc.apply(params, key, convert_jax(obses))
-                    ),
+                    model.apply(params, key, preproc.apply(params, key, convert_jax(obses))),
                     jnp.expand_dims(actions.astype(jnp.int32), axis=2),
                     axis=1,
                 )
-                next_q = model.apply(
-                    params, key, preproc.apply(params, key, convert_jax(nxtobses))
-                )
+                next_q = model.apply(params, key, preproc.apply(params, key, convert_jax(nxtobses)))
                 next_actions = jnp.expand_dims(
                     jnp.argmax(jnp.mean(next_q, axis=2), axis=1), axis=(1, 2)
                 )
@@ -208,12 +204,8 @@ class APE_X_QRDQN(Ape_X_Family):
                 return jnp.squeeze(loss)
 
             def actor(model, preproc, params, obses, key):
-                q_values = model.apply(
-                    params, key, preproc.apply(params, key, convert_jax(obses))
-                )
-                return jnp.expand_dims(
-                    jnp.argmax(jnp.mean(q_values, axis=2), axis=1), axis=1
-                )
+                q_values = model.apply(params, key, preproc.apply(params, key, convert_jax(obses)))
+                return jnp.expand_dims(jnp.argmax(jnp.mean(q_values, axis=2), axis=1), axis=1)
 
             if param_noise:
 
@@ -239,9 +231,7 @@ class APE_X_QRDQN(Ape_X_Family):
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
-            data = self.replay_buffer.sample(
-                self.batch_size, self.prioritized_replay_beta0
-            )
+            data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
 
             (
                 self.params,
@@ -294,9 +284,7 @@ class APE_X_QRDQN(Ape_X_Family):
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = hard_update(
-            params, target_params, steps, self.target_network_update_freq
-        )
+        target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = abs_error
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
 
@@ -305,17 +293,13 @@ class APE_X_QRDQN(Ape_X_Family):
             self.get_q(params, obses, key), actions, axis=1
         )  # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets, axis=2)  # batch x support x 1
-        loss = QuantileHuberLosses(
-            theta_loss_tile, logit_valid_tile, self.quantile, self.delta
-        )
+        loss = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, self.quantile, self.delta)
         return (
             jnp.mean(loss * weights),
             loss,
         )  # remove weight multiply cpprb weight is something wrong
 
-    def _target(
-        self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key
-    ):
+    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params, nxtobses, key)
 
         if self.munchausen:
@@ -323,16 +307,12 @@ class APE_X_QRDQN(Ape_X_Family):
                 next_q_mean = jnp.mean(self.get_q(params, nxtobses, key), axis=2)
             else:
                 next_q_mean = jnp.mean(next_q, axis=2)
-            next_sub_q, tau_log_pi_next = q_log_pi(
-                next_q_mean, self.munchausen_entropy_tau
-            )
+            next_sub_q, tau_log_pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau, axis=1)
             p_cuml = jnp.expand_dims(jnp.cumsum(pi_next, axis=1), axis=2).tile(32)
             r = jax.random.uniform(key, (32, 1, 32), dtype=p_cuml.dtype)
             ind = jnp.swapaxes(
-                jax.vmap(jax.vmap(lambda p, r: jnp.searchsorted(p, r), in_axes=(1, 1)))(
-                    p_cuml, r
-                ),
+                jax.vmap(jax.vmap(lambda p, r: jnp.searchsorted(p, r), in_axes=(1, 1)))(p_cuml, r),
                 1,
                 2,
             )
@@ -346,13 +326,9 @@ class APE_X_QRDQN(Ape_X_Family):
             else:
                 q_k_targets = jnp.mean(self.get_q(target_params, obses, key), axis=2)
             q_k_targets = jnp.mean(self.get_q(target_params, obses, key), axis=2)
-            q_sub_targets, tau_log_pi = q_log_pi(
-                q_k_targets, self.munchausen_entropy_tau
-            )
+            q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
-            munchausen_addon = jnp.take_along_axis(
-                log_pi, jnp.squeeze(actions, axis=2), axis=1
-            )
+            munchausen_addon = jnp.take_along_axis(log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0
@@ -360,9 +336,7 @@ class APE_X_QRDQN(Ape_X_Family):
         else:
             if self.double_q:
                 next_actions = jnp.expand_dims(
-                    jnp.argmax(
-                        jnp.mean(self.get_q(params, nxtobses, key), axis=2), axis=1
-                    ),
+                    jnp.argmax(jnp.mean(self.get_q(params, nxtobses, key), axis=2), axis=1),
                     axis=(1, 2),
                 )
             else:

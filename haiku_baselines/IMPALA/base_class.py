@@ -185,9 +185,7 @@ class IMPALA_Family(object):
                             keepdims=True,
                         )
                         + np.sum(log_std, axis=-1, keepdims=True)
-                        + 0.5
-                        * np.log(2 * np.pi)
-                        * np.asarray(action.shape[-1], dtype=np.float32)
+                        + 0.5 * np.log(2 * np.pi) * np.asarray(action.shape[-1], dtype=np.float32)
                     )
 
                 def convert_action(action):
@@ -314,13 +312,11 @@ class Logger_server(object):
                 "env": {
                     "episode_reward": [
                         "Multiline",
-                        [f"env/episode_reward/eps{e:.2f}" for e in eps]
-                        + ["env/episode_reward"],
+                        [f"env/episode_reward/eps{e:.2f}" for e in eps] + ["env/episode_reward"],
                     ],
                     "episode_len": [
                         "Multiline",
-                        [f"env/episode_len/eps{e:.2f}" for e in eps]
-                        + ["env/episode_len"],
+                        [f"env/episode_len/eps{e:.2f}" for e in eps] + ["env/episode_len"],
                     ],
                     "time_over": [
                         "Multiline",

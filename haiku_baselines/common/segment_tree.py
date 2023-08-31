@@ -55,15 +55,11 @@ class SegmentTree(object):
             return self._reduce_helper(_value, start, end, 2 * node, node_start, mid)
         else:
             if mid + 1 <= start:
-                return self._reduce_helper(
-                    _value, start, end, 2 * node + 1, mid + 1, node_end
-                )
+                return self._reduce_helper(_value, start, end, 2 * node + 1, mid + 1, node_end)
             else:
                 return self._operation(
                     self._reduce_helper(_value, start, mid, 2 * node, node_start, mid),
-                    self._reduce_helper(
-                        _value, mid + 1, end, 2 * node + 1, mid + 1, node_end
-                    ),
+                    self._reduce_helper(_value, mid + 1, end, 2 * node + 1, mid + 1, node_end),
                 )
 
     def reduce(self, start=0, end=None):
@@ -131,9 +127,7 @@ class SumSegmentTree(SegmentTree):
 
         while np.any(cont):  # while not all nodes are leafs
             idx[cont] = 2 * idx[cont]
-            prefixsum_new = np.where(
-                _value[idx] <= prefixsum, prefixsum - _value[idx], prefixsum
-            )
+            prefixsum_new = np.where(_value[idx] <= prefixsum, prefixsum - _value[idx], prefixsum)
             # prepare update of prefixsum for all right children
             idx = np.where(
                 np.logical_or(_value[idx] > prefixsum, np.logical_not(cont)),

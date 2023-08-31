@@ -122,9 +122,7 @@ class C51(Q_Network_Family):
         self.opt_state = self.optimizer.init(self.params)
 
         self.categorial_bar = jnp.expand_dims(
-            jnp.linspace(
-                self.categorial_min, self.categorial_max, self.categorial_bar_n
-            ),
+            jnp.linspace(self.categorial_min, self.categorial_max, self.categorial_bar_n),
             axis=0,
         )
         self._categorial_bar = jnp.expand_dims(self.categorial_bar, axis=0)
@@ -133,14 +131,12 @@ class C51(Q_Network_Family):
         )
 
         offset = jnp.expand_dims(
-            jnp.linspace(
-                0, (self.batch_size - 1) * self.categorial_bar_n, self.batch_size
-            ),
+            jnp.linspace(0, (self.batch_size - 1) * self.categorial_bar_n, self.batch_size),
             axis=-1,
         )
-        self.offset = jnp.broadcast_to(
-            offset, (self.batch_size, self.categorial_bar_n)
-        ).astype(jnp.int32)
+        self.offset = jnp.broadcast_to(offset, (self.batch_size, self.categorial_bar_n)).astype(
+            jnp.int32
+        )
 
         print("----------------------model----------------------")
         print_param("preprocess", pre_param)
@@ -173,9 +169,7 @@ class C51(Q_Network_Family):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
             if self.prioritized_replay:
-                data = self.replay_buffer.sample(
-                    self.batch_size, self.prioritized_replay_beta0
-                )
+                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
                 data = self.replay_buffer.sample(self.batch_size)
 
@@ -231,9 +225,7 @@ class C51(Q_Network_Family):
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = hard_update(
-            params, target_params, steps, self.target_network_update_freq
-        )
+        target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
@@ -248,55 +240,38 @@ class C51(Q_Network_Family):
 
     def _loss(self, params, obses, actions, target_distribution, weights, key):
         distribution = jnp.clip(
-            jnp.squeeze(
-                jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
-            ),
+            jnp.squeeze(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)),
             1e-5,
             1.0,
         )
         loss = jnp.sum(-target_distribution * jnp.log(distribution), axis=1)
         return jnp.mean(loss * weights), loss
 
-    def _target(
-        self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key
-    ):
+    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params, nxtobses, key)
         if self.double_q:
             next_action_q = jnp.sum(
                 self.get_q(params, nxtobses, key) * self._categorial_bar, axis=2
             )
-            next_actions = jnp.expand_dims(
-                jnp.argmax(next_action_q, axis=1), axis=(1, 2)
-            )
+            next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
         else:
             next_action_q = jnp.sum(next_q * self._categorial_bar, axis=2)
-            next_actions = jnp.expand_dims(
-                jnp.argmax(next_action_q, axis=1), axis=(1, 2)
-            )
-        next_distribution = jnp.squeeze(
-            jnp.take_along_axis(next_q, next_actions, axis=1)
-        )
+            next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
+        next_distribution = jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))
 
         if self.munchausen:
-            next_sub_q, tau_log_pi_next = q_log_pi(
-                next_action_q, self.munchausen_entropy_tau
-            )
+            next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
             next_categorial = not_dones * (
-                self.categorial_bar
-                - jnp.sum(pi_next * tau_log_pi_next, axis=1, keepdims=True)
+                self.categorial_bar - jnp.sum(pi_next * tau_log_pi_next, axis=1, keepdims=True)
             )
 
             q_k_targets = jnp.sum(
                 self.get_q(target_params, obses, key) * self.categorial_bar, axis=2
             )
-            q_sub_targets, tau_log_pi = q_log_pi(
-                q_k_targets, self.munchausen_entropy_tau
-            )
+            q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
-            munchausen_addon = jnp.take_along_axis(
-                log_pi, jnp.squeeze(actions, axis=2), axis=1
-            )
+            munchausen_addon = jnp.take_along_axis(log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0
@@ -308,21 +283,15 @@ class C51(Q_Network_Family):
         C51_b = ((Tz - self.categorial_min) / self.delta_bar).astype(jnp.float32)
         C51_L = jnp.floor(C51_b).astype(jnp.int32)
         C51_H = jnp.ceil(C51_b).astype(jnp.int32)
-        C51_L = jnp.where(
-            (C51_H > 0) * (C51_L == C51_H), C51_L - 1, C51_L
-        )  # C51_L.at[].add(-1)
+        C51_L = jnp.where((C51_H > 0) * (C51_L == C51_H), C51_L - 1, C51_L)  # C51_L.at[].add(-1)
         C51_H = jnp.where(
             (C51_L < (self.categorial_bar_n - 1)) * (C51_L == C51_H), C51_H + 1, C51_H
         )  # C51_H.at[].add(1)
         target_distribution = jnp.zeros((self.batch_size * self.categorial_bar_n))
-        target_distribution = target_distribution.at[
-            jnp.reshape(C51_L + self.offset, (-1))
-        ].add(
+        target_distribution = target_distribution.at[jnp.reshape(C51_L + self.offset, (-1))].add(
             jnp.reshape(next_distribution * (C51_H.astype(jnp.float32) - C51_b), (-1))
         )
-        target_distribution = target_distribution.at[
-            jnp.reshape(C51_H + self.offset, (-1))
-        ].add(
+        target_distribution = target_distribution.at[jnp.reshape(C51_H + self.offset, (-1))].add(
             jnp.reshape(next_distribution * (C51_b - C51_L.astype(jnp.float32)), (-1))
         )
         target_distribution = jnp.reshape(

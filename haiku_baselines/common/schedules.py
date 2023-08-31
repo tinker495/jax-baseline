@@ -69,9 +69,7 @@ class PiecewiseSchedule(Schedule):
             raised when outside value is requested.
     """
 
-    def __init__(
-        self, endpoints, interpolation=linear_interpolation, outside_value=None
-    ):
+    def __init__(self, endpoints, interpolation=linear_interpolation, outside_value=None):
         idxes = [e[0] for e in endpoints]
         assert idxes == sorted(idxes)
         self._interpolation = interpolation
@@ -79,9 +77,7 @@ class PiecewiseSchedule(Schedule):
         self._endpoints = endpoints
 
     def value(self, step):
-        for (left_t, left), (right_t, right) in zip(
-            self._endpoints[:-1], self._endpoints[1:]
-        ):
+        for (left_t, left), (right_t, right) in zip(self._endpoints[:-1], self._endpoints[1:]):
             if left_t <= step < right_t:
                 alpha = float(step - left_t) / (right_t - left_t)
                 return self._interpolation(left, right, alpha)

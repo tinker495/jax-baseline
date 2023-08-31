@@ -84,12 +84,7 @@ class APE_X_DQN(Ape_X_Family):
             del self.policy_kwargs["cnn_mode"]
 
         def network_builder(
-            observation_space,
-            cnn_mode,
-            action_size,
-            dueling_model,
-            param_noise,
-            **kwargs
+            observation_space, cnn_mode, action_size, dueling_model, param_noise, **kwargs
         ):
             def builder():
                 preproc = hk.transform(
@@ -163,16 +158,12 @@ class APE_X_DQN(Ape_X_Family):
                 model, preproc, params, obses, actions, rewards, nxtobses, dones, key
             ):
                 q_values = jnp.take_along_axis(
-                    model.apply(
-                        params, key, preproc.apply(params, key, convert_jax(obses))
-                    ),
+                    model.apply(params, key, preproc.apply(params, key, convert_jax(obses))),
                     actions.astype(jnp.int32),
                     axis=1,
                 )
                 next_q_values = jnp.max(
-                    model.apply(
-                        params, key, preproc.apply(params, key, convert_jax(nxtobses))
-                    ),
+                    model.apply(params, key, preproc.apply(params, key, convert_jax(nxtobses))),
                     axis=1,
                     keepdims=True,
                 )
@@ -181,9 +172,7 @@ class APE_X_DQN(Ape_X_Family):
                 return jnp.squeeze(jnp.abs(td_error))
 
             def actor(model, preproc, params, obses, key):
-                q_values = model.apply(
-                    params, key, preproc.apply(params, key, convert_jax(obses))
-                )
+                q_values = model.apply(params, key, preproc.apply(params, key, convert_jax(obses)))
                 return jnp.argmax(q_values, axis=1)
 
             if param_noise:
@@ -210,9 +199,7 @@ class APE_X_DQN(Ape_X_Family):
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
-            data = self.replay_buffer.sample(
-                self.batch_size, self.prioritized_replay_beta0
-            )
+            data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
 
             (
                 self.params,
@@ -265,9 +252,7 @@ class APE_X_DQN(Ape_X_Family):
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = hard_update(
-            params, target_params, steps, self.target_network_update_freq
-        )
+        target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = abs_error
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
 
@@ -280,9 +265,7 @@ class APE_X_DQN(Ape_X_Family):
             error
         )  # remove weight multiply cpprb weight is something wrong
 
-    def _target(
-        self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key
-    ):
+    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params, nxtobses, key)
 
         if self.munchausen:
@@ -291,19 +274,14 @@ class APE_X_DQN(Ape_X_Family):
                     self.get_q(params, nxtobses, key), self.munchausen_entropy_tau
                 )
             else:
-                next_sub_q, tau_log_pi_next = q_log_pi(
-                    next_q, self.munchausen_entropy_tau
-                )
+                next_sub_q, tau_log_pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
             next_vals = (
-                jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True)
-                * not_dones
+                jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True) * not_dones
             )
 
             q_k_targets = self.get_q(target_params, obses, key)
-            q_sub_targets, tau_log_pi = q_log_pi(
-                q_k_targets, self.munchausen_entropy_tau
-            )
+            q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
             munchausen_addon = jnp.take_along_axis(log_pi, actions, axis=1)
 
@@ -312,9 +290,7 @@ class APE_X_DQN(Ape_X_Family):
             )
         else:
             if self.double_q:
-                next_actions = jnp.argmax(
-                    self.get_q(params, nxtobses, key), axis=1, keepdims=True
-                )
+                next_actions = jnp.argmax(self.get_q(params, nxtobses, key), axis=1, keepdims=True)
             else:
                 next_actions = jnp.argmax(next_q, axis=1, keepdims=True)
             next_vals = not_dones * jnp.take_along_axis(next_q, next_actions, axis=1)

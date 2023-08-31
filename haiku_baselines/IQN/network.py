@@ -38,8 +38,7 @@ class Model(hk.Module):
         )  # [ (batch x tau) x feature]
 
         costau = jnp.cos(
-            rearrange(repeat(tau, "b t -> b t m", m=128), "b t m -> (b t) m")
-            * self.pi_mtx
+            rearrange(repeat(tau, "b t -> b t m", m=128), "b t m -> (b t) m") * self.pi_mtx
         )  # [ (batch x tau) x 128]
         quantile_embedding = hk.Sequential([self.layer(feature_shape[1]), jax.nn.relu])(
             costau

@@ -147,18 +147,14 @@ class QRDQN(Q_Network_Family):
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         return jnp.expand_dims(
-            jnp.argmax(
-                jnp.mean(self.get_q(params, convert_jax(obses), key), axis=2), axis=1
-            ),
+            jnp.argmax(jnp.mean(self.get_q(params, convert_jax(obses), key), axis=2), axis=1),
             axis=1,
         )
 
     def train_step(self, steps, gradient_steps):
         for _ in range(gradient_steps):
             if self.prioritized_replay:
-                data = self.replay_buffer.sample(
-                    self.batch_size, self.prioritized_replay_beta0
-                )
+                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
                 data = self.replay_buffer.sample(self.batch_size)
 
@@ -214,9 +210,7 @@ class QRDQN(Q_Network_Family):
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = hard_update(
-            params, target_params, steps, self.target_network_update_freq
-        )
+        target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
@@ -227,14 +221,10 @@ class QRDQN(Q_Network_Family):
             self.get_q(params, obses, key), actions, axis=1
         )  # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets, axis=2)  # batch x support x 1
-        loss = QuantileHuberLosses(
-            theta_loss_tile, logit_valid_tile, self.quantile, self.delta
-        )
+        loss = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, self.quantile, self.delta)
         return jnp.mean(loss * weights), loss
 
-    def _target(
-        self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key
-    ):
+    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params, nxtobses, key)
 
         if self.munchausen:
@@ -242,9 +232,7 @@ class QRDQN(Q_Network_Family):
                 next_q_mean = jnp.mean(self.get_q(params, nxtobses, key), axis=2)
             else:
                 next_q_mean = jnp.mean(next_q, axis=2)
-            next_sub_q, tau_log_pi_next = q_log_pi(
-                next_q_mean, self.munchausen_entropy_tau
-            )
+            next_sub_q, tau_log_pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
             pi_next = jnp.expand_dims(
                 jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau), axis=2
             )
@@ -257,13 +245,9 @@ class QRDQN(Q_Network_Family):
             )
 
             q_k_targets = jnp.mean(self.get_q(target_params, obses, key), axis=2)
-            q_sub_targets, tau_log_pi = q_log_pi(
-                q_k_targets, self.munchausen_entropy_tau
-            )
+            q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
-            munchausen_addon = jnp.take_along_axis(
-                log_pi, jnp.squeeze(actions, axis=2), axis=1
-            )
+            munchausen_addon = jnp.take_along_axis(log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0
@@ -271,9 +255,7 @@ class QRDQN(Q_Network_Family):
         else:
             if self.double_q:
                 next_actions = jnp.expand_dims(
-                    jnp.argmax(
-                        jnp.mean(self.get_q(params, nxtobses, key), axis=2), axis=1
-                    ),
+                    jnp.argmax(jnp.mean(self.get_q(params, nxtobses, key), axis=2), axis=1),
                     axis=(1, 2),
                 )
             else:

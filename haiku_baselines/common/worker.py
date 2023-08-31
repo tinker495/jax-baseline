@@ -44,9 +44,7 @@ class gymMultiworker(Multiworker):
         terminals = []
         end_states = []
         end_idx = []
-        for idx, (state, end_state, reward, done, terminal) in enumerate(
-            ray.get(self.steps)
-        ):
+        for idx, (state, end_state, reward, done, terminal) in enumerate(ray.get(self.steps)):
             states.append(state)
             rewards.append(reward)
             dones.append(done)
@@ -101,9 +99,7 @@ class gymRayworker:
     def step(self, action):
         if self.render:
             self.env.render()
-        state, reward, terminal, truncated, info = self.env.step(
-            self.action_conv(action)
-        )
+        state, reward, terminal, truncated, info = self.env.step(self.action_conv(action))
         if terminal or truncated:
             end_state = state
             state, info = self.env.reset()
