@@ -1,6 +1,6 @@
-# Haiku-Baseline
+# Jax-Baseline
 
-Haiku-Baseline is the same Reinforcement Learning implementation as any Baseline implemented through the JAX and Haiku libraries.
+Jax-Baseline is the same Reinforcement Learning implementation as any Baseline implemented through the JAX and Flax/Haiku libraries.
 
 It's not compared to any Baseline yet, but it's two to three times faster than the Torch and Tensorflow works that we've implemented before.
 Using JAX's JIT(Just In Time) compilation, we optimized a series of courses for learning and constructed them based on functions. This allows you to see how JAX's capabilities can be used effectively in various Reinforcement Learning implementations.
