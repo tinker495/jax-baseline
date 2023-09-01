@@ -51,6 +51,7 @@ pip install .
 | TD3                 | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: |
 | SAC                 | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: |
 | TQC                 | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: |
+| TD7 				  | TODO						 | TODO				  | TODO			   |
 | Ape-X-DPGs    	  | :heavy_check_mark:           |:heavy_check_mark:  | :heavy_check_mark: |
 
 ## Test
