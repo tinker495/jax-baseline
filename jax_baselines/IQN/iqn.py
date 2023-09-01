@@ -173,6 +173,7 @@ class IQN(Q_Network_Family):
                 self.opt_state,
                 loss,
                 t_mean,
+                t_std,
                 new_priorities,
             ) = self._train_step(
                 self.params, self.target_params, self.opt_state, steps, next(self.key_seq), **data
@@ -183,7 +184,8 @@ class IQN(Q_Network_Family):
 
         if self.summary and steps % self.log_interval == 0:
             self.summary.add_scalar("loss/qloss", loss, steps)
-            self.summary.add_scalar("loss/targets", t_mean, steps)
+            self.summary.add_scalar("loss/target", t_mean, steps)
+            self.summary.add_scalar("loss/target_stds", t_std, steps)
 
         return loss
 
@@ -219,7 +221,15 @@ class IQN(Q_Network_Family):
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
-        return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
+        return (
+            params,
+            target_params,
+            opt_state,
+            loss,
+            jnp.mean(targets),
+            jnp.mean(jnp.std(targets, axis=1)),
+            new_priorities,
+        )
 
     def _loss(self, params, obses, actions, targets, weights, key):
         tau = jax.random.uniform(key, (self.batch_size, self.n_support))
@@ -263,16 +273,14 @@ class IQN(Q_Network_Family):
             )
         else:
             if self.double_q:
-                next_actions = jnp.expand_dims(
-                    jnp.argmax(
-                        jnp.mean(self.get_q(params, nxtobses, target_tau, key), axis=2),
-                        axis=1,
-                    ),
-                    axis=(1, 2),
+                next_actions = jnp.argmax(
+                    jnp.mean(self.get_q(params, nxtobses, target_tau, key), axis=2, keepdims=True),
+                    axis=1,
+                    keepdims=True,
                 )
             else:
-                next_actions = jnp.expand_dims(
-                    jnp.argmax(jnp.mean(next_q, axis=2), axis=1), axis=(1, 2)
+                next_actions = jnp.argmax(
+                    jnp.mean(next_q, axis=2, keepdims=True), axis=1, keepdims=True
                 )
             next_vals = not_dones * jnp.squeeze(
                 jnp.take_along_axis(next_q, next_actions, axis=1)
