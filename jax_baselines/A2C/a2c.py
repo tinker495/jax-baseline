@@ -31,7 +31,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         seed=None,
         optimizer="rmsprop",
     ):
-        super(A2C, self).__init__(
+        super().__init__(
             env,
             gamma,
             learning_rate,

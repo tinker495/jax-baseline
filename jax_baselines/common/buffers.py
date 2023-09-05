@@ -316,9 +316,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         :param size: (int)  Max number of transitions to store in the buffer. When the buffer overflows the old
                 memories are dropped.
         """
-        super(PrioritizedReplayBuffer, self).__init__(
-            size, observation_space, worker_size, action_space
-        )
+        super().__init__(size, observation_space, worker_size, action_space)
         assert alpha >= 0
         self._alpha = alpha
 
@@ -426,9 +424,7 @@ class EpisodicReplayBuffer(ReplayBuffer):
                 are dropped.
         :param alpha: (float) how much prioritization is used (0 - no prioritization, 1 - full prioritization)
         """
-        super(EpisodicReplayBuffer, self).__init__(
-            size, observation_space, worker_size, action_space
-        )
+        super().__init__(size, observation_space, worker_size, action_space)
         self._storage["episodes"] = np.zeros((self._maxsize, 3), np.int32)
         self.episodes = {}
         self.worker_ep = np.zeros(worker_size)
@@ -544,9 +540,7 @@ class PrioritizedEpisodicReplayBuffer(EpisodicReplayBuffer):
         :param size: (int)  Max number of transitions to store in the buffer. When the buffer overflows the old
                 memories are dropped.
         """
-        super(PrioritizedEpisodicReplayBuffer, self).__init__(
-            size, observation_space, worker_size, action_space, n_step, gamma
-        )
+        super().__init__(size, observation_space, worker_size, action_space, n_step, gamma)
         assert alpha >= 0
         self._alpha = alpha
 

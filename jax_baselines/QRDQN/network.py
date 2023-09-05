@@ -17,7 +17,7 @@ class Model(hk.Module):
         dueling=False,
         support_n=200,
     ):
-        super(Model, self).__init__()
+        super().__init__()
         self.action_size = action_size
         self.node = node
         self.hidden_n = hidden_n

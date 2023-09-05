@@ -9,7 +9,7 @@ from typing import List
 
 class PreProcess(hk.Module):
     def __init__(self, state_size, cnn_mode="normal"):
-        super(PreProcess, self).__init__()
+        super().__init__()
         self.embedding = [
             visual_embedding(cnn_mode) if len(st) == 3 else lambda x: x for st in state_size
         ]
@@ -20,7 +20,7 @@ class PreProcess(hk.Module):
 
 class FractionProposal(hk.Module):
     def __init__(self, support_size, node=256, hidden_n=2):
-        super(FractionProposal, self).__init__()
+        super().__init__()
         self.support_size = support_size
         self.node = node
         self.hidden_n = hidden_n

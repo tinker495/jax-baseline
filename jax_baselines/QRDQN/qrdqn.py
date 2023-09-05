@@ -49,7 +49,7 @@ class QRDQN(Q_Network_Family):
         optimizer="adamw",
         compress_memory=False,
     ):
-        super(QRDQN, self).__init__(
+        super().__init__(
             env,
             gamma,
             learning_rate,

@@ -8,7 +8,7 @@ from einops import rearrange, reduce, repeat
 
 class Actor(hk.Module):
     def __init__(self, action_size, node=256, hidden_n=2):
-        super(Actor, self).__init__()
+        super().__init__()
         self.action_size = action_size
         self.node = node
         self.hidden_n = hidden_n
@@ -29,7 +29,7 @@ class Actor(hk.Module):
 
 class Quantile_Embeding(hk.Module):
     def __init__(self, embedding_size=256):
-        super(Quantile_Embeding, self).__init__()
+        super().__init__()
         self.layer = hk.Linear
         self.embedding_size = embedding_size
         self.pi_mtx = jax.lax.stop_gradient(
@@ -57,7 +57,7 @@ class Quantile_Embeding(hk.Module):
 
 class Critic(hk.Module):
     def __init__(self, node=256, hidden_n=2):
-        super(Critic, self).__init__()
+        super().__init__()
         self.node = node
         self.hidden_n = hidden_n - 1
         self.layer = hk.Linear

@@ -33,7 +33,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         seed=None,
         optimizer="rmsprop",
     ):
-        super(PPO, self).__init__(
+        super().__init__(
             env,
             gamma,
             learning_rate,

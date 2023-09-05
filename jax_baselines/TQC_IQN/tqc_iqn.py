@@ -51,7 +51,7 @@ class TQC_IQN(Deteministic_Policy_Gradient_Family):
         seed=None,
         optimizer="adamw",
     ):
-        super(TQC_IQN, self).__init__(
+        super().__init__(
             env,
             gamma,
             learning_rate,

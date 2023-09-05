@@ -47,7 +47,7 @@ class C51(Q_Network_Family):
         optimizer="adamw",
         compress_memory=False,
     ):
-        super(C51, self).__init__(
+        super().__init__(
             env,
             gamma,
             learning_rate,

@@ -26,5 +26,6 @@ setup(
         "jax_baselines.TPPO",
         "jax_baselines.APE_X",
         "jax_baselines.IMPALA",
+        "jax_baselines.model.flax",
     ],
 )

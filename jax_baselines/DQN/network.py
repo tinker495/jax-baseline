@@ -8,7 +8,7 @@ from jax_baselines.common.layers import NoisyLinear
 
 class Model(hk.Module):
     def __init__(self, action_size, node=256, hidden_n=2, noisy=False, dueling=False):
-        super(Model, self).__init__()
+        super().__init__()
         self.action_size = action_size
         self.node = node
         self.hidden_n = hidden_n

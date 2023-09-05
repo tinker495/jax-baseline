@@ -107,9 +107,7 @@ class SegmentTree(object):
 
 class SumSegmentTree(SegmentTree):
     def __init__(self, capacity):
-        super(SumSegmentTree, self).__init__(
-            capacity=capacity, operation=np.add, neutral_element=0.0
-        )
+        super().__init__(capacity=capacity, operation=np.add, neutral_element=0.0)
 
     def sum(self, start=0, end=None):
         """
@@ -119,7 +117,7 @@ class SumSegmentTree(SegmentTree):
         :param end: (int) end position of the reduction (must be < len(arr), can be None for len(arr) - 1)
         :return: (Any) reduction of SumSegmentTree
         """
-        return super(SumSegmentTree, self).reduce(start, end)
+        return super().reduce(start, end)
 
     def _find_prefixsum_idx_helper(self, _value, prefixsum):
         idx = np.ones(len(prefixsum), dtype=int)
@@ -163,9 +161,7 @@ class SumSegmentTree(SegmentTree):
 
 class MinSegmentTree(SegmentTree):
     def __init__(self, capacity):
-        super(MinSegmentTree, self).__init__(
-            capacity=capacity, operation=np.minimum, neutral_element=float("inf")
-        )
+        super().__init__(capacity=capacity, operation=np.minimum, neutral_element=float("inf"))
 
     def min(self, start=0, end=None):
         """
@@ -175,4 +171,4 @@ class MinSegmentTree(SegmentTree):
         :param end: (int) end position of the reduction (must be < len(arr), can be None for len(arr) - 1)
         :return: (Any) reduction of MinSegmentTree
         """
-        return super(MinSegmentTree, self).reduce(start, end)
+        return super().reduce(start, end)

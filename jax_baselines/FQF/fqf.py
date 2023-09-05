@@ -49,7 +49,7 @@ class FQF(Q_Network_Family):
         optimizer="adamw",
         compress_memory=False,
     ):
-        super(FQF, self).__init__(
+        super().__init__(
             env,
             gamma,
             learning_rate,

@@ -51,7 +51,7 @@ class TD4_QR(Deteministic_Policy_Gradient_Family):
         seed=None,
         optimizer="adamw",
     ):
-        super(TD4_QR, self).__init__(
+        super().__init__(
             env,
             gamma,
             learning_rate,

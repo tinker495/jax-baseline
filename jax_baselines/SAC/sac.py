@@ -39,7 +39,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
         seed=None,
         optimizer="adamw",
     ):
-        super(SAC, self).__init__(
+        super().__init__(
             env,
             gamma,
             learning_rate,

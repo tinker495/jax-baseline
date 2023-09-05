@@ -24,7 +24,7 @@ class NoisyLinear(hk.Module):
         b_init: Optional[hk.initializers.Initializer] = None,
         name: Optional[str] = None,
     ):
-        super(NoisyLinear, self).__init__()
+        super().__init__()
         self.input_size = None
         self.output_size = output_size
         self.with_bias = with_bias

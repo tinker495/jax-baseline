@@ -11,7 +11,7 @@ from jax_baselines.common.Module import PreProcess
 from jax_baselines.common.utils import soft_update, convert_jax, print_param
 
 
-class TD3(Deteministic_Policy_Gradient_Family):
+class TD7(Deteministic_Policy_Gradient_Family):
     def __init__(
         self,
         env,

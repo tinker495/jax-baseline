@@ -12,7 +12,7 @@ LOG_STD_MEAN = (LOG_STD_MAX + LOG_STD_MIN) / 2.0
 
 class Actor(hk.Module):
     def __init__(self, action_size, node=256, hidden_n=2):
-        super(Actor, self).__init__()
+        super().__init__()
         self.action_size = action_size
         self.node = node
         self.hidden_n = hidden_n
@@ -36,7 +36,7 @@ class Actor(hk.Module):
 
 class Critic(hk.Module):
     def __init__(self, node=256, hidden_n=2):
-        super(Critic, self).__init__()
+        super().__init__()
         self.node = node
         self.hidden_n = hidden_n
         self.layer = hk.Linear
@@ -52,7 +52,7 @@ class Critic(hk.Module):
 
 class Value(hk.Module):
     def __init__(self, node=256, hidden_n=2):
-        super(Value, self).__init__()
+        super().__init__()
         self.node = node
         self.hidden_n = hidden_n
         self.layer = hk.Linear

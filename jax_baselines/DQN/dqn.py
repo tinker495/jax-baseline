@@ -45,7 +45,7 @@ class DQN(Q_Network_Family):
         optimizer="adamw",
         compress_memory=False,
     ):
-        super(DQN, self).__init__(
+        super().__init__(
             env,
             gamma,
             learning_rate,
