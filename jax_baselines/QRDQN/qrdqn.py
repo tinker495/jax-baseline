@@ -8,7 +8,7 @@ from einops import rearrange, reduce, repeat
 
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.QRDQN.network import Model
-from jax_baselines.common.Module import PreProcess
+from jax_baselines.model.haiku.Module import PreProcess
 
 from jax_baselines.common.utils import hard_update, convert_jax, print_param, q_log_pi
 from jax_baselines.common.losses import QuantileHuberLosses

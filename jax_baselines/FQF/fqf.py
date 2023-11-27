@@ -8,7 +8,7 @@ from einops import rearrange, reduce, repeat
 
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.FQF.network import Model
-from jax_baselines.common.Module import PreProcess, FractionProposal
+from jax_baselines.model.haiku.Module import PreProcess, FractionProposal
 
 from jax_baselines.common.utils import hard_update, convert_jax, print_param
 from jax_baselines.common.losses import QuantileHuberLosses, FQFQuantileLosses

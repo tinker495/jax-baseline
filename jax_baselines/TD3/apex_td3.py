@@ -10,7 +10,7 @@ from jax_baselines.APE_X.dpg_base_class import (
     Ape_X_Deteministic_Policy_Gradient_Family,
 )
 from jax_baselines.TD3.network import Actor, Critic
-from jax_baselines.common.Module import PreProcess
+from jax_baselines.model.haiku.Module import PreProcess
 from jax_baselines.common.utils import soft_update, convert_jax, print_param
 
 

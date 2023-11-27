@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 from functools import partial
 from einops import rearrange, reduce, repeat
-from jax_baselines.common.layers import NoisyLinear
+from jax_baselines.model.haiku.layers import NoisyLinear
 
 
 class Model(hk.Module):

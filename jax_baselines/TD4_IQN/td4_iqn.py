@@ -7,7 +7,7 @@ from copy import deepcopy
 
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.TD4_IQN.network import Actor, Quantile_Embeding, Critic
-from jax_baselines.common.Module import PreProcess
+from jax_baselines.model.haiku.Module import PreProcess
 
 from jax_baselines.common.utils import (
     soft_update,

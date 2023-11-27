@@ -7,7 +7,7 @@ from itertools import repeat
 
 from jax_baselines.IMPALA.base_class import IMPALA_Family
 from jax_baselines.A2C.network import Actor, Critic
-from jax_baselines.common.Module import PreProcess
+from jax_baselines.model.haiku.Module import PreProcess
 from jax_baselines.common.utils import convert_jax, get_vtrace, print_param
 from jax_baselines.common.losses import hubberloss
 

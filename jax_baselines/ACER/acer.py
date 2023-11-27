@@ -11,7 +11,7 @@ from collections import deque
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.A2C.network import Actor, Critic
-from jax_baselines.common.Module import PreProcess
+from jax_baselines.model.haiku.Module import PreProcess
 from jax_baselines.common.utils import convert_states
 from jax_baselines.common.utils import convert_jax, discount_with_terminal
 

@@ -8,7 +8,7 @@ from itertools import repeat
 
 from jax_baselines.APE_X.base_class import Ape_X_Family
 from jax_baselines.DQN.network import Model
-from jax_baselines.common.Module import PreProcess
+from jax_baselines.model.haiku.Module import PreProcess
 from jax_baselines.common.losses import hubberloss
 from jax_baselines.common.utils import hard_update, convert_jax, print_param, q_log_pi
 

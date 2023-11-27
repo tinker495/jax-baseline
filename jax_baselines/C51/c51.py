@@ -7,7 +7,7 @@ from copy import deepcopy
 
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.C51.network import Model
-from jax_baselines.common.Module import PreProcess
+from jax_baselines.model.haiku.Module import PreProcess
 from jax_baselines.common.utils import hard_update, convert_jax, print_param, q_log_pi
 
 
