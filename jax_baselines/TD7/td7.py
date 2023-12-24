@@ -144,15 +144,10 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.eps_since_update += 1
         self.timesteps_since_update += eplen
 
-        self.min_return = min(self.min_return, score)
-
+        # self.min_return = min(self.min_return, score)
         # Update checkpoint
-        if (
-            self.eps_since_update >= self.max_eps_before_update
-            or self.min_return < self.best_min_return
-        ):
-            self.best_min_return = self.min_return
-
+        if self.eps_since_update >= self.max_eps_before_update:
+            # self.best_min_return = self.min_return
             self.checkpoint_params = self.params
             self.checkpoint_encoder_params = self.fixed_encoder_params
             self.train_and_reset(steps)
