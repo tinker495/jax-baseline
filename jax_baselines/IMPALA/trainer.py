@@ -1,33 +1,10 @@
-import gymnasium as gym
-import jax
-import jax.numpy as jnp
 import haiku as hk
+import jax
 import numpy as np
-import multiprocessing as mp
-import time
 import ray
-import os
 
-from tqdm.auto import trange
-from collections import deque
-
-from jax_baselines.common.base_classes import (
-    TensorboardWriter,
-    save,
-    restore,
-    select_optimizer,
-)
-from jax_baselines.common.utils import convert_states
-from jax_baselines.IMPALA.worker import Impala_Worker
+from jax_baselines.common.base_classes import select_optimizer
 from jax_baselines.IMPALA.cpprb_buffers import ImpalaReplayBuffer
-from jax_baselines.common.utils import (
-    convert_jax,
-    discount_with_terminal,
-    print_param,
-)
-
-from mlagents_envs.environment import UnityEnvironment, ActionTuple
-from gym import spaces
 
 
 @ray.remote(num_gpus=1)
@@ -38,7 +15,7 @@ class Impala_Trainer(object):
         minibatch_size,
         replay=False,
         batch_size=1024,
-        network_builder=None,
+        model_builder=None,
         train_builder=None,
         optimizer="rmsprop",
         logger_server=None,
@@ -48,7 +25,7 @@ class Impala_Trainer(object):
         self.batch_size = batch_size
         self.minibatch_size = minibatch_size
         self.key_seq = hk.PRNGSequence(key)
-        self.preproc, self.model = network_builder()
+        self.preproc, self.model = model_builder()
         self._preprocess, self._train_step = train_builder()
         self.optimizer = select_optimizer(optimizer, learning_rate, 1e-2 / batch_size)
         self.logger_server = logger_server

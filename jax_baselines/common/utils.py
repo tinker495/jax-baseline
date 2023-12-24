@@ -1,9 +1,9 @@
+from functools import partial
+from typing import List
+
 import jax
 import jax.numpy as jnp
 import numpy as np
-from functools import partial
-
-from typing import List
 
 cpu_jit = partial(jax.jit, backend="cpu")
 gpu_jit = partial(jax.jit, backend="gpu")
@@ -44,7 +44,6 @@ def convert_states(obs: List):
 
 def convert_jax(obs: List):
     return [jax.device_get(o).astype(jnp.float32) for o in obs]
-    # return [jax.device_get(o).astype(jnp.float32)/256.0 - 0.5 if len(o.shape) >= 4 else jax.device_get(o) for o in obs]
 
 
 def q_log_pi(q, entropy_tau):
@@ -79,18 +78,6 @@ def discount_with_terminal(rewards, dones, terminals, next_values, gamma):
     return discounted
 
 
-"""
-
-def discount_with_terminal(rewards, dones, terminals, next_values, gamma):
-	ret = rewards[-1] + gamma * next_values[-1] * (1. - dones[-1])
-	discounted = [ret]
-	for reward, done, term, nextval in zip(rewards[-2::-1], dones[-2::-1], terminals[-2::-1], next_values[-2::-1]):
-		ret = reward + gamma * (ret * (1. - term) + nextval * (1. - done) * term) # fixed off by one bug
-		discounted.append(ret)
-	return discounted[::-1]
-"""
-
-
 def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
     deltas = rewards + gamma * (1.0 - dones) * next_values - values
 
@@ -103,21 +90,6 @@ def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
         f, jnp.zeros((1,), dtype=jnp.float32), (deltas, dones, terminals), reverse=True
     )
     return advs
-
-
-"""
-def get_gaes(rewards, dones, terminals, values, next_values, gamma, lamda):
-	last_gae_lam = 0
-	delta = rewards[-1] + gamma * next_values[-1] * (1. - dones[-1]) - values[-1]
-	last_gae_lam = delta + gamma * lamda * (1. - dones[-1]) * last_gae_lam
-	advs = [last_gae_lam]
-	for reward, done, value, nextval, term in zip(rewards[-2::-1], dones[-2::-1], values[-2::-1], next_values[-2::-1], terminals[-2::-1]):
-		delta = reward + gamma * (nextval * (1. - done)) - value
-		last_gae_lam = delta + gamma * lamda * (1. - term) * last_gae_lam
-		advs.append(last_gae_lam)
-	advs = jnp.array(advs[::-1])
-	return advs
-"""
 
 
 def get_vtrace(rewards, rhos, c_ts, dones, terminals, values, next_values, gamma):

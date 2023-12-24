@@ -1,23 +1,22 @@
-import numpy as np
 import os
+import re
+from collections import defaultdict, deque
+
+import cv2
+import gymnasium as gym
+import numpy as np
+from gym import spaces
+
+from .wrappers import TimeLimit
 
 os.environ.setdefault("PATH", "")
-from collections import deque
-import gymnasium as gym
-from gym import spaces
-import cv2
-
 cv2.ocl.setUseOpenCL(False)
-from .wrappers import TimeLimit
-from collections import defaultdict
-import re
 
 
 class NoopResetEnv(gym.Wrapper):
     def __init__(self, env, noop_max=30):
-        """
-        Sample initial states by taking random number of no-ops on reset.
-        No-op is assumed to be action 0.
+        """Sample initial states by taking random number of no-ops on reset. No-op is assumed to be action 0.
+
         :param env: (Gym Environment) the environment to wrap
         :param noop_max: (int) the maximum value of no-ops to run
         """
@@ -47,8 +46,8 @@ class NoopResetEnv(gym.Wrapper):
 
 class FireResetEnv(gym.Wrapper):
     def __init__(self, env):
-        """
-        Take action on reset for environments that are fixed until firing.
+        """Take action on reset for environments that are fixed until firing.
+
         :param env: (Gym Environment) the environment to wrap
         """
         gym.Wrapper.__init__(self, env)
@@ -72,9 +71,9 @@ class FireResetEnv(gym.Wrapper):
 
 class EpisodicLifeEnv(gym.Wrapper):
     def __init__(self, env, kill_on_life_loss=False):
-        """
-        Make end-of-life == end-of-episode, but only reset on true game over.
-        Done by DeepMind for the DQN and co. since it helps value estimation.
+        """Make end-of-life == end-of-episode, but only reset on true game over. Done by DeepMind for the DQN and
+        co. since it helps value estimation.
+
         :param env: (Gym Environment) the environment to wrap
         """
         gym.Wrapper.__init__(self, env)
@@ -99,10 +98,9 @@ class EpisodicLifeEnv(gym.Wrapper):
         return obs, reward, terminal, truncated, info
 
     def reset(self, **kwargs):
-        """
-        Calls the Gym environment reset, only when lives are exhausted.
-        This way all states are still reachable even though lives are episodic,
-        and the learner need not know about any of this behind-the-scenes.
+        """Calls the Gym environment reset, only when lives are exhausted. This way all states are still reachable
+        even though lives are episodic, and the learner need not know about any of this behind-the-scenes.
+
         :param kwargs: Extra keywords passed to env.reset() call
         :return: ([int] or [float]) the first observation of the environment
         """
@@ -117,8 +115,8 @@ class EpisodicLifeEnv(gym.Wrapper):
 
 class MaxAndSkipEnv(gym.Wrapper):
     def __init__(self, env, skip=4):
-        """
-        Return only every `skip`-th frame (frameskipping)
+        """Return only every `skip`-th frame (frameskipping)
+
         :param env: (Gym Environment) the environment
         :param skip: (int) number of `skip`-th frame
         """
@@ -130,9 +128,8 @@ class MaxAndSkipEnv(gym.Wrapper):
         self._skip = skip
 
     def step(self, action):
-        """
-        Step the environment with the given action
-        Repeat action, sum reward, and max over last observations.
+        """Step the environment with the given action Repeat action, sum reward, and max over last observations.
+
         :param action: ([int] or [float]) the action
         :return: ([int] or [float], [float], [bool], dict) observation, reward, done, information
         """
@@ -159,15 +156,27 @@ class MaxAndSkipEnv(gym.Wrapper):
 
 class ClipRewardEnv(gym.RewardWrapper):
     def __init__(self, env):
-        """
-        clips the reward to {+1, 0, -1} by its sign.
+        """clips the reward to {+1, 0, -1} by its sign.
+
         :param env: (Gym Environment) the environment
         """
         gym.RewardWrapper.__init__(self, env)
 
-    def reward(self, reward):
-        """
-        Bin reward to {+1, 0, -1} by its sign.
+    def step(self, action):
+        """Logging the original reward."""
+
+        obs, reward, terminal, truncated, info = self.env.step(action)
+        info["original_reward"] = reward
+        return obs, self._reward(reward), terminal, truncated, info
+
+    def reset(self, **kwargs):
+        state, info = self.env.reset(**kwargs)
+        info["original_reward"] = 0
+        return state, info
+
+    def _reward(self, reward):
+        """Bin reward to {+1, 0, -1} by its sign.
+
         :param reward: (float)
         """
         return np.sign(reward)
@@ -175,8 +184,8 @@ class ClipRewardEnv(gym.RewardWrapper):
 
 class WarpFrame(gym.ObservationWrapper):
     def __init__(self, env):
-        """
-        Warp frames to 84x84 as done in the Nature paper and later work.
+        """Warp frames to 84x84 as done in the Nature paper and later work.
+
         :param env: (Gym Environment) the environment
         """
         gym.ObservationWrapper.__init__(self, env)
@@ -190,8 +199,8 @@ class WarpFrame(gym.ObservationWrapper):
         )
 
     def observation(self, frame):
-        """
-        returns the current observation from a frame
+        """Returns the current observation from a frame.
+
         :param frame: ([int] or [float]) environment frame
         :return: ([int] or [float]) the observation
         """
@@ -252,11 +261,10 @@ class ScaledFloatFrame(gym.ObservationWrapper):
 
 class LazyFrames(object):
     def __init__(self, frames):
-        """
-        This object ensures that common frames between the observations are only stored once.
-        It exists purely to optimize memory usage which can be huge for DQN's 1M frames replay
-        buffers.
-        This object should only be converted to np.ndarray before being passed to the model.
+        """This object ensures that common frames between the observations are only stored once. It exists purely
+        to optimize memory usage which can be huge for DQN's 1M frames replay buffers. This object should only be
+        converted to np.ndarray before being passed to the model.
+
         :param frames: ([int] or [float]) environment frames
         """
         self._frames = frames
@@ -292,7 +300,7 @@ def make_atari(env_id, max_episode_steps=None):
 def wrap_deepmind(
     env,
     episode_life=True,
-    kill_on_life_loss=True,
+    kill_on_life_loss=False,
     clip_rewards=True,
     frame_stack=True,
     scale=False,
@@ -333,7 +341,7 @@ def get_env_type(env_id):
             elif "shimmy" in env.entry_point:
                 env_type = env.entry_point.split(".")[1].split(":")[0]
             _game_envs[env_type].add(env.id)  # This is a set so add is idempotent
-        except:
+        except Exception:
             pass
 
     if env_id in _game_envs.keys():
@@ -347,6 +355,5 @@ def get_env_type(env_id):
                 break
         if ":" in env_id:
             env_type = re.sub(r":.*", "", env_id)
-        # assert env_type is not None, 'env_id {},{} is not recognized in env types {}'.format(env_id, env_type ,_game_envs.keys())
 
     return env_type, env_id

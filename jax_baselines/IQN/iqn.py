@@ -1,17 +1,14 @@
+from copy import deepcopy
+
 import jax
 import jax.numpy as jnp
-import haiku as hk
 import numpy as np
 import optax
-from copy import deepcopy
-from einops import rearrange, reduce, repeat
 
-from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.IQN.network import Model
-from jax_baselines.model.haiku.Module import PreProcess
-
-from jax_baselines.common.utils import hard_update, convert_jax, print_param, q_log_pi
 from jax_baselines.common.losses import QuantileHuberLosses
+from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
+from jax_baselines.DQN.base_class import Q_Network_Family
+from jax_baselines.IQN.network.haiku import model_builder_maker
 
 
 class IQN(Q_Network_Family):
@@ -92,47 +89,19 @@ class IQN(Q_Network_Family):
             self.setup_model()
 
     def setup_model(self):
-        tau = jax.random.uniform(next(self.key_seq), (1, self.n_support))
-        self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
-        if "cnn_mode" in self.policy_kwargs.keys():
-            cnn_mode = self.policy_kwargs["cnn_mode"]
-            del self.policy_kwargs["cnn_mode"]
-        self.preproc = hk.transform(
-            lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x)
+        model_builder = model_builder_maker(
+            self.observation_space,
+            self.action_size,
+            self.dueling_model,
+            self.param_noise,
+            self.policy_kwargs,
         )
-        self.model = hk.transform(
-            lambda x, tau: Model(
-                self.action_size,
-                dueling=self.dueling_model,
-                noisy=self.param_noise,
-                **self.policy_kwargs
-            )(x, tau)
-        )
-        pre_param = self.preproc.init(
-            next(self.key_seq),
-            [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-        )
-        model_param = self.model.init(
-            next(self.key_seq),
-            self.preproc.apply(
-                pre_param,
-                None,
-                [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-            ),
-            tau,
-        )
-        self.params = hk.data_structures.merge(pre_param, model_param)
+        self.preproc, self.model, self.params = model_builder(next(self.key_seq), print_model=True)
         self.target_params = deepcopy(self.params)
 
         self.opt_state = self.optimizer.init(self.params)
 
         self.tile_n = self.n_support
-
-        print("----------------------model----------------------")
-        print_param("preprocess", pre_param)
-        print_param("model", model_param)
-        print("loss : quaile_huber_loss")
-        print("-------------------------------------------------")
 
         self.get_q = jax.jit(self.get_q)
         self._get_actions = jax.jit(self._get_actions)
@@ -141,10 +110,10 @@ class IQN(Q_Network_Family):
         self._train_step = jax.jit(self._train_step)
 
     def get_q(self, params, obses, tau, key=None) -> jnp.ndarray:
-        return self.model.apply(params, key, self.preproc.apply(params, key, obses), tau)
+        return self.model(params, key, self.preproc(params, key, obses), tau)
 
     def actions(self, obs, epsilon):
-        if epsilon <= np.random.uniform(0, 1) or self.param_noise:
+        if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(self._get_actions(self.params, obs, next(self.key_seq)))
         else:
             actions = np.random.choice(self.action_size[0], [self.worker_size, 1])
@@ -184,7 +153,7 @@ class IQN(Q_Network_Family):
 
         if self.summary and steps % self.log_interval == 0:
             self.summary.add_scalar("loss/qloss", loss, steps)
-            self.summary.add_scalar("loss/target", t_mean, steps)
+            self.summary.add_scalar("loss/targets", t_mean, steps)
             self.summary.add_scalar("loss/target_stds", t_std, steps)
 
         return loss

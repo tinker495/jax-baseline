@@ -1,18 +1,12 @@
 import base64
 import multiprocessing as mp
-import time
-import jax
-import jax.numpy as jnp
-from functools import partial
-import os, psutil
-import copy
 import traceback
+from functools import partial
 
 import gymnasium as gym
-from gymnasium import spaces
+import jax
 import numpy as np
 import ray
-import haiku as hk
 
 from jax_baselines.common.cpprb_buffers import ReplayBuffer
 
@@ -39,7 +33,7 @@ class Ape_X_Worker(object):
         self,
         local_size,
         buffer_info,
-        network_builder,
+        model_builder,
         actor_builder,
         param_server,
         logger_server,
@@ -50,7 +44,7 @@ class Ape_X_Worker(object):
         try:
             gloabal_buffer, env_dict, n_s = buffer_info
             local_buffer = ReplayBuffer(local_size, env_dict=env_dict, n_s=n_s)
-            preproc, actor_model, cricit_model = network_builder()
+            preproc, actor_model, cricit_model = model_builder()
             (
                 get_abs_td_error,
                 actor,
@@ -74,9 +68,9 @@ class Ape_X_Worker(object):
             eplen = 0
             episode = 0
             if eps is None:
-                rw_label = f"env/episode_reward"
-                len_label = f"env/episode_len"
-                to_label = f"env/time_over"
+                rw_label = "env/episode_reward"
+                len_label = "env/episode_len"
+                to_label = "env/time_over"
             else:
                 rw_label = f"env/episode_reward/eps{eps:.2f}"
                 len_label = f"env/episode_len/eps{eps:.2f}"

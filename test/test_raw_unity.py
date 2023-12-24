@@ -1,4 +1,5 @@
-from mlagents_envs.environment import UnityEnvironment, ActionTuple
+import numpy as np
+from mlagents_envs.environment import ActionTuple, UnityEnvironment
 from mlagents_envs.side_channel.engine_configuration_channel import (
     EngineConfigurationChannel,
 )
@@ -6,7 +7,6 @@ from mlagents_envs.side_channel.environment_parameters_channel import (
     EnvironmentParametersChannel,
 )
 from tqdm import trange
-import numpy as np
 
 engine_configuration_channel = EngineConfigurationChannel()
 channel = EnvironmentParametersChannel()
@@ -32,13 +32,18 @@ observation_space = [list(spec.shape) for spec in group_spec.observation_specs]
 if group_spec.action_spec.continuous_size == 0:
     action_size = [branch for branch in group_spec.action_spec.discrete_branches]
     action_type = "discrete"
-    conv_action = lambda a: ActionTuple(discrete=a)
+
+    def conv_action(a):
+        return ActionTuple(discrete=a)
+
 else:
     action_size = [group_spec.action_spec.continuous_size]
     action_type = "continuous"
-    conv_action = lambda a: ActionTuple(
-        continuous=np.clip(a, -3.0, 3.0) / 3.0
-    )  # np.clip(a, -3.0, 3.0) / 3.0)
+
+    def conv_action(a):
+        return ActionTuple(continuous=np.clip(a, -3.0, 3.0) / 3.0)
+
+
 worker_size = len(dec.agent_id)
 env_type = "unity"
 

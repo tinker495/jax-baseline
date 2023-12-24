@@ -1,15 +1,15 @@
-import jax
-import jax.numpy as jnp
-import haiku as hk
-import numpy as np
-import optax
 from copy import deepcopy
 from itertools import repeat
 
+import haiku as hk
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+
 from jax_baselines.APE_X.base_class import Ape_X_Family
-from jax_baselines.C51.network import Model
-from jax_baselines.model.haiku.Module import PreProcess
-from jax_baselines.common.utils import hard_update, convert_jax, print_param, q_log_pi
+from jax_baselines.C51.network.haiku import model_builder_maker
+from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
 
 
 class APE_X_C51(Ape_X_Family):
@@ -22,7 +22,8 @@ class APE_X_C51(Ape_X_Family):
         buffer_size=50000,
         exploration_initial_eps=0.8,
         exploration_decay=0.7,
-        batch_size=32,
+        batch_num=16,
+        mini_batch_size=512,
         double_q=False,
         dueling_model=False,
         n_step=1,
@@ -34,7 +35,7 @@ class APE_X_C51(Ape_X_Family):
         prioritized_replay_eps=1e-3,
         param_noise=False,
         munchausen=False,
-        log_interval=200,
+        log_interval=10,
         tensorboard_log=None,
         _init_setup_model=True,
         policy_kwargs=None,
@@ -54,7 +55,8 @@ class APE_X_C51(Ape_X_Family):
             buffer_size,
             exploration_initial_eps,
             exploration_decay,
-            batch_size,
+            batch_num,
+            mini_batch_size,
             double_q,
             dueling_model,
             n_step,
@@ -84,61 +86,18 @@ class APE_X_C51(Ape_X_Family):
             self.setup_model()
 
     def setup_model(self):
-        self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
-        if "cnn_mode" in self.policy_kwargs.keys():
-            cnn_mode = self.policy_kwargs["cnn_mode"]
-            del self.policy_kwargs["cnn_mode"]
-
-        def network_builder(
-            observation_space,
-            cnn_mode,
-            action_size,
-            dueling_model,
-            param_noise,
-            categorial_bar_n,
-            **kwargs
-        ):
-            def builder():
-                preproc = hk.transform(
-                    lambda x: PreProcess(observation_space, cnn_mode=cnn_mode)(x)
-                )
-                model = hk.transform(
-                    lambda x: Model(
-                        action_size,
-                        dueling=dueling_model,
-                        noisy=param_noise,
-                        categorial_bar_n=categorial_bar_n,
-                        **kwargs
-                    )(x)
-                )
-                return preproc, model
-
-            return builder
-
-        self.network_builder = network_builder(
+        self.model_builder = model_builder_maker(
             self.observation_space,
-            cnn_mode,
             self.action_size,
             self.dueling_model,
             self.param_noise,
             self.categorial_bar_n,
-            **self.policy_kwargs
+            self.policy_kwargs,
         )
 
-        self.preproc, self.model = self.network_builder()
-        pre_param = self.preproc.init(
-            next(self.key_seq),
-            [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
+        self.preproc, self.model, self.params = self.model_builder(
+            next(self.key_seq), print_model=True
         )
-        model_param = self.model.init(
-            next(self.key_seq),
-            self.preproc.apply(
-                pre_param,
-                None,
-                [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-            ),
-        )
-        self.params = hk.data_structures.merge(pre_param, model_param)
         self.target_params = deepcopy(self.params)
 
         self.opt_state = self.optimizer.init(self.params)
@@ -153,20 +112,16 @@ class APE_X_C51(Ape_X_Family):
         )
 
         offset = jnp.expand_dims(
-            jnp.linspace(0, (self.batch_size - 1) * self.categorial_bar_n, self.batch_size),
+            jnp.linspace(
+                0, (self.mini_batch_size - 1) * self.categorial_bar_n, self.mini_batch_size
+            ),
             axis=-1,
         )
-        self.offset = jnp.broadcast_to(offset, (self.batch_size, self.categorial_bar_n)).astype(
-            jnp.int32
-        )
+        self.offset = jnp.broadcast_to(
+            offset, (self.mini_batch_size, self.categorial_bar_n)
+        ).astype(jnp.int32)
 
         self.actor_builder = self.get_actor_builder()
-
-        print("----------------------model----------------------")
-        print_param("preprocess", pre_param)
-        print_param("model", model_param)
-        print("loss : logistic_distribution_loss")
-        print("-------------------------------------------------")
 
         self.get_q = jax.jit(self.get_q)
         self._loss = jax.jit(self._loss)
@@ -174,7 +129,7 @@ class APE_X_C51(Ape_X_Family):
         self._train_step = jax.jit(self._train_step)
 
     def get_q(self, params, obses, key=None) -> jnp.ndarray:
-        return self.model.apply(params, key, self.preproc.apply(params, key, obses))
+        return self.model(params, key, self.preproc(params, key, obses))
 
     def get_actor_builder(self):
         gamma = self.gamma
@@ -185,7 +140,6 @@ class APE_X_C51(Ape_X_Family):
         categorial_max = self.categorial_max
         categorial_bar = self.categorial_bar
         delta_bar = self.delta_bar
-        prioritized_replay_eps = self.prioritized_replay_eps
 
         def builder():
             if param_noise:
@@ -201,10 +155,10 @@ class APE_X_C51(Ape_X_Family):
                 distribution = jnp.clip(
                     jnp.squeeze(
                         jnp.take_along_axis(
-                            model.apply(
+                            model(
                                 params,
                                 key,
-                                preproc.apply(params, key, convert_jax(obses)),
+                                preproc(params, key, convert_jax(obses)),
                             ),
                             jnp.expand_dims(actions.astype(jnp.int32), axis=2),
                             axis=1,
@@ -214,7 +168,7 @@ class APE_X_C51(Ape_X_Family):
                     1.0,
                 )
 
-                next_q = model.apply(params, key, preproc.apply(params, key, convert_jax(nxtobses)))
+                next_q = model(params, key, preproc(params, key, convert_jax(nxtobses)))
                 next_actions = jnp.expand_dims(
                     jnp.argmax(jnp.sum(next_q * categorial_bar, axis=2), axis=1),
                     axis=(1, 2),
@@ -254,8 +208,7 @@ class APE_X_C51(Ape_X_Family):
 
             def actor(model, preproc, params, obses, key):
                 q_values = jnp.sum(
-                    model.apply(params, key, preproc.apply(params, key, convert_jax(obses)))
-                    * categorial_bar,
+                    model(params, key, preproc(params, key, convert_jax(obses))) * categorial_bar,
                     axis=2,
                 )
                 return jnp.argmax(q_values, axis=1)
@@ -294,12 +247,7 @@ class APE_X_C51(Ape_X_Family):
                 t_mean,
                 new_priorities,
             ) = self._train_step(
-                self.params,
-                self.target_params,
-                self.opt_state,
-                steps,
-                next(self.key_seq) if self.param_noise else None,
-                **data
+                self.params, self.target_params, self.opt_state, steps, next(self.key_seq), **data
             )
 
             self.replay_buffer.update_priorities(data["indexes"], new_priorities)
@@ -329,22 +277,54 @@ class APE_X_C51(Ape_X_Family):
         nxtobses = convert_jax(nxtobses)
         actions = jnp.expand_dims(actions.astype(jnp.int32), axis=2)
         not_dones = 1.0 - dones
-        target_distribution = self._target(
-            params, target_params, obses, actions, rewards, nxtobses, not_dones, key
+        batch_idxes = jnp.arange(self.batch_size).reshape(-1, self.mini_batch_size)
+        obses_batch = [o[batch_idxes] for o in obses]
+        actions_batch = actions[batch_idxes]
+        rewards_batch = rewards[batch_idxes]
+        nxtobses_batch = [o[batch_idxes] for o in nxtobses]
+        not_dones_batch = not_dones[batch_idxes]
+        weights_batch = weights[batch_idxes]
+
+        def f(carry, data):
+            params, opt_state, key = carry
+            obses, actions, rewards, nxtobses, not_dones, weights = data
+            key, *subkeys = jax.random.split(key, 3)
+            target_distribution = self._target(
+                params, target_params, obses, actions, rewards, nxtobses, not_dones, subkeys[0]
+            )
+            (loss, abs_error), grad = jax.value_and_grad(self._loss, has_aux=True)(
+                params, obses, actions, target_distribution, weights, subkeys[1]
+            )
+            updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+            params = optax.apply_updates(params, updates)
+            return (params, opt_state, key), (loss, target_distribution, abs_error)
+
+        (params, opt_state, key), (loss, target_distribution, abs_error) = jax.lax.scan(
+            f,
+            (params, opt_state, key),
+            (
+                obses_batch,
+                actions_batch,
+                rewards_batch,
+                nxtobses_batch,
+                not_dones_batch,
+                weights_batch,
+            ),
         )
-        (loss, abs_error), grad = jax.value_and_grad(self._loss, has_aux=True)(
-            params, obses, actions, target_distribution, weights, key
-        )
-        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-        params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
-        new_priorities = abs_error
+        new_priorities = jnp.reshape(abs_error, (-1,))
         return (
             params,
             target_params,
             opt_state,
-            loss,
-            jnp.mean(jnp.sum(target_distribution * self.categorial_bar, axis=1)),
+            jnp.mean(loss),
+            jnp.mean(
+                jnp.sum(
+                    jnp.reshape(target_distribution, (-1, self.categorial_bar_n))
+                    * self.categorial_bar,
+                    axis=1,
+                )
+            ),
             new_priorities,
         )
 
@@ -405,7 +385,7 @@ class APE_X_C51(Ape_X_Family):
         C51_H = jnp.where(
             (C51_L < (self.categorial_bar_n - 1)) * (C51_L == C51_H), C51_H + 1, C51_H
         )  # C51_H.at[].add(1)
-        target_distribution = jnp.zeros((self.batch_size * self.categorial_bar_n))
+        target_distribution = jnp.zeros((self.mini_batch_size * self.categorial_bar_n))
         target_distribution = target_distribution.at[jnp.reshape(C51_L + self.offset, (-1))].add(
             jnp.reshape(next_distribution * (C51_H.astype(jnp.float32) - C51_b), (-1))
         )
@@ -413,7 +393,7 @@ class APE_X_C51(Ape_X_Family):
             jnp.reshape(next_distribution * (C51_b - C51_L.astype(jnp.float32)), (-1))
         )
         target_distribution = jnp.reshape(
-            target_distribution, (self.batch_size, self.categorial_bar_n)
+            target_distribution, (self.mini_batch_size, self.categorial_bar_n)
         )
         return target_distribution
 

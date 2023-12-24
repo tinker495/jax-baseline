@@ -1,12 +1,13 @@
-import os
 import argparse
+import os
+
 import gymnasium as gym
 
-from jax_baselines.DQN.dqn import DQN
 from jax_baselines.C51.c51 import C51
-from jax_baselines.QRDQN.qrdqn import QRDQN
-from jax_baselines.IQN.iqn import IQN
+from jax_baselines.DQN.dqn import DQN
 from jax_baselines.FQF.fqf import FQF
+from jax_baselines.IQN.iqn import IQN
+from jax_baselines.QRDQN.qrdqn import QRDQN
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -35,7 +36,7 @@ if __name__ == "__main__":
     parser.add_argument("--max", type=float, default=250, help="c51 max")
     parser.add_argument("--min", type=float, default=-250, help="c51 min")
     parser.add_argument("--n_support", type=int, default=32, help="n_support for QRDQN,IQN,FQF")
-    parser.add_argument("--delta", type=float, default=0.001, help="network node number")
+    parser.add_argument("--delta", type=float, default=0.1, help="network node number")
     parser.add_argument("--CVaR", type=float, default=1.0, help="IQN risk avoiding factor")
     parser.add_argument("--node", type=int, default=256, help="network node number")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
@@ -56,7 +57,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     env_name = args.env
-    cnn_mode = "normal"
+    embedding_mode = "normal"
     if os.path.exists(env_name):
         from mlagents_envs.environment import UnityEnvironment
         from mlagents_envs.side_channel.engine_configuration_channel import (
@@ -86,8 +87,8 @@ if __name__ == "__main__":
             env = gymMultiworker(env_name, worker_num=args.worker)
         else:
             from jax_baselines.common.atari_wrappers import (
-                make_wrap_atari,
                 get_env_type,
+                make_wrap_atari,
             )
 
             env_type, env_id = get_env_type(env_name)
@@ -97,7 +98,7 @@ if __name__ == "__main__":
                 env = gym.make(env_name)
         env_type = "gym"
 
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "cnn_mode": cnn_mode}
+    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
     if args.algo == "DQN":
         agent = DQN(

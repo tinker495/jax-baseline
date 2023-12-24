@@ -1,5 +1,5 @@
-"""This file is used for specifying various schedules that evolve over
-time throughout the execution of the algorithm, such as:
+"""This file is used for specifying various schedules that evolve over time throughout the execution of the
+algorithm, such as:
 
  - learning rate for the optimizer
  - exploration epsilon for the epsilon greedy exploration strategy
@@ -12,8 +12,7 @@ of the parameter given the timestep t of the optimization procedure.
 
 class Schedule(object):
     def value(self, step):
-        """
-        Value of the schedule for a given timestep
+        """Value of the schedule for a given timestep.
 
         :param step: (int) the timestep
         :return: (float) the output value for the given timestep
@@ -22,8 +21,7 @@ class Schedule(object):
 
 
 class ConstantSchedule(Schedule):
-    """
-    Value remains constant over time.
+    """Value remains constant over time.
 
     :param value: (float) Constant value of the schedule
     """
@@ -36,8 +34,7 @@ class ConstantSchedule(Schedule):
 
 
 def linear_interpolation(left, right, alpha):
-    """
-    Linear interpolation between `left` and `right`.
+    """Linear interpolation between `left` and `right`.
 
     :param left: (float) left boundary
     :param right: (float) right boundary
@@ -49,8 +46,7 @@ def linear_interpolation(left, right, alpha):
 
 
 class PiecewiseSchedule(Schedule):
-    """
-    Piecewise schedule.
+    """Piecewise schedule.
 
     :param endpoints: ([(int, int)])
             list of pairs `(time, value)` meaning that schedule should output
@@ -88,10 +84,8 @@ class PiecewiseSchedule(Schedule):
 
 
 class LinearSchedule(Schedule):
-    """
-    Linear interpolation between initial_p and final_p over
-    schedule_timesteps. After this many timesteps pass final_p is
-    returned.
+    """Linear interpolation between initial_p and final_p over schedule_timesteps. After this many timesteps pass
+    final_p is returned.
 
     :param schedule_timesteps: (int) Number of timesteps for which to linearly anneal initial_p to final_p
     :param initial_p: (float) initial output value
@@ -109,9 +103,7 @@ class LinearSchedule(Schedule):
 
 
 def get_schedule_fn(value_schedule):
-    """
-    Transform (if needed) learning rate and clip range
-    to callable.
+    """Transform (if needed) learning rate and clip range to callable.
 
     :param value_schedule: (callable or float)
     :return: (function)
@@ -127,9 +119,8 @@ def get_schedule_fn(value_schedule):
 
 
 def constfn(val):
-    """
-    Create a function that returns a constant
-    It is useful for learning rate schedule (to avoid code duplication)
+    """Create a function that returns a constant It is useful for learning rate schedule (to avoid code
+    duplication)
 
     :param val: (float)
     :return: (function)
@@ -147,8 +138,7 @@ def constfn(val):
 
 
 def constant(_):
-    """
-    Returns a constant value for the Scheduler
+    """Returns a constant value for the Scheduler.
 
     :param _: ignored
     :return: (float) 1
@@ -157,8 +147,7 @@ def constant(_):
 
 
 def linear_schedule(progress):
-    """
-    Returns a linear value for the Scheduler
+    """Returns a linear value for the Scheduler.
 
     :param progress: (float) Current progress status (in [0, 1])
     :return: (float) 1 - progress
@@ -167,8 +156,7 @@ def linear_schedule(progress):
 
 
 def middle_drop(progress):
-    """
-    Returns a linear value with a drop near the middle to a constant value for the Scheduler
+    """Returns a linear value with a drop near the middle to a constant value for the Scheduler.
 
     :param progress: (float) Current progress status (in [0, 1])
     :return: (float) 1 - progress if (1 - progress) >= 0.75 else 0.075
@@ -180,8 +168,7 @@ def middle_drop(progress):
 
 
 def double_linear_con(progress):
-    """
-    Returns a linear value (x2) with a flattened tail for the Scheduler
+    """Returns a linear value (x2) with a flattened tail for the Scheduler.
 
     :param progress: (float) Current progress status (in [0, 1])
     :return: (float) 1 - progress*2 if (1 - progress*2) >= 0.125 else 0.125
@@ -194,8 +181,7 @@ def double_linear_con(progress):
 
 
 def double_middle_drop(progress):
-    """
-    Returns a linear value with two drops near the middle to a constant value for the Scheduler
+    """Returns a linear value with two drops near the middle to a constant value for the Scheduler.
 
     :param progress: (float) Current progress status (in [0, 1])
     :return: (float) if 0.75 <= 1 - p: 1 - p, if 0.25 <= 1 - p < 0.75: 0.75, if 1 - p < 0.25: 0.125
@@ -220,8 +206,7 @@ SCHEDULES = {
 
 class Scheduler(object):
     def __init__(self, initial_value, n_values, schedule):
-        """
-        Update a value every iteration, with a specific curve.
+        """Update a value every iteration, with a specific curve.
 
         This is a legacy version of schedules, originally defined
         in a2c/utils.py. Used by A2C, ACER and ACKTR algorithms.
@@ -236,8 +221,7 @@ class Scheduler(object):
         self.schedule = SCHEDULES[schedule]
 
     def value(self):
-        """
-        Update the Scheduler, and return the current value
+        """Update the Scheduler, and return the current value.
 
         :return: (float) the current value
         """
@@ -246,8 +230,7 @@ class Scheduler(object):
         return current_value
 
     def value_steps(self, steps):
-        """
-        Get a value for a given step
+        """Get a value for a given step.
 
         :param steps: (int) The current number of iterations
         :return: (float) the value for the current number of iterations

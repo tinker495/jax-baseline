@@ -1,17 +1,11 @@
 import base64
 import multiprocessing as mp
-import time
-import jax
-import jax.numpy as jnp
 from functools import partial
-import os, psutil
-import copy
 
 import gymnasium as gym
-from gymnasium import spaces
+import jax
 import numpy as np
 import ray
-import haiku as hk
 
 from jax_baselines.IMPALA.cpprb_buffers import EpochBuffer
 
@@ -22,10 +16,10 @@ class Impala_Worker(object):
 
     def __init__(self, env_name_) -> None:
         mp.current_process().authkey = base64.b64decode(self.encoded)
-        from jax_baselines.common.atari_wrappers import make_wrap_atari, get_env_type
+        from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
 
         self.env_type, self.env_id = get_env_type(env_name_)
-        if self.env_type == "atari_env" and not "MinAtar" in env_name_:
+        if self.env_type == "atari_env" and "MinAtar" not in env_name_:
             self.env = make_wrap_atari(env_name_, clip_rewards=True)
         else:
             self.env = gym.make(env_name_)
@@ -42,7 +36,7 @@ class Impala_Worker(object):
         self,
         local_size,
         buffer_info,
-        network_builder,
+        model_builder,
         actor_builder,
         param_server,
         update,
@@ -52,20 +46,26 @@ class Impala_Worker(object):
         try:
             queue, env_dict, actor_num = buffer_info
             local_buffer = EpochBuffer(local_size, env_dict)
-            preproc, model, _ = network_builder()
+            preproc, actor_model, _ = model_builder()
             actor, get_action_prob, convert_action = actor_builder()
 
-            actor = jax.jit(partial(actor, model, preproc))
+            actor = jax.jit(partial(actor, actor_model, preproc))
             get_action_prob = partial(get_action_prob, actor)
 
-            score = 0
             state, info = self.env.reset()
+            have_original_reward = "original_reward" in info.keys()
+            have_lives = "lives" in info.keys()
+            if have_original_reward:
+                original_score = 0
+            score = 0
             state = [np.expand_dims(state, axis=0)]
             eplen = 0
             episode = 0
-            rw_label = f"env/episode_reward"
-            len_label = f"env/episode_len"
-            to_label = f"env/time_over"
+            rw_label = "env/episode_reward"
+            if have_original_reward:
+                original_rw_label = "env/original_reward"
+            len_label = "env/episode_len"
+            to_label = "env/time_over"
 
             while not stop.is_set():
                 if update.is_set():
@@ -87,23 +87,35 @@ class Impala_Worker(object):
                         terminal or truncated,
                         truncated,
                     )
+                    if have_original_reward:
+                        original_score += info["original_reward"]
                     score += reward
                     state = next_state
 
                     if terminal or truncated:
-                        state, info = self.env.reset()
-                        state = [np.expand_dims(state, axis=0)]
                         if logger_server is not None:
                             log_dict = {
                                 rw_label: score,
                                 len_label: eplen,
                                 to_label: 1 - terminal,
                             }
+                            if have_original_reward:
+                                if have_lives:
+                                    if info["lives"] == 0:
+                                        log_dict[original_rw_label] = original_score
+                                        original_score = 0
+                                else:
+                                    log_dict[original_rw_label] = original_score
+                                    original_score = 0
                             logger_server.log_worker.remote(log_dict, episode)
                         score = 0
                         eplen = 0
                         episode += 1
-                queue.put_nowait(local_buffer.get_buffer())
+                        state, info = self.env.reset()
+                        state = [np.expand_dims(state, axis=0)]
+                queue.put(local_buffer.get_buffer())
+        except Exception as e:
+            print(f"worker {mp.current_process().name} error : {e}")
         finally:
             if stop.is_set():
                 print("worker stoped")

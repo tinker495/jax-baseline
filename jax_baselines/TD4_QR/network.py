@@ -1,8 +1,8 @@
-import numpy as np
+from functools import partial
+
 import haiku as hk
 import jax
 import jax.numpy as jnp
-from functools import partial
 
 
 class Actor(hk.Module):

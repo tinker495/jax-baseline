@@ -1,12 +1,12 @@
-import os
 import argparse
-import gymnasium as gym
-import ray
 import multiprocessing as mp
 
+import ray
+
 from jax_baselines.APE_X.worker import Ape_X_Worker
-from jax_baselines.DQN.apex_dqn import APE_X_DQN
 from jax_baselines.C51.apex_c51 import APE_X_C51
+from jax_baselines.DQN.apex_dqn import APE_X_DQN
+from jax_baselines.IQN.apex_iqn import APE_X_IQN
 from jax_baselines.QRDQN.apex_qrdqn import APE_X_QRDQN
 
 if __name__ == "__main__":
@@ -16,7 +16,8 @@ if __name__ == "__main__":
     parser.add_argument("--algo", type=str, default="DQN", help="algo ID")
     parser.add_argument("--gamma", type=float, default=0.99, help="gamma")
     parser.add_argument("--target_update", type=int, default=2000, help="target update intervals")
-    parser.add_argument("--batch", type=int, default=64, help="batch size")
+    parser.add_argument("--batch_num", type=int, default=16, help="batch size")
+    parser.add_argument("--batch_size", type=int, default=512, help="batch size")
     parser.add_argument("--buffer_size", type=float, default=200000, help="buffer_size")
     parser.add_argument("--double", action="store_true")
     parser.add_argument("--dueling", action="store_true")
@@ -35,7 +36,7 @@ if __name__ == "__main__":
     parser.add_argument("--max", type=float, default=250, help="c51 max")
     parser.add_argument("--min", type=float, default=-250, help="c51 min")
     parser.add_argument("--n_support", type=int, default=200, help="n_support for QRDQN,IQN,FQF")
-    parser.add_argument("--delta", type=float, default=0.5, help="network node number")
+    parser.add_argument("--delta", type=float, default=0.001, help="delta for QRDQN,IQN,FQF")
     parser.add_argument("--CVaR", type=float, default=1.0, help="IQN risk avoiding factor")
     parser.add_argument("--node", type=int, default=256, help="network node number")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
@@ -54,7 +55,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     env_name = args.env
-    cnn_mode = "normal"
+    embedding_mode = "normal"
 
     manger = mp.get_context().Manager()
 
@@ -64,7 +65,7 @@ if __name__ == "__main__":
 
     env_type = "gym"
 
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "cnn_mode": cnn_mode}
+    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
     if args.algo == "DQN":
         agent = APE_X_DQN(
@@ -72,7 +73,8 @@ if __name__ == "__main__":
             manger,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
-            batch_size=args.batch,
+            batch_num=args.batch_num,
+            mini_batch_size=args.batch_size,
             buffer_size=int(args.buffer_size),
             target_network_update_freq=args.target_update,
             double_q=args.double,
@@ -95,7 +97,8 @@ if __name__ == "__main__":
             manger,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
-            batch_size=args.batch,
+            batch_num=args.batch_num,
+            mini_batch_size=args.batch_size,
             buffer_size=int(args.buffer_size),
             target_network_update_freq=args.target_update,
             double_q=args.double,
@@ -120,7 +123,8 @@ if __name__ == "__main__":
             manger,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
-            batch_size=args.batch,
+            batch_num=args.batch_num,
+            mini_batch_size=args.batch_size,
             buffer_size=int(args.buffer_size),
             target_network_update_freq=args.target_update,
             double_q=args.double,
@@ -138,6 +142,33 @@ if __name__ == "__main__":
             compress_memory=args.compress_memory,
             n_support=args.n_support,
             delta=args.delta,
+        )
+    elif args.algo == "IQN":
+        agent = APE_X_IQN(
+            workers,
+            manger,
+            gamma=args.gamma,
+            learning_rate=args.learning_rate,
+            batch_num=args.batch_num,
+            mini_batch_size=args.batch_size,
+            buffer_size=int(args.buffer_size),
+            target_network_update_freq=args.target_update,
+            double_q=args.double,
+            dueling_model=args.dueling,
+            exploration_initial_eps=args.initial_eps,
+            exploration_decay=args.eps_decay,
+            param_noise=args.noisynet,
+            n_step=args.n_step,
+            munchausen=args.munchausen,
+            gradient_steps=args.gradient_steps,
+            learning_starts=args.learning_starts,
+            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            policy_kwargs=policy_kwargs,
+            optimizer=args.optimizer,
+            compress_memory=args.compress_memory,
+            n_support=args.n_support,
+            delta=args.delta,
+            CVaR=args.CVaR,
         )
 
     agent.learn(int(args.steps))

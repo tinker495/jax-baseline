@@ -1,5 +1,6 @@
-import os
 import argparse
+import os
+
 import gymnasium as gym
 
 from jax_baselines.A2C.a2c import A2C
@@ -26,7 +27,6 @@ if __name__ == "__main__":
     parser.add_argument("--ent_coef", type=float, default=0.001, help="entropy coefficient")
     parser.add_argument("--val_coef", type=float, default=0.6, help="val coefficient")
     parser.add_argument("--gae_normalize", dest="gae_normalize", action="store_true")
-    parser.add_argument("--no_gae_normalize", dest="gae_normalize", action="store_false")
     parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
@@ -35,7 +35,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     env_name = args.env
-    cnn_mode = "normal"
+    embedding_mode = "normal"
     if os.path.exists(env_name):
         from mlagents_envs.environment import UnityEnvironment
         from mlagents_envs.side_channel.engine_configuration_channel import (
@@ -66,8 +66,8 @@ if __name__ == "__main__":
             env = gymMultiworker(env_name, worker_num=args.worker)
         else:
             from jax_baselines.common.atari_wrappers import (
-                make_wrap_atari,
                 get_env_type,
+                make_wrap_atari,
             )
 
             env_type, env_id = get_env_type(env_name)
@@ -77,7 +77,7 @@ if __name__ == "__main__":
                 env = gym.make(env_name, render_mode="rgb_array")
         env_type = "gym"
 
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "cnn_mode": cnn_mode}
+    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
     if args.algo == "A2C":
         agent = A2C(

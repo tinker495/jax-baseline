@@ -1,10 +1,10 @@
-import numpy as np
-import abc as ABC
+from typing import Optional
+
 import haiku as hk
 import jax
 import jax.lax as lax
 import jax.numpy as jnp
-from typing import Any, Callable, Iterable, Optional, Type
+import numpy as np
 
 
 def get_eps(n):
@@ -14,7 +14,7 @@ def get_eps(n):
 
 
 class NoisyLinear(hk.Module):
-    """Noisy Linear module"""
+    """Noisy Linear module."""
 
     def __init__(
         self,
@@ -29,7 +29,7 @@ class NoisyLinear(hk.Module):
         self.output_size = output_size
         self.with_bias = with_bias
         self.w_init = w_init
-        self.b_init = b_init
+        self.b_init = b_init or jnp.zeros
 
     def __call__(
         self,

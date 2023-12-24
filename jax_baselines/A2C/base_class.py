@@ -1,24 +1,23 @@
+from collections import deque
+
 import gymnasium as gym
+import haiku as hk
 import jax
 import jax.numpy as jnp
-import haiku as hk
 import numpy as np
-
+from gym import spaces
+from mlagents_envs.environment import ActionTuple, UnityEnvironment
 from tqdm.auto import trange
-from collections import deque
 
 from jax_baselines.common.base_classes import (
     TensorboardWriter,
-    save,
     restore,
+    save,
     select_optimizer,
 )
 from jax_baselines.common.cpprb_buffers import EpochBuffer
-from jax_baselines.common.utils import convert_states, convert_jax, add_hparams
+from jax_baselines.common.utils import add_hparams, convert_jax, convert_states
 from jax_baselines.common.worker import gymMultiworker
-
-from mlagents_envs.environment import UnityEnvironment, ActionTuple
-from gym import spaces
 
 
 class Actor_Critic_Policy_Gradient_Family(object):
@@ -152,13 +151,13 @@ class Actor_Critic_Policy_Gradient_Family(object):
 
     def _get_actions_discrete(self, params, obses, key=None) -> jnp.ndarray:
         prob = jax.nn.softmax(
-            self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses))),
+            self.actor(params, key, self.preproc(params, key, convert_jax(obses))),
             axis=1,
         )
         return prob
 
     def _get_actions_continuous(self, params, obses, key=None) -> jnp.ndarray:
-        mu, std = self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))
+        mu, std = self.actor(params, key, self.preproc(params, key, convert_jax(obses)))
         return mu, jnp.exp(std)
 
     def action_discrete(self, obs):
@@ -320,7 +319,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
 
     def learn_gym(self, pbar, callback=None, log_interval=100):
         state, info = self.env.reset()
+        have_original_reward = "original_reward" in info.keys()
+        have_lives = "lives" in info.keys()
         state = [np.expand_dims(state, axis=0)]
+        if have_original_reward:
+            self.original_score = np.zeros([self.worker_size])
         self.scores = np.zeros([self.worker_size])
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
@@ -331,11 +334,25 @@ class Actor_Critic_Policy_Gradient_Family(object):
             next_state, reward, terminal, truncated, info = self.env.step(self.conv_action(actions))
             next_state = [np.expand_dims(next_state, axis=0)]
             self.buffer.add(state, actions[0], reward, next_state, terminal, truncated)
+            if have_original_reward:
+                self.original_score[0] += info["original_reward"]
             self.scores[0] += reward
             state = next_state
             if terminal or truncated:
                 self.scoreque.append(self.scores[0])
                 if self.summary:
+                    if have_original_reward:
+                        if have_lives:
+                            if info["lives"] == 0:
+                                self.summary.add_scalar(
+                                    "env/original_reward", self.original_score[0], steps
+                                )
+                                self.original_score[0] = 0
+                        else:
+                            self.summary.add_scalar(
+                                "env/original_reward", self.original_score[0], steps
+                            )
+                            self.original_score[0] = 0
                     self.summary.add_scalar("env/episode_reward", self.scores[0], steps)
                     self.summary.add_scalar("env/episode len", self.eplen[0], steps)
                     self.summary.add_scalar("env/time over", float(truncated), steps)
@@ -353,7 +370,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
         return np.mean(self.scoreque)
 
     def learn_gymMultiworker(self, pbar, callback=None, log_interval=100):
-        state, _, _, _, _, _ = self.env.get_steps()
+        state, _, _, _, info, _, _ = self.env.get_steps()
+        have_original_reward = "original_reward" in info[0].keys()
+        have_lives = "lives" in info[0].keys()
+        if have_original_reward:
+            self.original_score = np.zeros([self.worker_size])
         self.scores = np.zeros([self.worker_size])
         self.eplen = np.zeros([self.worker_size])
         self.scoreque = deque(maxlen=10)
@@ -364,17 +385,37 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.env.step(self.conv_action(actions))
 
             (
-                next_states,
+                real_nextstates,
                 rewards,
                 dones,
                 terminals,
+                infos,
                 end_states,
                 end_idx,
             ) = self.env.get_steps()
+            self.scores += rewards
+            if have_original_reward:
+                self.original_score += np.asarray([info["original_reward"] for info in infos])
             if end_states is not None:
-                nxtstates = np.copy(next_states)
+                nxtstates = np.copy(real_nextstates)
                 nxtstates[end_idx] = end_states
                 if self.summary:
+                    if have_original_reward:
+                        if have_lives:
+                            end_lives = np.asarray([infos[ei]["lives"] for ei in end_idx])
+                            done_lives = np.logical_not(end_lives)
+                            if np.sum(done_lives) > 0:
+                                self.summary.add_scalar(
+                                    "env/original_reward",
+                                    np.mean(self.original_score[end_idx[done_lives]]),
+                                    steps,
+                                )
+                                self.original_score[end_idx[done_lives]] = 0
+                        else:
+                            self.summary.add_scalar(
+                                "env/original_reward", self.original_score[end_idx], steps
+                            )
+                            self.original_score[end_idx] = 0
                     self.summary.add_scalar(
                         "env/episode_reward", np.mean(self.scores[end_idx]), steps
                     )
@@ -400,12 +441,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
                     [state],
                     actions,
                     np.expand_dims(rewards, axis=1),
-                    [next_states],
+                    [real_nextstates],
                     np.expand_dims(dones, axis=1),
                     np.expand_dims(terminals, axis=1),
                 )
-            self.scores += rewards
-            state = next_states
+            state = real_nextstates
 
             if (steps + 1) % self.batch_size == 0:  # train in step the environments
                 loss = self.train_step(steps)
@@ -432,7 +472,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         from gymnasium.wrappers import RecordVideo
 
         env_id = self.env.env_id
-        from jax_baselines.common.atari_wrappers import make_wrap_atari, get_env_type
+        from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
 
         env_type, env_id = get_env_type(env_id)
         if env_type == "atari_env":

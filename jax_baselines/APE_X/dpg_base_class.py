@@ -1,27 +1,21 @@
-import gymnasium as gym
-import jax
-import jax.numpy as jnp
-import haiku as hk
-import numpy as np
-import multiprocessing as mp
 import time
-import ray
-
-from tqdm.auto import trange
 from collections import deque
+
+import gymnasium as gym
+import haiku as hk
+import jax
+import numpy as np
+import ray
+from mlagents_envs.environment import UnityEnvironment
+from tqdm.auto import trange
 
 from jax_baselines.common.base_classes import (
     TensorboardWriter,
-    save,
     restore,
+    save,
     select_optimizer,
 )
 from jax_baselines.common.cpprb_buffers import MultiPrioritizedReplayBuffer
-from jax_baselines.common.utils import convert_states
-from jax_baselines.APE_X.dpg_worker import Ape_X_Worker
-
-from mlagents_envs.environment import UnityEnvironment, ActionTuple
-from gym import spaces
 
 
 class Ape_X_Deteministic_Policy_Gradient_Family(object):
@@ -34,7 +28,8 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         buffer_size=50000,
         exploration_initial_eps=0.9,
         exploration_decay=0.7,
-        batch_size=32,
+        batch_num=16,
+        mini_batch_size=512,
         n_step=1,
         learning_starts=1000,
         target_network_update_tau=5e-4,
@@ -60,7 +55,9 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
 
         self.learning_starts = learning_starts
         self.prioritized_replay_eps = prioritized_replay_eps
-        self.batch_size = batch_size
+        self.batch_num = batch_num
+        self.mini_batch_size = mini_batch_size
+        self.batch_size = batch_num * mini_batch_size
         self.target_network_update_tau = target_network_update_tau
         self.prioritized_replay_alpha = prioritized_replay_alpha
         self.prioritized_replay_beta0 = prioritized_replay_beta0
@@ -82,7 +79,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         self.target_params = None
         self.save_path = None
         self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-2 / self.batch_size)
-        self.network_builder = None
+        self.model_builder = None
         self.actor_builder = None
 
         self.compress_memory = compress_memory
@@ -114,7 +111,6 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         print("-------------------------------------------------")
 
     def get_memory_setup(self):
-        # self.m = mp.get_context().Manager()
         self.replay_buffer = MultiPrioritizedReplayBuffer(
             self.buffer_size,
             self.observation_space,
@@ -192,9 +188,9 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
             )
             jobs.append(
                 self.workers[idx].run.remote(
-                    1000,
+                    2000,
                     self.replay_buffer.buffer_info(),
-                    self.network_builder,
+                    self.model_builder,
                     self.actor_builder,
                     param_server,
                     self.logger_server,
@@ -224,7 +220,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
             self.lossque.append(loss)
             if steps % log_interval == 0:
                 pbar.set_description(self.discription())
-            if steps % 500 == 0:
+            if steps % 20 == 0:
                 cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
                 param_server.update_params.remote(cpu_param)
                 for u in update:

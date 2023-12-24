@@ -1,20 +1,17 @@
-import os
 import glob
-import numpy as np
-import jax
+import os
 import pickle
 
+import jax
+import numpy as np
 import optax
-from copy import deepcopy
 from optax._src import combine
-
 from tensorboardX import SummaryWriter
 
 
 class TensorboardWriter:
     def __init__(self, tensorboard_log_path, tb_log_name, new_tb_log=True):
-        """
-        Create a Tensorboard writer for a code segment, and saves it to the log directory as its own run
+        """Create a Tensorboard writer for a code segment, and saves it to the log directory as its own run.
 
         :param graph: (Tensorflow Graph) the model graph
         :param tensorboard_log_path: (str) the save path for the log (can be None for no logging)
@@ -39,9 +36,8 @@ class TensorboardWriter:
         return self.writer, self.save_path
 
     def _get_latest_run_id(self):
-        """
-        returns the latest run number for the given log name and log path,
-        by finding the greatest number in the directories.
+        """returns the latest run number for the given log name and log path, by finding the greatest number in the
+        directories.
 
         :return: (int) latest run number
         """
@@ -84,15 +80,11 @@ def restore(ckpt_dir):
 
 
 def select_optimizer(optim_str, rl, eps=1e-2 / 256.0, grad_max=10):
-    """
-    if optim_str == 'adam':
-            return optax.adam(rl,b1=0.9,b2=0.99,eps=eps)
-    elif optim_str == 'adamw':
-            return optax.adamw(rl,b1=0.9,b2=0.99,eps=eps)
-    elif optim_str == 'rmsprop':
-            return optax.rmsprop(rl,eps=eps)
-    elif optim_str == 'lion':
-            return optax.lion(rl)
+    """if optim_str == 'adam':
+
+    return optax.adam(rl,b1=0.9,b2=0.99,eps=eps) elif optim_str == 'adamw':         return
+    optax.adamw(rl,b1=0.9,b2=0.99,eps=eps) elif optim_str == 'rmsprop':         return optax.rmsprop(rl,eps=eps) elif
+    optim_str == 'lion':         return optax.lion(rl)
     """
     if optim_str == "adam":
         return combine.chain(optax.clip_by_global_norm(grad_max), optax.adam(rl, eps=eps))

@@ -2,8 +2,8 @@ import numpy as np
 
 
 def unique(sorted_array: np.ndarray) -> np.ndarray:
-    """
-    More efficient implementation of np.unique for sorted arrays
+    """More efficient implementation of np.unique for sorted arrays.
+
     :param sorted_array: (np.ndarray)
     :return:(np.ndarray) sorted_array without duplicate elements
     """
@@ -17,8 +17,7 @@ def unique(sorted_array: np.ndarray) -> np.ndarray:
 
 class SegmentTree(object):
     def __init__(self, capacity, operation, neutral_element):
-        """
-        Build a Segment Tree data structure.
+        """Build a Segment Tree data structure.
 
         https://en.wikipedia.org/wiki/Segment_tree
 
@@ -63,9 +62,7 @@ class SegmentTree(object):
                 )
 
     def reduce(self, start=0, end=None):
-        """
-        Returns result of applying `self.operation`
-        to a contiguous subsequence of the array.
+        """Returns result of applying `self.operation` to a contiguous subsequence of the array.
 
                 self.operation(arr[start], operation(arr[start+1], operation(... arr[end])))
 
@@ -110,8 +107,7 @@ class SumSegmentTree(SegmentTree):
         super().__init__(capacity=capacity, operation=np.add, neutral_element=0.0)
 
     def sum(self, start=0, end=None):
-        """
-        Returns arr[start] + ... + arr[end]
+        """Returns arr[start] + ... + arr[end]
 
         :param start: (int) start position of the reduction (must be >= 0)
         :param end: (int) end position of the reduction (must be < len(arr), can be None for len(arr) - 1)
@@ -140,8 +136,8 @@ class SumSegmentTree(SegmentTree):
         return idx - self._capacity
 
     def find_prefixsum_idx(self, prefixsum):
-        """
-        Find the highest index `i` in the array such that
+        """Find the highest index `i` in the array such that.
+
                 sum(arr[0] + arr[1] + ... + arr[i - i]) <= prefixsum for each entry in prefixsum
 
         if array values are probabilities, this function
@@ -164,8 +160,7 @@ class MinSegmentTree(SegmentTree):
         super().__init__(capacity=capacity, operation=np.minimum, neutral_element=float("inf"))
 
     def min(self, start=0, end=None):
-        """
-        Returns min(arr[start], ...,  arr[end])
+        """Returns min(arr[start], ...,  arr[end])
 
         :param start: (int) start position of the reduction (must be >= 0)
         :param end: (int) end position of the reduction (must be < len(arr), can be None for len(arr) - 1)

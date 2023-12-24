@@ -1,8 +1,7 @@
-import os
 import argparse
-import gymnasium as gym
-import ray
 import multiprocessing as mp
+
+import ray
 
 from jax_baselines.APE_X.dpg_worker import Ape_X_Worker
 from jax_baselines.DDPG.apex_ddpg import APE_X_DDPG
@@ -19,7 +18,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--target_update_tau", type=float, default=2e-3, help="target update intervals"
     )
-    parser.add_argument("--batch", type=int, default=32, help="batch size")
+    parser.add_argument("--batch_num", type=int, default=16, help="batch num")
+    parser.add_argument("--batch_size", type=int, default=512, help="batch size")
     parser.add_argument("--buffer_size", type=float, default=100000, help="buffer_size")
     parser.add_argument(
         "--n_step",
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     env_name = args.env
-    cnn_mode = "normal"
+    embedding_mode = "normal"
 
     manger = mp.get_context().Manager()
 
@@ -61,7 +61,7 @@ if __name__ == "__main__":
 
     env_type = "gym"
 
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "cnn_mode": cnn_mode}
+    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
     if args.algo == "DDPG":
         agent = APE_X_DDPG(
@@ -69,7 +69,8 @@ if __name__ == "__main__":
             manger,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
-            batch_size=args.batch,
+            batch_num=args.batch_num,
+            mini_batch_size=args.batch_size,
             buffer_size=int(args.buffer_size),
             target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,
@@ -88,7 +89,8 @@ if __name__ == "__main__":
             manger,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
-            batch_size=args.batch,
+            batch_num=args.batch_num,
+            mini_batch_size=args.batch_size,
             buffer_size=int(args.buffer_size),
             target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,

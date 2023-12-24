@@ -1,8 +1,9 @@
-from jax_baselines.common.cpprb_buffers import (
-    ReplayBuffer,
-    MultiPrioritizedReplayBuffer,
-)
 import numpy as np
+
+from jax_baselines.common.cpprb_buffers import (
+    MultiPrioritizedReplayBuffer,
+    ReplayBuffer,
+)
 
 n = 4
 gamma = 0.995

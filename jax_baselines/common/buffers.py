@@ -1,12 +1,11 @@
 import random
-from typing import Optional, List, Union
 from collections.abc import Iterable
+from typing import List, Union
 
 import jax
 import numpy as np
-import jax.numpy as jnp
 
-from jax_baselines.common.segment_tree import SumSegmentTree, MinSegmentTree
+from jax_baselines.common.segment_tree import MinSegmentTree, SumSegmentTree
 
 
 class EpochBuffer(object):
@@ -178,8 +177,7 @@ def discounted(rewards, gamma=0.99):  # lfilter([1],[1,-gamma],x[::-1])[::-1]
 
 class ReplayBuffer(object):
     def __init__(self, size: int, observation_space: list, worker_size=1, action_space=1):
-        """
-        Implements a ring buffer (FIFO).
+        """Implements a ring buffer (FIFO).
 
         :param size: (int)  Max number of transitions to store in the buffer. When the buffer overflows the old
                 memories are dropped.
@@ -288,7 +286,6 @@ class ReplayBuffer(object):
             "rewards": self._storage["rewards"][idxes],
             "nxtobses": [self._storage[no][idxes] for no in self.nextobsdict.keys()],
             "dones": self._storage["dones"][idxes],
-            #'terminals'     : self._storage['terminals'][idxes]
         }
 
     def sample(self, batch_size: int):
@@ -310,8 +307,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         action_space=1,
         alpha=0.4,
     ):
-        """
-        Implements a ring buffer (FIFO).
+        """Implements a ring buffer (FIFO).
 
         :param size: (int)  Max number of transitions to store in the buffer. When the buffer overflows the old
                 memories are dropped.
@@ -349,8 +345,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         return idx
 
     def sample(self, batch_size: int, beta: float = 0):
-        """
-        Sample a batch of experiences.
+        """Sample a batch of experiences.
 
         compared to ReplayBuffer.sample
         it also returns importance weights and idxes
@@ -369,7 +364,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                         and 0 otherwise.
                 - weights: (numpy float) Array of shape (batch_size,) and dtype np.float32 denoting importance weight of
                         each sampled transition
-                - idxes: (numpy int) Array of shape (batch_size,) and dtype np.int32 idexes in buffer of sampled experiences
+                - idxes: (numpy int) Array of shape (batch_size,) and dtype np.int32 idexes in
+                        buffer of sampled experiences
         """
         assert beta > 0
 
@@ -385,8 +381,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         return encoded_sample
 
     def update_priorities(self, idxes, priorities):
-        """
-        Update priorities of sampled transitions.
+        """Update priorities of sampled transitions.
 
         sets priority of transition at index idxes[i] in buffer
         to priorities[i].
@@ -415,8 +410,7 @@ class EpisodicReplayBuffer(ReplayBuffer):
         n_step=3,
         gamma=0.99,
     ):
-        """
-        Create Episodic Replay buffer for n-step td
+        """Create Episodic Replay buffer for n-step td.
 
         See Also ReplayBuffer.__init__
 
@@ -433,8 +427,7 @@ class EpisodicReplayBuffer(ReplayBuffer):
         self.gamma = gamma
 
     def add(self, obs_t, action, reward, nxtobs_t, done, terminal):
-        """
-        add a new transition to the buffer
+        """Add a new transition to the buffer.
 
         :param obs_t: (Any) the last observation
         :param action: ([float]) the action
@@ -505,8 +498,7 @@ class EpisodicReplayBuffer(ReplayBuffer):
         }
 
     def sample(self, batch_size: int):
-        """
-        Sample a batch of experiences.
+        """Sample a batch of experiences.
 
         :param batch_size: (int) How many transitions to sample.
         :param env: (Optional[VecNormalize]) associated gym VecEnv
@@ -534,8 +526,7 @@ class PrioritizedEpisodicReplayBuffer(EpisodicReplayBuffer):
         gamma=0.99,
         alpha=0.4,
     ):
-        """
-        Implements a ring buffer (FIFO).
+        """Implements a ring buffer (FIFO).
 
         :param size: (int)  Max number of transitions to store in the buffer. When the buffer overflows the old
                 memories are dropped.
@@ -598,8 +589,7 @@ class PrioritizedEpisodicReplayBuffer(EpisodicReplayBuffer):
         return idx
 
     def sample(self, batch_size: int, beta: float = 0):
-        """
-        Sample a batch of experiences.
+        """Sample a batch of experiences.
 
         compared to ReplayBuffer.sample
         it also returns importance weights and idxes
@@ -618,7 +608,8 @@ class PrioritizedEpisodicReplayBuffer(EpisodicReplayBuffer):
                         and 0 otherwise.
                 - weights: (numpy float) Array of shape (batch_size,) and dtype np.float32 denoting importance weight of
                         each sampled transition
-                - idxes: (numpy int) Array of shape (batch_size,) and dtype np.int32 idexes in buffer of sampled experiences
+                - idxes: (numpy int) Array of shape (batch_size,) and dtype np.int32 idexes in
+                        buffer of sampled experiences
         """
         assert beta > 0
 
@@ -634,8 +625,7 @@ class PrioritizedEpisodicReplayBuffer(EpisodicReplayBuffer):
         return encoded_sample
 
     def update_priorities(self, idxes, priorities):
-        """
-        Update priorities of sampled transitions.
+        """Update priorities of sampled transitions.
 
         sets priority of transition at index idxes[i] in buffer
         to priorities[i].

@@ -1,17 +1,11 @@
 import jax
 import jax.numpy as jnp
-import haiku as hk
 import numpy as np
 import optax
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
-from jax_baselines.A2C.network import Actor, Critic
-from jax_baselines.model.haiku.Module import PreProcess
-from jax_baselines.common.utils import (
-    convert_jax,
-    discount_with_terminal,
-    print_param,
-)
+from jax_baselines.A2C.network.haiku import model_builder_maker
+from jax_baselines.common.utils import convert_jax, discount_with_terminal
 
 
 class A2C(Actor_Critic_Policy_Gradient_Family):
@@ -54,38 +48,14 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             self.setup_model()
 
     def setup_model(self):
-        self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
-        if "cnn_mode" in self.policy_kwargs.keys():
-            cnn_mode = self.policy_kwargs["cnn_mode"]
-            del self.policy_kwargs["cnn_mode"]
-        self.preproc = hk.transform(
-            lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x)
+        self.model_builder = model_builder_maker(
+            self.observation_space, self.action_size, self.action_type, self.policy_kwargs
         )
-        self.actor = hk.transform(
-            lambda x: Actor(self.action_size, self.action_type, **self.policy_kwargs)(x)
-        )
-        self.critic = hk.transform(lambda x: Critic(**self.policy_kwargs)(x))
-        pre_param = self.preproc.init(
-            next(self.key_seq),
-            [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-        )
-        feature = self.preproc.apply(
-            pre_param,
-            None,
-            [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-        )
-        actor_param = self.actor.init(next(self.key_seq), feature)
-        critic_param = self.critic.init(next(self.key_seq), feature)
-        self.params = hk.data_structures.merge(pre_param, actor_param, critic_param)
 
+        self.preproc, self.actor, self.critic, self.params = self.model_builder(
+            next(self.key_seq), print_model=True
+        )
         self.opt_state = self.optimizer.init(self.params)
-
-        print("----------------------model----------------------")
-        print_param("preprocess", pre_param)
-        print_param("actor", actor_param)
-        print_param("critic", critic_param)
-        print("-------------------------------------------------")
-
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
 
@@ -93,8 +63,6 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         return "score : {:.3f}, loss : {:.3f} |".format(
             np.mean(self.scoreque), np.mean(self.lossque)
         )
-
-        return np.random.normal(np.array(mu), np.array(std))
 
     def train_step(self, steps):
         # Sample a batch from the replay buffer
@@ -128,20 +96,20 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         rewards = jnp.stack(rewards)
         dones = jnp.stack(dones)
         terminals = jnp.stack(terminals)
-        obses = jax.vmap(convert_jax)(obses)
-        nxtobses = jax.vmap(convert_jax)(nxtobses)
-        value = jax.vmap(self.critic.apply, in_axes=(None, None, 0))(
+        obses = convert_jax(obses)
+        nxtobses = convert_jax(nxtobses)
+        value = jax.vmap(self.critic, in_axes=(None, None, 0))(
             params,
             key,
-            jax.vmap(self.preproc.apply, in_axes=(None, None, 0))(params, key, obses),
+            jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, obses),
         )
-        next_value = jax.vmap(self.critic.apply, in_axes=(None, None, 0))(
+        next_value = jax.vmap(self.critic, in_axes=(None, None, 0))(
             params,
             key,
-            jax.vmap(self.preproc.apply, in_axes=(None, None, 0))(params, key, nxtobses),
+            jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, nxtobses),
         )
-        targets = jax.vmap(discount_with_terminal, in_axes=(0, 0, 0, 0))(
-            rewards, dones, terminals, next_value
+        targets = jax.vmap(discount_with_terminal, in_axes=(0, 0, 0, 0, None))(
+            rewards, dones, terminals, next_value, self.gamma
         )
         obses = [jnp.vstack(o) for o in obses]
         actions = jnp.vstack(actions)
@@ -156,12 +124,12 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         return params, opt_state, critic_loss, actor_loss
 
     def _loss_discrete(self, params, obses, actions, targets, adv, key):
-        feature = self.preproc.apply(params, key, obses)
-        vals = self.critic.apply(params, key, feature)
+        feature = self.preproc(params, key, obses)
+        vals = self.critic(params, key, feature)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
 
         prob, log_prob = self.get_logprob(
-            self.actor.apply(params, key, feature), actions, key, out_prob=True
+            self.actor(params, key, feature), actions, key, out_prob=True
         )
         actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
         entropy = prob * jnp.log(prob)
@@ -170,18 +138,24 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         return total_loss, (critic_loss, actor_loss)
 
     def _loss_continuous(self, params, obses, actions, targets, adv, key):
-        feature = self.preproc.apply(params, key, obses)
-        vals = self.critic.apply(params, key, feature)
+        feature = self.preproc(params, key, obses)
+        vals = self.critic(params, key, feature)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
 
         prob, log_prob = self.get_logprob(
-            self.actor.apply(params, key, feature), actions, key, out_prob=True
+            self.actor(params, key, feature), actions, key, out_prob=True
         )
         actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
         mu, log_std = prob
         entropy_loss = jnp.mean(jnp.square(mu) - log_std)
         total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss)
+
+    def _value_loss(self, params, obses, targets, key):
+        feature = self.preproc(params, key, obses)
+        vals = self.critic(params, key, feature)
+        critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
+        return critic_loss
 
     def learn(
         self,
