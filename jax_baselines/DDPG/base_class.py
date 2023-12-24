@@ -54,6 +54,7 @@ class Deteministic_Policy_Gradient_Family(object):
         self.seed = 42 if seed is None else seed
         self.key_seq = hk.PRNGSequence(self.seed)
 
+        self.train_steps = 0
         self.learning_starts = learning_starts
         self.train_freq = train_freq
         self.gradient_steps = gradient_steps
