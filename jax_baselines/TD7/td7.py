@@ -286,11 +286,9 @@ class TD7(Deteministic_Policy_Gradient_Family):
         q1, q2 = self.critic(
             target_params, key, next_feature, fixed_target_zs, fixed_target_zsa, next_action
         )
-        next_q = jnp.minimum(q1, q2)
-        # next_q = jnp.clip(jnp.minimum(q1, q2),
-        #                    target_params["min_value"],
-        #                    target_params["max_value"]
-        # )
+        next_q = jnp.clip(
+            jnp.minimum(q1, q2), target_params["min_value"], target_params["max_value"]
+        )
         return rewards + not_dones * self.gamma * next_q
 
     def learn(
