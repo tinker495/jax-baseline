@@ -239,8 +239,10 @@ if __name__ == "__main__":
             optimizer=args.optimizer,
         )
     if args.algo == "TD7":
+        eval_env = gym.make(env_name)
         agent = TD7(
             env,
+            eval_env,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,

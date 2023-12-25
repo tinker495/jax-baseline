@@ -18,6 +18,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
     def __init__(
         self,
         env,
+        eval_env,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
@@ -80,6 +81,10 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.steps_before_checkpointing = int(1e5)
         self.max_eps_before_checkpointing = 25
 
+        self.eval_env = eval_env
+        self.eval_freq = self.steps_before_checkpointing // 5
+        self.eval_eps = 10
+
         if _init_setup_model:
             self.setup_model()
 
@@ -122,20 +127,25 @@ class TD7(Deteministic_Policy_Gradient_Family):
     def discription(self):
         return "score : {:.3f} |".format(np.mean(self.scoreque))
 
-    def actions(self, obs, steps):
+    def actions(self, obs, steps, use_checkpoint=False, exploration=True):
         if self.learning_starts < steps:
-            actions = np.clip(
-                np.asarray(
+            if use_checkpoint:
+                actions = np.asarray(
                     self._get_actions(
                         self.checkpoint_encoder_params, self.checkpoint_params, obs, None
                     )
                 )
-                + np.random.normal(
-                    0, self.action_noise, size=(self.worker_size, self.action_size[0])
-                ),
-                -1,
-                1,
-            )
+            else:
+                actions = np.asarray(self._get_actions(self.encoder_params, self.params, obs, None))
+            if exploration:
+                actions = np.clip(
+                    actions
+                    + np.random.normal(
+                        0, self.action_noise, size=(self.worker_size, self.action_size[0])
+                    ),
+                    -1,
+                    1,
+                )
         else:
             actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
         return actions
@@ -144,10 +154,14 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.eps_since_update += 1
         self.timesteps_since_update += eplen
 
-        # self.min_return = min(self.min_return, score)
+        self.min_return = min(self.min_return, score)
+        # End evaluation of current policy early
+        if self.min_return < self.best_min_return:
+            self.train_and_reset(steps)
+
         # Update checkpoint
-        if self.eps_since_update >= self.max_eps_before_update:
-            # self.best_min_return = self.min_return
+        elif self.eps_since_update >= self.max_eps_before_update:
+            self.best_min_return = self.min_return
             self.checkpoint_params = self.params
             self.checkpoint_encoder_params = self.fixed_encoder_params
             self.train_and_reset(steps)
@@ -155,7 +169,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
     def train_and_reset(self, steps):
         if steps > self.steps_before_checkpointing:
             self.max_eps_before_update = self.max_eps_before_checkpointing
-        self.train_step(steps, self.timesteps_since_update)
+        self.train_step(steps, self.timesteps_since_update * self.gradient_steps)
 
         self.eps_since_update = 0
         self.timesteps_since_update = 0
@@ -337,6 +351,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         replay_wrapper=None,
     ):
         pbar = trange(total_timesteps, miniters=log_interval)
+        self.eval_freq = total_timesteps // 100
         with TensorboardWriter(self.tensorboard_log, tb_log_name) as (
             self.summary,
             self.save_path,
@@ -366,11 +381,6 @@ class TD7(Deteministic_Policy_Gradient_Family):
             state = next_state
             if terminal or truncated:
                 self.end_episode(steps, self.scores[0], self.eplen[0])
-                self.scoreque.append(self.scores[0])
-                if self.summary:
-                    self.summary.add_scalar("env/episode_reward", self.scores[0], steps)
-                    self.summary.add_scalar("env/episode len", self.eplen[0], steps)
-                    self.summary.add_scalar("env/time over", float(truncated), steps)
                 self.scores[0] = 0
                 self.eplen[0] = 0
                 state, info = self.env.reset()
@@ -378,4 +388,35 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
             if steps % log_interval == 0 and len(self.scoreque) > 0:
                 pbar.set_description(self.discription())
+
+            if steps % self.eval_freq == 0:
+                self.eval(steps)
         return np.mean(self.scoreque)
+
+    def eval(self, steps):
+        total_reward = np.zeros(self.eval_eps)
+        total_ep_len = np.zeros(self.eval_eps)
+        total_truncated = np.zeros(self.eval_eps)
+        for ep in range(self.eval_eps):
+            state, info = self.eval_env.reset()
+            state = [np.expand_dims(state, axis=0)]
+            terminal = False
+            truncated = False
+            eplen = 0
+            while not terminal and not truncated:
+                actions = self.actions(
+                    state, self.learning_starts + 1, use_checkpoint=True, exploration=False
+                )
+                next_state, reward, terminal, truncated, info = self.eval_env.step(actions[0])
+                next_state = [np.expand_dims(next_state, axis=0)]
+                self.replay_buffer.add(state, actions[0], reward, next_state, terminal, truncated)
+                total_reward[ep] += reward
+                state = next_state
+                eplen += 1
+            total_ep_len[ep] = eplen
+            total_truncated[ep] = float(truncated)
+
+        if self.summary:
+            self.summary.add_scalar("env/episode_reward", np.mean(total_reward), steps)
+            self.summary.add_scalar("env/episode len", np.mean(total_ep_len), steps)
+            self.summary.add_scalar("env/time over", np.mean(truncated), steps)
