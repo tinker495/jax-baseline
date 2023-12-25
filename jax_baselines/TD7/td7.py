@@ -391,6 +391,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
             if steps % self.eval_freq == 0:
                 self.eval(steps)
+        self.eval(steps + 1)
         return np.mean(self.scoreque)
 
     def eval(self, steps):
