@@ -409,7 +409,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
                 )
                 next_state, reward, terminal, truncated, info = self.eval_env.step(actions[0])
                 next_state = [np.expand_dims(next_state, axis=0)]
-                self.replay_buffer.add(state, actions[0], reward, next_state, terminal, truncated)
+                # self.replay_buffer.add(state, actions[0], reward, next_state, terminal, truncated)
                 total_reward[ep] += reward
                 state = next_state
                 eplen += 1
