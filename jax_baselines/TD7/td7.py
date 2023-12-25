@@ -419,4 +419,4 @@ class TD7(Deteministic_Policy_Gradient_Family):
         if self.summary:
             self.summary.add_scalar("env/episode_reward", np.mean(total_reward), steps)
             self.summary.add_scalar("env/episode len", np.mean(total_ep_len), steps)
-            self.summary.add_scalar("env/time over", np.mean(truncated), steps)
+            self.summary.add_scalar("env/time over", np.mean(total_truncated), steps)
