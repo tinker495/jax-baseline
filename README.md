@@ -40,7 +40,7 @@ pip install .
 | --------------- | ------------------ | ------------------ | ------ | ------------------ |
 | A2C             | :heavy_check_mark: | :heavy_check_mark: | TODO   | :heavy_check_mark: |
 | PPO             | :heavy_check_mark: | :heavy_check_mark: | TODO   | :heavy_check_mark: |
-| Truly PPO(TPPO) | :heavy_check_mark: | :heavy_check_mark: | TODO   | :heavy_check_mark: |
+| Truly PPO(TPPO) | :heavy_check_mark: | :heavy_check_mark: | TODO   | TODO               |
 
 ### DPG bases
 
@@ -50,7 +50,7 @@ pip install .
 | TD3      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | SAC      | :heavy_check_mark: | :heavy_check_mark: | TODO               |
 | TQC      | :heavy_check_mark: | :heavy_check_mark: | TODO               |
-| TD7      | TODO               | TODO               | TODO               |
+| TD7      | LAP                | X                  | TODO               |
 
 ## Test
 
