@@ -136,7 +136,9 @@ class TD7(Deteministic_Policy_Gradient_Family):
                     )
                 )
             else:
-                actions = np.asarray(self._get_actions(self.encoder_params, self.params, obs, None))
+                actions = np.asarray(
+                    self._get_actions(self.fixed_encoder_params, self.params, obs, None)
+                )
             if exploration:
                 actions = np.clip(
                     actions
