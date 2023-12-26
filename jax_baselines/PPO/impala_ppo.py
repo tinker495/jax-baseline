@@ -1,14 +1,11 @@
 import jax
 import jax.numpy as jnp
-import haiku as hk
 import numpy as np
 import optax
-from itertools import repeat
 
+from jax_baselines.common.utils import convert_jax, get_vtrace
 from jax_baselines.IMPALA.base_class import IMPALA_Family
-from jax_baselines.PPO.network import Actor, Critic
-from jax_baselines.common.Module import PreProcess
-from jax_baselines.common.utils import convert_jax, get_vtrace, print_param
+from jax_baselines.PPO.network.haiku import model_builder_maker
 
 
 class IMPALA_PPO(IMPALA_Family):
@@ -69,61 +66,15 @@ class IMPALA_PPO(IMPALA_Family):
             self.setup_model()
 
     def setup_model(self):
-        self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
-        if "cnn_mode" in self.policy_kwargs.keys():
-            cnn_mode = self.policy_kwargs["cnn_mode"]
-            del self.policy_kwargs["cnn_mode"]
-
-        def network_builder(observation_space, cnn_mode, action_size, action_type, **kwargs):
-            def builder():
-                preproc = hk.transform(
-                    lambda x: PreProcess(observation_space, cnn_mode=cnn_mode)(x)
-                )
-                actor = hk.transform(lambda x: Actor(action_size, action_type, **kwargs)(x))
-                critic = hk.transform(lambda x: Critic(**kwargs)(x))
-                return preproc, actor, critic
-
-            return builder
-
-        self.network_builder = network_builder(
-            self.observation_space,
-            cnn_mode,
-            self.action_size,
-            self.action_type,
-            **self.policy_kwargs,
+        self.model_builder = model_builder_maker(
+            self.observation_space, self.action_size, self.action_type, self.policy_kwargs
         )
         self.actor_builder = self.get_actor_builder()
 
-        self.preproc, self.actor, self.critic = self.network_builder()
-        pre_param = self.preproc.init(
-            next(self.key_seq),
-            [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
+        self.preproc, self.actor, self.critic, self.params = self.model_builder(
+            next(self.key_seq), print_model=True
         )
-        actor_param = self.actor.init(
-            next(self.key_seq),
-            self.preproc.apply(
-                pre_param,
-                None,
-                [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-            ),
-        )
-        critic_param = self.critic.init(
-            next(self.key_seq),
-            self.preproc.apply(
-                pre_param,
-                None,
-                [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-            ),
-        )
-        self.params = hk.data_structures.merge(pre_param, actor_param, critic_param)
-
         self.opt_state = self.optimizer.init(self.params)
-
-        print("----------------------model----------------------")
-        print_param("preprocess", pre_param)
-        print_param("actor", actor_param)
-        print_param("critic", critic_param)
-        print("-------------------------------------------------")
 
         self._train_step = jax.jit(self._train_step)
         self.preprocess = jax.jit(self.preprocess)
@@ -212,17 +163,17 @@ class IMPALA_PPO(IMPALA_Family):
         rewards = jnp.stack(rewards)
         dones = jnp.stack(dones)
         terminals = jnp.stack(terminals)
-        obses = jax.vmap(convert_jax)(obses)
-        nxtobses = jax.vmap(convert_jax)(nxtobses)
-        feature = jax.vmap(self.preproc.apply, in_axes=(None, None, 0))(params, key, obses)
-        value = jax.vmap(self.critic.apply, in_axes=(None, None, 0))(params, key, feature)
-        next_value = jax.vmap(self.critic.apply, in_axes=(None, None, 0))(
+        obses = convert_jax(obses)
+        nxtobses = convert_jax(nxtobses)
+        feature = jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, obses)
+        value = jax.vmap(self.critic, in_axes=(None, None, 0))(params, key, feature)
+        next_value = jax.vmap(self.critic, in_axes=(None, None, 0))(
             params,
             key,
-            jax.vmap(self.preproc.apply, in_axes=(None, None, 0))(params, key, nxtobses),
+            jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, nxtobses),
         )
         pi_prob = jax.vmap(self.get_logprob, in_axes=(0, 0, None))(
-            jax.vmap(self.actor.apply, in_axes=(None, None, 0))(params, key, feature),
+            jax.vmap(self.actor, in_axes=(None, None, 0))(params, key, feature),
             actions,
             key,
         )
@@ -243,6 +194,7 @@ class IMPALA_PPO(IMPALA_Family):
         adv = rho * adv
         obses = [jnp.vstack(o) for o in obses]
         actions = jnp.vstack(actions)
+        old_value = jnp.vstack(value)
         vs = jnp.vstack(vs)
         pi_prob = jnp.vstack(pi_prob)
         rho = jnp.vstack(rho)
@@ -252,9 +204,9 @@ class IMPALA_PPO(IMPALA_Family):
             out_prob = jnp.log(
                 self.mu_ratio * jnp.exp(mu_prob) + (1.0 - self.mu_ratio) * jnp.exp(pi_prob)
             )
-            return obses, actions, vs, out_prob, rho, adv
+            return obses, actions, old_value, vs, out_prob, rho, adv
         else:
-            return obses, actions, vs, pi_prob, rho, adv
+            return obses, actions, old_value, vs, pi_prob, rho, adv
 
     def _train_step(
         self,
@@ -269,7 +221,7 @@ class IMPALA_PPO(IMPALA_Family):
         dones,
         terminals,
     ):
-        obses, actions, vs, pi_prob, rho, adv = self.preprocess(
+        obses, actions, old_values, vs, pi_prob, rho, adv = self.preprocess(
             params,
             key,
             obses,
@@ -289,17 +241,18 @@ class IMPALA_PPO(IMPALA_Family):
             )
             obses_batch = [o[batch_idxes] for o in obses]
             actions_batch = actions[batch_idxes]
+            old_values_batch = old_values[batch_idxes]
             vs_batch = vs[batch_idxes]
             pi_prob_batch = pi_prob[batch_idxes]
             adv_batch = adv[batch_idxes]
 
             def f(updates, input):
                 params, opt_state, key = updates
-                obs, act, vs, pi_prob, adv = input
+                obs, act, oldv, vs, pi_prob, adv = input
                 use_key, key = jax.random.split(key)
                 (total_loss, (critic_loss, actor_loss, entropy_loss),), grad = jax.value_and_grad(
                     self._loss, has_aux=True
-                )(params, obs, act, vs, pi_prob, adv, use_key)
+                )(params, obs, act, oldv, vs, pi_prob, adv, use_key)
                 updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
                 params = optax.apply_updates(params, updates)
                 return (params, opt_state, key), (critic_loss, actor_loss, entropy_loss)
@@ -307,7 +260,7 @@ class IMPALA_PPO(IMPALA_Family):
             updates, losses = jax.lax.scan(
                 f,
                 (params, opt_state, key),
-                (obses_batch, actions_batch, vs_batch, pi_prob_batch, adv_batch),
+                (obses_batch, actions_batch, old_values_batch, vs_batch, pi_prob_batch, adv_batch),
             )
             params, opt_state, key = updates
             cl, al, el = losses
@@ -328,12 +281,16 @@ class IMPALA_PPO(IMPALA_Family):
             jnp.mean(vs),
         )
 
-    def _loss_discrete(self, params, obses, actions, vs, mu_prob, adv, key):
-        feature = self.preproc.apply(params, key, obses)
-        vals = self.critic.apply(params, key, feature)
-        critic_loss = jnp.mean(jnp.square(vs - vals))
+    def _loss_discrete(self, params, obses, actions, old_value, vs, mu_prob, adv, key):
+        feature = self.preproc(params, key, obses)
+        vals = self.critic(params, key, feature)
+        # vals_clip = old_value + jnp.clip(vals - old_value, -self.ppo_eps, self.ppo_eps)
+        # vf1 = jnp.square(jnp.squeeze(vals - vs))
+        # vf2 = jnp.square(jnp.squeeze(vals_clip - vs))
+        # critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
+        critic_loss = jnp.mean(jnp.square(jnp.squeeze(vals - vs)))
 
-        logit = self.actor.apply(params, key, feature)
+        logit = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(logit, actions, key, out_prob=True)
         ratio = jnp.exp(log_prob - mu_prob)
         cross_entropy1 = -adv * ratio
@@ -344,12 +301,16 @@ class IMPALA_PPO(IMPALA_Family):
         total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
-    def _loss_continuous(self, params, obses, actions, vs, mu_prob, adv, key):
-        feature = self.preproc.apply(params, key, obses)
-        vals = self.critic.apply(params, key, feature)
-        critic_loss = jnp.mean(jnp.square(vs - vals))
+    def _loss_continuous(self, params, obses, actions, old_value, vs, mu_prob, adv, key):
+        feature = self.preproc(params, key, obses)
+        vals = self.critic(params, key, feature)
+        # vals_clip = old_value + jnp.clip(vals - old_value, -self.ppo_eps, self.ppo_eps)
+        # vf1 = jnp.square(jnp.squeeze(vals - vs))
+        # vf2 = jnp.square(jnp.squeeze(vals_clip - vs))
+        # critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
+        critic_loss = jnp.mean(jnp.square(jnp.squeeze(vals - vs)))
 
-        prob = self.actor.apply(params, key, feature)
+        prob = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(prob, actions, key, out_prob=True)
         ratio = jnp.exp(log_prob - mu_prob)
         cross_entropy1 = -adv * ratio

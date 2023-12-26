@@ -1,28 +1,24 @@
-import gymnasium as gym
-import jax
-import jax.numpy as jnp
-import haiku as hk
-import numpy as np
 import multiprocessing as mp
 import time
-import ray
-import os
-
-from tqdm.auto import trange
 from collections import deque
+
+import gymnasium as gym
+import haiku as hk
+import jax
+import numpy as np
+import ray
+from gymnasium import spaces
+from mlagents_envs.environment import UnityEnvironment
+from tqdm.auto import trange
 
 from jax_baselines.common.base_classes import (
     TensorboardWriter,
-    save,
     restore,
+    save,
     select_optimizer,
 )
-from jax_baselines.common.utils import convert_states, convert_jax, add_hparams
-from jax_baselines.IMPALA.worker import Impala_Worker
+from jax_baselines.common.utils import convert_jax
 from jax_baselines.IMPALA.cpprb_buffers import ImpalaBuffer
-
-from mlagents_envs.environment import UnityEnvironment, ActionTuple
-from gymnasium import spaces
 
 
 class IMPALA_Family(object):
@@ -75,7 +71,7 @@ class IMPALA_Family(object):
         self.optimizer = select_optimizer(
             optimizer, self.learning_rate, 1e-2 / self.batch_size, grad_max=40.0
         )
-        self.network_builder = None
+        self.model_builder = None
         self.actor_builder = None
 
         self.get_env_setup()
@@ -116,7 +112,7 @@ class IMPALA_Family(object):
             else self.get_logprob_continuous
         )
 
-    def network_builder(self):
+    def model_builder(self):
         pass
 
     def actor_builder(self):
@@ -152,9 +148,7 @@ class IMPALA_Family(object):
             if action_type == "discrete":
 
                 def actor(actor_model, preproc, params, obses, key=None):
-                    prob = actor_model.apply(
-                        params, key, preproc.apply(params, key, convert_jax(obses))
-                    )
+                    prob = actor_model(params, key, preproc(params, key, convert_jax(obses)))
                     return jax.nn.softmax(prob)
 
                 def get_action_prob(actor, params, obses):
@@ -168,8 +162,8 @@ class IMPALA_Family(object):
             elif action_type == "continuous":
 
                 def actor(actor_model, preproc, params, obses, key=None):
-                    mean, log_std = actor_model.apply(
-                        params, key, preproc.apply(params, key, convert_jax(obses))
+                    mean, log_std = actor_model(
+                        params, key, preproc(params, key, convert_jax(obses))
                     )
                     return mean, log_std
 
@@ -238,7 +232,7 @@ class IMPALA_Family(object):
                 self.workers[idx].run.remote(
                     self.batch_size,
                     self.buffer.queue_info(),
-                    self.network_builder,
+                    self.model_builder,
                     self.actor_builder,
                     param_server,
                     update[idx],
@@ -312,15 +306,19 @@ class Logger_server(object):
                 "env": {
                     "episode_reward": [
                         "Multiline",
-                        [f"env/episode_reward/eps{e:.2f}" for e in eps] + ["env/episode_reward"],
+                        ["env/episode_reward"],
+                    ],
+                    "original_reward": [
+                        "Multiline",
+                        ["env/original_reward"],
                     ],
                     "episode_len": [
                         "Multiline",
-                        [f"env/episode_len/eps{e:.2f}" for e in eps] + ["env/episode_len"],
+                        ["env/episode_len"],
                     ],
                     "time_over": [
                         "Multiline",
-                        [f"env/time_over/eps{e:.2f}" for e in eps] + ["env/time_over"],
+                        ["env/time_over"],
                     ],
                 },
             }

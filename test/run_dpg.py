@@ -1,12 +1,14 @@
-import os
 import argparse
+import os
+
 import gymnasium as gym
 
 from jax_baselines.DDPG.ddpg import DDPG
-from jax_baselines.TD3.td3 import TD3
-from jax_baselines.TD4_QR.td4_qr import TD4_QR
-from jax_baselines.TD4_IQN.td4_iqn import TD4_IQN
 from jax_baselines.SAC.sac import SAC
+from jax_baselines.TD3.td3 import TD3
+from jax_baselines.TD4_IQN.td4_iqn import TD4_IQN
+from jax_baselines.TD4_QR.td4_qr import TD4_QR
+from jax_baselines.TD7.td7 import TD7
 from jax_baselines.TQC.tqc import TQC
 from jax_baselines.TQC_IQN.tqc_iqn import TQC_IQN
 
@@ -53,7 +55,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     env_name = args.env
-    cnn_mode = "normal"
+    embedding_mode = "normal"
     if os.path.exists(env_name):
         from mlagents_envs.environment import UnityEnvironment
         from mlagents_envs.side_channel.engine_configuration_channel import (
@@ -86,7 +88,7 @@ if __name__ == "__main__":
             env = gym.make(env_name)
         env_type = "gym"
 
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "cnn_mode": cnn_mode}
+    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
     if args.algo == "DDPG":
         agent = DDPG(
@@ -98,7 +100,6 @@ if __name__ == "__main__":
             target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
-            exploration_final_eps=args.eps,
             n_step=args.n_step,
             train_freq=args.train_freq,
             seed=args.seed,
@@ -233,6 +234,25 @@ if __name__ == "__main__":
             n_support=args.n_support,
             critic_num=args.critic_num,
             mixture_type=args.mixture,
+            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            policy_kwargs=policy_kwargs,
+            optimizer=args.optimizer,
+        )
+    if args.algo == "TD7":
+        eval_env = gym.make(env_name)
+        agent = TD7(
+            env,
+            eval_env,
+            gamma=args.gamma,
+            learning_rate=args.learning_rate,
+            batch_size=args.batch,
+            buffer_size=int(args.buffer_size),
+            target_network_update_freq=250,
+            learning_starts=args.learning_starts,
+            action_noise=args.action_noise,
+            train_freq=args.train_freq,
+            seed=args.seed,
+            gradient_steps=args.gradient_steps,
             tensorboard_log=args.logdir + env_type + "/" + env_name,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,

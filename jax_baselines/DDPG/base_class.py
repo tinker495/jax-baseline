@@ -1,29 +1,25 @@
+from collections import deque
+
 import gymnasium as gym
-import jax
-import jax.numpy as jnp
 import haiku as hk
 import numpy as np
-
+from mlagents_envs.environment import ActionTuple, UnityEnvironment
 from tqdm.auto import trange
-from collections import deque
 
 from jax_baselines.common.base_classes import (
     TensorboardWriter,
-    save,
     restore,
+    save,
     select_optimizer,
 )
-
 from jax_baselines.common.cpprb_buffers import (
-    ReplayBuffer,
     NstepReplayBuffer,
-    PrioritizedReplayBuffer,
     PrioritizedNstepReplayBuffer,
+    PrioritizedReplayBuffer,
+    ReplayBuffer,
 )
-from jax_baselines.common.utils import convert_states, add_hparams
+from jax_baselines.common.utils import add_hparams, convert_states
 from jax_baselines.common.worker import gymMultiworker
-
-from mlagents_envs.environment import UnityEnvironment, ActionTuple
 
 
 class Deteministic_Policy_Gradient_Family(object):
@@ -58,6 +54,7 @@ class Deteministic_Policy_Gradient_Family(object):
         self.seed = 42 if seed is None else seed
         self.key_seq = hk.PRNGSequence(self.seed)
 
+        self.train_steps = 0
         self.learning_starts = learning_starts
         self.train_freq = train_freq
         self.gradient_steps = gradient_steps
@@ -129,21 +126,6 @@ class Deteministic_Policy_Gradient_Family(object):
         print("-------------------------------------------------")
 
     def get_memory_setup(self):
-        """
-        if self.prioritized_replay:
-                if self.n_step_method:
-                        self.replay_buffer = PrioritizedEpisodicReplayBuffer(self.buffer_size,self.observation_space, self.worker_size, self.action_size[0],
-                                                                                                                                 self.n_step, self.gamma, self.prioritized_replay_alpha)
-                else:
-                        self.replay_buffer = PrioritizedReplayBuffer(self.buffer_size,self.observation_space, self.worker_size, self.action_size[0],
-                                                                                                                 self.prioritized_replay_alpha)
-
-        else:
-                if self.n_step_method:
-                        self.replay_buffer = EpisodicReplayBuffer(self.buffer_size,self.observation_space, self.worker_size, self.action_size[0], self.n_step, self.gamma)
-                else:
-                        self.replay_buffer = ReplayBuffer(self.buffer_size,self.observation_space, self.worker_size, self.action_size[0])
-        """
         if self.prioritized_replay:
             if self.n_step_method:
                 self.replay_buffer = PrioritizedNstepReplayBuffer(

@@ -1,14 +1,13 @@
-import jax
-import jax.numpy as jnp
-import haiku as hk
-import numpy as np
-import optax
 from copy import deepcopy
 
+import jax
+import jax.numpy as jnp
+import numpy as np
+import optax
+
+from jax_baselines.common.utils import convert_jax, soft_update
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from jax_baselines.TD3.network import Actor, Critic
-from jax_baselines.common.Module import PreProcess
-from jax_baselines.common.utils import soft_update, convert_jax, print_param
+from jax_baselines.TD3.network.haiku import model_builder_maker
 
 
 class TD3(Deteministic_Policy_Gradient_Family):
@@ -73,49 +72,22 @@ class TD3(Deteministic_Policy_Gradient_Family):
             self.setup_model()
 
     def setup_model(self):
-        self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
-        if "cnn_mode" in self.policy_kwargs.keys():
-            cnn_mode = self.policy_kwargs["cnn_mode"]
-            del self.policy_kwargs["cnn_mode"]
-        self.preproc = hk.transform(
-            lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x)
+        model_builder = model_builder_maker(
+            self.observation_space,
+            self.action_size,
+            self.policy_kwargs,
         )
-        self.actor = hk.transform(lambda x: Actor(self.action_size, **self.policy_kwargs)(x))
-        self.critic = hk.transform(
-            lambda x, a: (
-                Critic(**self.policy_kwargs)(x, a),
-                Critic(**self.policy_kwargs)(x, a),
-            )
+        self.preproc, self.actor, self.critic, self.params = model_builder(
+            next(self.key_seq), print_model=True
         )
-        pre_param = self.preproc.init(
-            next(self.key_seq),
-            [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-        )
-        feature = self.preproc.apply(
-            pre_param,
-            None,
-            [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-        )
-        actor_param = self.actor.init(next(self.key_seq), feature)
-        critic_param = self.critic.init(
-            next(self.key_seq), feature, np.zeros((1, self.action_size[0]))
-        )
-        self.params = hk.data_structures.merge(pre_param, actor_param, critic_param)
         self.target_params = deepcopy(self.params)
 
         self.opt_state = self.optimizer.init(self.params)
-
-        print("----------------------model----------------------")
-        print_param("preprocess", pre_param)
-        print_param("actor", actor_param)
-        print_param("critic", critic_param)
-        print("-------------------------------------------------")
-
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        return self.actor.apply(params, key, self.preproc.apply(params, key, convert_jax(obses)))  #
+        return self.actor(params, key, self.preproc(params, key, convert_jax(obses)))  #
 
     def discription(self):
         return "score : {:.3f}, loss : {:.3f} |".format(
@@ -202,25 +174,23 @@ class TD3(Deteministic_Policy_Gradient_Family):
         )
 
     def _loss(self, params, obses, actions, targets, weights, key, step):
-        feature = self.preproc.apply(params, key, obses)
-        q1, q2 = self.critic.apply(params, key, feature, actions)
+        feature = self.preproc(params, key, obses)
+        q1, q2 = self.critic(params, key, feature, actions)
         error1 = jnp.squeeze(q1 - targets)
         error2 = jnp.squeeze(q2 - targets)
         critic_loss = jnp.mean(weights * jnp.square(error1)) + jnp.mean(
             weights * jnp.square(error2)
         )
-        policy = self.actor.apply(params, key, feature)
-        vals, _ = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
+        policy = self.actor(params, key, feature)
+        vals, _ = self.critic(jax.lax.stop_gradient(params), key, feature, policy)
         actor_loss = jnp.mean(-vals)
-        total_loss = jax.lax.select(
-            step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss
-        )
+        total_loss = jax.lax.select(step % self.policy_delay == 0, actor_loss, critic_loss)
         return total_loss, (critic_loss, actor_loss, jnp.abs(error1))
 
     def _target(self, target_params, rewards, nxtobses, not_dones, key):
-        next_feature = self.preproc.apply(target_params, key, nxtobses)
+        next_feature = self.preproc(target_params, key, nxtobses)
         next_action = jnp.clip(
-            self.actor.apply(target_params, key, next_feature)
+            self.actor(target_params, key, next_feature)
             + jnp.clip(
                 self.target_action_noise
                 * jax.random.normal(key, (self.batch_size, self.action_size[0])),
@@ -230,7 +200,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
             -1.0,
             1.0,
         )
-        q1, q2 = self.critic.apply(target_params, key, next_feature, next_action)
+        q1, q2 = self.critic(target_params, key, next_feature, next_action)
         next_q = jnp.minimum(q1, q2)
         return (not_dones * next_q * self._gamma) + rewards
 

@@ -1,17 +1,13 @@
+from copy import deepcopy
+
 import jax
 import jax.numpy as jnp
-import haiku as hk
-import numpy as np
 import optax
-from copy import deepcopy
-from einops import rearrange, reduce, repeat
 
+from jax_baselines.common.losses import FQFQuantileLosses, QuantileHuberLosses
+from jax_baselines.common.utils import convert_jax, hard_update
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.FQF.network import Model
-from jax_baselines.common.Module import PreProcess, FractionProposal
-
-from jax_baselines.common.utils import hard_update, convert_jax, print_param
-from jax_baselines.common.losses import QuantileHuberLosses, FQFQuantileLosses
+from jax_baselines.FQF.network.haiku import model_builder_maker
 
 
 class FQF(Q_Network_Family):
@@ -90,56 +86,23 @@ class FQF(Q_Network_Family):
             self.setup_model()
 
     def setup_model(self):
-        tau = jax.random.uniform(next(self.key_seq), (1, self.n_support))
-        self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
-        if "cnn_mode" in self.policy_kwargs.keys():
-            cnn_mode = self.policy_kwargs["cnn_mode"]
-            del self.policy_kwargs["cnn_mode"]
-        self.preproc = hk.transform(
-            lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x)
+        self.model_bulder = model_builder_maker(
+            self.observation_space,
+            self.action_size,
+            self.dueling_model,
+            self.param_noise,
+            self.n_support,
+            self.policy_kwargs,
         )
-        self.model = hk.transform(
-            lambda x, tau: Model(
-                self.action_size,
-                dueling=self.dueling_model,
-                noisy=self.param_noise,
-                **self.policy_kwargs
-            )(x, tau)
+
+        self.preproc, self.fpf, self.model, self.params = self.model_bulder(
+            next(self.key_seq), print_model=True
         )
-        self.fpf = hk.transform(lambda x: FractionProposal(self.n_support, **self.policy_kwargs)(x))
-        pre_param = self.preproc.init(
-            next(self.key_seq),
-            [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-        )
-        model_param = self.model.init(
-            next(self.key_seq),
-            self.preproc.apply(
-                pre_param,
-                None,
-                [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-            ),
-            tau,
-        )
-        fpf_param = self.fpf.init(
-            next(self.key_seq),
-            self.preproc.apply(
-                pre_param,
-                None,
-                [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-            ),
-        )
-        self.params = hk.data_structures.merge(pre_param, model_param, fpf_param)
         self.target_params = deepcopy(self.params)
 
         self.opt_state = self.optimizer.init(self.params)
 
         self.tile_n = self.n_support
-
-        print("----------------------model----------------------")
-        print_param("preprocess", pre_param)
-        print_param("model", model_param)
-        print("loss : quaile_huber_loss")
-        print("-------------------------------------------------")
 
         self.get_q = jax.jit(self.get_q)
         self._get_actions = jax.jit(self._get_actions)
@@ -148,11 +111,11 @@ class FQF(Q_Network_Family):
         self._train_step = jax.jit(self._train_step)
 
     def get_q(self, params, feature, tau, key=None) -> jnp.ndarray:
-        return self.model.apply(params, key, feature, tau)
+        return self.model(params, key, feature, tau)
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        feature = self.preproc.apply(params, key, convert_jax(obses))
-        _, tau, _ = self.fpf.apply(params, key, feature)
+        feature = self.preproc(params, key, convert_jax(obses))
+        _, tau, _ = self.fpf(params, key, feature)
         return jnp.expand_dims(
             jnp.argmax(jnp.mean(self.get_q(params, feature, tau, key), axis=2), axis=1),
             axis=1,
@@ -224,8 +187,8 @@ class FQF(Q_Network_Family):
         return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
 
     def _loss(self, params, obses, actions, targets, weights, key):
-        feature = self.preproc.apply(params, key, obses)
-        tau, tau_hats, entropy = self.fpf.apply(params, key, feature)
+        feature = self.preproc(params, key, obses)
+        tau, tau_hats, entropy = self.fpf(params, key, feature)
         theta_loss_tile = jnp.take_along_axis(
             self.get_q(params, feature, jax.lax.stop_gradient(tau_hats), key),
             actions,
@@ -256,11 +219,11 @@ class FQF(Q_Network_Family):
         return total_loss, hubber
 
     def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
-        feature = self.preproc.apply(target_params, key, nxtobses)
-        _, tau_hats, _ = self.fpf.apply(target_params, key, feature)
+        feature = self.preproc(target_params, key, nxtobses)
+        _, tau_hats, _ = self.fpf(target_params, key, feature)
         next_q = self.get_q(
             target_params,
-            self.preproc.apply(target_params, key, nxtobses),
+            feature,
             tau_hats,
             key,
         )
@@ -279,16 +242,13 @@ class FQF(Q_Network_Family):
                 - self.munchausen_entropy_tau * logsum,
                 axis=2,
             )
-            pi_target = jnp.expand_dims(
+            pi_next = jnp.expand_dims(
                 jax.nn.softmax(next_q_mean / self.munchausen_entropy_tau, axis=1),
                 axis=2,
             )
             next_vals = (
                 jnp.sum(
-                    (
-                        pi_target
-                        * (jnp.take_along_axis(next_q, next_actions, axis=1) - tau_log_pi_next)
-                    ),
+                    pi_next * (next_q - jnp.expand_dims(tau_log_pi_next, axis=2)),
                     axis=1,
                 )
                 * not_dones
@@ -297,7 +257,7 @@ class FQF(Q_Network_Family):
             q_k_targets = jnp.mean(
                 self.get_q(
                     target_params,
-                    self.preproc.apply(target_params, key, obses),
+                    self.preproc(target_params, key, obses),
                     tau_hats,
                     key,
                 ),
@@ -317,7 +277,7 @@ class FQF(Q_Network_Family):
             rewards += self.munchausen_alpha * jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
             if self.double_q:
-                feature = self.preproc.apply(params, key, nxtobses)
+                feature = self.preproc(params, key, nxtobses)
                 next_actions = jnp.expand_dims(
                     jnp.argmax(
                         jnp.mean(self.get_q(params, feature, nxtobses, tau_hats, key), axis=2),

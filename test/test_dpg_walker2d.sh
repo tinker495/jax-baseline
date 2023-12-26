@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=2
 export DISPLAY=:0
 
 pip install -q ..
@@ -10,8 +10,4 @@ MODEL="--node 512 --hidden_n 2"
 OPTIONS=""
 OPTIMIZER="--optimizer adam"
 
-#python  run_dpg.py --algo SAC $ENV $RL $TRAIN $MODEL $OPTIMIZER $OPTIONS
-
-OPTIONS="--per"
-
-python  run_dpg.py --algo SAC $ENV $RL $TRAIN $MODEL $OPTIMIZER $OPTIONS
+python  run_dpg.py --algo TD3 $ENV $RL $TRAIN $MODEL $OPTIMIZER $OPTIONS

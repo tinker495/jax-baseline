@@ -1,20 +1,19 @@
+import haiku as hk
 import jax
 import jax.numpy as jnp
-import haiku as hk
 import numpy as np
 import optax
-from itertools import repeat
 
-from jax_baselines.IMPALA.base_class import IMPALA_Family
-from jax_baselines.TPPO.network import Actor, Critic
-from jax_baselines.common.Module import PreProcess
 from jax_baselines.common.utils import (
     convert_jax,
     get_vtrace,
-    print_param,
-    kl_divergence_discrete,
     kl_divergence_continuous,
+    kl_divergence_discrete,
+    print_param,
 )
+from jax_baselines.IMPALA.base_class import IMPALA_Family
+from jax_baselines.model.haiku.Module import PreProcess
+from jax_baselines.TPPO.network import Actor, Critic
 
 
 class IMPALA_TPPO(IMPALA_Family):
@@ -77,14 +76,14 @@ class IMPALA_TPPO(IMPALA_Family):
 
     def setup_model(self):
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
-        if "cnn_mode" in self.policy_kwargs.keys():
-            cnn_mode = self.policy_kwargs["cnn_mode"]
-            del self.policy_kwargs["cnn_mode"]
+        if "embedding_mode" in self.policy_kwargs.keys():
+            embedding_mode = self.policy_kwargs["embedding_mode"]
+            del self.policy_kwargs["embedding_mode"]
 
-        def network_builder(observation_space, cnn_mode, action_size, action_type, **kwargs):
+        def model_builder(observation_space, embedding_mode, action_size, action_type, **kwargs):
             def builder():
                 preproc = hk.transform(
-                    lambda x: PreProcess(observation_space, cnn_mode=cnn_mode)(x)
+                    lambda x: PreProcess(observation_space, embedding_mode=embedding_mode)(x)
                 )
                 actor = hk.transform(lambda x: Actor(action_size, action_type, **kwargs)(x))
                 critic = hk.transform(lambda x: Critic(**kwargs)(x))
@@ -92,16 +91,16 @@ class IMPALA_TPPO(IMPALA_Family):
 
             return builder
 
-        self.network_builder = network_builder(
+        self.model_builder = model_builder(
             self.observation_space,
-            cnn_mode,
+            embedding_mode,
             self.action_size,
             self.action_type,
             **self.policy_kwargs,
         )
         self.actor_builder = self.get_actor_builder()
 
-        self.preproc, self.actor, self.critic = self.network_builder()
+        self.preproc, self.actor, self.critic = self.model_builder()
         pre_param = self.preproc.init(
             next(self.key_seq),
             [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],

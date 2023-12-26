@@ -1,9 +1,10 @@
-import numpy as np
+from functools import partial
+
 import haiku as hk
 import jax
 import jax.numpy as jnp
-from functools import partial
-from einops import rearrange, reduce, repeat
+import numpy as np
+from einops import rearrange, repeat
 
 LOG_STD_MAX = 2
 LOG_STD_MIN = -20

@@ -1,22 +1,15 @@
-import gym
+import os
 
+import cv2
+import numpy as np
+from tqdm import tqdm
+
+from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
 
 env_name = "BreakoutNoFrameskip-v4"
-
-from jax_baselines.common.atari_wrappers import make_wrap_atari, get_env_type
-
 env_type, env_id = get_env_type(env_name)
 if env_type == "atari_env":
     env = make_wrap_atari(env_name, clip_rewards=True)
-
-
-# save observation video in test folder
-
-import numpy as np
-import os
-import cv2
-import matplotlib.pyplot as plt
-from tqdm import tqdm
 
 
 def save_obs(obs, path):

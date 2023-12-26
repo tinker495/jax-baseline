@@ -1,20 +1,19 @@
+import haiku as hk
 import jax
 import jax.numpy as jnp
-import haiku as hk
 import numpy as np
 import optax
-from copy import deepcopy
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
-from jax_baselines.TPPO.network import Actor, Critic
-from jax_baselines.common.Module import PreProcess
 from jax_baselines.common.utils import (
     convert_jax,
     get_gaes,
-    print_param,
-    kl_divergence_discrete,
     kl_divergence_continuous,
+    kl_divergence_discrete,
+    print_param,
 )
+from jax_baselines.model.haiku.Module import PreProcess
+from jax_baselines.TPPO.network import Actor, Critic
 
 
 class TPPO(Actor_Critic_Policy_Gradient_Family):
@@ -76,11 +75,11 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
 
     def setup_model(self):
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
-        if "cnn_mode" in self.policy_kwargs.keys():
-            cnn_mode = self.policy_kwargs["cnn_mode"]
-            del self.policy_kwargs["cnn_mode"]
+        if "embedding_mode" in self.policy_kwargs.keys():
+            embedding_mode = self.policy_kwargs["embedding_mode"]
+            del self.policy_kwargs["embedding_mode"]
         self.preproc = hk.transform(
-            lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x)
+            lambda x: PreProcess(self.observation_space, embedding_mode=embedding_mode)(x)
         )
         self.actor = hk.transform(
             lambda x: Actor(self.action_size, self.action_type, **self.policy_kwargs)(x)

@@ -1,13 +1,10 @@
 import random
-from typing import Dict, Optional, List, Union
 from collections import deque, namedtuple
 
-import multiprocessing as mp
-import numpy as np
 import cpprb
+import numpy as np
 import ray
 from ray.util.queue import Queue
-import copy
 
 batch = namedtuple(
     "batch_tuple",

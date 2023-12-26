@@ -1,11 +1,10 @@
-import os
 import argparse
-import gymnasium as gym
-import ray
 import multiprocessing as mp
 
-from jax_baselines.IMPALA.worker import Impala_Worker
+import ray
+
 from jax_baselines.A2C.impala import IMPALA
+from jax_baselines.IMPALA.worker import Impala_Worker
 from jax_baselines.PPO.impala_ppo import IMPALA_PPO
 from jax_baselines.TPPO.impala_tppo import IMPALA_TPPO
 
@@ -41,9 +40,9 @@ if __name__ == "__main__":
     parser.add_argument("--mu_ratio", type=float, default=0.0, help="impala ppo mu ratio")
     args = parser.parse_args()
     env_name = args.env
-    cnn_mode = "normal"
-    # cnn_mode = "minimum"
-    # cnn_mode = "none"
+    embedding_mode = "normal"
+    # embedding_mode = "minimum"
+    # embedding_mode = "none"
 
     manger = mp.get_context().Manager()
 
@@ -53,7 +52,7 @@ if __name__ == "__main__":
 
     env_type = "gym"
 
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "cnn_mode": cnn_mode}
+    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
     if args.algo == "A2C":
         agent = IMPALA(

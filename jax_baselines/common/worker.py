@@ -1,13 +1,8 @@
-import os
-import argparse
-import gymnasium as gym
+from abc import ABC
 
-import jax
-import jax.numpy as jnp
+import gymnasium as gym
 import numpy as np
 import ray
-
-from abc import ABC
 from gymnasium import spaces
 
 
@@ -42,13 +37,15 @@ class gymMultiworker(Multiworker):
         rewards = []
         dones = []
         terminals = []
+        infos = []
         end_states = []
         end_idx = []
-        for idx, (state, end_state, reward, done, terminal) in enumerate(ray.get(self.steps)):
+        for idx, (state, end_state, reward, done, terminal, info) in enumerate(ray.get(self.steps)):
             states.append(state)
             rewards.append(reward)
             dones.append(done)
             terminals.append(terminal)
+            infos.append(info)
             if end_state is not None:
                 end_states.append(end_state)
                 end_idx.append(idx)
@@ -62,7 +59,7 @@ class gymMultiworker(Multiworker):
         else:
             end_states = None
             end_idx = None
-        return states, rewards, dones, terminals, end_states, end_idx
+        return states, rewards, dones, terminals, infos, end_states, end_idx
 
     def close(self):
         ray.shutdown()
@@ -71,7 +68,7 @@ class gymMultiworker(Multiworker):
 @ray.remote
 class gymRayworker:
     def __init__(self, env_name_, render=False):
-        from jax_baselines.common.atari_wrappers import make_wrap_atari, get_env_type
+        from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
 
         self.env_type, self.env_id = get_env_type(env_name_)
         if self.env_type == "atari_env":
@@ -86,7 +83,7 @@ class gymRayworker:
 
     def get_reset(self):
         state, info = self.env.reset()
-        return state, None, 0, False, False
+        return state, None, 0, False, False, info
 
     def get_info(self):
         return {
@@ -102,7 +99,7 @@ class gymRayworker:
         state, reward, terminal, truncated, info = self.env.step(self.action_conv(action))
         if terminal or truncated:
             end_state = state
-            state, info = self.env.reset()
+            state, _ = self.env.reset()
         else:
             end_state = None
-        return state, end_state, reward, terminal, truncated
+        return state, end_state, reward, terminal, truncated, info

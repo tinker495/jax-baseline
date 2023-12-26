@@ -1,17 +1,13 @@
+from copy import deepcopy
+
 import jax
 import jax.numpy as jnp
-import haiku as hk
-import numpy as np
 import optax
-from copy import deepcopy
-from einops import rearrange, reduce, repeat
 
-from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.QRDQN.network import Model
-from jax_baselines.common.Module import PreProcess
-
-from jax_baselines.common.utils import hard_update, convert_jax, print_param, q_log_pi
 from jax_baselines.common.losses import QuantileHuberLosses
+from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
+from jax_baselines.DQN.base_class import Q_Network_Family
+from jax_baselines.QRDQN.network.haiku import model_builder_maker
 
 
 class QRDQN(Q_Network_Family):
@@ -90,34 +86,16 @@ class QRDQN(Q_Network_Family):
 
     def setup_model(self):
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
-        if "cnn_mode" in self.policy_kwargs.keys():
-            cnn_mode = self.policy_kwargs["cnn_mode"]
-            del self.policy_kwargs["cnn_mode"]
-        self.preproc = hk.transform(
-            lambda x: PreProcess(self.observation_space, cnn_mode=cnn_mode)(x)
+
+        model_builder = model_builder_maker(
+            self.observation_space,
+            self.action_size,
+            self.dueling_model,
+            self.param_noise,
+            self.n_support,
+            self.policy_kwargs,
         )
-        self.model = hk.transform(
-            lambda x: Model(
-                self.action_size,
-                dueling=self.dueling_model,
-                noisy=self.param_noise,
-                support_n=self.n_support,
-                **self.policy_kwargs
-            )(x)
-        )
-        pre_param = self.preproc.init(
-            next(self.key_seq),
-            [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-        )
-        model_param = self.model.init(
-            next(self.key_seq),
-            self.preproc.apply(
-                pre_param,
-                None,
-                [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-            ),
-        )
-        self.params = hk.data_structures.merge(pre_param, model_param)
+        self.preproc, self.model, self.params = model_builder(next(self.key_seq), print_model=True)
         self.target_params = deepcopy(self.params)
 
         self.opt_state = self.optimizer.init(self.params)
@@ -130,12 +108,6 @@ class QRDQN(Q_Network_Family):
             jnp.expand_dims(self.quantile, axis=(0, 1))
         )  # [1 x 1 x support]
 
-        print("----------------------model----------------------")
-        print_param("preprocess", pre_param)
-        print_param("model", model_param)
-        print("loss : quaile_huber_loss")
-        print("-------------------------------------------------")
-
         self.get_q = jax.jit(self.get_q)
         self._get_actions = jax.jit(self._get_actions)
         self._loss = jax.jit(self._loss)
@@ -143,7 +115,7 @@ class QRDQN(Q_Network_Family):
         self._train_step = jax.jit(self._train_step)
 
     def get_q(self, params, obses, key=None) -> jnp.ndarray:
-        return self.model.apply(params, key, self.preproc.apply(params, key, obses))
+        return self.model(params, key, self.preproc(params, key, obses))
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         return jnp.expand_dims(
