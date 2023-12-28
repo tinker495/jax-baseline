@@ -79,23 +79,19 @@ def restore(ckpt_dir):
     return jax.tree_unflatten(treedef, flat_state)
 
 
-def select_optimizer(optim_str, rl, eps=1e-2 / 256.0, grad_max=10):
-    """if optim_str == 'adam':
-
-    return optax.adam(rl,b1=0.9,b2=0.99,eps=eps) elif optim_str == 'adamw':         return
-    optax.adamw(rl,b1=0.9,b2=0.99,eps=eps) elif optim_str == 'rmsprop':         return optax.rmsprop(rl,eps=eps) elif
-    optim_str == 'lion':         return optax.lion(rl)
-    """
+def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=10):
     if optim_str == "adam":
-        return combine.chain(optax.clip_by_global_norm(grad_max), optax.adam(rl, eps=eps))
+        return combine.chain(
+            optax.clip_by_global_norm(grad_max), optax.adam(lr, b1=0.9, b2=0.99, eps=eps)
+        )
     elif optim_str == "adamw":
         return combine.chain(
             optax.clip_by_global_norm(grad_max),
-            optax.adamw(rl, eps=eps, weight_decay=1e-5),
+            optax.adamw(lr, eps=eps, weight_decay=1e-5),
         )
     elif optim_str == "rmsprop":
-        return combine.chain(optax.clip_by_global_norm(grad_max), optax.rmsprop(rl, eps=eps))
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.rmsprop(lr, eps=eps))
     elif optim_str == "sgd":
-        return combine.chain(optax.clip_by_global_norm(grad_max), optax.sgd(rl))
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.sgd(lr))
     elif optim_str == "lion":
-        return combine.chain(optax.clip_by_global_norm(grad_max), optax.lion(rl, weight_decay=1e-5))
+        return combine.chain(optax.clip_by_global_norm(grad_max), optax.lion(lr, weight_decay=1e-5))

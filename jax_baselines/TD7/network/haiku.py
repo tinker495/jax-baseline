@@ -60,7 +60,10 @@ class Actor(hk.Module):
         embed_concat = jnp.concatenate([a0, zs], axis=1)
         action = hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [self.layer(self.action_size[0]), jax.nn.tanh]
+            + [
+                self.layer(self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)),
+                jax.nn.tanh,
+            ]
         )(embed_concat)
         return action
 
@@ -81,7 +84,7 @@ class Critic(hk.Module):
         embed_concat = jnp.concatenate([q0, embedding], axis=1)
         q_net = hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.elu for i in range(2 * self.hidden_n)]
-            + [self.layer(1)]
+            + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
         )(embed_concat)
         return q_net
 

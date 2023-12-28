@@ -29,7 +29,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         batch_size=32,
         policy_delay=2,
         learning_starts=1000,
-        target_network_update_freq=500,
+        target_network_update_freq=250,
         prioritized_replay_alpha=0.4,
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-3,

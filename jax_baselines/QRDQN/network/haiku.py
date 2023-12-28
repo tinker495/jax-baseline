@@ -41,7 +41,10 @@ class Model(hk.Module):
                     for i in range(2 * self.hidden_n)
                 ]
                 + [
-                    self.layer(self.action_size[0] * self.support_n),
+                    self.layer(
+                        self.action_size[0] * self.support_n,
+                        w_init=hk.initializers.RandomUniform(-0.03, 0.03),
+                    ),
                     hk.Reshape((self.action_size[0], self.support_n)),
                 ]
             )(feature)
@@ -52,7 +55,12 @@ class Model(hk.Module):
                     self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n)
                 ]
-                + [self.layer(self.value_support_n), hk.Reshape((1, 1, self.value_support_n))]
+                + [
+                    self.layer(
+                        self.value_support_n, w_init=hk.initializers.RandomUniform(-0.03, 0.03)
+                    ),
+                    hk.Reshape((1, 1, self.value_support_n)),
+                ]
             )(feature)
             a = hk.Sequential(
                 [
@@ -60,7 +68,10 @@ class Model(hk.Module):
                     for i in range(2 * self.hidden_n)
                 ]
                 + [
-                    self.layer(self.action_size[0] * self.action_support_n),
+                    self.layer(
+                        self.action_size[0] * self.action_support_n,
+                        w_init=hk.initializers.RandomUniform(-0.03, 0.03),
+                    ),
                     hk.Reshape((self.action_size[0], self.action_support_n, 1)),
                 ]
             )(feature)

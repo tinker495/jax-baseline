@@ -22,10 +22,14 @@ class Actor(hk.Module):
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
         )(feature)
         if self.action_type == "discrete":
-            action_probs = self.layer(self.action_size[0])(mlp)
+            action_probs = self.layer(
+                self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
+            )(mlp)
             return action_probs
         elif self.action_type == "continuous":
-            mu = self.layer(self.action_size[0])(mlp)
+            mu = self.layer(self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03))(
+                mlp
+            )
             log_std = hk.get_parameter(
                 "log_std", [1, self.action_size[0]], jnp.float32, init=jnp.zeros
             )
@@ -42,7 +46,7 @@ class Critic(hk.Module):
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         net = hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [self.layer(1)]
+            + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
         )(feature)
         return net
 

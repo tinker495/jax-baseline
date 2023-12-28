@@ -79,8 +79,8 @@ class C51(Q_Network_Family):
 
         self.name = "C51"
         self.categorial_bar_n = categorial_bar_n
-        self.categorial_max = categorial_max
-        self.categorial_min = categorial_min
+        self.categorial_max = float(categorial_max)
+        self.categorial_min = float(categorial_min)
 
         if _init_setup_model:
             self.setup_model()
@@ -107,18 +107,10 @@ class C51(Q_Network_Family):
         self.categorial_bar = jnp.expand_dims(
             jnp.linspace(self.categorial_min, self.categorial_max, self.categorial_bar_n),
             axis=0,
-        )
-        self._categorial_bar = jnp.expand_dims(self.categorial_bar, axis=0)
+        )  # [1, 51]
+        self._categorial_bar = jnp.expand_dims(self.categorial_bar, axis=0)  # [1, 1, 51]
         self.delta_bar = jax.device_put(
             (self.categorial_max - self.categorial_min) / (self.categorial_bar_n - 1)
-        )
-
-        offset = jnp.expand_dims(
-            jnp.linspace(0, (self.batch_size - 1) * self.categorial_bar_n, self.batch_size),
-            axis=-1,
-        )
-        self.offset = jnp.broadcast_to(offset, (self.batch_size, self.categorial_bar_n)).astype(
-            jnp.int32
         )
 
         self.get_q = jax.jit(self.get_q)
@@ -211,17 +203,20 @@ class C51(Q_Network_Family):
             target_params,
             opt_state,
             loss,
-            jnp.mean(jnp.sum(target_distribution * self.categorial_bar, axis=1)),
+            jnp.mean(
+                jnp.sum(
+                    target_distribution * self.categorial_bar,
+                    axis=1,
+                )
+            ),
             new_priorities,
         )
 
     def _loss(self, params, obses, actions, target_distribution, weights, key):
-        distribution = jnp.clip(
-            jnp.squeeze(jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)),
-            1e-5,
-            1.0,
+        distribution = jnp.squeeze(
+            jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         )
-        loss = jnp.sum(-target_distribution * jnp.log(distribution), axis=1)
+        loss = jnp.mean(target_distribution * (-jnp.log(distribution + 1e-5)), axis=1)
         return jnp.mean(loss * weights), loss
 
     def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
@@ -255,24 +250,32 @@ class C51(Q_Network_Family):
             )
         else:
             next_categorial = not_dones * self.categorial_bar
-        target_categorial = (next_categorial * self._gamma) + rewards
-        Tz = jnp.clip(target_categorial, self.categorial_min, self.categorial_max)
-        C51_b = ((Tz - self.categorial_min) / self.delta_bar).astype(jnp.float32)
-        C51_L = jnp.floor(C51_b).astype(jnp.int32)
-        C51_H = jnp.ceil(C51_b).astype(jnp.int32)
+        target_categorial = (next_categorial * self._gamma) + rewards  # [32, 51]
+        Tz = jnp.clip(
+            target_categorial, self.categorial_min, self.categorial_max
+        )  # clip to range of bar
+        C51_B = ((Tz - self.categorial_min) / self.delta_bar).astype(
+            jnp.float32
+        )  # bar index as float
+        C51_L = jnp.floor(C51_B).astype(jnp.int32)  # bar lower index as int
+        C51_H = jnp.ceil(C51_B).astype(jnp.int32)  # bar higher index as int
         C51_L = jnp.where((C51_H > 0) * (C51_L == C51_H), C51_L - 1, C51_L)  # C51_L.at[].add(-1)
         C51_H = jnp.where(
             (C51_L < (self.categorial_bar_n - 1)) * (C51_L == C51_H), C51_H + 1, C51_H
         )  # C51_H.at[].add(1)
-        target_distribution = jnp.zeros((self.batch_size * self.categorial_bar_n))
-        target_distribution = target_distribution.at[jnp.reshape(C51_L + self.offset, (-1))].add(
-            jnp.reshape(next_distribution * (C51_H.astype(jnp.float32) - C51_b), (-1))
-        )
-        target_distribution = target_distribution.at[jnp.reshape(C51_H + self.offset, (-1))].add(
-            jnp.reshape(next_distribution * (C51_b - C51_L.astype(jnp.float32)), (-1))
-        )
-        target_distribution = jnp.reshape(
-            target_distribution, (self.batch_size, self.categorial_bar_n)
+
+        def tdist(next_distribution, C51_L, C51_H, C51_b):
+            target_distribution = jnp.zeros((self.categorial_bar_n))
+            target_distribution = target_distribution.at[C51_L].add(
+                next_distribution * (C51_H.astype(jnp.float32) - C51_b)
+            )
+            target_distribution = target_distribution.at[C51_H].add(
+                next_distribution * (C51_b - C51_L.astype(jnp.float32))
+            )
+            return target_distribution
+
+        target_distribution = jax.vmap(tdist, in_axes=(0, 0, 0, 0))(
+            next_distribution, C51_L, C51_H, C51_B
         )
         return target_distribution
 

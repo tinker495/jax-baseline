@@ -51,7 +51,11 @@ class Model(hk.Module):
                         self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                         for i in range(2 * self.hidden_n)
                     ]
-                    + [self.layer(self.action_size[0])]
+                    + [
+                        self.layer(
+                            self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
+                        )
+                    ]
                 )(mul_embedding),
                 "(b t) a -> b a t",
                 b=batch_size,
@@ -65,7 +69,7 @@ class Model(hk.Module):
                         self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                         for i in range(2 * self.hidden_n)
                     ]
-                    + [self.layer(1)]
+                    + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
                 )(mul_embedding),
                 "(b t) o -> b o t",
                 b=batch_size,
@@ -77,7 +81,11 @@ class Model(hk.Module):
                         self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                         for i in range(2 * self.hidden_n)
                     ]
-                    + [self.layer(self.action_size[0])]
+                    + [
+                        self.layer(
+                            self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
+                        )
+                    ]
                 )(mul_embedding),
                 "(b t) a -> b a t",
                 b=batch_size,

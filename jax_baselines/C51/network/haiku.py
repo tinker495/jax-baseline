@@ -39,7 +39,10 @@ class Model(hk.Module):
                     for i in range(2 * self.hidden_n)
                 ]
                 + [
-                    self.layer(self.action_size[0] * self.categorial_bar_n),
+                    self.layer(
+                        self.action_size[0] * self.categorial_bar_n,
+                        w_init=hk.initializers.RandomUniform(-0.03, 0.03),
+                    ),
                     hk.Reshape((self.action_size[0], self.categorial_bar_n)),
                 ]
             )(feature)
@@ -51,7 +54,9 @@ class Model(hk.Module):
                     for i in range(2 * self.hidden_n)
                 ]
                 + [
-                    self.layer(self.categorial_bar_n),
+                    self.layer(
+                        self.categorial_bar_n, w_init=hk.initializers.RandomUniform(-0.03, 0.03)
+                    ),
                     hk.Reshape((1, self.categorial_bar_n)),
                 ]
             )(feature)
@@ -61,7 +66,10 @@ class Model(hk.Module):
                     for i in range(2 * self.hidden_n)
                 ]
                 + [
-                    self.layer(self.action_size[0] * self.categorial_bar_n),
+                    self.layer(
+                        self.action_size[0] * self.categorial_bar_n,
+                        w_init=hk.initializers.RandomUniform(-0.03, 0.03),
+                    ),
                     hk.Reshape((self.action_size[0], self.categorial_bar_n)),
                 ]
             )(feature)
