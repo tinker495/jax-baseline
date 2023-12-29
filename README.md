@@ -26,21 +26,21 @@ pip install .
 
 ### Q-Net bases
 
-| **Name** | `Per`              | `N-step`           | `NoisyNet`         | `Munchausen`       | `LSTM` | `Ape-X`            |
-| -------- | ------------------ | ------------------ | ------------------ | ------------------ | ------ | ------------------ |
-| DQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | TODO   | :heavy_check_mark: |
-| C51      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | TODO   | :heavy_check_mark: |
-| QRDQN    | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | TODO   | :heavy_check_mark: |
-| IQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | TODO   | TODO               |
-| FQF      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | TODO   | TODO               |
+| **Name** | `Per`              | `N-step`           | `NoisyNet`         | `Munchausen`       | `Ape-X`            |
+| -------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
+| DQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| C51      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| QRDQN    | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| IQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | TODO               |
+| FQF      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | TODO               |
 
 ### Actor-Critic based
 
-| **Name**        | `Box`              | `Discrete`         | `LSTM` | `IMPALA`           |
-| --------------- | ------------------ | ------------------ | ------ | ------------------ |
-| A2C             | :heavy_check_mark: | :heavy_check_mark: | TODO   | :heavy_check_mark: |
-| PPO             | :heavy_check_mark: | :heavy_check_mark: | TODO   | :heavy_check_mark: |
-| Truly PPO(TPPO) | :heavy_check_mark: | :heavy_check_mark: | TODO   | TODO               |
+| **Name**        | `Box`              | `Discrete`         | `IMPALA`           |
+| --------------- | ------------------ | ------------------ | ------------------ |
+| A2C             | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| PPO             | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| Truly PPO(TPPO) | :heavy_check_mark: | :heavy_check_mark: | TODO               |
 
 ### DPG bases
 
