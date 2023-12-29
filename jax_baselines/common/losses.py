@@ -32,12 +32,12 @@ def QuantileHuberLosses(target_tile, q_tile, quantile, delta):
     return jnp.sum(jnp.mean(weight * huber, axis=1), axis=1)
 
 
-def FQFQuantileLosses(tau_vals, vals, quantile):
-    values_1 = tau_vals - vals[:, :-1]
-    sign_1 = tau_vals > jnp.concatenate([vals[:, :1], tau_vals[:, :-1]], axis=1)
+def FQFQuantileLosses(tau_vals, tau_hat_val, quantile):
+    values_1 = tau_vals - tau_hat_val[:, :-1]
+    sign_1 = tau_vals > jnp.concatenate([tau_hat_val[:, :1], tau_vals[:, :-1]], axis=1)
 
-    values_2 = tau_vals - vals[:, 1:]
-    sign_2 = tau_vals < jnp.concatenate([tau_vals[:, 1:], vals[:, -1:]], axis=1)
+    values_2 = tau_vals - tau_hat_val[:, 1:]
+    sign_2 = tau_vals < jnp.concatenate([tau_vals[:, 1:], tau_hat_val[:, -1:]], axis=1)
 
     grad_of_taus = jnp.where(sign_1, values_1, -values_1) + jnp.where(sign_2, values_2, -values_2)
     return jnp.sum(grad_of_taus * quantile[:, 1:-1], axis=1)

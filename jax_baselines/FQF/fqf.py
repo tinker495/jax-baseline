@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+from jax_baselines.common.base_classes import select_optimizer
 from jax_baselines.common.losses import FQFQuantileLosses, QuantileHuberLosses
 from jax_baselines.common.utils import convert_jax, hard_update
 from jax_baselines.DQN.base_class import Q_Network_Family
@@ -81,7 +82,8 @@ class FQF(Q_Network_Family):
         self.name = "FQF"
         self.n_support = n_support
         self.delta = delta
-        self.ent_coef = 1e-2
+        self.fqf_factor = 1e-6
+        self.ent_coef = 1e-3
 
         if _init_setup_model:
             self.setup_model()
@@ -103,7 +105,9 @@ class FQF(Q_Network_Family):
 
         self.opt_state = self.optimizer.init(self.params)
 
-        self.fqf_optimizer = optax.rmsprop(learning_rate=2.5e-9)
+        self.fqf_optimizer = select_optimizer(
+            "rmsprop", self.learning_rate * self.fqf_factor, grad_max=5.0
+        )
         self.fqf_opt_state = self.fqf_optimizer.init(self.fqf_params)
 
         self.get_q = jax.jit(self.get_q)
@@ -232,20 +236,20 @@ class FQF(Q_Network_Family):
         feature = self.preproc(params, key, obses)
         _, tau_hats, _ = self.fpf(fqf_params, key, feature)
         theta_loss_tile = jnp.take_along_axis(
-            self.get_q(params, feature, jax.lax.stop_gradient(tau_hats), key),
+            self.get_q(params, feature, tau_hats, key),
             actions,
             axis=1,
         )  # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets, axis=2)  # batch x support x 1
         hubber = QuantileHuberLosses(
-            theta_loss_tile,
             logit_valid_tile,
+            theta_loss_tile,
             jax.lax.stop_gradient(jnp.expand_dims(tau_hats, axis=1)),
             self.delta,
         )
         return jnp.mean(hubber * weights), (hubber, feature, theta_loss_tile)
 
-    def _fqf_loss(self, fqf_params, params, feature, actions, theta_loss_tile, key):
+    def _fqf_loss(self, fqf_params, params, feature, actions, tau_hat_val, key):
         tau, _, entropy = self.fpf(fqf_params, key, feature)
         tau_vals = jax.lax.stop_gradient(
             jnp.take_along_axis(self.get_q(params, feature, tau[:, 1:-1], key), actions, axis=1)
@@ -253,11 +257,11 @@ class FQF(Q_Network_Family):
         quantile_loss = jnp.mean(
             FQFQuantileLosses(
                 jnp.squeeze(tau_vals),
-                jnp.squeeze(theta_loss_tile),
+                jnp.squeeze(tau_hat_val),
                 tau,
             )
         )
-        entropy_loss = self.ent_coef * jnp.mean(entropy)
+        entropy_loss = -self.ent_coef * jnp.mean(entropy)
         loss = quantile_loss + entropy_loss
         return loss
 

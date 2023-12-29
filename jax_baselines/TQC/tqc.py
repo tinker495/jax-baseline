@@ -244,8 +244,8 @@ class TQC(Deteministic_Policy_Gradient_Family):
         qnets = self.critic(params, key, feature, actions)
         logit_valid_tile = jnp.expand_dims(targets, axis=2)  # batch x support x 1
         huber0 = QuantileHuberLosses(
-            jnp.expand_dims(qnets[0], axis=1),
             logit_valid_tile,
+            jnp.expand_dims(qnets[0], axis=1),
             self.quantile,
             self.delta,
         )
