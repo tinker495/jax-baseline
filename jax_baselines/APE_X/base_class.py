@@ -3,7 +3,6 @@ import time
 from collections import deque
 
 import gymnasium as gym
-import haiku as hk
 import jax
 import numpy as np
 import ray
@@ -17,6 +16,7 @@ from jax_baselines.common.base_classes import (
     select_optimizer,
 )
 from jax_baselines.common.cpprb_buffers import MultiPrioritizedReplayBuffer
+from jax_baselines.common.utils import key_gen
 
 
 class Ape_X_Family(object):
@@ -56,7 +56,7 @@ class Ape_X_Family(object):
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
-        self.key_seq = hk.PRNGSequence(self.seed)
+        self.key_seq = key_gen(self.seed)
 
         self.param_noise = param_noise
         self.learning_starts = learning_starts

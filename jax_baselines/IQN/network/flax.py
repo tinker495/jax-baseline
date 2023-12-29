@@ -2,7 +2,6 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as np
-from einops import rearrange, repeat
 
 from jax_baselines.common.utils import print_param
 from jax_baselines.model.flax.apply import get_apply_fn_flax_module
@@ -24,68 +23,62 @@ class Model(nn.Module):
             self.layer = NoisyDense
 
         self.pi_mtx = jax.lax.stop_gradient(
-            repeat(jnp.pi * np.arange(0, 128, dtype=np.float32), "m -> o m", o=1)
-        )  # [ 1 x 128]
+            jnp.expand_dims(jnp.pi * (jnp.arange(0, 128, dtype=np.float32) + 1), axis=(0, 2))
+        )  # [ 1 x 128 x 1]
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray, tau: jnp.ndarray) -> jnp.ndarray:
         feature_shape = feature.shape  # [ batch x feature]
-        batch_size = feature_shape[0]  # [ batch ]
-        quaitle_shape = tau.shape  # [ tau ]
-        feature_tile = repeat(
-            feature, "b f -> (b t) f", t=quaitle_shape[1]
-        )  # [ (batch x tau) x feature]
 
-        costau = jnp.cos(
-            rearrange(repeat(tau, "b t -> b t m", m=128), "b t m -> (b t) m") * self.pi_mtx
-        )  # [ (batch x tau) x 128]
-        quantile_embedding = nn.Sequential([self.layer(feature_shape[1]), jax.nn.relu])(
-            costau
-        )  # [ (batch x tau) x feature ]
+        tau = jnp.expand_dims(tau, axis=1)  # [ batch x 1 x tau]
+        costau = jnp.cos(tau * self.pi_mtx)  # [ batch x 128 x tau]
 
-        mul_embedding = feature_tile * quantile_embedding  # [ (batch x tau) x feature ]
-
-        if not self.dueling:
-            q_net = rearrange(
-                nn.Sequential(
+        def qnet(feature, costau):  # [ batch x feature], [ batch x 128 ]
+            quantile_embedding = nn.Sequential([self.layer(feature_shape[1]), jax.nn.relu])(
+                costau
+            )  # [ batch x feature ]
+            mul_embedding = feature * quantile_embedding  # [ batch x feature ]
+            if not self.dueling:
+                q_net = nn.Sequential(
                     [
                         self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                         for i in range(2 * self.hidden_n)
                     ]
-                    + [self.layer(self.action_size[0])]
-                )(mul_embedding),
-                "(b t) a -> b a t",
-                b=batch_size,
-                t=quaitle_shape[1],
-            )  # [ batch x action x tau ]
-            return q_net
-        else:
-            v = rearrange(
-                nn.Sequential(
+                    + [
+                        self.layer(
+                            self.action_size[0],
+                            kernel_init=jax.nn.initializers.uniform(-0.03, 0.03),
+                        )
+                    ]
+                )(mul_embedding)
+                return q_net
+            else:
+                v = nn.Sequential(
                     [
                         self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                         for i in range(2 * self.hidden_n)
                     ]
-                    + [self.layer(1)]
-                )(mul_embedding),
-                "(b t) o -> b o t",
-                b=batch_size,
-                t=quaitle_shape[1],
-            )  # [ batch x 1 x tau ]
-            a = rearrange(
-                nn.Sequential(
+                    + [self.layer(1, kernel_init=jax.nn.initializers.uniform(-0.03, 0.03))]
+                )(mul_embedding)
+                a = nn.Sequential(
                     [
                         self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                         for i in range(2 * self.hidden_n)
                     ]
-                    + [self.layer(self.action_size[0])]
-                )(mul_embedding),
-                "(b t) a -> b a t",
-                b=batch_size,
-                t=quaitle_shape[1],
-            )  # [ batch x action x tau ]
-            q = v + a - jnp.mean(a, axis=(1, 2), keepdims=True)
-            return q
+                    + [
+                        self.layer(
+                            self.action_size[0],
+                            kernel_init=jax.nn.initializers.uniform(-0.03, 0.03),
+                        )
+                    ]
+                )(mul_embedding)
+                q = v + a - jnp.max(a, axis=1, keepdims=True)
+                return q
+
+        out = jax.vmap(qnet, in_axes=(None, 2), out_axes=2)(
+            feature, costau
+        )  # [ batch x action x tau ]
+        return out
 
 
 def model_builder_maker(observation_space, action_space, dueling_model, param_noise, policy_kwargs):

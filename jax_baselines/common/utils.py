@@ -9,6 +9,13 @@ cpu_jit = partial(jax.jit, backend="cpu")
 gpu_jit = partial(jax.jit, backend="gpu")
 
 
+def key_gen(seed):
+    key = jax.random.PRNGKey(seed)
+    while True:
+        key, subkey = jax.random.split(key)
+        yield subkey
+
+
 def hard_update(new_tensors, old_tensors, steps: int, update_period: int):
     update = steps % update_period == 0
     return jax.tree_map(lambda new, old: jax.lax.select(update, new, old), new_tensors, old_tensors)
@@ -16,19 +23,6 @@ def hard_update(new_tensors, old_tensors, steps: int, update_period: int):
 
 def soft_update(new_tensors, old_tensors, tau: float):
     return jax.tree_map(lambda new, old: tau * new + (1.0 - tau) * old, new_tensors, old_tensors)
-
-
-def t_soft_function(new, old, W, tau, v):
-    pass
-
-
-def t_soft_update(new_tensors, old_tensors, W_tensors, tau: float, v=1.0):
-    return jax.tree_map(
-        lambda new, old: tau * new + (1.0 - tau) * old,
-        new_tensors,
-        old_tensors,
-        W_tensors,
-    )
 
 
 def truncated_mixture(quantiles, cut):

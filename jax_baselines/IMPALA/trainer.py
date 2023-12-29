@@ -4,7 +4,8 @@ import numpy as np
 import ray
 
 from jax_baselines.common.base_classes import select_optimizer
-from jax_baselines.IMPALA.cpprb_buffers import ImpalaReplayBuffer
+from jax_baselines.common.utils import key_gen
+from jax_baselines.IMPALA.cpprb_buffers import ImpalaBuffer
 
 
 @ray.remote(num_gpus=1)
@@ -21,10 +22,10 @@ class Impala_Trainer(object):
         logger_server=None,
         key=42,
     ):
-        self.buffer = ImpalaReplayBuffer(replay)
+        self.buffer = ImpalaBuffer(replay)
         self.batch_size = batch_size
         self.minibatch_size = minibatch_size
-        self.key_seq = hk.PRNGSequence(key)
+        self.key_seq = key_gen(key)
         self.preproc, self.model = model_builder()
         self._preprocess, self._train_step = train_builder()
         self.optimizer = select_optimizer(optimizer, learning_rate, 1e-2 / batch_size)

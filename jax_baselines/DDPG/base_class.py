@@ -1,7 +1,6 @@
 from collections import deque
 
 import gymnasium as gym
-import haiku as hk
 import numpy as np
 from mlagents_envs.environment import ActionTuple, UnityEnvironment
 from tqdm.auto import trange
@@ -18,7 +17,7 @@ from jax_baselines.common.cpprb_buffers import (
     PrioritizedReplayBuffer,
     ReplayBuffer,
 )
-from jax_baselines.common.utils import add_hparams, convert_states
+from jax_baselines.common.utils import add_hparams, convert_states, key_gen
 from jax_baselines.common.worker import gymMultiworker
 
 
@@ -52,9 +51,9 @@ class Deteministic_Policy_Gradient_Family(object):
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
-        self.key_seq = hk.PRNGSequence(self.seed)
+        self.key_seq = key_gen(self.seed)
 
-        self.train_steps = 0
+        self.train_steps_count = 0
         self.learning_starts = learning_starts
         self.train_freq = train_freq
         self.gradient_steps = gradient_steps

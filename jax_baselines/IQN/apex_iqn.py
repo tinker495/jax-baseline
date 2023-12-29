@@ -1,6 +1,5 @@
 from copy import deepcopy
 
-import haiku as hk
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -8,7 +7,7 @@ import optax
 
 from jax_baselines.APE_X.base_class import Ape_X_Family
 from jax_baselines.common.losses import QuantileHuberLosses
-from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
+from jax_baselines.common.utils import convert_jax, hard_update, key_gen, q_log_pi
 from jax_baselines.IQN.network.haiku import model_builder_maker
 
 
@@ -119,7 +118,7 @@ class APE_X_IQN(Ape_X_Family):
         def builder():
             import random
 
-            key_seq = hk.PRNGSequence(random.randint(0, 1000000))
+            key_seq = key_gen(random.randint(0, 1000000))
 
             def get_abs_td_error(
                 model, preproc, params, obses, actions, rewards, nxtobses, dones, key

@@ -1,4 +1,3 @@
-import jax
 import jax.numpy as jnp
 
 
@@ -14,20 +13,23 @@ def log_cosh(x):
     return jnp.logaddexp(x, -x) - jnp.log(2.0).astype(x.dtype)
 
 
-def QuantileHuberLosses(q_tile, target_tile, quantile, delta):
+def QuantileHuberLosses(target_tile, q_tile, quantile, delta):
+    """Compute the quantile huber loss for quantile regression.
+
+    Args:
+        target_tile: target tile (batch_size, num_tau_prime, 1)
+        q_tile: quantile tile (batch_size, 1, num_tau)
+        quantile: quantile (batch_size, 1, num_tau)
+        delta: huber loss delta (float)
+
+    Returns:
+        quantile huber loss (batch_size)
+    """
     error = target_tile - q_tile
-    error_neg = (error >= 0.0).astype(jnp.float32)
-    weight = jax.lax.stop_gradient(jnp.abs(quantile - error_neg))
+    error_neg = (error < 0.0).astype(jnp.float32)
+    weight = jnp.abs(quantile - error_neg)
     huber = hubberloss(error, delta) / delta
     return jnp.sum(jnp.mean(weight * huber, axis=1), axis=1)
-
-
-def QuantileSquareLosses(q_tile, target_tile, quantile, delta):
-    error = target_tile - q_tile
-    error_neg = (error >= 0.0).astype(jnp.float32)
-    weight = jax.lax.stop_gradient(jnp.abs(quantile - error_neg))
-    square = jnp.square(error)
-    return jnp.sum(jnp.mean(weight * square, axis=1), axis=1)
 
 
 def FQFQuantileLosses(tau_vals, vals, quantile):

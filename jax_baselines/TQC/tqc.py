@@ -1,21 +1,14 @@
 from copy import deepcopy
 
-import haiku as hk
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 
 from jax_baselines.common.losses import QuantileHuberLosses
-from jax_baselines.common.utils import (
-    convert_jax,
-    print_param,
-    soft_update,
-    truncated_mixture,
-)
+from jax_baselines.common.utils import convert_jax, soft_update, truncated_mixture
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from jax_baselines.model.haiku.Module import PreProcess
-from jax_baselines.TQC.network import Actor, Critic
+from jax_baselines.TQC.network.haiku import model_builder_maker
 
 
 class TQC(Deteministic_Policy_Gradient_Family):
@@ -94,34 +87,14 @@ class TQC(Deteministic_Policy_Gradient_Family):
             self.setup_model()
 
     def setup_model(self):
-        self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
-        if "embedding_mode" in self.policy_kwargs.keys():
-            embedding_mode = self.policy_kwargs["embedding_mode"]
-            del self.policy_kwargs["embedding_mode"]
-        self.preproc = hk.transform(
-            lambda x: PreProcess(self.observation_space, embedding_mode=embedding_mode)(x)
+        model_builder = model_builder_maker(
+            self.observation_space,
+            self.action_size,
+            self.policy_kwargs,
         )
-        self.actor = hk.transform(lambda x: Actor(self.action_size, **self.policy_kwargs)(x))
-        self.critic = hk.transform(
-            lambda x, a: [
-                Critic(support_n=self.n_support, **self.policy_kwargs)(x, a)
-                for _ in range(self.critic_num)
-            ]
+        self.preproc, self.actor, self.critic, self.params = model_builder(
+            next(self.key_seq), print_model=True
         )
-        pre_param = self.preproc.init(
-            next(self.key_seq),
-            [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-        )
-        feature = self.preproc.apply(
-            pre_param,
-            None,
-            [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-        )
-        actor_param = self.actor.init(next(self.key_seq), feature)
-        critic_param = self.critic.init(
-            next(self.key_seq), feature, np.zeros((1, self.action_size[0]))
-        )
-        self.params = hk.data_structures.merge(pre_param, actor_param, critic_param)
         self.target_params = deepcopy(self.params)
 
         if isinstance(self.ent_coef, str) and self.ent_coef.startswith("auto"):
@@ -143,26 +116,13 @@ class TQC(Deteministic_Policy_Gradient_Family):
         self.quantile = jax.device_put(jnp.expand_dims(self.quantile, axis=(0, 1))).astype(
             jnp.float32
         )  # [1 x 1 x support]
-        self.policy_weight = jnp.tile(
-            jnp.reshape(
-                1.0 + self.risk_avoidance * 2.0 * (0.5 - self.quantile),
-                (1, self.n_support),
-            ),
-            (1, self.critic_num),
-        )
-
-        print("----------------------model----------------------")
-        print_param("preprocess", pre_param)
-        print_param("actor", actor_param)
-        print_param("critic", critic_param)
-        print("-------------------------------------------------")
 
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
         self._train_ent_coef = jax.jit(self._train_ent_coef)
 
     def _get_update_data(self, params, feature, key=None) -> jnp.ndarray:
-        mu, log_std = self.actor.apply(params, None, feature)
+        mu, log_std = self.actor(params, None, feature)
         std = jnp.exp(log_std)
         x_t = mu + std * jax.random.normal(key, std.shape)
         pi = jax.nn.tanh(x_t)
@@ -172,12 +132,10 @@ class TQC(Deteministic_Policy_Gradient_Family):
             axis=1,
             keepdims=True,
         )
-        return pi, log_prob, mu, log_std, std
+        return pi, log_prob
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        mu, log_std = self.actor.apply(
-            params, None, self.preproc.apply(params, None, convert_jax(obses))
-        )
+        mu, log_std = self.actor(params, None, self.preproc(params, None, convert_jax(obses)))
         std = jnp.exp(log_std)
         pi = jax.nn.tanh(mu + std * jax.random.normal(key, std.shape))
         return pi
@@ -282,8 +240,8 @@ class TQC(Deteministic_Policy_Gradient_Family):
         return log_coef, jnp.exp(log_coef)
 
     def _loss(self, params, obses, actions, targets, weights, key, step, ent_coef):
-        feature = self.preproc.apply(params, key, obses)
-        qnets = self.critic.apply(params, key, feature, actions)
+        feature = self.preproc(params, key, obses)
+        qnets = self.critic(params, key, feature, actions)
         logit_valid_tile = jnp.expand_dims(targets, axis=2)  # batch x support x 1
         huber0 = QuantileHuberLosses(
             jnp.expand_dims(qnets[0], axis=1),
@@ -302,21 +260,18 @@ class TQC(Deteministic_Policy_Gradient_Family):
                     self.delta,
                 )
             )
-        policy, log_prob, mu, log_std, std = self._get_update_data(params, feature, key)
-        qnets_pi = self.critic.apply(jax.lax.stop_gradient(params), key, feature, policy)
+        policy, log_prob = self._get_update_data(params, feature, key)
+        qnets_pi = self.critic(jax.lax.stop_gradient(params), key, feature, policy)
         actor_loss = jnp.mean(
-            ent_coef * log_prob
-            - jnp.mean(jnp.concatenate(qnets_pi, axis=1) * self.policy_weight, axis=1)
+            ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi, axis=1), axis=1)
         )
         total_loss = critic_loss + actor_loss
         return total_loss, (critic_loss, actor_loss, huber0, log_prob)
 
     def _target(self, params, target_params, rewards, nxtobses, not_dones, key, ent_coef):
-        next_feature = self.preproc.apply(target_params, key, nxtobses)
-        policy, log_prob, mu, log_std, std = self._get_update_data(
-            params, self.preproc.apply(params, key, nxtobses), key
-        )
-        qnets_pi = self.critic.apply(target_params, key, next_feature, policy)
+        next_feature = self.preproc(target_params, key, nxtobses)
+        policy, log_prob = self._get_update_data(params, self.preproc(params, key, nxtobses), key)
+        qnets_pi = self.critic(target_params, key, next_feature, policy)
         if self.mixture_type == "min":
             next_q = jnp.min(jnp.stack(qnets_pi, axis=-1), axis=-1) - ent_coef * log_prob
         elif self.mixture_type == "truncated":

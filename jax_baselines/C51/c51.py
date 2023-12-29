@@ -137,6 +137,7 @@ class C51(Q_Network_Family):
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
+            self.train_steps_count += 1
             if self.prioritized_replay:
                 data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
@@ -153,7 +154,7 @@ class C51(Q_Network_Family):
                 self.params,
                 self.target_params,
                 self.opt_state,
-                steps,
+                self.train_steps_count,
                 next(self.key_seq) if self.param_noise else None,
                 **data
             )

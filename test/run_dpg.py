@@ -6,11 +6,8 @@ import gymnasium as gym
 from jax_baselines.DDPG.ddpg import DDPG
 from jax_baselines.SAC.sac import SAC
 from jax_baselines.TD3.td3 import TD3
-from jax_baselines.TD4_IQN.td4_iqn import TD4_IQN
-from jax_baselines.TD4_QR.td4_qr import TD4_QR
 from jax_baselines.TD7.td7 import TD7
 from jax_baselines.TQC.tqc import TQC
-from jax_baselines.TQC_IQN.tqc_iqn import TQC_IQN
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -127,51 +124,6 @@ if __name__ == "__main__":
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
-    if args.algo == "TD4_QR":
-        agent = TD4_QR(
-            env,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_size=args.batch,
-            buffer_size=int(args.buffer_size),
-            target_network_update_tau=args.target_update_tau,
-            learning_starts=args.learning_starts,
-            quantile_drop=args.quantile_drop,
-            prioritized_replay=args.per,
-            action_noise=args.action_noise,
-            n_step=args.n_step,
-            train_freq=args.train_freq,
-            seed=args.seed,
-            gradient_steps=args.gradient_steps,
-            n_support=args.n_support,
-            mixture_type=args.mixture,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-        )
-    if args.algo == "TD4_IQN":
-        agent = TD4_IQN(
-            env,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_size=args.batch,
-            buffer_size=int(args.buffer_size),
-            target_network_update_tau=args.target_update_tau,
-            learning_starts=args.learning_starts,
-            cvar=args.cvar,
-            quantile_drop=args.quantile_drop,
-            prioritized_replay=args.per,
-            action_noise=args.action_noise,
-            n_step=args.n_step,
-            train_freq=args.train_freq,
-            seed=args.seed,
-            gradient_steps=args.gradient_steps,
-            n_support=args.n_support,
-            mixture_type=args.mixture,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-        )
     if args.algo == "SAC":
         agent = SAC(
             env,
@@ -200,30 +152,6 @@ if __name__ == "__main__":
             buffer_size=int(args.buffer_size),
             target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,
-            quantile_drop=args.quantile_drop,
-            prioritized_replay=args.per,
-            n_step=args.n_step,
-            train_freq=args.train_freq,
-            ent_coef=args.ent_coef,
-            seed=args.seed,
-            gradient_steps=args.gradient_steps,
-            n_support=args.n_support,
-            critic_num=args.critic_num,
-            mixture_type=args.mixture,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-        )
-    if args.algo == "TQC_IQN":
-        agent = TQC_IQN(
-            env,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_size=args.batch,
-            buffer_size=int(args.buffer_size),
-            target_network_update_tau=args.target_update_tau,
-            learning_starts=args.learning_starts,
-            cvar=args.cvar,
             quantile_drop=args.quantile_drop,
             prioritized_replay=args.per,
             n_step=args.n_step,

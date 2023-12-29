@@ -1,7 +1,6 @@
 from collections import deque
 
 import gymnasium as gym
-import haiku as hk
 import numpy as np
 from mlagents_envs.environment import ActionTuple, UnityEnvironment
 from tqdm.auto import trange
@@ -19,7 +18,7 @@ from jax_baselines.common.cpprb_buffers import (
     ReplayBuffer,
 )
 from jax_baselines.common.schedules import ConstantSchedule, LinearSchedule
-from jax_baselines.common.utils import add_hparams, convert_states
+from jax_baselines.common.utils import add_hparams, convert_states, key_gen
 from jax_baselines.common.worker import gymMultiworker
 
 
@@ -61,7 +60,7 @@ class Q_Network_Family(object):
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
-        self.key_seq = hk.PRNGSequence(self.seed)
+        self.key_seq = key_gen(self.seed)
 
         self.param_noise = param_noise
         self.learning_starts = learning_starts
@@ -92,6 +91,7 @@ class Q_Network_Family(object):
         self.munchausen_alpha = 0.9
         self.munchausen_entropy_tau = 0.03
 
+        self.train_steps_count = 0
         self.params = None
         self.target_params = None
         self.save_path = None

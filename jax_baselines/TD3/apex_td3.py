@@ -1,13 +1,12 @@
 from copy import deepcopy
 
-import haiku as hk
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 
 from jax_baselines.APE_X.dpg_base_class import Ape_X_Deteministic_Policy_Gradient_Family
-from jax_baselines.common.utils import convert_jax, soft_update
+from jax_baselines.common.utils import convert_jax, key_gen, soft_update
 from jax_baselines.TD3.network.haiku import model_builder_maker
 
 
@@ -112,7 +111,7 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
 
         def builder():
             noise = Noise(action_size)
-            key_seq = hk.PRNGSequence(42)
+            key_seq = key_gen(42)
 
             def get_abs_td_error(
                 actor,

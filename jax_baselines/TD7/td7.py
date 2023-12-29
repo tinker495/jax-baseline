@@ -180,7 +180,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
-            self.train_steps += 1
+            self.train_steps_count += 1
             data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
 
             (
@@ -204,7 +204,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
                 self.encoder_opt_state,
                 self.opt_state,
                 next(self.key_seq),
-                self.train_steps,
+                self.train_steps_count,
                 **data,
             )
 

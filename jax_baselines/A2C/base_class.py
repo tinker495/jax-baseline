@@ -1,7 +1,6 @@
 from collections import deque
 
 import gymnasium as gym
-import haiku as hk
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -16,7 +15,7 @@ from jax_baselines.common.base_classes import (
     select_optimizer,
 )
 from jax_baselines.common.cpprb_buffers import EpochBuffer
-from jax_baselines.common.utils import add_hparams, convert_jax, convert_states
+from jax_baselines.common.utils import add_hparams, convert_jax, convert_states, key_gen
 from jax_baselines.common.worker import gymMultiworker
 
 
@@ -42,7 +41,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
-        self.key_seq = hk.PRNGSequence(self.seed)
+        self.key_seq = key_gen(self.seed)
 
         self.batch_size = batch_size
         self.learning_rate = learning_rate

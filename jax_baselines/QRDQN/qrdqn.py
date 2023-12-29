@@ -125,6 +125,7 @@ class QRDQN(Q_Network_Family):
 
     def train_step(self, steps, gradient_steps):
         for _ in range(gradient_steps):
+            self.train_steps_count += 1
             if self.prioritized_replay:
                 data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
@@ -142,7 +143,7 @@ class QRDQN(Q_Network_Family):
                 self.params,
                 self.target_params,
                 self.opt_state,
-                steps,
+                self.train_steps_count,
                 next(self.key_seq) if self.param_noise or self.munchausen else None,
                 **data
             )
@@ -203,7 +204,7 @@ class QRDQN(Q_Network_Family):
             self.get_q(params, obses, key), actions, axis=1
         )  # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets, axis=2)  # batch x support x 1
-        loss = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, self.quantile, self.delta)
+        loss = QuantileHuberLosses(logit_valid_tile, theta_loss_tile, self.quantile, self.delta)
         return jnp.mean(loss * weights), loss
 
     def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):

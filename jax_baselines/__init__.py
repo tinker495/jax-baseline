@@ -9,4 +9,3 @@ from jax_baselines.QRDQN.qrdqn import QRDQN
 from jax_baselines.TD3.td3 import TD3
 from jax_baselines.TPPO.tppo import TPPO
 from jax_baselines.TQC.tqc import TQC
-from jax_baselines.TQC_IQN.tqc_iqn import TQC_IQN

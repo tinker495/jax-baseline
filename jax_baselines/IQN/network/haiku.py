@@ -2,7 +2,6 @@ import haiku as hk
 import jax
 import jax.numpy as jnp
 import numpy as np
-from einops import rearrange, repeat
 
 from jax_baselines.common.utils import print_param
 from jax_baselines.model.haiku.apply import get_apply_fn_haiku_module
@@ -24,29 +23,23 @@ class Model(hk.Module):
             self.layer = NoisyLinear
 
         self.pi_mtx = jax.lax.stop_gradient(
-            repeat(jnp.pi * np.arange(0, 128, dtype=np.float32), "m -> o m", o=1)
-        )  # [ 1 x 128]
+            jnp.expand_dims(jnp.pi * (jnp.arange(0, 128, dtype=np.float32) + 1), axis=(0, 2))
+        )  # [ 1 x 128 x 1]
 
     def __call__(self, feature: jnp.ndarray, tau: jnp.ndarray) -> jnp.ndarray:
         feature_shape = feature.shape  # [ batch x feature]
-        batch_size = feature_shape[0]  # [ batch ]
-        quaitle_shape = tau.shape  # [ tau ]
-        feature_tile = repeat(
-            feature, "b f -> (b t) f", t=quaitle_shape[1]
-        )  # [ (batch x tau) x feature]
 
-        costau = jnp.cos(
-            rearrange(repeat(tau, "b t -> b t m", m=128), "b t m -> (b t) m") * self.pi_mtx
-        )  # [ (batch x tau) x 128]
-        quantile_embedding = hk.Sequential([self.layer(feature_shape[1]), jax.nn.relu])(
-            costau
-        )  # [ (batch x tau) x feature ]
+        tau = jnp.expand_dims(tau, axis=1)  # [ batch x 1 x tau]
+        costau = jnp.cos(tau * self.pi_mtx)  # [ batch x 128 x tau]
 
-        mul_embedding = feature_tile * quantile_embedding  # [ (batch x tau) x feature ]
+        def qnet(feature, costau):  # [ batch x feature], [ batch x 128 ]
+            quantile_embedding = hk.Sequential([self.layer(feature_shape[1]), jax.nn.relu])(
+                costau
+            )  # [ batch x feature ]
 
-        if not self.dueling:
-            q_net = rearrange(
-                hk.Sequential(
+            mul_embedding = feature * quantile_embedding  # [ batch x feature ]
+            if not self.dueling:
+                q_net = hk.Sequential(
                     [
                         self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                         for i in range(2 * self.hidden_n)
@@ -56,27 +49,17 @@ class Model(hk.Module):
                             self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
                         )
                     ]
-                )(mul_embedding),
-                "(b t) a -> b a t",
-                b=batch_size,
-                t=quaitle_shape[1],
-            )  # [ batch x action x tau ]
-            return q_net
-        else:
-            v = rearrange(
-                hk.Sequential(
+                )(mul_embedding)
+                return q_net
+            else:
+                v = hk.Sequential(
                     [
                         self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                         for i in range(2 * self.hidden_n)
                     ]
                     + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
-                )(mul_embedding),
-                "(b t) o -> b o t",
-                b=batch_size,
-                t=quaitle_shape[1],
-            )  # [ batch x 1 x tau ]
-            a = rearrange(
-                hk.Sequential(
+                )(mul_embedding)
+                a = hk.Sequential(
                     [
                         self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                         for i in range(2 * self.hidden_n)
@@ -86,13 +69,14 @@ class Model(hk.Module):
                             self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
                         )
                     ]
-                )(mul_embedding),
-                "(b t) a -> b a t",
-                b=batch_size,
-                t=quaitle_shape[1],
-            )  # [ batch x action x tau ]
-            q = v + a - jnp.mean(a, axis=(1, 2), keepdims=True)
-            return q
+                )(mul_embedding)
+                q = v + a - jnp.max(a, axis=(1), keepdims=True)
+                return q
+
+        out = jax.vmap(qnet, in_axes=(None, 2), out_axes=2)(
+            feature, costau
+        )  # [ batch x action x tau ]
+        return out
 
 
 def model_builder_maker(observation_space, action_space, dueling_model, param_noise, policy_kwargs):
@@ -116,7 +100,7 @@ def model_builder_maker(observation_space, action_space, dueling_model, param_no
         model_fn = get_apply_fn_haiku_module(model)
         if key is not None:
             key1, key2, key3, key4 = jax.random.split(key, num=4)
-            tau = jax.random.uniform(key4, (1, 2))
+            tau = jax.random.uniform(key4, (1, 64))
             pre_param = preproc.init(
                 key1,
                 [np.zeros((1, *o), dtype=np.float32) for o in observation_space],

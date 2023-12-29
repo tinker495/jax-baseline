@@ -1,4 +1,3 @@
-import haiku as hk
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -10,10 +9,8 @@ from jax_baselines.common.utils import (
     get_gaes,
     kl_divergence_continuous,
     kl_divergence_discrete,
-    print_param,
 )
-from jax_baselines.model.haiku.Module import PreProcess
-from jax_baselines.TPPO.network import Actor, Critic
+from jax_baselines.TPPO.network.haiku import model_builder_maker
 
 
 class TPPO(Actor_Critic_Policy_Gradient_Family):
@@ -74,37 +71,14 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             self.setup_model()
 
     def setup_model(self):
-        self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
-        if "embedding_mode" in self.policy_kwargs.keys():
-            embedding_mode = self.policy_kwargs["embedding_mode"]
-            del self.policy_kwargs["embedding_mode"]
-        self.preproc = hk.transform(
-            lambda x: PreProcess(self.observation_space, embedding_mode=embedding_mode)(x)
+        self.model_builder = model_builder_maker(
+            self.observation_space, self.action_size, self.action_type, self.policy_kwargs
         )
-        self.actor = hk.transform(
-            lambda x: Actor(self.action_size, self.action_type, **self.policy_kwargs)(x)
-        )
-        self.critic = hk.transform(lambda x: Critic(**self.policy_kwargs)(x))
-        pre_param = self.preproc.init(
-            next(self.key_seq),
-            [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-        )
-        feature = self.preproc.apply(
-            pre_param,
-            None,
-            [np.zeros((1, *o), dtype=np.float32) for o in self.observation_space],
-        )
-        actor_param = self.actor.init(next(self.key_seq), feature)
-        critic_param = self.critic.init(next(self.key_seq), feature)
-        self.params = hk.data_structures.merge(pre_param, actor_param, critic_param)
 
+        self.preproc, self.actor, self.critic, self.params = self.model_builder(
+            next(self.key_seq), print_model=True
+        )
         self.opt_state = self.optimizer.init(self.params)
-
-        print("----------------------model----------------------")
-        print_param("preprocess", pre_param)
-        print_param("actor", actor_param)
-        print_param("critic", critic_param)
-        print("-------------------------------------------------")
 
         self._get_actions = jax.jit(self._get_actions)
         self._preprocess = jax.jit(self._preprocess)
