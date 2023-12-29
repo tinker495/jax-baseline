@@ -244,7 +244,7 @@ class FQF(Q_Network_Family):
         hubber = QuantileHuberLosses(
             logit_valid_tile,
             theta_loss_tile,
-            jax.lax.stop_gradient(jnp.expand_dims(tau_hats, axis=1)),
+            jnp.expand_dims(tau_hats, axis=1),
             self.delta,
         )
         return jnp.mean(hubber * weights), (hubber, feature, theta_loss_tile)
