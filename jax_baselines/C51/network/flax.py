@@ -25,13 +25,16 @@ class Model(nn.Module):
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
-        if not self.dueling:
-            q_net = nn.Sequential(
+        if self.hidden_n != 0:
+            feature = nn.Sequential(
                 [
                     self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n)
                 ]
-                + [
+            )(feature)
+        if not self.dueling:
+            q_net = nn.Sequential(
+                [
                     self.layer(self.action_size[0] * self.categorial_bar_n),
                     lambda x: jnp.reshape(
                         x, (x.shape[0], self.action_size[0], self.categorial_bar_n)
@@ -42,27 +45,19 @@ class Model(nn.Module):
         else:
             v = nn.Sequential(
                 [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [
                     self.layer(self.categorial_bar_n),
                     lambda x: jnp.reshape(x, (x.shape[0], 1, self.categorial_bar_n)),
                 ]
             )(feature)
             a = nn.Sequential(
                 [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [
                     self.layer(self.action_size[0] * self.categorial_bar_n),
                     lambda x: jnp.reshape(
                         x, (x.shape[0], self.action_size[0], self.categorial_bar_n)
                     ),
                 ]
             )(feature)
-            return v + (a - jnp.mean(a, axis=(1, 2), keepdims=True))
+            return v + a - jnp.max(a, axis=1, keepdims=True)
 
 
 def model_builder_maker(

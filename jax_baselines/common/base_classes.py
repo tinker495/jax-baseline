@@ -5,7 +5,6 @@ import pickle
 import jax
 import numpy as np
 import optax
-from optax._src import combine
 from tensorboardX import SummaryWriter
 
 
@@ -79,19 +78,20 @@ def restore(ckpt_dir):
     return jax.tree_unflatten(treedef, flat_state)
 
 
-def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=80):
+def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
+    optim = None
     if optim_str == "adam":
-        return combine.chain(
-            optax.clip_by_global_norm(grad_max), optax.adam(lr, b1=0.9, b2=0.99, eps=eps)
-        )
+        optim = optax.adam(lr, b1=0.9, b2=0.99, eps=eps)
     elif optim_str == "adamw":
-        return combine.chain(
-            optax.clip_by_global_norm(grad_max),
-            optax.adamw(lr, eps=eps, weight_decay=1e-5),
-        )
+        optim = optax.adamw(lr, b1=0.9, b2=0.99, eps=eps, weight_decay=1e-4)
     elif optim_str == "rmsprop":
-        return combine.chain(optax.clip_by_global_norm(grad_max), optax.rmsprop(lr, eps=eps))
+        optim = optax.rmsprop(lr, eps=eps)
     elif optim_str == "sgd":
-        return combine.chain(optax.clip_by_global_norm(grad_max), optax.sgd(lr))
+        optim = optax.sgd(lr)
     elif optim_str == "lion":
-        return combine.chain(optax.clip_by_global_norm(grad_max), optax.lion(lr, weight_decay=1e-5))
+        optim = optax.lion(lr, weight_decay=1e-5)
+
+    if grad_max is not None:
+        optim = optax.chain(optax.clip_by_global_norm(grad_max), optim)
+
+    return optim

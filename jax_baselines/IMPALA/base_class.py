@@ -67,9 +67,7 @@ class IMPALA_Family(object):
         self.params = None
         self.target_params = None
         self.save_path = None
-        self.optimizer = select_optimizer(
-            optimizer, self.learning_rate, 1e-2 / self.batch_size, grad_max=40.0
-        )
+        self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-2 / self.batch_size)
         self.model_builder = None
         self.actor_builder = None
 

@@ -38,8 +38,6 @@ def visual_embedding(mode: str = "normal") -> Callable[[jnp.ndarray], jnp.ndarra
                 ),
                 nn.relu,
                 flatten,
-                nn.Dense(512),
-                nn.relu,
             ]
         )
 
@@ -64,8 +62,6 @@ def visual_embedding(mode: str = "normal") -> Callable[[jnp.ndarray], jnp.ndarra
                 ),
                 nn.relu,
                 flatten,
-                nn.Dense(512),
-                nn.relu,
             ]
         )
 
@@ -89,8 +85,6 @@ def visual_embedding(mode: str = "normal") -> Callable[[jnp.ndarray], jnp.ndarra
                 ),
                 nn.relu,
                 flatten,
-                nn.Dense(512),
-                nn.relu,
             ]
         )
     elif mode == "none":

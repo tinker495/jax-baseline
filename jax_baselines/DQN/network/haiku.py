@@ -23,39 +23,24 @@ class Model(hk.Module):
             self.layer = NoisyLinear
 
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
-        if not self.dueling:
-            q_net = hk.Sequential(
+        if self.hidden_n != 0:
+            feature = hk.Sequential(
                 [
                     self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n)
                 ]
-                + [
-                    self.layer(
-                        self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
-                    )
-                ]
+            )(feature)
+        if not self.dueling:
+            q_net = self.layer(
+                self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
             )(feature)
             return q_net
         else:
-            v = hk.Sequential(
-                [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
-            )(feature)
-            a = hk.Sequential(
-                [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [
-                    self.layer(
-                        self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
-                    )
-                ]
-            )(feature)
-            return v + (a - jnp.max(a, axis=1, keepdims=True))
+            v = self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))(feature)
+            a = self.layer(self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03))(
+                feature
+            )
+            return v + a - jnp.max(a, axis=1, keepdims=True)
 
 
 def model_builder_maker(observation_space, action_space, dueling_model, param_noise, policy_kwargs):

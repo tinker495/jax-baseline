@@ -38,37 +38,22 @@ class Model(hk.Module):
             )  # [ batch x feature ]
 
             mul_embedding = feature * quantile_embedding  # [ batch x feature ]
-            if not self.dueling:
-                q_net = hk.Sequential(
+            if self.hidden_n != 0:
+                mul_embedding = hk.Sequential(
                     [
                         self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                         for i in range(2 * self.hidden_n)
                     ]
-                    + [
-                        self.layer(
-                            self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
-                        )
-                    ]
+                )(mul_embedding)
+            if not self.dueling:
+                q_net = self.layer(
+                    self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
                 )(mul_embedding)
                 return q_net
             else:
-                v = hk.Sequential(
-                    [
-                        self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                        for i in range(2 * self.hidden_n)
-                    ]
-                    + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
-                )(mul_embedding)
-                a = hk.Sequential(
-                    [
-                        self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                        for i in range(2 * self.hidden_n)
-                    ]
-                    + [
-                        self.layer(
-                            self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
-                        )
-                    ]
+                v = self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))(mul_embedding)
+                a = self.layer(
+                    self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
                 )(mul_embedding)
                 q = v + a - jnp.max(a, axis=(1), keepdims=True)
                 return q
@@ -80,7 +65,7 @@ class Model(hk.Module):
 
 
 class FractionProposal(hk.Module):
-    def __init__(self, support_size, node=256, hidden_n=1):
+    def __init__(self, support_size, node=256, hidden_n=0):
         super().__init__()
         self.support_size = support_size
         self.node = node
@@ -94,7 +79,7 @@ class FractionProposal(hk.Module):
                     hk.Linear(self.node) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n - 1)
                 ]
-                + [hk.Linear(self.support_size, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
+                + [hk.Linear(self.support_size, w_init=hk.initializers.VarianceScaling(0.01))]
             )(feature),
             axis=1,
         )

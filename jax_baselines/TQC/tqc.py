@@ -90,6 +90,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         model_builder = model_builder_maker(
             self.observation_space,
             self.action_size,
+            self.n_support,
             self.policy_kwargs,
         )
         self.preproc, self.actor, self.critic, self.params = model_builder(

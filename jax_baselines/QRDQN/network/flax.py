@@ -22,24 +22,19 @@ class Model(nn.Module):
             self.layer = nn.Dense
         else:
             self.layer = NoisyDense
-        if self.dueling:
-            # self.value_support_n is divisor of self.support_n and close to sqrt(self.support_n)
-            # self.value_support_n * self.action_support_n = self.support_n
-            for i in range(int(np.sqrt(self.support_n)) + 1, 0, -1):
-                if self.support_n % i == 0:
-                    self.value_support_n = i
-                    break
-            self.action_support_n = self.support_n // self.value_support_n
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
-        if not self.dueling:
-            q_net = nn.Sequential(
+        if self.hidden_n != 0:
+            feature = nn.Sequential(
                 [
                     self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n)
                 ]
-                + [
+            )(feature)
+        if not self.dueling:
+            q_net = nn.Sequential(
+                [
                     self.layer(self.action_size[0] * self.support_n),
                     lambda x: jnp.reshape(x, (x.shape[0], self.action_size[0], self.support_n)),
                 ]
@@ -48,29 +43,17 @@ class Model(nn.Module):
         else:
             v = nn.Sequential(
                 [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [
-                    self.layer(self.value_support_n),
-                    lambda x: jnp.reshape(x, (x.shape[0], 1, 1, self.value_support_n)),
+                    self.layer(self.support_n),
+                    lambda x: jnp.reshape(x, (x.shape[0], 1, self.support_n)),
                 ]
             )(feature)
             a = nn.Sequential(
                 [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [
-                    self.layer(self.action_size[0] * self.action_support_n),
-                    lambda x: jnp.reshape(
-                        x, (x.shape[0], self.action_size[0], self.action_support_n, 1)
-                    ),
+                    self.layer(self.action_size[0] * self.support_n),
+                    lambda x: jnp.reshape(x, (x.shape[0], self.action_size[0], self.support_n)),
                 ]
             )(feature)
-            q = v + a - jnp.mean(a, axis=(1, 2, 3), keepdims=True)
-            q = jnp.reshape(q, (q.shape[0], self.action_size[0], self.support_n))
-            q = jnp.sort(q, axis=2)
+            q = v + a - jnp.max(a, axis=1, keepdims=True)
             return q
 
 

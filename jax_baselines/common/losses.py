@@ -1,3 +1,5 @@
+import chex
+import jax
 import jax.numpy as jnp
 
 
@@ -32,12 +34,14 @@ def QuantileHuberLosses(target_tile, q_tile, quantile, delta):
     return jnp.sum(jnp.mean(weight * huber, axis=1), axis=1)
 
 
-def FQFQuantileLosses(tau_vals, tau_hat_val, quantile):
-    values_1 = tau_vals - tau_hat_val[:, :-1]
-    sign_1 = tau_vals > jnp.concatenate([tau_hat_val[:, :1], tau_vals[:, :-1]], axis=1)
-
-    values_2 = tau_vals - tau_hat_val[:, 1:]
-    sign_2 = tau_vals < jnp.concatenate([tau_vals[:, 1:], tau_hat_val[:, -1:]], axis=1)
-
-    grad_of_taus = jnp.where(sign_1, values_1, -values_1) + jnp.where(sign_2, values_2, -values_2)
-    return jnp.sum(grad_of_taus * quantile[:, 1:-1], axis=1)
+def FQFQuantileLosses(tau_vals, tau_hat_vals, tau):
+    """Compute the fqf loss."""
+    grad1 = tau_vals - tau_hat_vals[:, :-1]
+    grad2 = tau_vals - tau_hat_vals[:, 1:]
+    flag1 = tau_vals > jnp.concatenate([tau_hat_vals[:, :1], tau_vals[:, :-1]], axis=1)
+    flag2 = tau_vals < jnp.concatenate([tau_vals[:, 1:], tau_hat_vals[:, -1:]], axis=1)
+    grad_of_taus = jax.lax.stop_gradient(
+        jnp.where(flag1, grad1, -grad1) + jnp.where(flag2, grad2, -grad2)
+    )
+    chex.assert_shape(grad_of_taus, tau[:, 1:-1].shape)
+    return jnp.sum(grad_of_taus * tau[:, 1:-1], axis=1)

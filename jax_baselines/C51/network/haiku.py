@@ -32,13 +32,16 @@ class Model(hk.Module):
             self.layer = NoisyLinear
 
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
-        if not self.dueling:
-            q = hk.Sequential(
+        if self.hidden_n != 0:
+            feature = hk.Sequential(
                 [
                     self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n)
                 ]
-                + [
+            )(feature)
+        if not self.dueling:
+            q = hk.Sequential(
+                [
                     self.layer(
                         self.action_size[0] * self.categorial_bar_n,
                         w_init=hk.initializers.RandomUniform(-0.03, 0.03),
@@ -50,10 +53,6 @@ class Model(hk.Module):
         else:
             v = hk.Sequential(
                 [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [
                     self.layer(
                         self.categorial_bar_n, w_init=hk.initializers.RandomUniform(-0.03, 0.03)
                     ),
@@ -62,10 +61,6 @@ class Model(hk.Module):
             )(feature)
             a = hk.Sequential(
                 [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [
                     self.layer(
                         self.action_size[0] * self.categorial_bar_n,
                         w_init=hk.initializers.RandomUniform(-0.03, 0.03),
@@ -73,7 +68,7 @@ class Model(hk.Module):
                     hk.Reshape((self.action_size[0], self.categorial_bar_n)),
                 ]
             )(feature)
-            q = v + (a - jnp.mean(a, axis=(1, 2), keepdims=True))
+            q = v + a - jnp.max(a, axis=1, keepdims=True)
             return jax.nn.softmax(q, axis=2)
 
 

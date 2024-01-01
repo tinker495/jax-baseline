@@ -53,7 +53,7 @@ class Critic(hk.Module):
         return q_net
 
 
-def model_builder_maker(observation_space, action_size, policy_kwargs):
+def model_builder_maker(observation_space, action_size, support_n, policy_kwargs):
     policy_kwargs = {} if policy_kwargs is None else policy_kwargs
     if "embedding_mode" in policy_kwargs.keys():
         embedding_mode = policy_kwargs["embedding_mode"]
@@ -68,8 +68,8 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         actor = hk.transform(lambda x: Actor(action_size, **policy_kwargs)(x))
         critic = hk.transform(
             lambda x, a: (
-                Critic(**policy_kwargs)(x, a),
-                Critic(**policy_kwargs)(x, a),
+                Critic(support_n=support_n, **policy_kwargs)(x, a),
+                Critic(support_n=support_n, **policy_kwargs)(x, a),
             )
         )
         preproc_fn = get_apply_fn_haiku_module(preproc)

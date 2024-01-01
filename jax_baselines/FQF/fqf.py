@@ -82,8 +82,8 @@ class FQF(Q_Network_Family):
         self.name = "FQF"
         self.n_support = n_support
         self.delta = delta
-        self.fqf_factor = 1e-6
-        self.ent_coef = 1e-3
+        self.fqf_factor = 1e-5
+        self.ent_coef = 0.01
 
         if _init_setup_model:
             self.setup_model()
@@ -116,9 +116,6 @@ class FQF(Q_Network_Family):
         self._target = jax.jit(self._target)
         self._train_step = jax.jit(self._train_step)
 
-    def get_q(self, params, feature, tau, key=None) -> jnp.ndarray:
-        return self.model(params, key, feature, tau)
-
     def actions(self, obs, epsilon):
         if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(
@@ -135,14 +132,26 @@ class FQF(Q_Network_Family):
 
     def _get_actions(self, params, fqf_params, obses, key=None) -> jnp.ndarray:
         feature = self.preproc(params, key, convert_jax(obses))
-        _, tau, _ = self.fpf(fqf_params, key, feature)
-        return jnp.expand_dims(
-            jnp.argmax(jnp.mean(self.get_q(params, feature, tau, key), axis=2), axis=1),
-            axis=1,
-        )
+        tau, tau_hat, _ = self.fpf(fqf_params, key, feature)
+        return jnp.argmax(self.get_q(params, feature, tau, tau_hat, key), axis=1, keepdims=True)
+
+    def get_quantile(self, params, feature, tau_hat, key=None) -> jnp.ndarray:
+        return self.model(params, key, feature, tau_hat)
+
+    def quantiles_to_q(self, quantiles, tau):
+        tau = jnp.expand_dims(tau, axis=1)
+        q = (tau[:, :, 1:] - tau[:, :, :-1]) * quantiles
+        return jnp.sum(q, axis=2)
+
+    def get_q(self, params, feature, tau, tau_hat, key=None) -> jnp.ndarray:
+        quanile_hat = self.model(params, key, feature, tau_hat)
+        tau = jnp.expand_dims(tau, axis=1)
+        q = (tau[:, :, 1:] - tau[:, :, :-1]) * quanile_hat
+        return jnp.sum(q, axis=2)
 
     def train_step(self, steps, gradient_steps):
         for _ in range(gradient_steps):
+            self.train_steps_count += 1
             if self.prioritized_replay:
                 data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
@@ -158,6 +167,7 @@ class FQF(Q_Network_Family):
                 fqf_loss,
                 t_mean,
                 t_std,
+                tau,
                 new_priorities,
             ) = self._train_step(
                 self.params,
@@ -165,7 +175,7 @@ class FQF(Q_Network_Family):
                 self.target_params,
                 self.opt_state,
                 self.fqf_opt_state,
-                steps,
+                self.train_steps_count,
                 next(self.key_seq) if self.param_noise else None,
                 **data
             )
@@ -178,6 +188,7 @@ class FQF(Q_Network_Family):
             self.summary.add_scalar("loss/fqf_loss", fqf_loss, steps)
             self.summary.add_scalar("loss/targets", t_mean, steps)
             self.summary.add_scalar("loss/target_stds", t_std, steps)
+            self.summary.add_histogram("loss/tau", tau, steps)
 
         return loss
 
@@ -202,19 +213,30 @@ class FQF(Q_Network_Family):
         nxtobses = convert_jax(nxtobses)
         actions = jnp.expand_dims(actions.astype(jnp.int32), axis=2)
         not_dones = 1.0 - dones
-        targets = self._target(
-            params, fqf_params, target_params, obses, actions, rewards, nxtobses, not_dones, key
+        (loss, (abs_error, feature, tau_hats, theta_loss_tile, targets)), grad = jax.value_and_grad(
+            self._loss,
+            has_aux=True,
+        )(
+            params,
+            fqf_params,
+            target_params,
+            obses,
+            actions,
+            rewards,
+            nxtobses,
+            not_dones,
+            weights,
+            key,
         )
-        (loss, (abs_error, feature, theta_loss_tile)), grad = jax.value_and_grad(
-            self._loss, has_aux=True
-        )(params, fqf_params, obses, actions, targets, weights, key)
-        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-        params = optax.apply_updates(params, updates)
-        fqf_loss, grad = jax.value_and_grad(self._fqf_loss)(
+        fqf_loss, grad_fqf = jax.value_and_grad(self._fqf_loss)(
             fqf_params, params, feature, actions, theta_loss_tile, key
         )
-        updates, fqf_opt_state = self.fqf_optimizer.update(grad, fqf_opt_state, params=fqf_params)
-        fqf_params = optax.apply_updates(fqf_params, updates)
+        fqf_update, fqf_opt_state = self.fqf_optimizer.update(
+            grad_fqf, fqf_opt_state, params=fqf_params
+        )
+        fqf_params = optax.apply_updates(fqf_params, fqf_update)
+        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+        params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
@@ -229,14 +251,41 @@ class FQF(Q_Network_Family):
             fqf_loss,
             jnp.mean(targets),
             jnp.mean(jnp.std(targets, axis=1)),
+            tau_hats,
             new_priorities,
         )
 
-    def _loss(self, params, fqf_params, obses, actions, targets, weights, key):
+    def _loss(
+        self,
+        params,
+        fqf_params,
+        target_params,
+        obses,
+        actions,
+        rewards,
+        nxtobses,
+        not_dones,
+        weights,
+        key,
+    ):
         feature = self.preproc(params, key, obses)
         _, tau_hats, _ = self.fpf(fqf_params, key, feature)
+        targets = jax.lax.stop_gradient(
+            self._target(
+                params,
+                fqf_params,
+                target_params,
+                tau_hats,
+                obses,
+                actions,
+                rewards,
+                nxtobses,
+                not_dones,
+                key,
+            )
+        )
         theta_loss_tile = jnp.take_along_axis(
-            self.get_q(params, feature, tau_hats, key),
+            self.get_quantile(params, feature, tau_hats, key),
             actions,
             axis=1,
         )  # batch x 1 x support
@@ -247,12 +296,14 @@ class FQF(Q_Network_Family):
             jnp.expand_dims(tau_hats, axis=1),
             self.delta,
         )
-        return jnp.mean(hubber * weights), (hubber, feature, theta_loss_tile)
+        return jnp.mean(hubber * weights), (hubber, feature, tau_hats, theta_loss_tile, targets)
 
     def _fqf_loss(self, fqf_params, params, feature, actions, tau_hat_val, key):
         tau, _, entropy = self.fpf(fqf_params, key, feature)
         tau_vals = jax.lax.stop_gradient(
-            jnp.take_along_axis(self.get_q(params, feature, tau[:, 1:-1], key), actions, axis=1)
+            jnp.take_along_axis(
+                self.get_quantile(params, feature, tau[:, 1:-1], key), actions, axis=1
+            )
         )  # batch x 1 x support
         quantile_loss = jnp.mean(
             FQFQuantileLosses(
@@ -261,56 +312,76 @@ class FQF(Q_Network_Family):
                 tau,
             )
         )
-        entropy_loss = -self.ent_coef * jnp.mean(entropy)
+        entropy_loss = self.ent_coef * jnp.mean(entropy)
         loss = quantile_loss + entropy_loss
         return loss
 
     def _target(
-        self, params, fqf_params, target_params, obses, actions, rewards, nxtobses, not_dones, key
+        self,
+        params,
+        fqf_params,
+        target_params,
+        tau_hats,
+        obses,
+        actions,
+        rewards,
+        nxtobses,
+        not_dones,
+        key,
     ):
-        feature = self.preproc(target_params, key, nxtobses)
-        _, tau_hats, _ = self.fpf(fqf_params, key, feature)
+        feature = self.preproc(params, key, nxtobses)
+        _tau, _tau_hats, _ = self.fpf(fqf_params, key, feature)
         next_q = self.get_q(
-            target_params,
+            params,
             feature,
-            tau_hats,
+            _tau,
+            _tau_hats,
             key,
         )
+        """
+            feature = self.preproc(target_params, key, nxtobses)
+            _tau, _tau_hats, _ = self.fpf(fqf_params, key, feature)
+            next_q = self.get_q(
+                target_params,
+                feature,
+                _tau,
+                _tau_hats,
+                key,
+            )
+        """
+        feature = self.preproc(target_params, key, nxtobses)
+        next_quantiles = self.get_quantile(target_params, feature, tau_hats, key)
 
         if self.munchausen:
-            next_q_mean = jnp.mean(next_q, axis=2)  # [batch x action]
             logsum = jax.nn.logsumexp(
-                (next_q_mean - jnp.max(next_q_mean, axis=1, keepdims=True))
-                / self.munchausen_entropy_tau,
+                (next_q - jnp.max(next_q, axis=1, keepdims=True)) / self.munchausen_entropy_tau,
                 axis=1,
                 keepdims=True,
             )  # []
             tau_log_pi_next = jnp.expand_dims(
-                next_q_mean
-                - jnp.max(next_q_mean, axis=1, keepdims=True)
+                next_q
+                - jnp.max(next_q, axis=1, keepdims=True)
                 - self.munchausen_entropy_tau * logsum,
                 axis=2,
             )
             pi_next = jnp.expand_dims(
-                jax.nn.softmax(next_q_mean / self.munchausen_entropy_tau, axis=1),
+                jax.nn.softmax(next_q / self.munchausen_entropy_tau, axis=1),
                 axis=2,
             )
             next_vals = (
                 jnp.sum(
-                    pi_next * (next_q - jnp.expand_dims(tau_log_pi_next, axis=2)),
+                    pi_next * (next_quantiles - jnp.expand_dims(tau_log_pi_next, axis=2)),
                     axis=1,
                 )
                 * not_dones
             )
 
-            q_k_targets = jnp.mean(
-                self.get_q(
-                    target_params,
-                    self.preproc(target_params, key, obses),
-                    tau_hats,
-                    key,
-                ),
-                axis=2,
+            q_k_targets = self.get_q(
+                target_params,
+                self.preproc(target_params, key, obses),
+                _tau,
+                tau_hats,
+                key,
             )
             v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
             logsum = jax.nn.logsumexp(
@@ -325,21 +396,9 @@ class FQF(Q_Network_Family):
 
             rewards += self.munchausen_alpha * jnp.clip(munchausen_addon, a_min=-1, a_max=0)
         else:
-            if self.double_q:
-                feature = self.preproc(params, key, nxtobses)
-                next_actions = jnp.expand_dims(
-                    jnp.argmax(
-                        jnp.mean(self.get_q(params, feature, nxtobses, tau_hats, key), axis=2),
-                        axis=1,
-                    ),
-                    axis=(1, 2),
-                )
-            else:
-                next_actions = jnp.expand_dims(
-                    jnp.argmax(jnp.mean(next_q, axis=2), axis=1), axis=(1, 2)
-                )
+            next_actions = jnp.expand_dims(jnp.argmax(next_q, axis=1), axis=(1, 2))
             next_vals = not_dones * jnp.squeeze(
-                jnp.take_along_axis(next_q, next_actions, axis=1)
+                jnp.take_along_axis(next_quantiles, next_actions, axis=1)
             )  # batch x support
         return (next_vals * self._gamma) + rewards  # batch x support
 

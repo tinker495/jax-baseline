@@ -36,8 +36,6 @@ def visual_embedding(mode="simple"):
                     ),
                     jax.nn.relu,
                     hk.Flatten(),
-                    hk.Linear(512),
-                    jax.nn.relu,
                 ]
             )(x)
 
@@ -63,8 +61,6 @@ def visual_embedding(mode="simple"):
                     ),
                     jax.nn.relu,
                     hk.Flatten(),
-                    hk.Linear(512),
-                    jax.nn.relu,
                 ]
             )(x)
 
@@ -78,8 +74,6 @@ def visual_embedding(mode="simple"):
                     hk.Conv2D(32, kernel_shape=[4, 4], stride=[2, 2], padding="VALID"),
                     jax.nn.relu,
                     hk.Flatten(),
-                    hk.Linear(512),
-                    jax.nn.relu,
                 ]
             )(x)
 
