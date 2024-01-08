@@ -359,6 +359,7 @@ class FQF(Q_Network_Family):
                 _tau_hats,
                 key,
             )
+        tau_hats = jax.random.uniform(key, (self.batch_size, self.n_support))
         next_quantiles = self.get_quantile(target_params, feature, tau_hats, key)
 
         if self.munchausen:

@@ -86,7 +86,9 @@ class EpisodicLifeEnv(gym.Wrapper):
         self.was_real_done = terminal or truncated
         # check current lives, make loss of life terminal,
         # then update lives to handle bonus lives
-        lives = info["lives"] if not self.was_real_done else 0
+        if self.was_real_done:
+            info["lives"] = 0
+        lives = info["lives"]
         if 0 < lives < self.lives:
             # print("Lives lost: ", self.lives - lives)
             # for Qbert sometimes we stay in lives == 0 condtion for a few frames
