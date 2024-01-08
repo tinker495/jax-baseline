@@ -80,7 +80,10 @@ class FractionProposal(nn.Module):
                 [nn.Dense(self.node) if i % 2 == 0 else nn.relu for i in range(2 * self.hidden_n)]
                 + [
                     nn.Dense(
-                        self.support_size, kernel_init=jax.nn.initializers.variance_scaling(0.01)
+                        self.support_size,
+                        kernel_init=jax.nn.initializers.variance_scaling(
+                            0.01, mode="fan_in", distribution="normal"
+                        ),
                     )
                 ],
             )(feature),
@@ -134,13 +137,13 @@ def model_builder_maker(
                 key, [np.zeros((1, *o), dtype=np.float32) for o in observation_space], tau
             )
             out = preproc_fn(
-                params, [np.zeros((1, *o), dtype=np.float32) for o in observation_space]
+                params, key, [np.zeros((1, *o), dtype=np.float32) for o in observation_space]
             )
             fqf_param = fqf.init(key, out)
             if print_model:
                 print("------------------build-flax-model--------------------")
                 print_param("", params)
-                print_param("", fqf_param)
+                print_param("fqf", fqf_param)
                 print("------------------------------------------------------")
             return preproc_fn, model_fn, fqf_fn, params, fqf_param
         else:
