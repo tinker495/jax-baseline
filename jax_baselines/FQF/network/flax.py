@@ -70,7 +70,7 @@ class Model(nn.Module):
 class FractionProposal(nn.Module):
     support_size: int
     node: int = 256
-    hidden_n: int = 2
+    hidden_n: int = 0
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
