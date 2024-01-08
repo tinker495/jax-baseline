@@ -152,7 +152,8 @@ def add_hparams(agent, writer, metric_dict, step):
 
 
 def print_param(name, params):
-    print(name, end="")
+    if name:
+        print(name, end="")
     param_tree_map = jax.tree_map(lambda x: x.shape, params)
-    formatData(param_tree_map, 1)
+    formatData(param_tree_map, 1 if name else 0)
     print()

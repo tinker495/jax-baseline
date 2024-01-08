@@ -5,6 +5,7 @@ import numpy as np
 
 from jax_baselines.common.utils import print_param
 from jax_baselines.model.flax.apply import get_apply_fn_flax_module
+from jax_baselines.model.flax.initializers import clip_uniform_initializers
 from jax_baselines.model.flax.layers import NoisyDense
 from jax_baselines.model.flax.Module import PreProcess
 
@@ -48,16 +49,14 @@ class Model(nn.Module):
             if not self.dueling:
                 q_net = self.layer(
                     self.action_size[0],
-                    kernel_init=jax.nn.initializers.uniform(-0.03, 0.03),
+                    kernel_init=clip_uniform_initializers(-0.03, 0.03),
                 )(mul_embedding)
                 return q_net
             else:
-                v = self.layer(1, kernel_init=jax.nn.initializers.uniform(-0.03, 0.03))(
-                    mul_embedding
-                )
+                v = self.layer(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))(mul_embedding)
                 a = self.layer(
                     self.action_size[0],
-                    kernel_init=jax.nn.initializers.uniform(-0.03, 0.03),
+                    kernel_init=clip_uniform_initializers(-0.03, 0.03),
                 )(mul_embedding)
                 q = v + a - jnp.max(a, axis=1, keepdims=True)
                 return q
@@ -76,31 +75,35 @@ def model_builder_maker(observation_space, action_space, dueling_model, param_no
     else:
         embedding_mode = "normal"
 
+    class Merged(nn.Module):
+        def setup(self):
+            self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
+            self.qnet = Model(
+                action_space, dueling=dueling_model, noisy=param_noise, **policy_kwargs
+            )
+
+        def __call__(self, x, tau):
+            x = self.preproc(x)
+            return self.qnet(x, tau)
+
+        def preprocess(self, x):
+            return self.preproc(x)
+
+        def q(self, x, tau):
+            return self.qnet(x, tau)
+
     def model_builder(key=None, print_model=False):
-        preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
-        model = Model(action_space, dueling=dueling_model, noisy=param_noise, **policy_kwargs)
-        preproc_fn = get_apply_fn_flax_module(preproc)
-        model_fn = get_apply_fn_flax_module(model)
+        model = Merged()
+        preproc_fn = get_apply_fn_flax_module(model, model.preprocess)
+        model_fn = get_apply_fn_flax_module(model, model.q)
         if key is not None:
-            key1, key2, key3, key4 = jax.random.split(key, num=4)
-            tau = jax.random.uniform(key4, (1, 2))
-            pre_param = preproc.init(
-                key1, [np.zeros((1, *o), dtype=np.float32) for o in observation_space]
+            tau = jax.random.uniform(key, (1, 2))
+            params = model.init(
+                key, [np.zeros((1, *o), dtype=np.float32) for o in observation_space], tau
             )
-            model_param = model.init(
-                key2,
-                preproc_fn(
-                    pre_param,
-                    key3,
-                    [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                ),
-                tau,
-            )
-            params = {"params": {**pre_param["params"], **model_param["params"]}}
             if print_model:
                 print("------------------build-flax-model--------------------")
-                print_param("preprocess", pre_param)
-                print_param("model", model_param)
+                print_param("", params)
                 print("------------------------------------------------------")
             return preproc_fn, model_fn, params
         else:
