@@ -70,7 +70,7 @@ class Model(nn.Module):
 class FractionProposal(nn.Module):
     support_size: int
     node: int = 256
-    hidden_n: int = 0
+    hidden_n: int = 1
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
@@ -142,7 +142,7 @@ def model_builder_maker(
             fqf_param = fqf.init(key, out)
             if print_model:
                 print("------------------build-flax-model--------------------")
-                print_param("", params)
+                print_param("iqn", params)
                 print_param("fqf", fqf_param)
                 print("------------------------------------------------------")
             return preproc_fn, model_fn, fqf_fn, params, fqf_param

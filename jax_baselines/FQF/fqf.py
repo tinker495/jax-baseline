@@ -9,7 +9,7 @@ from jax_baselines.common.base_classes import select_optimizer
 from jax_baselines.common.losses import FQFQuantileLosses, QuantileHuberLosses
 from jax_baselines.common.utils import convert_jax, hard_update
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.FQF.network.haiku import model_builder_maker
+from jax_baselines.FQF.network.flax import model_builder_maker
 
 
 class FQF(Q_Network_Family):
@@ -359,7 +359,6 @@ class FQF(Q_Network_Family):
                 _tau_hats,
                 key,
             )
-        tau_hats = jax.random.uniform(key, (self.batch_size, self.n_support))
         next_quantiles = self.get_quantile(target_params, feature, tau_hats, key)
 
         if self.munchausen:

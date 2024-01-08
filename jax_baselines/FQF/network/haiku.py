@@ -69,7 +69,7 @@ class Model(hk.Module):
 
 
 class FractionProposal(hk.Module):
-    def __init__(self, support_size, node=256, hidden_n=0):
+    def __init__(self, support_size, node=256, hidden_n=1):
         super().__init__()
         self.support_size = support_size
         self.node = node
