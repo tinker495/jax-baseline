@@ -82,7 +82,7 @@ class FQF(Q_Network_Family):
         self.name = "FQF"
         self.n_support = n_support
         self.delta = delta
-        self.fqf_factor = 1e-5
+        self.fqf_factor = 1e-4
         self.ent_coef = 0.01
 
         if _init_setup_model:
@@ -176,7 +176,7 @@ class FQF(Q_Network_Family):
                 self.opt_state,
                 self.fqf_opt_state,
                 self.train_steps_count,
-                next(self.key_seq) if self.param_noise else None,
+                next(self.key_seq),
                 **data
             )
 
@@ -213,10 +213,10 @@ class FQF(Q_Network_Family):
         nxtobses = convert_jax(nxtobses)
         actions = jnp.expand_dims(actions.astype(jnp.int32), axis=2)
         not_dones = 1.0 - dones
-        (loss, (abs_error, feature, tau_hats, theta_loss_tile, targets)), grad = jax.value_and_grad(
-            self._loss,
-            has_aux=True,
-        )(
+        (
+            loss,
+            (abs_error, feature, taus, tau_hats, theta_loss_tile, targets),
+        ), grad = jax.value_and_grad(self._loss, has_aux=True,)(
             params,
             fqf_params,
             target_params,
@@ -249,7 +249,7 @@ class FQF(Q_Network_Family):
             fqf_opt_state,
             loss,
             fqf_loss,
-            jnp.mean(targets),
+            jnp.mean(jnp.sum((taus[:, 1:] - taus[:, :-1]) * targets, axis=1)),
             jnp.mean(jnp.std(targets, axis=1)),
             tau_hats,
             new_priorities,
@@ -269,7 +269,7 @@ class FQF(Q_Network_Family):
         key,
     ):
         feature = self.preproc(params, key, obses)
-        _, tau_hats, _ = self.fpf(fqf_params, key, feature)
+        taus, tau_hats, _ = self.fpf(fqf_params, key, jax.lax.stop_gradient(feature))
         targets = jax.lax.stop_gradient(
             self._target(
                 params,
@@ -284,6 +284,7 @@ class FQF(Q_Network_Family):
                 key,
             )
         )
+        tau_hats = jax.lax.stop_gradient(tau_hats)
         theta_loss_tile = jnp.take_along_axis(
             self.get_quantile(params, feature, tau_hats, key),
             actions,
@@ -296,23 +297,31 @@ class FQF(Q_Network_Family):
             jnp.expand_dims(tau_hats, axis=1),
             self.delta,
         )
-        return jnp.mean(hubber * weights), (hubber, feature, tau_hats, theta_loss_tile, targets)
+        return jnp.mean(hubber * weights), (
+            hubber,
+            feature,
+            taus,
+            tau_hats,
+            theta_loss_tile,
+            targets,
+        )
 
     def _fqf_loss(self, fqf_params, params, feature, actions, tau_hat_val, key):
+        feature = jax.lax.stop_gradient(feature)
         tau, _, entropy = self.fpf(fqf_params, key, feature)
-        tau_vals = jax.lax.stop_gradient(
-            jnp.take_along_axis(
-                self.get_quantile(params, feature, tau[:, 1:-1], key), actions, axis=1
-            )
+        tau_vals = jnp.take_along_axis(
+            self.get_quantile(params, feature, tau[:, 1:-1], key), actions, axis=1
         )  # batch x 1 x support
+        tau_vals = jax.lax.stop_gradient(jnp.squeeze(tau_vals))
+        tau_hat_val = jax.lax.stop_gradient(jnp.squeeze(tau_hat_val))
         quantile_loss = jnp.mean(
             FQFQuantileLosses(
-                jnp.squeeze(tau_vals),
-                jnp.squeeze(tau_hat_val),
+                tau_vals,
+                tau_hat_val,
                 tau,
             )
         )
-        entropy_loss = self.ent_coef * jnp.mean(entropy)
+        entropy_loss = -self.ent_coef * jnp.mean(entropy)
         loss = quantile_loss + entropy_loss
         return loss
 
@@ -329,16 +338,18 @@ class FQF(Q_Network_Family):
         not_dones,
         key,
     ):
-        feature = self.preproc(params, key, nxtobses)
-        _tau, _tau_hats, _ = self.fpf(fqf_params, key, feature)
-        next_q = self.get_q(
-            params,
-            feature,
-            _tau,
-            _tau_hats,
-            key,
-        )
-        """
+        if self.double_q:
+            feature = self.preproc(params, key, nxtobses)
+            _tau, _tau_hats, _ = self.fpf(fqf_params, key, feature)
+            next_q = self.get_q(
+                params,
+                feature,
+                _tau,
+                _tau_hats,
+                key,
+            )
+            feature = self.preproc(target_params, key, nxtobses)
+        else:
             feature = self.preproc(target_params, key, nxtobses)
             _tau, _tau_hats, _ = self.fpf(fqf_params, key, feature)
             next_q = self.get_q(
@@ -348,8 +359,7 @@ class FQF(Q_Network_Family):
                 _tau_hats,
                 key,
             )
-        """
-        feature = self.preproc(target_params, key, nxtobses)
+        tau_hats = jax.random.uniform(key, (self.batch_size, self.n_support))
         next_quantiles = self.get_quantile(target_params, feature, tau_hats, key)
 
         if self.munchausen:

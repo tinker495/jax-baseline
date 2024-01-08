@@ -1,3 +1,4 @@
+import chex
 import haiku as hk
 import jax
 import jax.numpy as jnp
@@ -28,9 +29,11 @@ class Model(hk.Module):
 
     def __call__(self, feature: jnp.ndarray, tau: jnp.ndarray) -> jnp.ndarray:
         feature_shape = feature.shape  # [ batch x feature]
+        tau_shape = tau.shape[-1]
 
         tau = jnp.expand_dims(tau, axis=1)  # [ batch x 1 x tau]
         costau = jnp.cos(tau * self.pi_mtx)  # [ batch x 128 x tau]
+        chex.assert_shape(costau, (None, 128, tau_shape))
 
         def qnet(feature, costau):  # [ batch x feature], [ batch x 128 ]
             quantile_embedding = hk.Sequential([self.layer(feature_shape[1]), jax.nn.relu])(
@@ -61,6 +64,7 @@ class Model(hk.Module):
         out = jax.vmap(qnet, in_axes=(None, 2), out_axes=2)(
             feature, costau
         )  # [ batch x action x tau ]
+        chex.assert_shape(out, (None, self.action_size[0], tau_shape))
         return out
 
 
