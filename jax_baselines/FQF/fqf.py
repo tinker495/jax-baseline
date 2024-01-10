@@ -306,18 +306,18 @@ class FQF(Q_Network_Family):
             targets,
         )
 
-    def _fqf_loss(self, fqf_params, params, feature, actions, tau_hat_val, key):
+    def _fqf_loss(self, fqf_params, params, feature, actions, tau_hat_vals, key):
         feature = jax.lax.stop_gradient(feature)
         tau, _, entropy = self.fpf(fqf_params, key, feature)
         tau_vals = jnp.take_along_axis(
             self.get_quantile(params, feature, tau[:, 1:-1], key), actions, axis=1
         )  # batch x 1 x support
         tau_vals = jax.lax.stop_gradient(jnp.squeeze(tau_vals))
-        tau_hat_val = jax.lax.stop_gradient(jnp.squeeze(tau_hat_val))
+        tau_hat_vals = jax.lax.stop_gradient(jnp.squeeze(tau_hat_vals))
         quantile_loss = jnp.mean(
             FQFQuantileLosses(
                 tau_vals,
-                tau_hat_val,
+                tau_hat_vals,
                 tau,
             )
         )
