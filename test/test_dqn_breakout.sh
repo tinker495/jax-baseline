@@ -7,7 +7,7 @@ ENV="--env BreakoutNoFrameskip-v4"
 LR="--learning_rate 0.0001"
 TRAIN="--steps 1e7 --batch 32 --train_freq 4 --final_eps 0.01 --learning_starts 20000 --gamma 0.99 --buffer_size 1e6 --exploration_fraction 0.1"
 MODEL="--node 512 --hidden_n 1"
-OPTIONS="--target_update 1000"
+OPTIONS="--target_update 250"
 OPTIMIZER="--optimizer adam"
 
 python run_qnet.py --algo DQN $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
