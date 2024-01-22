@@ -1,15 +1,17 @@
 from copy import deepcopy
 
+import dm_pix as pix
 import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
+from jax_baselines.common.utils import convert_jax, q_log_pi, soft_update
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.DQN.network.haiku import model_builder_maker
+from jax_baselines.SPR.cpprb_buffers import TransitionReplayBuffer
+from jax_baselines.SPR.network.haiku import model_builder_maker
 
 
-class DQN(Q_Network_Family):
+class SPR(Q_Network_Family):
     def __init__(
         self,
         env,
@@ -42,6 +44,12 @@ class DQN(Q_Network_Family):
         optimizer="adamw",
         compress_memory=False,
     ):
+
+        self.name = "SPR"
+        self.shift_size = 4
+        self.prediction_depth = 5
+        self.intensity_scale = 0.05
+
         super().__init__(
             env,
             gamma,
@@ -74,10 +82,16 @@ class DQN(Q_Network_Family):
             compress_memory,
         )
 
-        self.name = "DQN"
-
         if _init_setup_model:
             self.setup_model()
+
+    def get_memory_setup(self):
+        self.replay_buffer = TransitionReplayBuffer(
+            self.buffer_size,
+            self.observation_space,
+            1,
+            prediction_depth=self.prediction_depth,
+        )
 
     def setup_model(self):
         model_builder = model_builder_maker(
@@ -87,7 +101,14 @@ class DQN(Q_Network_Family):
             self.param_noise,
             self.policy_kwargs,
         )
-        self.preproc, self.model, self.params = model_builder(next(self.key_seq), print_model=True)
+        (
+            self.preproc,
+            self.model,
+            self.transition,
+            self.projection,
+            self.prediction,
+            self.params,
+        ) = model_builder(next(self.key_seq), print_model=True)
         self.target_params = deepcopy(self.params)
 
         self.opt_state = self.optimizer.init(self.params)
@@ -122,12 +143,13 @@ class DQN(Q_Network_Family):
                 loss,
                 t_mean,
                 new_priorities,
+                rprloss,
             ) = self._train_step(
                 self.params,
                 self.target_params,
                 self.opt_state,
                 self.train_steps_count,
-                next(self.key_seq) if self.param_noise else None,
+                next(self.key_seq),
                 **data
             )
 
@@ -136,9 +158,53 @@ class DQN(Q_Network_Family):
 
         if self.summary and steps % self.log_interval == 0:
             self.summary.add_scalar("loss/qloss", loss, steps)
+            self.summary.add_scalar("loss/rprloss", rprloss, steps)
             self.summary.add_scalar("loss/targets", t_mean, steps)
 
         return loss
+
+    def _image_augmentation(self, obs, key):
+        """Random augmentation for input images.
+
+        Args:
+            obses (np.ndarray): input images  B x K x H x W x C
+            key (jax.random.PRNGKey): random key
+
+        Returns:
+            list(np.ndarray): augmented images
+        """
+
+        def random_shift(obs, key):  # K x H x W x C
+            obs = jnp.pad(
+                obs,
+                ((self.shift_size, self.shift_size), (self.shift_size, self.shift_size), (0, 0)),
+                mode="constant",
+            )
+            obs = pix.random_crop(
+                key,
+                obs,
+                (
+                    obs.shape[0] - self.shift_size * 2,
+                    obs.shape[1] - self.shift_size * 2,
+                    obs.shape[2],
+                ),
+            )
+            return obs
+
+        def Intensity(obs, key):
+            noise = (
+                1.0 + jnp.clip(jax.random.normal(key, (1, 1, 1)), -2.0, 2.0) * self.intensity_scale
+            )
+            return obs * noise
+
+        def augment(obs, key):
+            subkey1, subkey2 = jax.random.split(key)
+            obs = jax.vmap(random_shift)(obs, jax.random.split(subkey1, self.prediction_depth + 1))
+            obs = jax.vmap(Intensity)(obs, jax.random.split(subkey2, self.prediction_depth + 1))
+            return obs
+
+        batch_size = obs.shape[0]
+        return jax.vmap(augment)(obs, jax.random.split(key, batch_size))
 
     def _train_step(
         self,
@@ -150,37 +216,125 @@ class DQN(Q_Network_Family):
         obses,
         actions,
         rewards,
-        nxtobses,
         dones,
+        filled,
         weights=1,
         indexes=None,
     ):
         obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
         actions = actions.astype(jnp.int32)
         not_dones = 1.0 - dones
+        obses = [
+            jax.lax.cond(
+                len(o.shape) >= 5,
+                lambda: self._image_augmentation(o, key),
+                lambda: o,
+            )
+            for o in obses
+        ]
+        parsed_obses = [jnp.reshape(o[:, :-1], (-1, *o.shape[2:])) for o in obses]
+        parsed_nxtobses = [jnp.reshape(o[:, 1:], (-1, *o.shape[2:])) for o in obses]
+        parsed_actions = jnp.reshape(actions, (-1, 1))
+        parsed_rewards = jnp.reshape(rewards, (-1, 1))
+        parsed_not_dones = jnp.reshape(not_dones, (-1, 1))
+        parsed_filled = jnp.reshape(filled, (-1, 1))
         targets = self._target(
-            params, target_params, obses, actions, rewards, nxtobses, not_dones, key
+            params,
+            target_params,
+            parsed_obses,
+            parsed_actions,
+            parsed_rewards,
+            parsed_nxtobses,
+            parsed_not_dones,
+            key,
         )
-        (loss, abs_error), grad = jax.value_and_grad(self._loss, has_aux=True)(
-            params, obses, actions, targets, weights, key
+        (loss, (abs_error, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
+            params,
+            target_params,
+            obses,
+            actions,
+            filled,
+            parsed_obses,
+            parsed_actions,
+            targets,
+            parsed_filled,
+            weights,
+            key,
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
+        target_params = soft_update(params, target_params, 0.01)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
-        return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
+        return (
+            params,
+            target_params,
+            opt_state,
+            qloss,
+            jnp.sum(targets * parsed_filled) / jnp.sum(parsed_filled),
+            new_priorities,
+            rprloss,
+        )
 
-    def _loss(self, params, obses, actions, targets, weights, key):
-        vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
-        error = jnp.squeeze(vals - targets)
-        loss = jnp.square(error)
-        # loss = hubberloss(error, delta=1.0)
-        return jnp.mean(loss * weights), jnp.abs(
-            error
-        )  # remove weight multiply cpprb weight is something wrong
+    def _loss(
+        self,
+        params,
+        target_params,
+        obses,
+        actions,
+        filled,
+        parsed_obses,
+        parsed_actions,
+        targets,
+        parsed_filled,
+        weights,
+        key,
+    ):
+        rprloss = self._represetation_loss(params, target_params, obses, actions, filled, key)
+        vals = jnp.take_along_axis(self.get_q(params, parsed_obses, key), parsed_actions, axis=1)
+        error = vals - targets
+        qloss = jnp.sum(jnp.square(error) * parsed_filled) / jnp.sum(parsed_filled)
+        total_loss = qloss + rprloss
+        return total_loss, (jnp.abs(error), qloss, rprloss)
+
+    def _represetation_loss(self, params, target_params, obses, actions, filled, key):
+        initial_obs = [o[:, 0] for o in obses]  # B x H x W x C
+        target_obs = [o[:, 1:] for o in obses]  # B x K x H x W x C
+        initial_features = self.preproc(params, key, initial_obs)  # B x D
+        target_features = jax.vmap(self.preproc, in_axes=(None, None, 1), out_axes=1)(
+            target_params, key, target_obs
+        )  # B x K x D
+        traget_projection = jax.vmap(self.projection, in_axes=(None, None, 1), out_axes=1)(
+            target_params, key, target_features
+        )  # B x K x D
+        traget_projection = traget_projection / jnp.linalg.norm(
+            traget_projection, axis=-1, keepdims=True
+        )  # normalize
+
+        def body(carry, x):
+            loss, current_features = carry
+            action, filled, target_projection = x
+            action = jax.nn.one_hot(jnp.squeeze(action), self.action_size[0])
+            current_features = self.transition(params, key, current_features, action)
+            current_projection = self.projection(params, key, current_features)
+            current_projection = self.prediction(params, key, current_projection)
+            current_projection = current_projection / jnp.linalg.norm(
+                current_projection, axis=-1, keepdims=True
+            )  # normalize
+            cosine_similarity = jnp.sum(current_projection * target_projection, axis=-1)
+            loss = loss - cosine_similarity * filled
+            return (loss, current_features), None
+
+        actions = jnp.swapaxes(actions, 0, 1)
+        filled = jnp.swapaxes(filled, 0, 1)
+        traget_projection = jnp.swapaxes(traget_projection, 0, 1)
+        (loss, _), _ = jax.lax.scan(
+            body,
+            (jnp.zeros((initial_features.shape[0],)), initial_features),
+            (actions, filled, traget_projection),
+        )
+        return jnp.mean(loss)
 
     def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params, nxtobses, key)
@@ -218,7 +372,7 @@ class DQN(Q_Network_Family):
         total_timesteps,
         callback=None,
         log_interval=100,
-        tb_log_name="DQN",
+        tb_log_name="SPR",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):

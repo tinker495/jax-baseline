@@ -8,6 +8,7 @@ from jax_baselines.DQN.dqn import DQN
 from jax_baselines.FQF.fqf import FQF
 from jax_baselines.IQN.iqn import IQN
 from jax_baselines.QRDQN.qrdqn import QRDQN
+from jax_baselines.SPR.spr import SPR
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -225,6 +226,30 @@ if __name__ == "__main__":
             learning_starts=args.learning_starts,
             delta=args.delta,
             n_support=args.n_support,
+            exploration_fraction=args.exploration_fraction,
+            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            policy_kwargs=policy_kwargs,
+            optimizer=args.optimizer,
+            compress_memory=args.compress_memory,
+        )
+    elif args.algo == "SPR":
+        agent = SPR(
+            env,
+            gamma=args.gamma,
+            learning_rate=args.learning_rate,
+            batch_size=args.batch,
+            buffer_size=int(args.buffer_size),
+            target_network_update_freq=args.target_update,
+            prioritized_replay=args.per,
+            double_q=args.double,
+            dueling_model=args.dueling,
+            exploration_final_eps=args.final_eps,
+            param_noise=args.noisynet,
+            n_step=args.n_step,
+            munchausen=args.munchausen,
+            gradient_steps=args.gradient_steps,
+            train_freq=args.train_freq,
+            learning_starts=args.learning_starts,
             exploration_fraction=args.exploration_fraction,
             tensorboard_log=args.logdir + env_type + "/" + env_name,
             policy_kwargs=policy_kwargs,

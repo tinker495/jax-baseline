@@ -1,3 +1,4 @@
+--find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 requests
 protobuf==3.20
 mlagents_envs
@@ -8,7 +9,8 @@ mujoco
 box2d
 box2d-py
 box2d-kengz
-jax>=0.4.7
+jax[cuda11_local]
+dm_pix
 dm-haiku
 flax
 optax

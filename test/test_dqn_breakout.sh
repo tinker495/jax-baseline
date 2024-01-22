@@ -16,3 +16,7 @@ LR="--learning_rate 0.00005"
 python run_qnet.py --algo QRDQN $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS --n_support 200
 python run_qnet.py --algo IQN $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 python run_qnet.py --algo FQF $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
+
+LR="--learning_rate 0.0001"
+TRAIN="--steps 1e5 --batch 32 --train_freq 1 --final_eps 0.01 --learning_starts 2000 --gamma 0.99 --buffer_size 1e5 --exploration_fraction 0.2"
+#python run_qnet.py --algo SPR $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS

@@ -33,6 +33,7 @@ pip install .
 | QRDQN    | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | IQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | TODO               |
 | FQF      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | TODO               |
+| SPR      | TODO               | TODO               | :heavy_check_mark: | :heavy_check_mark: | TODO               |
 
 ### Actor-Critic based
 

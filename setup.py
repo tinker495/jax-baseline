@@ -16,6 +16,8 @@ setup(
         "jax_baselines.IQN.network",
         "jax_baselines.FQF",
         "jax_baselines.FQF.network",
+        "jax_baselines.SPR",
+        "jax_baselines.SPR.network",
         "jax_baselines.DDPG",
         "jax_baselines.DDPG.network",
         "jax_baselines.TD3",
