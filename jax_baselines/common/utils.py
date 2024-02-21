@@ -114,16 +114,6 @@ def kl_divergence_continuous(p, q):
     return p_std - q_std + (q_std**2 + (q_mu - p_mu) ** 2) / (2.0 * p_std**2) - 0.5
 
 
-def formatData(t, s):
-    if not isinstance(t, dict) and not isinstance(t, list):
-        print(": " + str(t), end="")
-    else:
-        for key in t:
-            print("\n" + "\t" * s + str(key), end="")
-            if not isinstance(t, list):
-                formatData(t[key], s + 1)
-
-
 def get_hyper_params(agent):
     return dict(
         [
@@ -149,11 +139,3 @@ def add_hparams(agent, writer, metric_dict, step):
     writer.file_writer.add_summary(sei)
     for k, v in metric_dict.items():
         writer.add_scalar(k, v, step)
-
-
-def print_param(name, params):
-    if name:
-        print(name, end="")
-    param_tree_map = jax.tree_map(lambda x: x.shape, params)
-    formatData(param_tree_map, 1 if name else 0)
-    print()

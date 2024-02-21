@@ -5,13 +5,13 @@ import optax
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.common.utils import convert_jax, get_gaes
-from jax_baselines.PPO.network.haiku import model_builder_maker
 
 
 class PPO(Actor_Critic_Policy_Gradient_Family):
     def __init__(
         self,
         env,
+        model_builder_maker,
         gamma=0.995,
         lamda=0.95,
         gae_normalize=False,
@@ -32,6 +32,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     ):
         super().__init__(
             env,
+            model_builder_maker,
             gamma,
             learning_rate,
             batch_size,
@@ -64,7 +65,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             self.setup_model()
 
     def setup_model(self):
-        self.model_builder = model_builder_maker(
+        self.model_builder = self.model_builder_maker(
             self.observation_space, self.action_size, self.action_type, self.policy_kwargs
         )
 

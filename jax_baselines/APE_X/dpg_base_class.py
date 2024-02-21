@@ -22,6 +22,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
     def __init__(
         self,
         workers,
+        model_builder_maker,
         manager=None,
         gamma=0.995,
         learning_rate=5e-5,
@@ -47,6 +48,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         compress_memory=False,
     ):
         self.workers = workers
+        self.model_builder_maker = model_builder_maker
         self.m = manager
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs

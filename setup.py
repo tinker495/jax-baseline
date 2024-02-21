@@ -1,42 +1,11 @@
-from setuptools import setup
+from setuptools import find_packages, setup
 
+packages = [package for package in find_packages() if package.startswith("jax_baselines")] + [
+    package for package in find_packages() if package.startswith("model_builder")
+]
+print(packages)
 setup(
     name="jax_baselines",
     version="0.0.1",
-    packages=[
-        "jax_baselines",
-        "jax_baselines.common",
-        "jax_baselines.DQN",
-        "jax_baselines.DQN.network",
-        "jax_baselines.C51",
-        "jax_baselines.C51.network",
-        "jax_baselines.QRDQN",
-        "jax_baselines.QRDQN.network",
-        "jax_baselines.IQN",
-        "jax_baselines.IQN.network",
-        "jax_baselines.FQF",
-        "jax_baselines.FQF.network",
-        "jax_baselines.SPR",
-        "jax_baselines.SPR.network",
-        "jax_baselines.DDPG",
-        "jax_baselines.DDPG.network",
-        "jax_baselines.TD3",
-        "jax_baselines.TD3.network",
-        "jax_baselines.SAC",
-        "jax_baselines.SAC.network",
-        "jax_baselines.TQC",
-        "jax_baselines.TQC.network",
-        "jax_baselines.TD7",
-        "jax_baselines.TD7.network",
-        "jax_baselines.A2C",
-        "jax_baselines.A2C.network",
-        "jax_baselines.PPO",
-        "jax_baselines.PPO.network",
-        "jax_baselines.TPPO",
-        "jax_baselines.TPPO.network",
-        "jax_baselines.APE_X",
-        "jax_baselines.IMPALA",
-        "jax_baselines.model.flax",
-        "jax_baselines.model.haiku",
-    ],
+    packages=packages,
 )

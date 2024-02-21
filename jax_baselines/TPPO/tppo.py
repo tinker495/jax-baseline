@@ -10,13 +10,13 @@ from jax_baselines.common.utils import (
     kl_divergence_continuous,
     kl_divergence_discrete,
 )
-from jax_baselines.TPPO.network.haiku import model_builder_maker
 
 
 class TPPO(Actor_Critic_Policy_Gradient_Family):
     def __init__(
         self,
         env,
+        model_builder_maker,
         gamma=0.995,
         lamda=0.95,
         gae_normalize=False,
@@ -38,6 +38,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
     ):
         super().__init__(
             env,
+            model_builder_maker,
             gamma,
             learning_rate,
             batch_size,
@@ -71,7 +72,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             self.setup_model()
 
     def setup_model(self):
-        self.model_builder = model_builder_maker(
+        self.model_builder = self.model_builder_maker(
             self.observation_space, self.action_size, self.action_type, self.policy_kwargs
         )
 
@@ -121,15 +122,15 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         terminals = jnp.stack(terminals)
         obses = jax.vmap(convert_jax)(obses)
         nxtobses = jax.vmap(convert_jax)(nxtobses)
-        feature = jax.vmap(self.preproc.apply, in_axes=(None, None, 0))(params, key, obses)
-        value = jax.vmap(self.critic.apply, in_axes=(None, None, 0))(params, key, feature)
-        next_value = jax.vmap(self.critic.apply, in_axes=(None, None, 0))(
+        feature = jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, obses)
+        value = jax.vmap(self.critic, in_axes=(None, None, 0))(params, key, feature)
+        next_value = jax.vmap(self.critic, in_axes=(None, None, 0))(
             params,
             key,
-            jax.vmap(self.preproc.apply, in_axes=(None, None, 0))(params, key, nxtobses),
+            jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, nxtobses),
         )
         prob, pi_prob = jax.vmap(self.get_logprob, in_axes=(0, 0, None, None))(
-            jax.vmap(self.actor.apply, in_axes=(None, None, 0))(params, key, feature),
+            jax.vmap(self.actor, in_axes=(None, None, 0))(params, key, feature),
             actions,
             key,
             True,
@@ -223,12 +224,12 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         )
 
     def _loss_discrete(self, params, obses, actions, targets, old_prob, old_act_prob, adv, key):
-        feature = self.preproc.apply(params, key, obses)
-        vals = self.critic.apply(params, key, feature)
+        feature = self.preproc(params, key, obses)
+        vals = self.critic(params, key, feature)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
 
         prob, log_prob = self.get_logprob(
-            self.actor.apply(params, key, feature), actions, key, out_prob=True
+            self.actor(params, key, feature), actions, key, out_prob=True
         )
         ratio = jnp.exp(log_prob - old_act_prob)
         kl = jax.vmap(kl_divergence_discrete)(old_prob, prob)
@@ -245,12 +246,12 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         return total_loss, (critic_loss, actor_loss, entropy_loss, jnp.mean(kl))
 
     def _loss_continuous(self, params, obses, actions, targets, old_prob, old_act_prob, adv, key):
-        feature = self.preproc.apply(params, key, obses)
-        vals = self.critic.apply(params, key, feature)
+        feature = self.preproc(params, key, obses)
+        vals = self.critic(params, key, feature)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
 
         prob, log_prob = self.get_logprob(
-            self.actor.apply(params, key, feature), actions, key, out_prob=True
+            self.actor(params, key, feature), actions, key, out_prob=True
         )
         ratio = jnp.exp(log_prob - old_act_prob)
         kl = jax.vmap(kl_divergence_continuous)(old_prob, prob)

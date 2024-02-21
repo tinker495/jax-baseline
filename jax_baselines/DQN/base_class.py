@@ -26,6 +26,7 @@ class Q_Network_Family(object):
     def __init__(
         self,
         env,
+        model_builder_maker,
         gamma=0.995,
         learning_rate=5e-5,
         buffer_size=50000,
@@ -57,6 +58,7 @@ class Q_Network_Family(object):
     ):
         self.name = "Q_Network_Family"
         self.env = env
+        self.model_builder_maker = model_builder_maker
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed

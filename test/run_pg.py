@@ -10,6 +10,7 @@ from jax_baselines.TPPO.tppo import TPPO
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", type=str, default="Pendulum-v1", help="environment")
+    parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--worker_id", type=int, default=0, help="unlty ml agent's worker id")
     parser.add_argument("--worker", type=int, default=1, help="gym_worker_size")
     parser.add_argument("--algo", type=str, default="A2C", help="algo ID")
@@ -79,9 +80,15 @@ if __name__ == "__main__":
 
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
+    if args.model_lib == "flax":
+        from model_builder.flax.ac.ac_builder import model_builder_maker
+    elif args.model_lib == "haiku":
+        from model_builder.haiku.ac.ac_builder import model_builder_maker
+
     if args.algo == "A2C":
         agent = A2C(
             env,
+            model_builder_maker=model_builder_maker,
             gamma=args.gamma,
             batch_size=args.batch,
             val_coef=args.val_coef,
@@ -93,6 +100,7 @@ if __name__ == "__main__":
     if args.algo == "PPO":
         agent = PPO(
             env,
+            model_builder_maker=model_builder_maker,
             gamma=args.gamma,
             lamda=args.lamda,
             gae_normalize=args.gae_normalize,
@@ -107,6 +115,7 @@ if __name__ == "__main__":
     if args.algo == "TPPO":
         agent = TPPO(
             env,
+            model_builder_maker=model_builder_maker,
             gamma=args.gamma,
             lamda=args.lamda,
             gae_normalize=args.gae_normalize,

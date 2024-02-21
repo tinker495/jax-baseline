@@ -8,13 +8,13 @@ import optax
 
 from jax_baselines.APE_X.base_class import Ape_X_Family
 from jax_baselines.common.utils import convert_jax, hard_update, key_gen, q_log_pi
-from jax_baselines.DQN.network.haiku import model_builder_maker
 
 
 class APE_X_DQN(Ape_X_Family):
     def __init__(
         self,
         workers,
+        model_builder_maker,
         manager=None,
         gamma=0.995,
         learning_rate=5e-5,
@@ -45,6 +45,7 @@ class APE_X_DQN(Ape_X_Family):
     ):
         super().__init__(
             workers,
+            model_builder_maker,
             manager,
             gamma,
             learning_rate,
@@ -78,7 +79,7 @@ class APE_X_DQN(Ape_X_Family):
             self.setup_model()
 
     def setup_model(self):
-        self.model_builder = model_builder_maker(
+        self.model_builder = self.model_builder_maker(
             self.observation_space,
             self.action_size,
             self.dueling_model,

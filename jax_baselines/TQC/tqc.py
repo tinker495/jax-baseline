@@ -8,13 +8,13 @@ import optax
 from jax_baselines.common.losses import QuantileHuberLosses
 from jax_baselines.common.utils import convert_jax, soft_update, truncated_mixture
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from jax_baselines.TQC.network.haiku import model_builder_maker
 
 
 class TQC(Deteministic_Policy_Gradient_Family):
     def __init__(
         self,
         env,
+        model_builder_maker,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
@@ -46,6 +46,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
     ):
         super().__init__(
             env,
+            model_builder_maker,
             gamma,
             learning_rate,
             buffer_size,
@@ -87,7 +88,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
             self.setup_model()
 
     def setup_model(self):
-        model_builder = model_builder_maker(
+        model_builder = self.model_builder_maker(
             self.observation_space,
             self.action_size,
             self.n_support,

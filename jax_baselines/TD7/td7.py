@@ -11,7 +11,6 @@ from jax_baselines.common.base_classes import TensorboardWriter
 from jax_baselines.common.losses import hubberloss
 from jax_baselines.common.utils import add_hparams, convert_jax, hard_update
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from jax_baselines.TD7.network.haiku import model_builder_maker
 
 
 class TD7(Deteministic_Policy_Gradient_Family):
@@ -19,6 +18,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self,
         env,
         eval_env,
+        model_builder_maker,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
@@ -43,6 +43,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
     ):
         super().__init__(
             env,
+            model_builder_maker,
             gamma,
             learning_rate,
             buffer_size,
@@ -89,7 +90,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             self.setup_model()
 
     def setup_model(self):
-        model_builder = model_builder_maker(
+        model_builder = self.model_builder_maker(
             self.observation_space,
             self.action_size,
             self.policy_kwargs,

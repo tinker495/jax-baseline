@@ -8,13 +8,13 @@ import optax
 from jax_baselines.common.losses import QuantileHuberLosses
 from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.IQN.network.haiku import model_builder_maker
 
 
 class IQN(Q_Network_Family):
     def __init__(
         self,
         env,
+        model_builder_maker,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
@@ -49,6 +49,7 @@ class IQN(Q_Network_Family):
     ):
         super().__init__(
             env,
+            model_builder_maker,
             gamma,
             learning_rate,
             buffer_size,
@@ -89,7 +90,7 @@ class IQN(Q_Network_Family):
             self.setup_model()
 
     def setup_model(self):
-        model_builder = model_builder_maker(
+        model_builder = self.model_builder_maker(
             self.observation_space,
             self.action_size,
             self.dueling_model,

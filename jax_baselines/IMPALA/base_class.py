@@ -24,6 +24,7 @@ class IMPALA_Family(object):
     def __init__(
         self,
         workers,
+        model_builder_maker,
         manager=None,
         buffer_size=0,
         gamma=0.995,
@@ -45,6 +46,7 @@ class IMPALA_Family(object):
     ):
         self.name = "IMPALA_Family"
         self.workers = workers
+        self.model_builder_maker = model_builder_maker
         self.m = manager if manager is not None else mp.Manager()
         self.buffer_size = buffer_size
         self.log_interval = log_interval

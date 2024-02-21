@@ -10,13 +10,13 @@ from jax_baselines.common.utils import (
     kl_divergence_discrete,
 )
 from jax_baselines.IMPALA.base_class import IMPALA_Family
-from jax_baselines.TPPO.network.haiku import model_builder_maker
 
 
 class IMPALA_TPPO(IMPALA_Family):
     def __init__(
         self,
         workers,
+        model_builder_maker,
         manager=None,
         buffer_size=0,
         gamma=0.995,
@@ -42,6 +42,7 @@ class IMPALA_TPPO(IMPALA_Family):
     ):
         super().__init__(
             workers,
+            model_builder_maker,
             manager,
             buffer_size,
             gamma,
@@ -72,7 +73,7 @@ class IMPALA_TPPO(IMPALA_Family):
             self.setup_model()
 
     def setup_model(self):
-        self.model_builder = model_builder_maker(
+        self.model_builder = self.model_builder_maker(
             self.observation_space, self.action_size, self.action_type, self.policy_kwargs
         )
         self.actor_builder = self.get_actor_builder()

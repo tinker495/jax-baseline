@@ -13,6 +13,7 @@ from jax_baselines.SPR.spr import SPR
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
+    parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="Cartpole-v1", help="environment")
     parser.add_argument("--algo", type=str, default="DQN", help="algo ID")
     parser.add_argument("--gamma", type=float, default=0.99, help="gamma")
@@ -104,8 +105,13 @@ if __name__ == "__main__":
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
     if args.algo == "DQN":
+        if args.model_lib == "flax":
+            from model_builder.flax.qnet.dqn_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            from model_builder.haiku.qnet.dqn_builder import model_builder_maker
         agent = DQN(
             env,
+            model_builder_maker=model_builder_maker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,
@@ -128,8 +134,13 @@ if __name__ == "__main__":
             compress_memory=args.compress_memory,
         )
     elif args.algo == "C51":
+        if args.model_lib == "flax":
+            from model_builder.flax.qnet.c51_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            from model_builder.haiku.qnet.c51_builder import model_builder_maker
         agent = C51(
             env,
+            model_builder_maker=model_builder_maker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,
@@ -154,8 +165,13 @@ if __name__ == "__main__":
             compress_memory=args.compress_memory,
         )
     elif args.algo == "QRDQN":
+        if args.model_lib == "flax":
+            from model_builder.flax.qnet.qrdqn_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            from model_builder.haiku.qnet.qrdqn_builder import model_builder_maker
         agent = QRDQN(
             env,
+            model_builder_maker=model_builder_maker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,
@@ -180,8 +196,13 @@ if __name__ == "__main__":
             compress_memory=args.compress_memory,
         )
     elif args.algo == "IQN":
+        if args.model_lib == "flax":
+            from model_builder.flax.qnet.iqn_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            from model_builder.haiku.qnet.iqn_builder import model_builder_maker
         agent = IQN(
             env,
+            model_builder_maker=model_builder_maker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,
@@ -207,8 +228,13 @@ if __name__ == "__main__":
             compress_memory=args.compress_memory,
         )
     elif args.algo == "FQF":
+        if args.model_lib == "flax":
+            from model_builder.flax.qnet.fqf_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            from model_builder.haiku.qnet.fqf_builder import model_builder_maker
         agent = FQF(
             env,
+            model_builder_maker=model_builder_maker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,
@@ -233,8 +259,13 @@ if __name__ == "__main__":
             compress_memory=args.compress_memory,
         )
     elif args.algo == "SPR":
+        if args.model_lib == "flax":
+            from model_builder.flax.qnet.spr_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            from model_builder.haiku.qnet.spr_builder import model_builder_maker
         agent = SPR(
             env,
+            model_builder_maker=model_builder_maker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,

@@ -4,7 +4,6 @@ import numpy as np
 import optax
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
-from jax_baselines.A2C.network.haiku import model_builder_maker
 from jax_baselines.common.utils import convert_jax, discount_with_terminal
 
 
@@ -12,6 +11,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
     def __init__(
         self,
         env,
+        model_builder_maker,
         gamma=0.995,
         learning_rate=3e-4,
         batch_size=32,
@@ -27,6 +27,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
     ):
         super().__init__(
             env,
+            model_builder_maker,
             gamma,
             learning_rate,
             batch_size,
@@ -48,7 +49,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             self.setup_model()
 
     def setup_model(self):
-        self.model_builder = model_builder_maker(
+        self.model_builder = self.model_builder_maker(
             self.observation_space, self.action_size, self.action_type, self.policy_kwargs
         )
 
@@ -68,13 +69,20 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         # Sample a batch from the replay buffer
         data = self.buffer.get_buffer()
 
-        self.params, self.opt_state, critic_loss, actor_loss = self._train_step(
-            self.params, self.opt_state, None, **data
-        )
+        (
+            self.params,
+            self.opt_state,
+            critic_loss,
+            actor_loss,
+            entropy_loss,
+            targets,
+        ) = self._train_step(self.params, self.opt_state, None, **data)
 
         if self.summary:
             self.summary.add_scalar("loss/critic_loss", critic_loss, steps)
             self.summary.add_scalar("loss/actor_loss", actor_loss, steps)
+            self.summary.add_scalar("loss/entropy_loss", entropy_loss, steps)
+            self.summary.add_scalar("loss/mean_target", targets, steps)
 
         return critic_loss
 
@@ -116,12 +124,12 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         value = jnp.vstack(value)
         targets = jnp.vstack(targets)
         adv = targets - value
-        (total_loss, (critic_loss, actor_loss)), grad = jax.value_and_grad(
+        (total_loss, (critic_loss, actor_loss, entropy_loss)), grad = jax.value_and_grad(
             self._loss, has_aux=True
         )(params, obses, actions, targets, adv, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        return params, opt_state, critic_loss, actor_loss
+        return params, opt_state, critic_loss, actor_loss, entropy_loss, jnp.mean(targets)
 
     def _loss_discrete(self, params, obses, actions, targets, adv, key):
         feature = self.preproc(params, key, obses)
@@ -135,7 +143,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         entropy = prob * jnp.log(prob)
         entropy_loss = jnp.mean(entropy)
         total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
-        return total_loss, (critic_loss, actor_loss)
+        return total_loss, (critic_loss, actor_loss, entropy_loss)
 
     def _loss_continuous(self, params, obses, actions, targets, adv, key):
         feature = self.preproc(params, key, obses)
@@ -149,7 +157,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         mu, log_std = prob
         entropy_loss = jnp.mean(jnp.square(mu) - log_std)
         total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
-        return total_loss, (critic_loss, actor_loss)
+        return total_loss, (critic_loss, actor_loss, entropy_loss)
 
     def _value_loss(self, params, obses, targets, key):
         feature = self.preproc(params, key, obses)

@@ -23,6 +23,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
     def __init__(
         self,
         env,
+        model_builder_maker,
         gamma=0.995,
         learning_rate=3e-4,
         batch_size=32,
@@ -38,6 +39,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
     ):
         self.name = "Actor_Critic_Policy_Gradient_Family"
         self.env = env
+        self.model_builder_maker = model_builder_maker
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed

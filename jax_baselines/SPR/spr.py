@@ -5,16 +5,19 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.common.utils import convert_jax, q_log_pi, soft_update
+from jax_baselines.common.utils import convert_jax, q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.SPR.cpprb_buffers import TransitionReplayBuffer
-from jax_baselines.SPR.network.haiku import model_builder_maker
+from jax_baselines.SPR.cpprb_buffers import (
+    PrioritizedTransitionReplayBuffer,
+    TransitionReplayBuffer,
+)
 
 
 class SPR(Q_Network_Family):
     def __init__(
         self,
         env,
+        model_builder_maker,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
@@ -52,6 +55,7 @@ class SPR(Q_Network_Family):
 
         super().__init__(
             env,
+            model_builder_maker,
             gamma,
             learning_rate,
             buffer_size,
@@ -86,15 +90,25 @@ class SPR(Q_Network_Family):
             self.setup_model()
 
     def get_memory_setup(self):
-        self.replay_buffer = TransitionReplayBuffer(
-            self.buffer_size,
-            self.observation_space,
-            1,
-            prediction_depth=self.prediction_depth,
-        )
+        if self.prioritized_replay:
+            self.replay_buffer = PrioritizedTransitionReplayBuffer(
+                self.buffer_size,
+                self.observation_space,
+                1,
+                prediction_depth=self.prediction_depth,
+                alpha=self.prioritized_replay_alpha,
+                eps=self.prioritized_replay_eps,
+            )
+        else:
+            self.replay_buffer = TransitionReplayBuffer(
+                self.buffer_size,
+                self.observation_space,
+                1,
+                prediction_depth=self.prediction_depth,
+            )
 
     def setup_model(self):
-        model_builder = model_builder_maker(
+        model_builder = self.model_builder_maker(
             self.observation_space,
             self.action_size,
             self.dueling_model,
@@ -232,12 +246,11 @@ class SPR(Q_Network_Family):
             )
             for o in obses
         ]
-        parsed_obses = [jnp.reshape(o[:, :-1], (-1, *o.shape[2:])) for o in obses]
-        parsed_nxtobses = [jnp.reshape(o[:, 1:], (-1, *o.shape[2:])) for o in obses]
-        parsed_actions = jnp.reshape(actions, (-1, 1))
-        parsed_rewards = jnp.reshape(rewards, (-1, 1))
-        parsed_not_dones = jnp.reshape(not_dones, (-1, 1))
-        parsed_filled = jnp.reshape(filled, (-1, 1))
+        parsed_obses = [jnp.reshape(o[:, 0], (-1, *o.shape[2:])) for o in obses]
+        parsed_nxtobses = [jnp.reshape(o[:, 1], (-1, *o.shape[2:])) for o in obses]
+        parsed_actions = jnp.reshape(actions[:, 0], (-1, 1))
+        parsed_rewards = jnp.reshape(rewards[:, 0], (-1, 1))
+        parsed_not_dones = jnp.reshape(not_dones[:, 0], (-1, 1))
         targets = self._target(
             params,
             target_params,
@@ -257,13 +270,12 @@ class SPR(Q_Network_Family):
             parsed_obses,
             parsed_actions,
             targets,
-            parsed_filled,
             weights,
             key,
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
-        target_params = soft_update(params, target_params, 0.01)
+        target_params = params
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
@@ -272,7 +284,7 @@ class SPR(Q_Network_Family):
             target_params,
             opt_state,
             qloss,
-            jnp.sum(targets * parsed_filled) / jnp.sum(parsed_filled),
+            jnp.mean(targets),
             new_priorities,
             rprloss,
         )
@@ -287,16 +299,21 @@ class SPR(Q_Network_Family):
         parsed_obses,
         parsed_actions,
         targets,
-        parsed_filled,
         weights,
         key,
     ):
         rprloss = self._represetation_loss(params, target_params, obses, actions, filled, key)
         vals = jnp.take_along_axis(self.get_q(params, parsed_obses, key), parsed_actions, axis=1)
         error = vals - targets
-        qloss = jnp.sum(jnp.square(error) * parsed_filled) / jnp.sum(parsed_filled)
+        qloss = jnp.mean(
+            jnp.square(error)
+        )  # jnp.mean(jnp.sum(jnp.square(error) * filled, axis=-1) / jnp.sum(filled, axis=-1) * weights)
         total_loss = qloss + rprloss
-        return total_loss, (jnp.abs(error), qloss, rprloss)
+        return total_loss, (
+            jnp.abs(error),
+            qloss,
+            rprloss,
+        )  # jnp.sum(jnp.abs(error) * filled, axis=-1) / jnp.sum(filled, axis=-1)
 
     def _represetation_loss(self, params, target_params, obses, actions, filled, key):
         initial_obs = [o[:, 0] for o in obses]  # B x H x W x C
@@ -322,7 +339,7 @@ class SPR(Q_Network_Family):
             current_projection = current_projection / jnp.linalg.norm(
                 current_projection, axis=-1, keepdims=True
             )  # normalize
-            cosine_similarity = jnp.sum(current_projection * target_projection, axis=-1)
+            cosine_similarity = jnp.sum(current_projection * target_projection, axis=-1) - 1.0
             loss = loss - cosine_similarity * filled
             return (loss, current_features), None
 

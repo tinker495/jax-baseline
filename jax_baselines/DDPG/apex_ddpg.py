@@ -8,7 +8,6 @@ import optax
 
 from jax_baselines.APE_X.dpg_base_class import Ape_X_Deteministic_Policy_Gradient_Family
 from jax_baselines.common.utils import convert_jax, soft_update
-from jax_baselines.DDPG.network.haiku import model_builder_maker
 from jax_baselines.DDPG.ou_noise import OUNoise
 
 
@@ -16,6 +15,7 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
     def __init__(
         self,
         workers,
+        model_builder_maker,
         manager=None,
         gamma=0.995,
         learning_rate=5e-5,
@@ -42,6 +42,7 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
     ):
         super().__init__(
             workers,
+            model_builder_maker,
             manager,
             gamma,
             learning_rate,
@@ -71,7 +72,7 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
             self.setup_model()
 
     def setup_model(self):
-        self.model_builder = model_builder_maker(
+        self.model_builder = self.model_builder_maker(
             self.observation_space,
             self.action_size,
             self.policy_kwargs,

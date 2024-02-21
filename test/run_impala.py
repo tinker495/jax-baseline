@@ -11,6 +11,7 @@ from jax_baselines.TPPO.impala_tppo import IMPALA_TPPO
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--learning_rate", type=float, default=0.0002, help="learning rate")
+    parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="BreakoutNoFrameskip-v4", help="environment")
     parser.add_argument("--worker_id", type=int, default=0, help="unlty ml agent's worker id")
     parser.add_argument("--worker", type=int, default=16, help="gym_worker_size")
@@ -54,9 +55,15 @@ if __name__ == "__main__":
 
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
+    if args.model_lib == "flax":
+        from model_builder.flax.ac.ac_builder import model_builder_maker
+    elif args.model_lib == "haiku":
+        from model_builder.haiku.ac.ac_builder import model_builder_maker
+
     if args.algo == "A2C":
         agent = IMPALA(
             workers,
+            model_builder_maker,
             manger,
             gamma=args.gamma,
             lamda=args.lamda,
@@ -76,6 +83,7 @@ if __name__ == "__main__":
     elif args.algo == "PPO":
         agent = IMPALA_PPO(
             workers,
+            model_builder_maker,
             manger,
             gamma=args.gamma,
             lamda=args.lamda,
@@ -96,6 +104,7 @@ if __name__ == "__main__":
     elif args.algo == "TPPO":
         agent = IMPALA_TPPO(
             workers,
+            model_builder_maker,
             manger,
             gamma=args.gamma,
             lamda=args.lamda,

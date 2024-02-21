@@ -9,13 +9,13 @@ from jax_baselines.common.base_classes import select_optimizer
 from jax_baselines.common.losses import FQFQuantileLosses, QuantileHuberLosses
 from jax_baselines.common.utils import convert_jax, hard_update
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.FQF.network.flax import model_builder_maker
 
 
 class FQF(Q_Network_Family):
     def __init__(
         self,
         env,
+        model_builder_maker,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
@@ -49,6 +49,7 @@ class FQF(Q_Network_Family):
     ):
         super().__init__(
             env,
+            model_builder_maker,
             gamma,
             learning_rate,
             buffer_size,
@@ -89,7 +90,7 @@ class FQF(Q_Network_Family):
             self.setup_model()
 
     def setup_model(self):
-        self.model_bulder = model_builder_maker(
+        self.model_bulder = self.model_builder_maker(
             self.observation_space,
             self.action_size,
             self.dueling_model,

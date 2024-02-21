@@ -4,7 +4,6 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.C51.network.haiku import model_builder_maker
 from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
 
@@ -13,6 +12,7 @@ class C51(Q_Network_Family):
     def __init__(
         self,
         env,
+        model_builder_maker,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
@@ -47,6 +47,7 @@ class C51(Q_Network_Family):
     ):
         super().__init__(
             env,
+            model_builder_maker,
             gamma,
             learning_rate,
             buffer_size,
@@ -88,7 +89,7 @@ class C51(Q_Network_Family):
     def setup_model(self):
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
 
-        self.model_builder = model_builder_maker(
+        self.model_builder = self.model_builder_maker(
             self.observation_space,
             self.action_size,
             self.dueling_model,
