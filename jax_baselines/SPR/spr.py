@@ -86,6 +86,8 @@ class SPR(Q_Network_Family):
             compress_memory,
         )
 
+        self._gamma = jnp.power(self.gamma, jnp.arange(self.prediction_depth))
+
         if _init_setup_model:
             self.setup_model()
 
@@ -247,10 +249,17 @@ class SPR(Q_Network_Family):
             for o in obses
         ]
         parsed_obses = [jnp.reshape(o[:, 0], (-1, *o.shape[2:])) for o in obses]
-        parsed_nxtobses = [jnp.reshape(o[:, 1], (-1, *o.shape[2:])) for o in obses]
+        last_idxs = jnp.argmax(
+            filled * jnp.arange(1, self.prediction_depth + 1), axis=1, keepdims=True
+        )
+        parsed_nxtobses = [
+            jnp.take_along_axis(o, jnp.reshape(last_idxs + 1, (-1, 1, 1, 1, 1)), axis=1)
+            for o in obses
+        ]
         parsed_actions = jnp.reshape(actions[:, 0], (-1, 1))
-        parsed_rewards = jnp.reshape(rewards[:, 0], (-1, 1))
-        parsed_not_dones = jnp.reshape(not_dones[:, 0], (-1, 1))
+        parsed_rewards = jnp.sum(rewards * self._gamma * filled, axis=1, keepdims=True)
+        parsed_not_dones = jnp.take_along_axis(not_dones, last_idxs, axis=1)
+        parsed_gamma = jnp.take_along_axis(jnp.expand_dims(self._gamma, 0), last_idxs, axis=1)
         targets = self._target(
             params,
             target_params,
@@ -259,6 +268,7 @@ class SPR(Q_Network_Family):
             parsed_rewards,
             parsed_nxtobses,
             parsed_not_dones,
+            parsed_gamma,
             key,
         )
         (loss, (abs_error, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
@@ -304,9 +314,9 @@ class SPR(Q_Network_Family):
     ):
         rprloss = self._represetation_loss(params, target_params, obses, actions, filled, key)
         vals = jnp.take_along_axis(self.get_q(params, parsed_obses, key), parsed_actions, axis=1)
-        error = vals - targets
+        error = jnp.squeeze(vals - targets)
         qloss = jnp.mean(
-            jnp.square(error)
+            jnp.square(error) * weights
         )  # jnp.mean(jnp.sum(jnp.square(error) * filled, axis=-1) / jnp.sum(filled, axis=-1) * weights)
         total_loss = qloss + rprloss
         return total_loss, (
@@ -353,7 +363,9 @@ class SPR(Q_Network_Family):
         )
         return jnp.mean(loss)
 
-    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
+    def _target(
+        self, params, target_params, obses, actions, rewards, nxtobses, not_dones, gammas, key
+    ):
         next_q = self.get_q(target_params, nxtobses, key)
 
         if self.munchausen:
@@ -382,7 +394,7 @@ class SPR(Q_Network_Family):
             else:
                 next_actions = jnp.argmax(next_q, axis=1, keepdims=True)
             next_vals = not_dones * jnp.take_along_axis(next_q, next_actions, axis=1)
-        return (next_vals * self._gamma) + rewards
+        return (next_vals * gammas) + rewards
 
     def learn(
         self,
