@@ -86,7 +86,7 @@ class SPR(Q_Network_Family):
             compress_memory,
         )
 
-        self._gamma = jnp.power(self.gamma, jnp.arange(self.prediction_depth))
+        self._gamma = jnp.power(self.gamma, jnp.arange(self.n_step))
 
         if _init_setup_model:
             self.setup_model()
@@ -97,7 +97,7 @@ class SPR(Q_Network_Family):
                 self.buffer_size,
                 self.observation_space,
                 1,
-                prediction_depth=self.prediction_depth,
+                prediction_depth=max(self.prediction_depth, self.n_step),
                 alpha=self.prioritized_replay_alpha,
                 eps=self.prioritized_replay_eps,
             )
@@ -106,7 +106,7 @@ class SPR(Q_Network_Family):
                 self.buffer_size,
                 self.observation_space,
                 1,
-                prediction_depth=self.prediction_depth,
+                prediction_depth=max(self.prediction_depth, self.n_step),
             )
 
     def setup_model(self):
@@ -215,8 +215,9 @@ class SPR(Q_Network_Family):
 
         def augment(obs, key):
             subkey1, subkey2 = jax.random.split(key)
-            obs = jax.vmap(random_shift)(obs, jax.random.split(subkey1, self.prediction_depth + 1))
-            obs = jax.vmap(Intensity)(obs, jax.random.split(subkey2, self.prediction_depth + 1))
+            obs_len = obs.shape[0]
+            obs = jax.vmap(random_shift)(obs, jax.random.split(subkey1, obs_len))
+            obs = jax.vmap(Intensity)(obs, jax.random.split(subkey2, obs_len))
             return obs
 
         batch_size = obs.shape[0]
@@ -249,17 +250,24 @@ class SPR(Q_Network_Family):
             for o in obses
         ]
         parsed_obses = [jnp.reshape(o[:, 0], (-1, *o.shape[2:])) for o in obses]
+        parsed_filled = jnp.reshape(filled[:, : self.n_step], (-1, self.n_step))
         last_idxs = jnp.argmax(
-            filled * jnp.arange(1, self.prediction_depth + 1), axis=1, keepdims=True
+            parsed_filled * jnp.arange(1, self.n_step + 1), axis=1, keepdims=True
         )
         parsed_nxtobses = [
-            jnp.take_along_axis(o, jnp.reshape(last_idxs + 1, (-1, 1, 1, 1, 1)), axis=1)
+            jnp.reshape(
+                jnp.take_along_axis(o, jnp.reshape(last_idxs + 1, (-1, 1, 1, 1, 1)), axis=1),
+                (-1, *o.shape[2:]),
+            )
             for o in obses
         ]
         parsed_actions = jnp.reshape(actions[:, 0], (-1, 1))
-        parsed_rewards = jnp.sum(rewards * self._gamma * filled, axis=1, keepdims=True)
+        rewards = jnp.reshape(rewards[:, : self.n_step], (-1, self.n_step))
+        parsed_rewards = jnp.sum(rewards * self._gamma * parsed_filled, axis=1, keepdims=True)
         parsed_not_dones = jnp.take_along_axis(not_dones, last_idxs, axis=1)
-        parsed_gamma = jnp.take_along_axis(jnp.expand_dims(self._gamma, 0), last_idxs, axis=1)
+        parsed_gamma = (
+            jnp.take_along_axis(jnp.expand_dims(self._gamma, 0), last_idxs, axis=1) * self.gamma
+        )
         targets = self._target(
             params,
             target_params,
@@ -271,12 +279,15 @@ class SPR(Q_Network_Family):
             parsed_gamma,
             key,
         )
+        transition_obses = [o[:, : (self.prediction_depth + 1)] for o in obses]
+        transition_actions = actions[:, : self.prediction_depth]
+        transition_filled = filled[:, : self.prediction_depth]
         (loss, (abs_error, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params,
             target_params,
-            obses,
-            actions,
-            filled,
+            transition_obses,
+            transition_actions,
+            transition_filled,
             parsed_obses,
             parsed_actions,
             targets,
