@@ -215,15 +215,7 @@ class Q_Network_Family(object):
                 np.mean(self.scoreque), self.update_eps, np.mean(self.lossque)
             )
 
-    def learn(
-        self,
-        total_timesteps,
-        callback=None,
-        log_interval=1000,
-        tb_log_name="Q_network",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
-    ):
+    def tb_log_name_update(self, tb_log_name):
         if self.munchausen:
             tb_log_name = "M-" + tb_log_name
         if self.param_noise:
@@ -236,6 +228,18 @@ class Q_Network_Family(object):
             tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
         if self.prioritized_replay:
             tb_log_name = tb_log_name + "+PER"
+        return tb_log_name
+
+    def learn(
+        self,
+        total_timesteps,
+        callback=None,
+        log_interval=1000,
+        tb_log_name="Q_network",
+        reset_num_timesteps=True,
+        replay_wrapper=None,
+    ):
+        tb_log_name = self.tb_log_name_update(tb_log_name)
 
         if self.param_noise:
             self.exploration = ConstantSchedule(0)

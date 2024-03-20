@@ -30,13 +30,14 @@ if __name__ == "__main__":
         default=1,
         help="n step setting when n > 1 is n step td method",
     )
+    parser.add_argument("--off_policy_fix", action="store_true")
     parser.add_argument("--munchausen", action="store_true")
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
     parser.add_argument("--verbose", type=int, default=0, help="verbose")
     parser.add_argument("--logdir", type=str, default="log/", help="log file dir")
     parser.add_argument("--seed", type=int, default=0, help="random seed")
-    parser.add_argument("--max", type=float, default=10, help="c51 max")
-    parser.add_argument("--min", type=float, default=-10, help="c51 min")
+    parser.add_argument("--max", type=float, default=20, help="c51 max")
+    parser.add_argument("--min", type=float, default=-20, help="c51 min")
     parser.add_argument("--n_support", type=int, default=32, help="n_support for QRDQN,IQN,FQF")
     parser.add_argument(
         "--delta", type=float, default=1.0, help="huber loss delta  for QRDQN,IQN,FQF"
@@ -277,6 +278,7 @@ if __name__ == "__main__":
             exploration_final_eps=args.final_eps,
             param_noise=args.noisynet,
             n_step=args.n_step,
+            off_policy_fix=args.off_policy_fix,
             munchausen=args.munchausen,
             gradient_steps=args.gradient_steps,
             train_freq=args.train_freq,

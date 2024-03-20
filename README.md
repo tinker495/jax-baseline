@@ -31,9 +31,9 @@ pip install .
 | DQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | C51      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | QRDQN    | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| IQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | TODO               |
-| FQF      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | TODO               |
-| SPR      | TODO               | TODO               | :heavy_check_mark: | :heavy_check_mark: | TODO               |
+| IQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | X                  |
+| FQF      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | X                  |
+| SPR      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | X                  |
 
 ### Actor-Critic based
 
@@ -41,24 +41,24 @@ pip install .
 | --------------- | ------------------ | ------------------ | ------------------ |
 | A2C             | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | PPO             | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| Truly PPO(TPPO) | :heavy_check_mark: | :heavy_check_mark: | TODO               |
+| Truly PPO(TPPO) | :heavy_check_mark: | :heavy_check_mark: | X                  |
 
 ### DPG bases
 
-| **Name** | `Per`              | `N-step`           | `Ape-X`            |
-| -------- | ------------------ | ------------------ | ------------------ |
-| DDPG     | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| TD3      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| SAC      | :heavy_check_mark: | :heavy_check_mark: | TODO               |
-| TQC      | :heavy_check_mark: | :heavy_check_mark: | TODO               |
-| TD7      | LAP                | X                  | TODO               |
+| **Name** | `Per`                   | `N-step`           | `Ape-X`            |
+| -------- | ----------------------- | ------------------ | ------------------ |
+| DDPG     | :heavy_check_mark:      | :heavy_check_mark: | :heavy_check_mark: |
+| TD3      | :heavy_check_mark:      | :heavy_check_mark: | :heavy_check_mark: |
+| SAC      | :heavy_check_mark:      | :heavy_check_mark: | X                  |
+| TQC      | :heavy_check_mark:      | :heavy_check_mark: | X                  |
+| TD7      | :heavy_check_mark:(LAP) | X                  | X                  |
 
 ## Test
 
 To test atari with DQN(or C51, QRQDN, IQN, FQF)
 
 ```
-python run_qnet.py --algo DQN --env BreakoutNoFrameskip-v4 --learning_rate 0.0002 \
+python test/run_qnet.py --algo DQN --env BreakoutNoFrameskip-v4 --learning_rate 0.0002 \
 		--steps 5e5 --batch 32 --train_freq 1 --target_update 1000 --node 512 \
 		--hidden_n 1 --final_eps 0.01 --learning_starts 20000 --gamma 0.995 --clip_rewards
 ```

@@ -30,6 +30,7 @@ class SPR(Q_Network_Family):
         double_q=False,
         dueling_model=False,
         n_step=1,
+        off_policy_fix=False,
         learning_starts=1000,
         target_network_update_freq=2000,
         prioritized_replay=False,
@@ -54,6 +55,7 @@ class SPR(Q_Network_Family):
         self.name = "SPR"
         self.shift_size = 4
         self.prediction_depth = 5
+        self.off_policy_fix = off_policy_fix
         self.intensity_scale = 0.05
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = float(categorial_max)
@@ -189,7 +191,7 @@ class SPR(Q_Network_Family):
                 self.opt_state,
                 self.train_steps_count,
                 next(self.key_seq),
-                **data
+                **data,
             )
 
             if self.prioritized_replay:
@@ -246,6 +248,42 @@ class SPR(Q_Network_Family):
         batch_size = obs.shape[0]
         return jax.vmap(augment)(obs, jax.random.split(key, batch_size))
 
+    def get_last_idx(self, params, obses, actions, filled, key):
+        if self.n_step == 1:
+            return jnp.zeros((obses[0].shape[0], 1), jnp.int32), jnp.ones(
+                (obses[0].shape[0], 1), jnp.bool_
+            )
+        parsed_filled = jnp.reshape(filled[:, : self.n_step], (-1, self.n_step))
+        last_idxs = jnp.argmax(
+            parsed_filled * jnp.arange(1, self.n_step + 1), axis=1, keepdims=True
+        )
+        if not self.off_policy_fix:
+            return last_idxs, parsed_filled
+        action_obs = [o[:, 1 : self.n_step] for o in obses]  # 1 ~ n_step
+        pred_actions = jax.vmap(
+            lambda o: jnp.argmax(
+                jnp.sum(
+                    self.get_q(params, o, key) * self._categorial_bar,
+                    axis=2,
+                ),
+                axis=1,
+            ),
+            in_axes=1,
+            out_axes=1,
+        )(
+            action_obs
+        )  # B x n_step - 1
+        action_equal = jnp.not_equal(
+            pred_actions, jnp.squeeze(actions[:, 1 : self.n_step + 1])
+        )  # B x n_step - 1
+        minimum_not_equal = 1 + jnp.argmax(
+            action_equal * jnp.arange(self.n_step, 1, -1), axis=1, keepdims=True
+        )
+        last_idxs = jnp.minimum(last_idxs, minimum_not_equal)
+        # fill partial filled
+        parsed_filled = jnp.less_equal(jnp.arange(0, self.n_step), last_idxs)
+        return last_idxs, parsed_filled
+
     def _train_step(
         self,
         params,
@@ -273,10 +311,7 @@ class SPR(Q_Network_Family):
             for o in obses
         ]
         parsed_obses = [jnp.reshape(o[:, 0], (-1, *o.shape[2:])) for o in obses]
-        parsed_filled = jnp.reshape(filled[:, : self.n_step], (-1, self.n_step))
-        last_idxs = jnp.argmax(
-            parsed_filled * jnp.arange(1, self.n_step + 1), axis=1, keepdims=True
-        )
+        last_idxs, parsed_filled = self.get_last_idx(params, obses, actions, filled, key)
         parsed_nxtobses = [
             jnp.reshape(
                 jnp.take_along_axis(o, jnp.reshape(last_idxs + 1, (-1, 1, 1, 1, 1)), axis=1),
@@ -318,8 +353,8 @@ class SPR(Q_Network_Family):
             key,
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-        params = optax.apply_updates(params, updates)
         target_params = params
+        params = optax.apply_updates(params, updates)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
@@ -465,6 +500,25 @@ class SPR(Q_Network_Family):
             next_distribution, C51_L, C51_H, C51_B
         )
         return target_distribution
+
+    def tb_log_name_update(self, tb_log_name):
+        if self.munchausen:
+            tb_log_name = "M-" + tb_log_name
+        if self.param_noise:
+            tb_log_name = "Noisy_" + tb_log_name
+        if self.dueling_model:
+            tb_log_name = "Dueling_" + tb_log_name
+        if self.double_q:
+            tb_log_name = "Double_" + tb_log_name
+        if self.n_step_method:
+            if self.off_policy_fix:
+                n_step_str = f"[{self.n_step}~1]Step_"
+            else:
+                n_step_str = f"{self.n_step}Step_"
+            tb_log_name = n_step_str + tb_log_name
+        if self.prioritized_replay:
+            tb_log_name = tb_log_name + "+PER"
+        return tb_log_name
 
     def learn(
         self,
