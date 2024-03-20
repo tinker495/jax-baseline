@@ -281,6 +281,8 @@ if __name__ == "__main__":
             gradient_steps=args.gradient_steps,
             train_freq=args.train_freq,
             learning_starts=args.learning_starts,
+            categorial_max=args.max,
+            categorial_min=args.min,
             exploration_fraction=args.exploration_fraction,
             tensorboard_log=args.logdir + env_type + "/" + env_name,
             policy_kwargs=policy_kwargs,

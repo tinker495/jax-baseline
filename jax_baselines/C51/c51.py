@@ -218,7 +218,7 @@ class C51(Q_Network_Family):
         distribution = jnp.squeeze(
             jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         )
-        loss = jnp.mean(target_distribution * (-jnp.log(distribution + 1e-5)), axis=1)
+        loss = jnp.sum(target_distribution * (-jnp.log(distribution + 1e-5)), axis=1)
         return jnp.mean(loss * weights), loss
 
     def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):

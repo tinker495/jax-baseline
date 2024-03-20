@@ -78,6 +78,7 @@ class Model(nn.Module):
     hidden_n: int
     noisy: bool
     dueling: bool
+    categorial_bar_n: int
 
     def setup(self) -> None:
         if not self.noisy:
@@ -95,22 +96,45 @@ class Model(nn.Module):
                 ]
             )(feature)
         if not self.dueling:
-            q_net = self.layer(
-                self.action_size[0],
-                kernel_init=clip_uniform_initializers(-0.03, 0.03),
+            q_net = nn.Sequential(
+                [
+                    self.layer(
+                        self.action_size[0] * self.categorial_bar_n,
+                        kernel_init=clip_uniform_initializers(-0.03, 0.03),
+                    ),
+                    lambda x: jnp.reshape(
+                        x, (x.shape[0], self.action_size[0], self.categorial_bar_n)
+                    ),
+                ]
             )(feature)
-            return q_net
+            return jax.nn.softmax(q_net, axis=2)
         else:
-            v = self.layer(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))(feature)
-            a = self.layer(
-                self.action_size[0],
-                kernel_init=clip_uniform_initializers(-0.03, 0.03),
+            v = nn.Sequential(
+                [
+                    self.layer(
+                        self.categorial_bar_n, kernel_init=clip_uniform_initializers(-0.03, 0.03)
+                    ),
+                    lambda x: jnp.reshape(x, (x.shape[0], 1, self.categorial_bar_n)),
+                ]
+            )(feature)
+            a = nn.Sequential(
+                [
+                    self.layer(
+                        self.action_size[0] * self.categorial_bar_n,
+                        kernel_init=clip_uniform_initializers(-0.03, 0.03),
+                    ),
+                    lambda x: jnp.reshape(
+                        x, (x.shape[0], self.action_size[0], self.categorial_bar_n)
+                    ),
+                ]
             )(feature)
             q = v + a - jnp.max(a, axis=1, keepdims=True)
-            return q
+            return jax.nn.softmax(q, axis=2)
 
 
-def model_builder_maker(observation_space, action_space, dueling_model, param_noise, policy_kwargs):
+def model_builder_maker(
+    observation_space, action_space, dueling_model, param_noise, categorial_bar_n, policy_kwargs
+):
     policy_kwargs = {} if policy_kwargs is None else policy_kwargs
     if "embedding_mode" in policy_kwargs.keys():
         embedding_mode = policy_kwargs["embedding_mode"]
@@ -123,7 +147,11 @@ def model_builder_maker(observation_space, action_space, dueling_model, param_no
             def setup(self):
                 self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
                 self.qnet = Model(
-                    action_space, dueling=dueling_model, noisy=param_noise, **policy_kwargs
+                    action_space,
+                    dueling=dueling_model,
+                    noisy=param_noise,
+                    categorial_bar_n=categorial_bar_n,
+                    **policy_kwargs
                 )
                 self.tran = Transition()
                 self.proj = Projection()
