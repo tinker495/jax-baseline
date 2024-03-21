@@ -38,7 +38,7 @@ class Transition(nn.Module):
                 padding="SAME",
                 kernel_init=nn.initializers.orthogonal(scale=1.0),
             ),
-            nn.BatchNorm(use_running_average=True),
+            nn.GroupNorm(4, reduction_axes=-1),
             nn.relu,
         ]
     )

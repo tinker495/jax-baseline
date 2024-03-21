@@ -51,7 +51,10 @@ class NoisyLinear(hk.Module):
             w_init = hk.initializers.TruncatedNormal(stddev=stddev)
         w_mu = hk.get_parameter("w_mu", [input_size, output_size], dtype, init=w_init)
         w_sigma = hk.get_parameter(
-            "w_sigma", [input_size, output_size], dtype, init=hk.initializers.Constant(0.5)
+            "w_sigma",
+            [input_size, output_size],
+            dtype,
+            init=w_init,
         )
 
         eps_in = get_eps(input_size)
@@ -63,9 +66,7 @@ class NoisyLinear(hk.Module):
 
         if self.with_bias:
             b_mu = hk.get_parameter("b_mu", [self.output_size], dtype, init=self.b_init)
-            b_sigma = hk.get_parameter(
-                "b_sigma", [self.output_size], dtype, init=hk.initializers.Constant(0.5)
-            )
+            b_sigma = hk.get_parameter("b_sigma", [self.output_size], dtype, init=self.b_init)
             b = jnp.broadcast_to(b_mu + b_sigma * eps_out, out.shape)
             out = out + b
         return out

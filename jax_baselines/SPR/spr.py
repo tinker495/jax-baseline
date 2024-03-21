@@ -393,7 +393,7 @@ class SPR(Q_Network_Family):
         qloss = jnp.sum(
             target_distribution * (-jnp.log(distribution + 1e-5)), axis=1
         )  # jnp.mean(jnp.sum(jnp.square(error) * filled, axis=-1) / jnp.sum(filled, axis=-1) * weights)
-        mean_qloss = jnp.mean(qloss * weights)
+        mean_qloss = jnp.mean(qloss)
         total_loss = mean_qloss + rprloss
         return total_loss, (
             qloss,

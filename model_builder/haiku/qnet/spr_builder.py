@@ -18,6 +18,7 @@ class Projection(hk.Module):
         self.layer = hk.Linear
 
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
+        feature = hk.Flatten()(feature)
         projection = hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
         )(feature)
@@ -26,14 +27,37 @@ class Projection(hk.Module):
 
 
 class Transition(hk.Module):
-    def __init__(self, node=2048, hidden_n=2):
+    def __init__(self, node=64, hidden_n=2):
         super().__init__()
         self.node = node
         self.hidden_n = hidden_n
-        self.layer = hk.Linear
+        self.layer = lambda ch: hk.Sequential(
+            [
+                hk.Conv2D(
+                    ch,
+                    kernel_shape=[3, 3],
+                    stride=[1, 1],
+                    padding="SAME",
+                    w_init=hk.initializers.Orthogonal(scale=1.0),
+                ),
+                hk.GroupNorm(4, axis=-1),
+                jax.nn.relu,
+            ]
+        )
+        self.last = lambda ch: hk.Conv2D(
+            ch,
+            kernel_shape=[3, 3],
+            stride=[1, 1],
+            padding="SAME",
+            w_init=hk.initializers.Orthogonal(scale=1.0),
+        )
 
     def __call__(self, feature: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([feature, action], axis=1)
+        batch_size = feature.shape[0]
+        tile_shape = (1, feature.shape[1], feature.shape[2], 1)
+        action = jnp.reshape(action, (batch_size, 1, 1, -1))
+        action = jnp.tile(action, tile_shape)
+        concat = jnp.concatenate([feature, action], axis=-1)
         x = hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
         )(concat)
@@ -79,6 +103,7 @@ class Model(hk.Module):
             self.layer = NoisyLinear
 
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
+        feature = hk.Flatten()(feature)
         if self.hidden_n != 0:
             feature = hk.Sequential(
                 [
@@ -131,7 +156,12 @@ def model_builder_maker(
 
     def _model_builder(key=None, print_model=False):
         preproc = hk.transform(
-            lambda x: PreProcess(observation_space, embedding_mode=embedding_mode)(x)
+            lambda x: hk.Sequential(
+                [
+                    PreProcess(observation_space, embedding_mode=embedding_mode),
+                    hk.Reshape((7, 7, 64)),
+                ]
+            )(x)
         )
         model = hk.transform(
             lambda x: Model(
