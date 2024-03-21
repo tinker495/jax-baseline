@@ -26,14 +26,14 @@ class NoisyDense(nn.Dense):
         )
         kernel_sigma = self.param(
             "kernel_sigma",
-            self.kernel_init,
+            nn.initializers.constant(0.5),
             (input_size, self.features),
             self.param_dtype,
         )
         if self.use_bias:
             bias_mu = self.param("bias_mu", self.bias_init, (self.features,), self.param_dtype)
             bias_sigma = self.param(
-                "bias_sigma", self.bias_init, (self.features,), self.param_dtype
+                "bias_sigma", nn.initializers.constant(0.5), (self.features,), self.param_dtype
             )
         else:
             bias_mu = None
