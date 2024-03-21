@@ -63,7 +63,7 @@ python test/run_qnet.py --algo DQN --env BreakoutNoFrameskip-v4 --learning_rate 
 		--hidden_n 1 --final_eps 0.01 --learning_starts 20000 --gamma 0.995 --clip_rewards
 ```
 
-Only 15 minutes is sufficient to run 50K steps on DQNs learning atari breakout (540 steps/sec).
+Only 15 minutes is sufficient to run 500K steps on DQNs learning atari breakout (540 steps/sec).
 This performance measurement was on Nvidia RTX3080 and AMD Ryzen 9 5950X in a single process.
 
 ```
