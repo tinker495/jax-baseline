@@ -36,8 +36,8 @@ if __name__ == "__main__":
     parser.add_argument("--verbose", type=int, default=0, help="verbose")
     parser.add_argument("--logdir", type=str, default="log/", help="log file dir")
     parser.add_argument("--seed", type=int, default=0, help="random seed")
-    parser.add_argument("--max", type=float, default=20, help="c51 max")
-    parser.add_argument("--min", type=float, default=-20, help="c51 min")
+    parser.add_argument("--max", type=float, default=10, help="c51 max")
+    parser.add_argument("--min", type=float, default=-10, help="c51 min")
     parser.add_argument("--n_support", type=int, default=32, help="n_support for QRDQN,IQN,FQF")
     parser.add_argument(
         "--delta", type=float, default=1.0, help="huber loss delta  for QRDQN,IQN,FQF"

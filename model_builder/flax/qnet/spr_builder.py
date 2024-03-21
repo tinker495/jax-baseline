@@ -38,7 +38,7 @@ class Transition(nn.Module):
                 padding="SAME",
                 kernel_init=nn.initializers.orthogonal(scale=1.0),
             ),
-            nn.GroupNorm(4, reduction_axes=-1),
+            nn.GroupNorm(4),
             nn.relu,
         ]
     )
@@ -102,9 +102,7 @@ class Model(nn.Module):
                         self.action_size[0] * self.categorial_bar_n,
                         kernel_init=clip_uniform_initializers(-0.03, 0.03),
                     ),
-                    lambda x: jnp.reshape(
-                        x, (x.shape[0], self.action_size[0], self.categorial_bar_n)
-                    ),
+                    lambda x: jnp.reshape(x, (-1, self.action_size[0], self.categorial_bar_n)),
                 ]
             )(feature)
             return jax.nn.softmax(q_net, axis=2)
@@ -114,7 +112,7 @@ class Model(nn.Module):
                     self.layer(
                         self.categorial_bar_n, kernel_init=clip_uniform_initializers(-0.03, 0.03)
                     ),
-                    lambda x: jnp.reshape(x, (x.shape[0], 1, self.categorial_bar_n)),
+                    lambda x: jnp.reshape(x, (-1, 1, self.categorial_bar_n)),
                 ]
             )(feature)
             a = nn.Sequential(
@@ -123,13 +121,11 @@ class Model(nn.Module):
                         self.action_size[0] * self.categorial_bar_n,
                         kernel_init=clip_uniform_initializers(-0.03, 0.03),
                     ),
-                    lambda x: jnp.reshape(
-                        x, (x.shape[0], self.action_size[0], self.categorial_bar_n)
-                    ),
+                    lambda x: jnp.reshape(x, (-1, self.action_size[0], self.categorial_bar_n)),
                 ]
             )(feature)
-            q = v + a - jnp.max(a, axis=1, keepdims=True)
-            return jax.nn.softmax(q, axis=2)
+            q = v + a - jnp.mean(a, axis=1, keepdims=True)
+            return jax.nn.softmax(q, axis=-1)
 
 
 def model_builder_maker(

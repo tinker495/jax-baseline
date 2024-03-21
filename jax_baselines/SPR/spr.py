@@ -340,7 +340,7 @@ class SPR(Q_Network_Family):
         transition_obses = [o[:, : (self.prediction_depth + 1)] for o in obses]
         transition_actions = actions[:, : self.prediction_depth]
         transition_filled = filled[:, : self.prediction_depth]
-        (loss, (abs_error, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
+        (loss, (KLdiv, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params,
             target_params,
             transition_obses,
@@ -357,7 +357,7 @@ class SPR(Q_Network_Family):
         params = optax.apply_updates(params, updates)
         new_priorities = None
         if self.prioritized_replay:
-            new_priorities = abs_error
+            new_priorities = KLdiv
         return (
             params,
             target_params,
@@ -390,14 +390,14 @@ class SPR(Q_Network_Family):
         distribution = jnp.squeeze(
             jnp.take_along_axis(self.get_q(params, parsed_obses, key), parsed_actions, axis=1)
         )
-        qloss = jnp.sum(
-            target_distribution * (-jnp.log(distribution + 1e-5)), axis=1
+        KLdiv = jnp.sum(
+            target_distribution * (-jnp.log(distribution + 1e-8)), axis=1
         )  # jnp.mean(jnp.sum(jnp.square(error) * filled, axis=-1) / jnp.sum(filled, axis=-1) * weights)
-        mean_qloss = jnp.mean(qloss)
-        total_loss = mean_qloss + rprloss
+        mean_KLdiv = jnp.mean(KLdiv * weights)
+        total_loss = mean_KLdiv + rprloss
         return total_loss, (
-            qloss,
-            mean_qloss,
+            KLdiv,
+            mean_KLdiv,
             rprloss,
         )  # jnp.sum(jnp.abs(error) * filled, axis=-1) / jnp.sum(filled, axis=-1)
 
@@ -447,17 +447,16 @@ class SPR(Q_Network_Family):
             next_action_q = jnp.sum(
                 self.get_q(params, nxtobses, key) * self._categorial_bar, axis=2
             )
-            next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
         else:
             next_action_q = jnp.sum(next_q * self._categorial_bar, axis=2)
-            next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
+        next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
         next_distribution = jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))
 
         if self.munchausen:
             next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
-            next_categorial = not_dones * (
-                self.categorial_bar - jnp.sum(pi_next * tau_log_pi_next, axis=1, keepdims=True)
+            next_categorial = self.categorial_bar - jnp.sum(
+                pi_next * tau_log_pi_next, axis=1, keepdims=True
             )
 
             q_k_targets = jnp.sum(
@@ -471,8 +470,8 @@ class SPR(Q_Network_Family):
                 munchausen_addon, a_min=-1, a_max=0
             )
         else:
-            next_categorial = not_dones * self.categorial_bar
-        target_categorial = (next_categorial * gammas) + rewards  # [32, 51]
+            next_categorial = self.categorial_bar
+        target_categorial = gammas * not_dones * next_categorial + rewards  # [32, 51]
         Tz = jnp.clip(
             target_categorial, self.categorial_min, self.categorial_max
         )  # clip to range of bar

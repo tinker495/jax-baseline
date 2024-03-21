@@ -191,7 +191,7 @@ class C51(Q_Network_Family):
         target_distribution = self._target(
             params, target_params, obses, actions, rewards, nxtobses, not_dones, key
         )
-        (loss, abs_error), grad = jax.value_and_grad(self._loss, has_aux=True)(
+        (loss, KLdiv), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params, obses, actions, target_distribution, weights, key
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
@@ -199,7 +199,7 @@ class C51(Q_Network_Family):
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
-            new_priorities = abs_error
+            new_priorities = KLdiv
         return (
             params,
             target_params,
@@ -218,8 +218,8 @@ class C51(Q_Network_Family):
         distribution = jnp.squeeze(
             jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         )
-        loss = jnp.sum(target_distribution * (-jnp.log(distribution + 1e-5)), axis=1)
-        return jnp.mean(loss), loss
+        KLdiv = jnp.sum(target_distribution * (-jnp.log(distribution + 1e-8)), axis=1)
+        return jnp.mean(KLdiv * weights), KLdiv
 
     def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params, nxtobses, key)
@@ -227,17 +227,16 @@ class C51(Q_Network_Family):
             next_action_q = jnp.sum(
                 self.get_q(params, nxtobses, key) * self._categorial_bar, axis=2
             )
-            next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
         else:
             next_action_q = jnp.sum(next_q * self._categorial_bar, axis=2)
-            next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
+        next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
         next_distribution = jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))
 
         if self.munchausen:
             next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
-            next_categorial = not_dones * (
-                self.categorial_bar - jnp.sum(pi_next * tau_log_pi_next, axis=1, keepdims=True)
+            next_categorial = self.categorial_bar - jnp.sum(
+                pi_next * tau_log_pi_next, axis=1, keepdims=True
             )
 
             q_k_targets = jnp.sum(
@@ -251,8 +250,8 @@ class C51(Q_Network_Family):
                 munchausen_addon, a_min=-1, a_max=0
             )
         else:
-            next_categorial = not_dones * self.categorial_bar
-        target_categorial = (next_categorial * self._gamma) + rewards  # [32, 51]
+            next_categorial = self.categorial_bar
+        target_categorial = self._gamma * not_dones * next_categorial + rewards  # [32, 51]
         Tz = jnp.clip(
             target_categorial, self.categorial_min, self.categorial_max
         )  # clip to range of bar

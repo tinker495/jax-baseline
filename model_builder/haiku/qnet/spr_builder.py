@@ -40,7 +40,7 @@ class Transition(hk.Module):
                     padding="SAME",
                     w_init=hk.initializers.Orthogonal(scale=1.0),
                 ),
-                hk.GroupNorm(4, axis=-1),
+                hk.GroupNorm(4),
                 jax.nn.relu,
             ]
         )
@@ -140,7 +140,7 @@ class Model(hk.Module):
                     hk.Reshape((self.action_size[0], self.categorial_bar_n)),
                 ]
             )(feature)
-            q = v + a - jnp.max(a, axis=1, keepdims=True)
+            q = v + a - jnp.mean(a, axis=1, keepdims=True)
             return jax.nn.softmax(q, axis=2)
 
 
