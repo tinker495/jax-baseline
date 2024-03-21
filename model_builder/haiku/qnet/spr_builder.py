@@ -57,13 +57,22 @@ class Prediction(hk.Module):
 
 
 class Model(hk.Module):
-    def __init__(self, action_size, node=256, hidden_n=2, noisy=False, dueling=False):
+    def __init__(
+        self,
+        action_size,
+        node=256,
+        hidden_n=2,
+        noisy=False,
+        dueling=False,
+        categorial_bar_n=51,
+    ):
         super().__init__()
         self.action_size = action_size
         self.node = node
         self.hidden_n = hidden_n
         self.noisy = noisy
         self.dueling = dueling
+        self.categorial_bar_n = categorial_bar_n
         if not noisy:
             self.layer = hk.Linear
         else:
@@ -78,19 +87,41 @@ class Model(hk.Module):
                 ]
             )(feature)
         if not self.dueling:
-            q_net = self.layer(
-                self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
+            q = hk.Sequential(
+                [
+                    self.layer(
+                        self.action_size[0] * self.categorial_bar_n,
+                        w_init=hk.initializers.RandomUniform(-0.03, 0.03),
+                    ),
+                    hk.Reshape((self.action_size[0], self.categorial_bar_n)),
+                ]
             )(feature)
-            return q_net
+            return jax.nn.softmax(q, axis=2)
         else:
-            v = self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))(feature)
-            a = self.layer(self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03))(
-                feature
-            )
-            return v + a - jnp.max(a, axis=1, keepdims=True)
+            v = hk.Sequential(
+                [
+                    self.layer(
+                        self.categorial_bar_n, w_init=hk.initializers.RandomUniform(-0.03, 0.03)
+                    ),
+                    hk.Reshape((1, self.categorial_bar_n)),
+                ]
+            )(feature)
+            a = hk.Sequential(
+                [
+                    self.layer(
+                        self.action_size[0] * self.categorial_bar_n,
+                        w_init=hk.initializers.RandomUniform(-0.03, 0.03),
+                    ),
+                    hk.Reshape((self.action_size[0], self.categorial_bar_n)),
+                ]
+            )(feature)
+            q = v + a - jnp.max(a, axis=1, keepdims=True)
+            return jax.nn.softmax(q, axis=2)
 
 
-def model_builder_maker(observation_space, action_space, dueling_model, param_noise, policy_kwargs):
+def model_builder_maker(
+    observation_space, action_space, dueling_model, param_noise, categorial_bar_n, policy_kwargs
+):
     policy_kwargs = {} if policy_kwargs is None else policy_kwargs
     if "embedding_mode" in policy_kwargs.keys():
         embedding_mode = policy_kwargs["embedding_mode"]
@@ -104,7 +135,11 @@ def model_builder_maker(observation_space, action_space, dueling_model, param_no
         )
         model = hk.transform(
             lambda x: Model(
-                action_space, dueling=dueling_model, noisy=param_noise, **policy_kwargs
+                action_space,
+                dueling=dueling_model,
+                noisy=param_noise,
+                categorial_bar_n=categorial_bar_n,
+                **policy_kwargs
             )(x)
         )
         transition = hk.transform(lambda x, y: Transition()(x, y))
