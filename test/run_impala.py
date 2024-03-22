@@ -38,7 +38,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
-    parser.add_argument("--mu_ratio", type=float, default=0.0, help="impala ppo mu ratio")
     args = parser.parse_args()
     env_name = args.env
     embedding_mode = "normal"
@@ -92,7 +91,6 @@ if __name__ == "__main__":
             batch_size=args.batch,
             sample_size=args.sample_size,
             buffer_size=int(args.buffer_size),
-            mu_ratio=args.mu_ratio,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
             val_coef=args.val_coef,
@@ -113,7 +111,6 @@ if __name__ == "__main__":
             batch_size=args.batch,
             sample_size=args.sample_size,
             buffer_size=int(args.buffer_size),
-            mu_ratio=args.mu_ratio,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
             val_coef=args.val_coef,

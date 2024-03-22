@@ -23,7 +23,6 @@ class IMPALA_PPO(IMPALA_Family):
         ent_coef=0.01,
         rho_max=1.0,
         ppo_eps=0.2,
-        mu_ratio=0.0,
         epoch_num=3,
         log_interval=1,
         tensorboard_log=None,
@@ -57,7 +56,6 @@ class IMPALA_PPO(IMPALA_Family):
         )
 
         self.name = "IMPALA_PPO"
-        self.mu_ratio = mu_ratio
         self.minibatch_size = 256
         self.epoch_num = epoch_num
         self.ppo_eps = ppo_eps
@@ -172,17 +170,11 @@ class IMPALA_PPO(IMPALA_Family):
         actions = jnp.vstack(actions)
         old_value = jnp.vstack(value)
         vs = jnp.vstack(vs)
+        mu_prob = jnp.vstack(mu_log_prob)
         pi_prob = jnp.vstack(pi_prob)
         rho = jnp.vstack(rho)
         adv = jnp.vstack(adv)
-        if self.mu_ratio != 0.0:
-            mu_prob = jnp.vstack(mu_log_prob)
-            out_prob = jnp.log(
-                self.mu_ratio * jnp.exp(mu_prob) + (1.0 - self.mu_ratio) * jnp.exp(pi_prob)
-            )
-            return obses, actions, old_value, vs, out_prob, rho, adv
-        else:
-            return obses, actions, old_value, vs, pi_prob, rho, adv
+        return obses, actions, old_value, vs, mu_prob, pi_prob, rho, adv
 
     def _train_step(
         self,
@@ -197,7 +189,7 @@ class IMPALA_PPO(IMPALA_Family):
         dones,
         terminals,
     ):
-        obses, actions, old_values, vs, pi_prob, rho, adv = self.preprocess(
+        obses, actions, old_values, vs, mu_prob, pi_prob, rho, adv = self.preprocess(
             params,
             key,
             obses,
@@ -219,16 +211,17 @@ class IMPALA_PPO(IMPALA_Family):
             actions_batch = actions[batch_idxes]
             old_values_batch = old_values[batch_idxes]
             vs_batch = vs[batch_idxes]
+            mu_prob_batch = mu_prob[batch_idxes]
             pi_prob_batch = pi_prob[batch_idxes]
             adv_batch = adv[batch_idxes]
 
             def f(updates, input):
                 params, opt_state, key = updates
-                obs, act, oldv, vs, pi_prob, adv = input
+                obs, act, oldv, vs, mu_prob, pi_prob, adv = input
                 use_key, key = jax.random.split(key)
                 (total_loss, (critic_loss, actor_loss, entropy_loss),), grad = jax.value_and_grad(
                     self._loss, has_aux=True
-                )(params, obs, act, oldv, vs, pi_prob, adv, use_key)
+                )(params, obs, act, oldv, vs, mu_prob, pi_prob, adv, use_key)
                 updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
                 params = optax.apply_updates(params, updates)
                 return (params, opt_state, key), (critic_loss, actor_loss, entropy_loss)
@@ -236,7 +229,15 @@ class IMPALA_PPO(IMPALA_Family):
             updates, losses = jax.lax.scan(
                 f,
                 (params, opt_state, key),
-                (obses_batch, actions_batch, old_values_batch, vs_batch, pi_prob_batch, adv_batch),
+                (
+                    obses_batch,
+                    actions_batch,
+                    old_values_batch,
+                    vs_batch,
+                    mu_prob_batch,
+                    pi_prob_batch,
+                    adv_batch,
+                ),
             )
             params, opt_state, key = updates
             cl, al, el = losses
@@ -257,7 +258,7 @@ class IMPALA_PPO(IMPALA_Family):
             jnp.mean(vs),
         )
 
-    def _loss_discrete(self, params, obses, actions, old_value, vs, mu_prob, adv, key):
+    def _loss_discrete(self, params, obses, actions, old_value, vs, mu_prob, pi_prob, adv, key):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
         # vals_clip = old_value + jnp.clip(vals - old_value, -self.ppo_eps, self.ppo_eps)
@@ -268,7 +269,8 @@ class IMPALA_PPO(IMPALA_Family):
 
         logit = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(logit, actions, key, out_prob=True)
-        ratio = jnp.exp(log_prob - mu_prob)
+        is_ratio = jnp.clip(jnp.exp(mu_prob - pi_prob), 0.0, 2.0)
+        ratio = is_ratio * jnp.exp(log_prob - mu_prob)
         cross_entropy1 = -adv * ratio
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
@@ -306,8 +308,6 @@ class IMPALA_PPO(IMPALA_Family):
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
-        if self.mu_ratio != 0.0:
-            tb_log_name += f"({self.mu_ratio:.2f})"
         super().learn(
             total_trainstep,
             callback,
