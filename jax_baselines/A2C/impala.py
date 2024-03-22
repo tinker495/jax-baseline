@@ -1,6 +1,5 @@
 import jax
 import jax.numpy as jnp
-import numpy as np
 import optax
 
 from jax_baselines.common.utils import convert_jax, get_vtrace
@@ -77,30 +76,6 @@ class IMPALA(IMPALA_Family):
             if self.action_type == "discrete"
             else jax.jit(self._loss_continuous)
         )
-
-    def get_logprob_discrete(self, prob, action, key, out_prob=False):
-        prob = jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0)
-        action = action.astype(jnp.int32)
-        if out_prob:
-            return prob, jnp.log(jnp.take_along_axis(prob, action, axis=1))
-        else:
-            return jnp.log(jnp.take_along_axis(prob, action, axis=1))
-
-    def get_logprob_continuous(self, prob, action, key, out_prob=False):
-        mu, log_std = prob
-        std = jnp.exp(log_std)
-        if out_prob:
-            return prob, -(
-                0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True)
-                + jnp.sum(log_std, axis=-1, keepdims=True)
-                + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
-            )
-        else:
-            return -(
-                0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True)
-                + jnp.sum(log_std, axis=-1, keepdims=True)
-                + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
-            )
 
     def train_step(self, steps):
         data = self.buffer.sample()
