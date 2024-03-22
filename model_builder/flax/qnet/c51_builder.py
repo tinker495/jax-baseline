@@ -66,7 +66,7 @@ class Model(nn.Module):
                     ),
                 ]
             )(feature)
-            q = v + a - jnp.max(a, axis=1, keepdims=True)
+            q = v + a - jnp.mean(a, axis=1, keepdims=True)
             return jax.nn.softmax(q, axis=2)
 
 

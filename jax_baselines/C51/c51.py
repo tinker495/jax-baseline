@@ -191,7 +191,7 @@ class C51(Q_Network_Family):
         target_distribution = self._target(
             params, target_params, obses, actions, rewards, nxtobses, not_dones, key
         )
-        (loss, KLdiv), grad = jax.value_and_grad(self._loss, has_aux=True)(
+        (loss, centropy), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params, obses, actions, target_distribution, weights, key
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
@@ -199,7 +199,7 @@ class C51(Q_Network_Family):
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
-            new_priorities = KLdiv
+            new_priorities = centropy
         return (
             params,
             target_params,
@@ -218,8 +218,8 @@ class C51(Q_Network_Family):
         distribution = jnp.squeeze(
             jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         )
-        KLdiv = jnp.sum(target_distribution * (-jnp.log(distribution + 1e-8)), axis=1)
-        return jnp.mean(KLdiv * weights), KLdiv
+        centropy = jnp.sum(target_distribution * (-jnp.log(distribution + 1e-8)), axis=1)
+        return jnp.mean(centropy * weights), centropy
 
     def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_dones, key):
         next_q = self.get_q(target_params, nxtobses, key)

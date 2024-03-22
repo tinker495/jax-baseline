@@ -340,7 +340,7 @@ class SPR(Q_Network_Family):
         transition_obses = [o[:, : (self.prediction_depth + 1)] for o in obses]
         transition_actions = actions[:, : self.prediction_depth]
         transition_filled = filled[:, : self.prediction_depth]
-        (loss, (KLdiv, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
+        (loss, (centropy, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params,
             target_params,
             transition_obses,
@@ -357,7 +357,7 @@ class SPR(Q_Network_Family):
         params = optax.apply_updates(params, updates)
         new_priorities = None
         if self.prioritized_replay:
-            new_priorities = KLdiv
+            new_priorities = centropy
         return (
             params,
             target_params,
@@ -390,13 +390,13 @@ class SPR(Q_Network_Family):
         distribution = jnp.squeeze(
             jnp.take_along_axis(self.get_q(params, parsed_obses, key), parsed_actions, axis=1)
         )
-        KLdiv = jnp.sum(
+        centropy = jnp.sum(
             target_distribution * (-jnp.log(distribution + 1e-8)), axis=1
         )  # jnp.mean(jnp.sum(jnp.square(error) * filled, axis=-1) / jnp.sum(filled, axis=-1) * weights)
-        mean_KLdiv = jnp.mean(KLdiv * weights)
+        mean_KLdiv = jnp.mean(centropy * weights)
         total_loss = mean_KLdiv + rprloss
         return total_loss, (
-            KLdiv,
+            centropy,
             mean_KLdiv,
             rprloss,
         )  # jnp.sum(jnp.abs(error) * filled, axis=-1) / jnp.sum(filled, axis=-1)
@@ -511,7 +511,7 @@ class SPR(Q_Network_Family):
             tb_log_name = "Double_" + tb_log_name
         if self.n_step_method:
             if self.off_policy_fix:
-                n_step_str = f"[{self.n_step}~1]Step_"
+                n_step_str = f"{self.n_step}~1Step_"
             else:
                 n_step_str = f"{self.n_step}Step_"
             tb_log_name = n_step_str + tb_log_name
