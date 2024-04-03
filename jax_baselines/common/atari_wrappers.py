@@ -5,7 +5,7 @@ from collections import defaultdict, deque
 import cv2
 import gymnasium as gym
 import numpy as np
-from gym import spaces
+from gymnasium import spaces
 
 from .wrappers import TimeLimit
 

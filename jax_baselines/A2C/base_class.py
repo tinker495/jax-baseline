@@ -4,7 +4,7 @@ import gymnasium as gym
 import jax
 import jax.numpy as jnp
 import numpy as np
-from gym import spaces
+from gymnasium import spaces
 from mlagents_envs.environment import ActionTuple, UnityEnvironment
 from tqdm.auto import trange
 
