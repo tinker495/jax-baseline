@@ -25,7 +25,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch", type=int, default=256, help="batch size")
     parser.add_argument("--steps", type=float, default=1e5, help="step size")
     parser.add_argument("--verbose", type=int, default=0, help="verbose")
-    parser.add_argument("--logdir", type=str, default="log/", help="log file dir")
+    parser.add_argument("--logdir", type=str, default="log/impala", help="log file dir")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     parser.add_argument("--node", type=int, default=256, help="network node number")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")

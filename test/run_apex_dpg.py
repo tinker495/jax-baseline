@@ -29,7 +29,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
     parser.add_argument("--verbose", type=int, default=0, help="verbose")
-    parser.add_argument("--logdir", type=str, default="log/", help="log file dir")
+    parser.add_argument("--logdir", type=str, default="log/apex_dpg/", help="log file dir")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     parser.add_argument("--n_support", type=int, default=25, help="n_support for QRDQN,IQN,FQF")
     parser.add_argument("--mixture", type=str, default="truncated", help="mixture type")
