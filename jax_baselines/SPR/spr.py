@@ -7,7 +7,7 @@ import optax
 
 from jax_baselines.common.utils import convert_jax, q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.SPR.cpprb_buffers import (
+from jax_baselines.SPR.efficent_buffer import (
     PrioritizedTransitionReplayBuffer,
     TransitionReplayBuffer,
 )
