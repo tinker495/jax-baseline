@@ -7,6 +7,7 @@ class Buffer(object):
         self._idx = 0
         self.ep_idx = 0
         self.obs_dict = obs_dict
+        self.env_dict = env_dict
         self.buffer = self.creat_buffer(size, obs_dict, env_dict)
 
     def creat_buffer(self, size: int, env_dict: dict):
@@ -33,22 +34,30 @@ class Buffer(object):
             self.buffer[name][self.next_roll_idx] = next_obs[k]
         for name, data in kwargs.items():
             self.buffer[name][self.roll_idx] = data
-        self.buffer["terminal"][self.roll_idx] = 0
         self.buffer["ep_idx"][self.roll_idx] = self.ep_idx
         self.update_idx()
 
-    def on_episode_end(self, obs, terminal):
+    def on_episode_end(self, terminal):
         if not terminal:
-            self.update_idx()
-            for name in self.obs_dict.keys():
-                self.buffer[name][self.roll_idx] = obs[name]
-            self.buffer["terminal"][self.roll_idx] = 1
+            self.buffer["ep_idx"][self.roll_idx] = -1
             self.update_idx()
         self.ep_idx += 1
 
-    def sample_idxs(self, batch_size):
+    def sample(self, batch_size, traj_len=5):
         idxs = np.random.randint(0, self.get_stored_size(), size=batch_size)
-        return idxs
+        idxs = np.reshape(
+            np.where(self.buffer["ep_idx"][idxs] != -1, idxs, idxs - 1), (batch_size, 1)
+        )
+        obs_traj_idxs = (idxs + np.reshape(np.arange(traj_len + 1), (1, traj_len))) % self.max_size
+        traj_idxs = (idxs + np.reshape(np.arange(traj_len), (1, traj_len))) % self.max_size
+        obs = {}
+        for name in self.obs_dict.keys():
+            obs[name] = self.buffer[name][obs_traj_idxs]
+        data = {}
+        for name in self.env_dict.keys():
+            data[name] = self.buffer[name][traj_idxs]
+        filled = np.equal(self.buffer["ep_idx"][idxs], self.buffer["ep_idx"][traj_idxs])
+        return obs, data, filled
 
     @property
     def roll_idx_m1(self):
