@@ -81,6 +81,7 @@ class TransitionReplayBuffer(object):
         prediction_depth=5,
     ):
         self.max_size = size
+        self.prediction_depth = prediction_depth
         self.obsdict = dict(
             (
                 "obs{}".format(idx),
@@ -126,3 +127,26 @@ class TransitionReplayBuffer(object):
 
     def sample(self, batch_size: int):
         pass
+
+
+if __name__ == "__main__":
+    buffer = TransitionReplayBuffer(
+        20, observation_space=[(4,)], action_space=1, prediction_depth=5
+    )
+    for idx in range(10):
+        buffer.add(
+            [np.arange(idx, idx + 4)],
+            idx + 1,
+            idx + 1,
+            [np.arange(idx + 1, idx + 5)],
+            False,
+            truncated=False,
+        )
+    buffer.add(
+        [np.arange(idx, idx + 4)],
+        idx + 1,
+        idx + 1,
+        [np.arange(idx + 1, idx + 5)],
+        True,
+        truncated=True,
+    )
