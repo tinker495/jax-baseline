@@ -42,7 +42,6 @@ class Buffer(object):
         if not terminal:
             self.update_idx()
             self.buffer["ep_idx"][self.roll_idx] = -1
-            self.update_idx()
         self.ep_idx += 1
 
     def sample(self, idxs, traj_len=5):
@@ -59,6 +58,7 @@ class Buffer(object):
             data[k] = self.buffer[k][traj_idxs]
         terminal = self.buffer["terminal"][traj_idxs, 0]
         filled = np.equal(self.buffer["ep_idx"][idxs], self.buffer["ep_idx"][traj_idxs])[..., 0]
+        filled = np.logical_and(filled, np.logical_not(terminal))
         return obs, data, terminal, filled, idxs
 
     @property
@@ -243,7 +243,8 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
             priorities[i] = p
             buffer_idxs[i] = buffer_idx
         obs, data, terminal, filled, _ = self.buffer.sample(buffer_idxs, traj_len=self.prediction_depth)
-        weight = np.power(priorities / self.tree.total(), -beta)
+        sampling_probabilities = priorities / self.tree.total()
+        weight = np.power(self.tree.n_entries * sampling_probabilities, -beta)
         weight /= weight.max()
         return {
             "obses": obs,
@@ -261,36 +262,6 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
 
 
 if __name__ == "__main__":
-    buffer = TransitionReplayBuffer(
-        20, observation_space=[(4,)], action_space=1, prediction_depth=5
-    )
-    for idx in range(10):
-        buffer.add(
-            [np.arange(idx, idx + 4)],
-            idx + 1,
-            idx + 1,
-            [np.arange(idx + 1, idx + 5)],
-            False,
-            truncated=False,
-        )
-    buffer.add(
-        [np.arange(idx, idx + 4)],
-        idx + 1,
-        idx + 1,
-        [np.arange(idx + 1, idx + 5)],
-        True,
-        truncated=True,
-    )
-    sample = buffer.sample(5)
-    print("shape : ")
-    for k, v in sample.items():
-        if v is not None and isinstance(v, list):
-            for idx, a in enumerate(v):
-                print(k+str(idx), a.shape)
-        else:
-            print(k, v.shape)
-    #print("sample : ", sample)
-
     buffer = PrioritizedTransitionReplayBuffer(
         20, observation_space=[(4,)], action_space=1, prediction_depth=5, alpha=0.6, eps=1e-6
     )
@@ -303,14 +274,6 @@ if __name__ == "__main__":
             False,
             truncated=False,
         )
-    buffer.add(
-        [np.arange(idx, idx + 4)],
-        idx + 1,
-        idx + 1,
-        [np.arange(idx + 1, idx + 5)],
-        True,
-        truncated=True,
-    )
     sample = buffer.sample(1)
     print("shape : ")
     for k, v in sample.items():
@@ -321,6 +284,14 @@ if __name__ == "__main__":
             print(k, v.shape)
 
     print("sample : ", sample)
+    buffer.add(
+        [np.arange(idx, idx + 4)],
+        idx + 1,
+        idx + 1,
+        [np.arange(idx + 1, idx + 5)],
+        True,
+        truncated=True,
+    )
 
 
     buffer.update_priorities(sample["indexes"], np.random.rand(5))
