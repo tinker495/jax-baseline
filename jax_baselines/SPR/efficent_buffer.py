@@ -254,15 +254,15 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
             priorities[i] = p
             buffer_idxs[i] = buffer_idx
         obs, data, terminal, filled, _ = self.buffer.sample(buffer_idxs, traj_len=self.prediction_depth)
-        #weight = np.power(self.tree.n_entries * priorities / self.tree.total(), -beta)
-        #weight_max = np.power(self.tree.n_entries * self.tree.min() / self.tree.total(), -beta)
-        #weights = weight / weight_max
+        weight = np.power(self.tree.n_entries * priorities / self.tree.total(), -beta)
+        weight_max = np.power(self.tree.n_entries * self.tree.min() / self.tree.total(), -beta)
+        weights = weight / weight_max
         return {
             "obses": obs,
             **data,
             "dones": terminal,
             "filled": filled,
-            "weights": 1,
+            "weights": weights,
             "indexes": idxs,
         }
     
