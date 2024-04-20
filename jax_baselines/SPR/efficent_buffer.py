@@ -78,9 +78,11 @@ class SumTree:
 
     def __init__(self, capacity):
         self.capacity = capacity
-        self.tree = np.zeros(2 * capacity - 1, dtype=np.float32)
+        self.tree = np.zeros(2 * capacity - 1, dtype=np.float64)
         self.data = np.zeros(capacity, dtype=np.int32)
         self.n_entries = 0
+        self.max_priority = 1.0
+        self.min_priority = np.inf
 
     # update to the root node
     def _propagate(self, idx, change):
@@ -105,7 +107,16 @@ class SumTree:
             return self._retrieve(right, s - self.tree[left])
 
     def total(self):
+        # all sum of priorities
         return self.tree[0]
+    
+    def max(self):
+        # return the max priority
+        return self.max_priority
+    
+    def min(self):
+        # return the min priority
+        return self.min_priority
 
     # store priority and sample
     def add(self, p, data):
@@ -123,6 +134,8 @@ class SumTree:
 
     # update priority
     def update(self, idx, p):
+        self.max_priority = max(p, self.max_priority)
+        self.min_priority = min(p, self.min_priority)
         change = p - self.tree[idx]
 
         self.tree[idx] = p
@@ -225,7 +238,7 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
             rewards=reward,
             terminal=terminal,
         )
-        self.tree.add(self.eps, idx)
+        self.tree.add(self.tree.max(), idx)
         if terminal or truncated:
             self.buffer.on_episode_end(terminal)
 
@@ -233,25 +246,23 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
         idxs = np.zeros((batch_size), dtype=np.int32)
         priorities = np.zeros((batch_size), dtype=np.float32)
         buffer_idxs = np.zeros((batch_size), dtype=np.int32)
-        segment = self.tree.total() / batch_size
+        segment = self.tree.total()
         for i in range(batch_size):
-            a = segment * i
-            b = segment * (i + 1)
-            s = np.random.uniform(a, b)
+            s = np.random.uniform(0, segment)
             idx, p, buffer_idx = self.tree.get(s)
             idxs[i] = idx
             priorities[i] = p
             buffer_idxs[i] = buffer_idx
         obs, data, terminal, filled, _ = self.buffer.sample(buffer_idxs, traj_len=self.prediction_depth)
-        sampling_probabilities = priorities / self.tree.total()
-        weight = np.power(self.tree.n_entries * sampling_probabilities, -beta)
-        weight /= weight.max()
+        #weight = np.power(self.tree.n_entries * priorities / self.tree.total(), -beta)
+        #weight_max = np.power(self.tree.n_entries * self.tree.min() / self.tree.total(), -beta)
+        #weights = weight / weight_max
         return {
             "obses": obs,
             **data,
             "dones": terminal,
             "filled": filled,
-            "weights": weight,
+            "weights": 1,
             "indexes": idxs,
         }
     
