@@ -194,8 +194,8 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
             "indexes": smpl["indexes"],
         }
 
-    def update_priorities(self, indexes, abs_errors):
-        self.buffer.update_priorities(indexes, abs_errors)
+    def update_priorities(self, indexes, priorities):
+        self.buffer.update_priorities(indexes, priorities)
 
 
 if __name__ == "__main__":
@@ -233,11 +233,10 @@ if __name__ == "__main__":
     for k, v in sample.items():
         if v is not None and isinstance(v, list):
             for idx, a in enumerate(v):
-                print(k+str(idx), a.shape)
+                print(k + str(idx), a.shape)
         else:
             print(k, v.shape)
 
     print("sample : ", sample)
-
 
     buffer.update_priorities(sample["indexes"], np.random.rand(5))

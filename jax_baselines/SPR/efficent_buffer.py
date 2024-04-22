@@ -48,7 +48,9 @@ class Buffer(object):
         is_last = np.equal(self.buffer["ep_idx"][idxs], -1)[..., 0]
         idxs = np.where(is_last, idxs - 1, idxs)
         idxs = np.expand_dims(idxs, axis=1)
-        obs_traj_idxs = (idxs + np.reshape(np.arange(traj_len + 1), (1, traj_len+1))) % self.max_size
+        obs_traj_idxs = (
+            idxs + np.reshape(np.arange(traj_len + 1), (1, traj_len + 1))
+        ) % self.max_size
         traj_idxs = (idxs + np.reshape(np.arange(traj_len), (1, traj_len))) % self.max_size
         obs = []
         for k in self.obs_dict:
@@ -72,6 +74,7 @@ class Buffer(object):
     @property
     def roll_idx(self):
         return self._idx % self.max_size
+
 
 class SumTree:
     write = 0
@@ -109,11 +112,11 @@ class SumTree:
     def total(self):
         # all sum of priorities
         return self.tree[0]
-    
+
     def max(self):
         # return the max priority
         return self.max_priority
-    
+
     def min(self):
         # return the min priority
         return self.min_priority
@@ -133,9 +136,9 @@ class SumTree:
             self.n_entries += 1
 
     # update priority
-    def update(self, idx, p):
-        self.max_priority = max(p, self.max_priority)
-        self.min_priority = min(p, self.min_priority)
+    def update(self, idx, p, minmax_decay=1e-4):
+        self.max_priority = max(p, self.max_priority * (1.0 - minmax_decay))
+        self.min_priority = min(p, self.min_priority * (1.0 + minmax_decay))
         change = p - self.tree[idx]
 
         self.tree[idx] = p
@@ -147,6 +150,7 @@ class SumTree:
         dataIdx = idx - self.capacity + 1
 
         return (idx, self.tree[idx], self.data[dataIdx])
+
 
 class TransitionReplayBuffer(object):
     def __init__(
@@ -253,7 +257,9 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
             idxs[i] = idx
             priorities[i] = p
             buffer_idxs[i] = buffer_idx
-        obs, data, terminal, filled, _ = self.buffer.sample(buffer_idxs, traj_len=self.prediction_depth)
+        obs, data, terminal, filled, _ = self.buffer.sample(
+            buffer_idxs, traj_len=self.prediction_depth
+        )
         weight = np.power(self.tree.n_entries * priorities / self.tree.total(), -beta)
         weight_max = np.power(self.tree.n_entries * self.tree.min() / self.tree.total(), -beta)
         weights = weight / weight_max
@@ -265,9 +271,9 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
             "weights": weights,
             "indexes": idxs,
         }
-    
-    def update_priorities(self, indexes, abs_errors):
-        priorities = np.power(abs_errors + self.eps, self.alpha)
+
+    def update_priorities(self, indexes, priorities):
+        priorities = np.power(priorities + self.eps, self.alpha)
         for idx, p in zip(indexes, priorities):
             self.tree.update(idx, p)
 
@@ -290,7 +296,7 @@ if __name__ == "__main__":
     for k, v in sample.items():
         if v is not None and isinstance(v, list):
             for idx, a in enumerate(v):
-                print(k+str(idx), a.shape)
+                print(k + str(idx), a.shape)
         else:
             print(k, v.shape)
 
@@ -303,6 +309,5 @@ if __name__ == "__main__":
         True,
         truncated=True,
     )
-
 
     buffer.update_priorities(sample["indexes"], np.random.rand(5))
