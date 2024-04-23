@@ -1,3 +1,5 @@
+import random
+
 import numpy as np
 
 
@@ -250,9 +252,10 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
         idxs = np.zeros((batch_size), dtype=np.int32)
         priorities = np.zeros((batch_size), dtype=np.float32)
         buffer_idxs = np.zeros((batch_size), dtype=np.int32)
-        segment = self.tree.total()
+        segment = self.tree.total() / batch_size
         for i in range(batch_size):
-            s = np.random.uniform(0, segment)
+            a, b = segment * i, segment * (i + 1)
+            s = random.uniform(a, b)
             idx, p, buffer_idx = self.tree.get(s)
             idxs[i] = idx
             priorities[i] = p
