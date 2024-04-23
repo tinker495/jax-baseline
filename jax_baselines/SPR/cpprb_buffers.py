@@ -199,10 +199,9 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
 
 
 if __name__ == "__main__":
-    buffer = TransitionReplayBuffer(
-        100, observation_space=[(4,)], action_space=1, prediction_depth=5
+    buffer = PrioritizedTransitionReplayBuffer(
+        20, observation_space=[(4,)], action_space=1, prediction_depth=5, alpha=0.6, eps=1e-6
     )
-    print(buffer.roller.get_transition())
     for idx in range(10):
         buffer.add(
             [np.arange(idx, idx + 4)],
@@ -212,7 +211,6 @@ if __name__ == "__main__":
             False,
             truncated=False,
         )
-        print(buffer.roller.get_transition())
     buffer.add(
         [np.arange(idx, idx + 4)],
         idx + 1,
@@ -221,4 +219,24 @@ if __name__ == "__main__":
         True,
         truncated=True,
     )
-    print(buffer.buffer.get_all_transitions())
+    for idx in range(10):
+        buffer.add(
+            [np.arange(idx, idx + 4)],
+            idx + 1,
+            idx + 1,
+            [np.arange(idx + 1, idx + 5)],
+            False,
+            truncated=False,
+        )
+    sample = buffer.sample(1)
+    print("shape : ")
+    for k, v in sample.items():
+        if v is not None and isinstance(v, list):
+            for idx, a in enumerate(v):
+                print(k + str(idx), a.shape)
+        else:
+            print(k, v.shape)
+
+    print("sample : ", sample)
+
+    buffer.update_priorities(sample["indexes"], np.random.rand(5))
