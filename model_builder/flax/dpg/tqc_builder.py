@@ -52,7 +52,7 @@ class Critic(nn.Module):
         return q_net
 
 
-def model_builder_maker(observation_space, action_size, policy_kwargs):
+def model_builder_maker(observation_space, action_size, support_n, policy_kwargs):
     policy_kwargs = {} if policy_kwargs is None else policy_kwargs
     if "embedding_mode" in policy_kwargs.keys():
         embedding_mode = policy_kwargs["embedding_mode"]
@@ -65,8 +65,8 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
             def setup(self):
                 self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
                 self.act = Actor(action_size, **policy_kwargs)
-                self.crit1 = Critic(**policy_kwargs)
-                self.crit2 = Critic(**policy_kwargs)
+                self.crit1 = Critic(support_n=support_n, **policy_kwargs)
+                self.crit2 = Critic(support_n=support_n, **policy_kwargs)
 
             def __call__(self, x):
                 feature = self.preprocess(x)

@@ -110,10 +110,14 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.checkpoint_encoder_params = deepcopy(self.encoder_params)
         self.checkpoint_params = deepcopy(self.params)
 
-        self.params["min_value"] = jnp.array([np.inf], dtype=jnp.float32)
-        self.params["max_value"] = jnp.array([-np.inf], dtype=jnp.float32)
-        self.target_params["min_value"] = jnp.array([0], dtype=jnp.float32)
-        self.target_params["max_value"] = jnp.array([0], dtype=jnp.float32)
+        self.params["values"] = {
+            "min_value": jnp.array([np.inf], dtype=jnp.float32),
+            "max_value": jnp.array([-np.inf], dtype=jnp.float32),
+        }
+        self.target_params["values"] = {
+            "min_value": jnp.array([0], dtype=jnp.float32),
+            "max_value": jnp.array([0], dtype=jnp.float32),
+        }
 
         self.encoder_opt_state = self.optimizer.init(self.encoder_params)
         self.opt_state = self.optimizer.init(self.params)
@@ -215,8 +219,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
             self.summary.add_scalar("loss/encoder_loss", repr_loss, steps)
             self.summary.add_scalar("loss/qloss", loss, steps)
             self.summary.add_scalar("loss/targets", t_mean, steps)
-            self.summary.add_scalar("loss/min_value", self.params["min_value"], steps)
-            self.summary.add_scalar("loss/max_value", self.params["max_value"], steps)
+            self.summary.add_scalar("loss/min_value", self.params["values"]["min_value"], steps)
+            self.summary.add_scalar("loss/max_value", self.params["values"]["max_value"], steps)
 
         return loss
 
@@ -254,8 +258,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
         targets = self._target(
             fixed_encoder_target_params, target_params, rewards, nxtobses, not_terminateds, key
         )
-        params["min_value"] = jnp.minimum(jnp.min(targets), params["min_value"])
-        params["max_value"] = jnp.maximum(jnp.max(targets), params["max_value"])
+        params["values"]["min_value"] = jnp.minimum(jnp.min(targets), params["values"]["min_value"])
+        params["values"]["max_value"] = jnp.maximum(jnp.max(targets), params["values"]["max_value"])
 
         (total_loss, (critic_loss, actor_loss, priority)), grad = jax.value_and_grad(
             self._loss, has_aux=True
@@ -340,7 +344,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             target_params, key, next_feature, fixed_target_zs, fixed_target_zsa, next_action
         )
         next_q = jnp.clip(
-            jnp.minimum(q1, q2), target_params["min_value"], target_params["max_value"]
+            jnp.minimum(q1, q2), target_params["values"]["min_value"], target_params["values"]["max_value"]
         )
         return rewards + not_terminateds * self.gamma * next_q
 

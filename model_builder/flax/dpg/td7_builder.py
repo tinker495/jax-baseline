@@ -80,7 +80,7 @@ class Critic(nn.Module):
         q0 = avgl1norm(self.layer(self.node)(concat))
         embed_concat = jnp.concatenate([q0, embedding], axis=1)
         q_net = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            [self.layer(self.node) if i % 2 == 0 else jax.nn.elu for i in range(2 * self.hidden_n)]
             + [self.layer(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))]
         )(embed_concat)
         return q_net
@@ -144,14 +144,14 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
             encoder_params = encoder_model.init(
                 key,
                 [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                np.zeros((1, action_size), dtype=np.float32),
+                np.zeros((1, *action_size), dtype=np.float32),
             )
             params = model.init(
                 key,
                 *encoder_model.apply(
                     encoder_params,
                     [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                    np.zeros((1, action_size), dtype=np.float32),
+                    np.zeros((1, *action_size), dtype=np.float32),
                 )
             )
 
