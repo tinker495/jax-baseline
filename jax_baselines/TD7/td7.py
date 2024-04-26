@@ -67,9 +67,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
         self.name = "TD7"
         self.action_noise = action_noise
-        self._action_noise = action_noise**2
         self.target_action_noise = action_noise * target_action_noise_mul
-        self._target_action_noise = self.target_action_noise**2
         self.action_noise_clamp = 0.5  # self.target_action_noise*1.5
         self.target_network_update_freq = target_network_update_freq
         self.policy_delay = policy_delay
@@ -145,8 +143,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
             if exploration:
                 actions = np.clip(
                     actions
-                    + np.random.normal(
-                        0, self._action_noise, size=(self.worker_size, self.action_size[0])
+                    + self.action_noise * np.random.normal(
+                        0, 1, size=(self.worker_size, self.action_size[0])
                     ),
                     -1,
                     1,
@@ -337,7 +335,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         next_action = jnp.clip(
             self.actor(target_params, key, next_feature, fixed_target_zs)
             + jnp.clip(
-                self._target_action_noise
+                self.target_action_noise
                 * jax.random.normal(key, (self.batch_size, self.action_size[0])),
                 -self.action_noise_clamp,
                 self.action_noise_clamp,

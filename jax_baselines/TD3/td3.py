@@ -65,9 +65,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
 
         self.name = "TD3"
         self.action_noise = action_noise
-        self._action_noise = action_noise**2
         self.target_action_noise = action_noise * target_action_noise_mul
-        self._target_action_noise = self.target_action_noise**2
         self.action_noise_clamp = 0.5  # self.target_action_noise*1.5
         self.policy_delay = policy_delay
 
@@ -101,8 +99,8 @@ class TD3(Deteministic_Policy_Gradient_Family):
         if self.learning_starts < steps:
             actions = np.clip(
                 np.asarray(self._get_actions(self.params, obs, None))
-                + np.random.normal(
-                    0, self._action_noise, size=(self.worker_size, self.action_size[0])
+                + self.action_noise * np.random.normal(
+                    0, 1, size=(self.worker_size, self.action_size[0])
                 ),
                 -1,
                 1,
@@ -195,7 +193,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         next_action = jnp.clip(
             self.actor(target_params, key, next_feature)
             + jnp.clip(
-                self._target_action_noise
+                self.target_action_noise
                 * jax.random.normal(key, (self.batch_size, self.action_size[0])),
                 -self.action_noise_clamp,
                 self.action_noise_clamp,
