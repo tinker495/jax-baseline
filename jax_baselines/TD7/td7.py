@@ -78,7 +78,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.min_return = 1e8
         self.best_min_return = -1e8
 
-        self.steps_before_checkpointing = int(1e5)
+        self.steps_before_checkpointing = int(75e4)
         self.max_eps_before_checkpointing = 25
 
         self.eval_env = eval_env
@@ -315,7 +315,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         error2 = jnp.squeeze(q2 - targets)
         critic_loss = jnp.mean(hubberloss(error1, 1.0)) + jnp.mean(hubberloss(error2, 1.0))
 
-        priority = jnp.minimum(jnp.maximum(jnp.abs(error1), jnp.abs(error2)), 1.0)
+        priority = jnp.maximum(jnp.maximum(jnp.abs(error1), jnp.abs(error2)), 1.0)
 
         policy = self.actor(params, key, feature, zs)
         policy_zsa = self.action_encoder(fixed_encoder_params, key, zs, policy)
