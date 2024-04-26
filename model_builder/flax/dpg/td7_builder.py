@@ -15,7 +15,7 @@ def avgl1norm(x, epsilon=1e-6):
 
 class Encoder(nn.Module):
     node: int = 256
-    hidden_n: int = 2
+    hidden_n: int = 3
     layer: nn.Module = nn.Dense
 
     @nn.compact
@@ -31,7 +31,7 @@ class Encoder(nn.Module):
 
 class Action_Encoder(nn.Module):
     node: int = 256
-    hidden_n: int = 2
+    hidden_n: int = 3
     layer: nn.Module = nn.Dense
 
     @nn.compact
