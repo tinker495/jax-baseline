@@ -1,4 +1,3 @@
-from collections import deque
 from copy import deepcopy
 
 import jax
@@ -68,7 +67,9 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
         self.name = "TD7"
         self.action_noise = action_noise
+        self._action_noise = action_noise**2
         self.target_action_noise = action_noise * target_action_noise_mul
+        self._target_action_noise = action_noise**2
         self.action_noise_clamp = 0.5  # self.target_action_noise*1.5
         self.target_network_update_freq = target_network_update_freq
         self.policy_delay = policy_delay
@@ -129,9 +130,6 @@ class TD7(Deteministic_Policy_Gradient_Family):
         zs = self.encoder(encoder_params, key, feature)
         return self.actor(params, key, feature, zs)
 
-    def discription(self):
-        return "score : {:.3f} |".format(np.mean(self.scoreque))
-
     def actions(self, obs, steps, use_checkpoint=False, exploration=True):
         if self.learning_starts < steps:
             if use_checkpoint:
@@ -148,7 +146,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
                 actions = np.clip(
                     actions
                     + np.random.normal(
-                        0, self.action_noise, size=(self.worker_size, self.action_size[0])
+                        0, self._action_noise, size=(self.worker_size, self.action_size[0])
                     ),
                     -1,
                     1,
@@ -158,6 +156,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
         return actions
 
     def end_episode(self, steps, score, eplen):
+        if self.learning_starts > steps:
+            return
         self.eps_since_update += 1
         self.timesteps_since_update += eplen
 
@@ -176,7 +176,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
     def train_and_reset(self, steps):
         if steps > self.steps_before_checkpointing:
             self.max_eps_before_update = self.max_eps_before_checkpointing
-        self.train_step(steps, self.timesteps_since_update * self.gradient_steps)
+        self.loss_mean = self.train_step(steps, self.timesteps_since_update * self.gradient_steps)
 
         self.eps_since_update = 0
         self.timesteps_since_update = 0
@@ -184,6 +184,9 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
+        repr_losses = []
+        losses = []
+        targets = []
         for _ in range(gradient_steps):
             self.train_steps_count += 1
             data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
@@ -212,17 +215,24 @@ class TD7(Deteministic_Policy_Gradient_Family):
                 self.train_steps_count,
                 **data,
             )
+            repr_losses.append(repr_loss)
+            losses.append(loss)
+            targets.append(t_mean)
 
             self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
+        mean_repr_loss = jnp.mean(jnp.array(repr_losses))
+        mean_loss = jnp.mean(jnp.array(losses))
+        mean_target = jnp.mean(jnp.array(targets))
+
         if self.summary:
-            self.summary.add_scalar("loss/encoder_loss", repr_loss, steps)
-            self.summary.add_scalar("loss/qloss", loss, steps)
-            self.summary.add_scalar("loss/targets", t_mean, steps)
+            self.summary.add_scalar("loss/encoder_loss", mean_repr_loss, steps)
+            self.summary.add_scalar("loss/qloss", mean_loss, steps)
+            self.summary.add_scalar("loss/targets", mean_target, steps)
             self.summary.add_scalar("loss/min_value", self.params["values"]["min_value"], steps)
             self.summary.add_scalar("loss/max_value", self.params["values"]["max_value"], steps)
 
-        return loss
+        return mean_loss
 
     def _train_step(
         self,
@@ -327,7 +337,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         next_action = jnp.clip(
             self.actor(target_params, key, next_feature, fixed_target_zs)
             + jnp.clip(
-                self.target_action_noise
+                self._target_action_noise
                 * jax.random.normal(key, (self.batch_size, self.action_size[0])),
                 -self.action_noise_clamp,
                 self.action_noise_clamp,
@@ -344,9 +354,14 @@ class TD7(Deteministic_Policy_Gradient_Family):
             target_params, key, next_feature, fixed_target_zs, fixed_target_zsa, next_action
         )
         next_q = jnp.clip(
-            jnp.minimum(q1, q2), target_params["values"]["min_value"], target_params["values"]["max_value"]
+            jnp.minimum(q1, q2),
+            target_params["values"]["min_value"],
+            target_params["values"]["max_value"],
         )
         return rewards + not_terminateds * self.gamma * next_q
+
+    def discription(self):
+        return "score : {:.3f}, loss : {:.3f} |".format(self.score_mean, self.loss_mean)
 
     def learn(
         self,
@@ -377,7 +392,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
         state = [np.expand_dims(state, axis=0)]
         self.scores = np.zeros([self.worker_size])
         self.eplen = np.zeros([self.worker_size], dtype=np.int32)
-        self.scoreque = deque(maxlen=10)
+        self.score_mean = None
+        self.loss_mean = None
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(state, steps)
@@ -393,13 +409,16 @@ class TD7(Deteministic_Policy_Gradient_Family):
                 state, info = self.env.reset()
                 state = [np.expand_dims(state, axis=0)]
 
-            if steps % log_interval == 0 and len(self.scoreque) > 0:
+            if (
+                steps % log_interval == 0
+                and self.loss_mean is not None
+                and self.score_mean is not None
+            ):
                 pbar.set_description(self.discription())
 
             if steps % self.eval_freq == 0:
-                self.eval(steps)
-        self.eval(steps + 1)
-        return np.mean(self.scoreque)
+                self.score_mean = self.eval(steps)
+        return self.eval(steps + 1)
 
     def eval(self, steps):
         total_reward = np.zeros(self.eval_eps)
@@ -424,7 +443,10 @@ class TD7(Deteministic_Policy_Gradient_Family):
             total_ep_len[ep] = eplen
             total_truncated[ep] = float(truncated)
 
+        mean_reward = np.mean(total_reward)
+
         if self.summary:
-            self.summary.add_scalar("env/episode_reward", np.mean(total_reward), steps)
+            self.summary.add_scalar("env/episode_reward", mean_reward, steps)
             self.summary.add_scalar("env/episode len", np.mean(total_ep_len), steps)
             self.summary.add_scalar("env/time over", np.mean(total_truncated), steps)
+        return mean_reward
