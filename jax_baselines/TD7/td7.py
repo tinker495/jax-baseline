@@ -29,9 +29,10 @@ class TD7(Deteministic_Policy_Gradient_Family):
         policy_delay=2,
         learning_starts=1000,
         target_network_update_freq=250,
+        prioritized_replay=False,
         prioritized_replay_alpha=0.4,
         prioritized_replay_beta0=0.4,
-        prioritized_replay_eps=1e-3,
+        prioritized_replay_eps=0,
         log_interval=200,
         tensorboard_log=None,
         _init_setup_model=True,
@@ -52,7 +53,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             1,
             learning_starts,
             0,
-            True,
+            prioritized_replay,
             prioritized_replay_alpha,
             prioritized_replay_beta0,
             prioritized_replay_eps,
@@ -78,7 +79,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.min_return = 1e8
         self.best_min_return = -1e8
 
-        self.steps_before_checkpointing = int(75e4)
+        self.checkpointing = False
+        self.steps_before_checkpointing = int(5e5)
         self.max_eps_before_checkpointing = 25
 
         self.eval_env = eval_env
@@ -161,7 +163,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
         self.min_return = min(self.min_return, score)
         # End evaluation of current policy early
-        if self.min_return < self.best_min_return:
+        if self.checkpointing and self.min_return < self.best_min_return:
             self.train_and_reset(steps)
 
         # Update checkpoint
@@ -172,8 +174,10 @@ class TD7(Deteministic_Policy_Gradient_Family):
             self.train_and_reset(steps)
 
     def train_and_reset(self, steps):
-        if steps > self.steps_before_checkpointing:
+        if not self.checkpointing and steps > self.steps_before_checkpointing:
+            self.best_min_return = 0.9 * self.best_min_return
             self.max_eps_before_update = self.max_eps_before_checkpointing
+            self.checkpointing = True
         self.loss_mean = self.train_step(steps, self.timesteps_since_update * self.gradient_steps)
 
         self.eps_since_update = 0
@@ -187,7 +191,10 @@ class TD7(Deteministic_Policy_Gradient_Family):
         targets = []
         for _ in range(gradient_steps):
             self.train_steps_count += 1
-            data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
+            if self.prioritized_replay:
+                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
+            else:
+                data = self.replay_buffer.sample(self.batch_size)
 
             (
                 self.encoder_params,
@@ -217,7 +224,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
             losses.append(loss)
             targets.append(t_mean)
 
-            self.replay_buffer.update_priorities(data["indexes"], new_priorities)
+            if self.prioritized_replay:
+                self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
         mean_repr_loss = jnp.mean(jnp.array(repr_losses))
         mean_loss = jnp.mean(jnp.array(losses))
