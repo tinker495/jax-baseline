@@ -203,7 +203,6 @@ if __name__ == "__main__":
             buffer_size=int(args.buffer_size),
             target_network_update_freq=250,
             learning_starts=args.learning_starts,
-            prioritized_replay=args.per,
             action_noise=args.action_noise,
             train_freq=args.train_freq,
             seed=args.seed,
