@@ -78,7 +78,7 @@ class HL_GAUSS_C51(Q_Network_Family):
             compress_memory,
         )
 
-        self.name = "C51"
+        self.name = "HL_GAUSS_C51"
         self.sigma = 0.75
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = float(categorial_max)
@@ -266,7 +266,7 @@ class HL_GAUSS_C51(Q_Network_Family):
         total_timesteps,
         callback=None,
         log_interval=100,
-        tb_log_name="C51",
+        tb_log_name="HL_GAUSS_C51",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
