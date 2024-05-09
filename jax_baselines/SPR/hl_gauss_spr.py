@@ -391,7 +391,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
         centropy = jnp.sum(
             target_distribution * (-jnp.log(distribution + 1e-8)), axis=1
         )  # jnp.mean(jnp.sum(jnp.square(error) * filled, axis=-1) / jnp.sum(filled, axis=-1) * weights)
-        mean_KLdiv = jnp.mean(centropy * weights)
+        mean_KLdiv = jnp.mean(centropy)
         total_loss = mean_KLdiv + rprloss
         return total_loss, (
             centropy,

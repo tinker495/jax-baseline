@@ -223,7 +223,7 @@ class HL_GAUSS_C51(Q_Network_Family):
             jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         )
         centropy = jnp.sum(target_distribution * (-jnp.log(distribution + 1e-8)), axis=1)
-        return jnp.mean(centropy * weights), centropy
+        return jnp.mean(centropy), centropy
 
     def _target(
         self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
