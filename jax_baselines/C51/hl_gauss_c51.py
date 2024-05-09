@@ -109,6 +109,8 @@ class HL_GAUSS_C51(Q_Network_Family):
         self.support = jnp.linspace(
             self.categorial_min, self.categorial_max, self.categorial_bar_n + 1, dtype=jnp.float32
         )
+        bin_width = self.support[1] - self.support[0]
+        self.sigma = self.sigma * bin_width
 
         self.get_q = jax.jit(self.get_q)
         self._get_actions = jax.jit(self._get_actions)
@@ -124,8 +126,8 @@ class HL_GAUSS_C51(Q_Network_Family):
         def f(target):
             cdf_evals = jax.scipy.special.erf((self.support - target) / (jnp.sqrt(2) * self.sigma))
             z = cdf_evals[-1] - cdf_evals[0]
-            probs = jnp.diff(cdf_evals) / z
-            return probs
+            bin_probs = (cdf_evals[1:] - cdf_evals[:-1])
+            return bin_probs / z
 
         return jax.vmap(f)(target)
 
@@ -135,7 +137,7 @@ class HL_GAUSS_C51(Q_Network_Family):
             centers = (self.support[:-1] + self.support[1:]) / 2
             return jnp.sum(probs * centers)
 
-        return jax.vmap(jax.vmap(f), in_axes=1)(probs)
+        return jax.vmap(jax.vmap(f))(probs)
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         return jnp.argmax(
@@ -212,7 +214,7 @@ class HL_GAUSS_C51(Q_Network_Family):
             target_params,
             opt_state,
             loss,
-            jax.vmap(jax.vmap(self.to_scalar), in_axes=1)(target_distribution).mean(),
+            self.to_scalar(jnp.expand_dims(target_distribution,1)).mean(),
             new_priorities,
         )
 

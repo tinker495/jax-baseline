@@ -142,6 +142,8 @@ class HL_GAUSS_SPR(Q_Network_Family):
         self.support = jnp.linspace(
             self.categorial_min, self.categorial_max, self.categorial_bar_n + 1, dtype=jnp.float32
         )
+        bin_width = self.support[1] - self.support[0]
+        self.sigma = self.sigma * bin_width
 
         self.get_q = jax.jit(self.get_q)
         self._get_actions = jax.jit(self._get_actions)
@@ -157,8 +159,8 @@ class HL_GAUSS_SPR(Q_Network_Family):
         def f(target):
             cdf_evals = jax.scipy.special.erf((self.support - target) / (jnp.sqrt(2) * self.sigma))
             z = cdf_evals[-1] - cdf_evals[0]
-            probs = jnp.diff(cdf_evals) / z
-            return probs
+            bin_probs = (cdf_evals[1:] - cdf_evals[:-1])
+            return bin_probs / z
 
         return jax.vmap(f)(target)
 
@@ -168,18 +170,11 @@ class HL_GAUSS_SPR(Q_Network_Family):
             centers = (self.support[:-1] + self.support[1:]) / 2
             return jnp.sum(probs * centers)
 
-        return jax.vmap(jax.vmap(f), in_axes=1)(probs)
+        return jax.vmap(jax.vmap(f))(probs)
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        return jnp.expand_dims(
-            jnp.argmax(
-                jnp.sum(
-                    self.get_q(params, convert_jax(obses), key) * self._categorial_bar,
-                    axis=2,
-                ),
-                axis=1,
-            ),
-            axis=1,
+        return jnp.argmax(
+            self.to_scalar(self.get_q(params, convert_jax(obses), key)), axis=1, keepdims=True
         )
 
     def train_step(self, steps, gradient_steps):
@@ -275,13 +270,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
             return last_idxs, parsed_filled
         action_obs = [o[:, 1 : self.n_step] for o in obses]  # 1 ~ n_step
         pred_actions = jax.vmap(
-            lambda o: jnp.argmax(
-                jnp.sum(
-                    self.get_q(params, o, key) * self._categorial_bar,
-                    axis=2,
-                ),
-                axis=1,
-            ),
+            lambda o: self._get_actions(params, o, key).squeeze(),
             in_axes=1,
             out_axes=1,
         )(
@@ -377,12 +366,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
             target_params,
             opt_state,
             qloss,
-            jnp.mean(
-                jnp.sum(
-                    target_distribution * self.categorial_bar,
-                    axis=1,
-                )
-            ),
+            self.to_scalar(jnp.expand_dims(target_distribution,1)).mean(),
             new_priorities,
             rprloss,
         )
