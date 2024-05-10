@@ -218,10 +218,12 @@ class C51(Q_Network_Family):
         distribution = jnp.squeeze(
             jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         )
-        centropy = jnp.sum(target_distribution * (-jnp.log(distribution + 1e-8)), axis=1)
-        return jnp.mean(centropy * weights), centropy
+        cross_entropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
+        return jnp.mean(cross_entropy), cross_entropy
 
-    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key):
+    def _target(
+        self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
+    ):
         next_q = self.get_q(target_params, nxtobses, key)
         if self.double_q:
             next_action_q = jnp.sum(

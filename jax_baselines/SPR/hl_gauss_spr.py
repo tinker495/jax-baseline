@@ -159,7 +159,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
         def f(target):
             cdf_evals = jax.scipy.special.erf((self.support - target) / (jnp.sqrt(2) * self.sigma))
             z = cdf_evals[-1] - cdf_evals[0]
-            bin_probs = (cdf_evals[1:] - cdf_evals[:-1])
+            bin_probs = cdf_evals[1:] - cdf_evals[:-1]
             return bin_probs / z
 
         return jax.vmap(f)(target)
@@ -366,7 +366,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
             target_params,
             opt_state,
             qloss,
-            self.to_scalar(jnp.expand_dims(target_distribution,1)).mean(),
+            self.to_scalar(jnp.expand_dims(target_distribution, 1)).mean(),
             new_priorities,
             rprloss,
         )
@@ -388,14 +388,12 @@ class HL_GAUSS_SPR(Q_Network_Family):
         distribution = jnp.squeeze(
             jnp.take_along_axis(self.get_q(params, parsed_obses, key), parsed_actions, axis=1)
         )
-        centropy = jnp.sum(
-            target_distribution * (-jnp.log(distribution + 1e-8)), axis=1
-        )  # jnp.mean(jnp.sum(jnp.square(error) * filled, axis=-1) / jnp.sum(filled, axis=-1) * weights)
-        mean_KLdiv = jnp.mean(centropy)
-        total_loss = mean_KLdiv + rprloss
+        centropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
+        mean_centropy = jnp.mean(centropy)
+        total_loss = mean_centropy + rprloss
         return total_loss, (
             centropy,
-            mean_KLdiv,
+            mean_centropy,
             rprloss,
         )  # jnp.sum(jnp.abs(error) * filled, axis=-1) / jnp.sum(filled, axis=-1)
 

@@ -126,7 +126,7 @@ class HL_GAUSS_C51(Q_Network_Family):
         def f(target):
             cdf_evals = jax.scipy.special.erf((self.support - target) / (jnp.sqrt(2) * self.sigma))
             z = cdf_evals[-1] - cdf_evals[0]
-            bin_probs = (cdf_evals[1:] - cdf_evals[:-1])
+            bin_probs = cdf_evals[1:] - cdf_evals[:-1]
             return bin_probs / z
 
         return jax.vmap(f)(target)
@@ -214,7 +214,7 @@ class HL_GAUSS_C51(Q_Network_Family):
             target_params,
             opt_state,
             loss,
-            self.to_scalar(jnp.expand_dims(target_distribution,1)).mean(),
+            self.to_scalar(jnp.expand_dims(target_distribution, 1)).mean(),
             new_priorities,
         )
 
@@ -222,8 +222,8 @@ class HL_GAUSS_C51(Q_Network_Family):
         distribution = jnp.squeeze(
             jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         )
-        centropy = jnp.sum(target_distribution * (-jnp.log(distribution + 1e-8)), axis=1)
-        return jnp.mean(centropy), centropy
+        cross_entropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
+        return jnp.mean(cross_entropy), cross_entropy
 
     def _target(
         self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
