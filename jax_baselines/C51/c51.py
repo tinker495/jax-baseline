@@ -262,9 +262,9 @@ class C51(Q_Network_Family):
         )  # bar index as float
         C51_L = jnp.floor(C51_B).astype(jnp.int32)  # bar lower index as int
         C51_H = jnp.ceil(C51_B).astype(jnp.int32)  # bar higher index as int
-        C51_L = jnp.where((C51_H > 0) * (C51_L == C51_H), C51_L - 1, C51_L)  # C51_L.at[].add(-1)
+        C51_L = jnp.where((C51_L > 0) * (C51_L == C51_H), C51_L - 1, C51_L)  # C51_L.at[].add(-1)
         C51_H = jnp.where(
-            (C51_L < (self.categorial_bar_n - 1)) * (C51_L == C51_H), C51_H + 1, C51_H
+            (C51_H < (self.categorial_bar_n - 1)) * (C51_L == C51_H), C51_H + 1, C51_H
         )  # C51_H.at[].add(1)
 
         def tdist(next_distribution, C51_L, C51_H, C51_b):
