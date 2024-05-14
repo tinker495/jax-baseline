@@ -111,6 +111,7 @@ class C51(Q_Network_Family):
         )
         bin_width = self.support[1] - self.support[0]
         self.centers = (self.support[:-1] + self.support[1:]) / 2
+        self._centers = jnp.expand_dims(self.centers, axis=0)
         self.sigma = self.sigma * bin_width
 
         self.get_q = jax.jit(self.get_q)
@@ -122,16 +123,29 @@ class C51(Q_Network_Family):
     def get_q(self, params, obses, key=None) -> jnp.ndarray:
         return self.model(params, key, self.preproc(params, key, obses))
 
+    def to_probs(self, target: jax.Array, probs: jax.Array):
+        # target: [batch, support]
+        # probs: [batch, support]
+        def f(target):
+            cdf_evals = jax.scipy.special.erf((self.support - target) / (jnp.sqrt(2) * self.sigma))
+            z = cdf_evals[-1] - cdf_evals[0]
+            bin_probs = cdf_evals[1:] - cdf_evals[:-1]
+            return bin_probs / z
+
+        hl_gauss_probs = jax.vmap(jax.vmap(f))(target)  # [batch, support, support]
+        probs = jnp.expand_dims(probs, axis=1) # [batch, 1, support]
+        return jnp.sum(hl_gauss_probs * probs, axis=2)
+
+    def to_scalar(self, probs: jax.Array):
+        # probs: [batch, n, support]
+        def f(probs):
+            return jnp.sum(probs * self._centers)
+
+        return jax.vmap(jax.vmap(f))(probs)
+
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        return jnp.expand_dims(
-            jnp.argmax(
-                jnp.sum(
-                    self.get_q(params, convert_jax(obses), key) * self._categorial_bar,
-                    axis=2,
-                ),
-                axis=1,
-            ),
-            axis=1,
+        return jnp.argmax(
+            self.to_scalar(self.get_q(params, convert_jax(obses), key)), axis=1, keepdims=True
         )
 
     def train_step(self, steps, gradient_steps):
@@ -204,12 +218,7 @@ class C51(Q_Network_Family):
             target_params,
             opt_state,
             loss,
-            jnp.mean(
-                jnp.sum(
-                    target_distribution * self.categorial_bar,
-                    axis=1,
-                )
-            ),
+            self.to_scalar(jnp.expand_dims(target_distribution, 1)).mean(),
             new_priorities,
         )
 
@@ -234,7 +243,7 @@ class C51(Q_Network_Family):
         if self.munchausen:
             next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
-            next_centers = self.centers - jnp.sum(pi_next * tau_log_pi_next, axis=1, keepdims=True)
+            next_centers = self._centers - jnp.sum(pi_next * tau_log_pi_next, axis=1, keepdims=True)
 
             q_k_targets = self.to_scalar(self.get_q(target_params, obses, key))
             q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
@@ -245,7 +254,7 @@ class C51(Q_Network_Family):
                 munchausen_addon, a_min=-1, a_max=0
             )
         else:
-            next_centers = self.centers
+            next_centers = self._centers
         target_centers = self._gamma * not_terminateds * next_centers + rewards  # [32, 51]
 
         target_distribution = self.to_probs(target_centers, next_distribution)  # [32, 51]

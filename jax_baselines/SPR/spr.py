@@ -144,6 +144,7 @@ class SPR(Q_Network_Family):
         )
         bin_width = self.support[1] - self.support[0]
         self.centers = (self.support[:-1] + self.support[1:]) / 2
+        self._centers = jnp.expand_dims(self.centers, axis=0)
         self.sigma = self.sigma * bin_width
 
         self.get_q = jax.jit(self.get_q)
@@ -171,7 +172,7 @@ class SPR(Q_Network_Family):
     def to_scalar(self, probs: jax.Array):
         # probs: [batch, n, support]
         def f(probs):
-            return jnp.sum(probs * self.centers)
+            return jnp.sum(probs * self._centers)
 
         return jax.vmap(jax.vmap(f))(probs)
 
@@ -375,12 +376,7 @@ class SPR(Q_Network_Family):
             target_params,
             opt_state,
             qloss,
-            jnp.mean(
-                jnp.sum(
-                    target_distribution * self.categorial_bar,
-                    axis=1,
-                )
-            ),
+            self.to_scalar(jnp.expand_dims(target_distribution, 1)).mean(),
             new_priorities,
             rprloss,
         )
@@ -404,7 +400,7 @@ class SPR(Q_Network_Family):
         )
         centropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
         mean_centropy = jnp.mean(centropy)
-        total_loss = mean_centropy + rprloss
+        total_loss = mean_centropy + 0.1 * rprloss
         return total_loss, (
             centropy,
             mean_centropy,
@@ -463,7 +459,7 @@ class SPR(Q_Network_Family):
         if self.munchausen:
             next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
-            next_centers = self.centers - jnp.sum(pi_next * tau_log_pi_next, axis=1, keepdims=True)
+            next_centers = self._centers - jnp.sum(pi_next * tau_log_pi_next, axis=1, keepdims=True)
 
             q_k_targets = self.to_scalar(self.get_q(target_params, obses, key))
             q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
@@ -474,7 +470,7 @@ class SPR(Q_Network_Family):
                 munchausen_addon, a_min=-1, a_max=0
             )
         else:
-            next_centers = self.centers
+            next_centers = self._centers
         target_centers = gammas * not_terminateds * next_centers + rewards  # [32, 51]
 
         target_distribution = self.to_probs(target_centers, next_distribution)  # [32, 51]
