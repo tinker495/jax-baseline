@@ -488,12 +488,12 @@ class SPR(Q_Network_Family):
 
             def add_distribution(target_distribution, x):
                 index, value = x
-                return target_distribution.at[index].add(value)
+                return target_distribution.at[index].add(value), value
 
-            target_distribution = jax.lax.scan(
+            target_distribution, _ = jax.lax.scan(
                 add_distribution, target_distribution, (C51_L, next_distribution * (C51_H - C51_b))
             )
-            target_distribution = jax.lax.scan(
+            target_distribution, _ = jax.lax.scan(
                 add_distribution, target_distribution, (C51_H, next_distribution * (C51_b - C51_L))
             )
             return target_distribution
