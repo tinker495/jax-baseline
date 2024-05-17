@@ -26,16 +26,13 @@ class Model(hk.Module):
             self.layer = NoisyLinear
 
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
-        if self.hidden_n != 0:
-            feature = hk.Sequential(
+        if not self.dueling:
+            q_net = hk.Sequential(
                 [
                     self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n)
                 ]
-            )(feature)
-        if not self.dueling:
-            q_net = hk.Sequential(
-                [
+                + [
                     self.layer(
                         self.action_size[0] * self.support_n,
                         w_init=hk.initializers.RandomUniform(-0.03, 0.03),
@@ -47,12 +44,20 @@ class Model(hk.Module):
         else:
             v = hk.Sequential(
                 [
+                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
+                    for i in range(2 * self.hidden_n)
+                ]
+                + [
                     self.layer(self.support_n, w_init=hk.initializers.RandomUniform(-0.03, 0.03)),
                     hk.Reshape((1, self.support_n)),
                 ]
             )(feature)
             a = hk.Sequential(
                 [
+                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
+                    for i in range(2 * self.hidden_n)
+                ]
+                + [
                     self.layer(
                         self.action_size[0] * self.support_n,
                         w_init=hk.initializers.RandomUniform(-0.03, 0.03),

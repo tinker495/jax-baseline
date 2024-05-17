@@ -8,7 +8,7 @@ from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
 
 
-class C51(Q_Network_Family):
+class HL_GAUSS_C51(Q_Network_Family):
     def __init__(
         self,
         env,
@@ -78,7 +78,7 @@ class C51(Q_Network_Family):
             compress_memory,
         )
 
-        self.name = "C51"
+        self.name = "HL_GAUSS_C51"
         self.sigma = 0.75
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = float(categorial_max)
@@ -110,8 +110,6 @@ class C51(Q_Network_Family):
             self.categorial_min, self.categorial_max, self.categorial_bar_n + 1, dtype=jnp.float32
         )
         bin_width = self.support[1] - self.support[0]
-        self.centers = (self.support[:-1] + self.support[1:]) / 2
-        self._centers = jnp.expand_dims(self.centers, axis=0)
         self.sigma = self.sigma * bin_width
 
         self.get_q = jax.jit(self.get_q)
@@ -123,23 +121,21 @@ class C51(Q_Network_Family):
     def get_q(self, params, obses, key=None) -> jnp.ndarray:
         return self.model(params, key, self.preproc(params, key, obses))
 
-    def to_probs(self, target: jax.Array, probs: jax.Array):
-        # target: [batch, support]
-        # probs: [batch, support]
+    def to_probs(self, target: jax.Array):
+        # target: [batch, 1]
         def f(target):
             cdf_evals = jax.scipy.special.erf((self.support - target) / (jnp.sqrt(2) * self.sigma))
             z = cdf_evals[-1] - cdf_evals[0]
             bin_probs = cdf_evals[1:] - cdf_evals[:-1]
             return bin_probs / z
 
-        hl_gauss_probs = jax.vmap(jax.vmap(f))(target)  # [batch, support, support]
-        probs = jnp.expand_dims(probs, axis=1) # [batch, 1, support]
-        return jnp.sum(hl_gauss_probs * probs, axis=2)
+        return jax.vmap(f)(target)
 
     def to_scalar(self, probs: jax.Array):
         # probs: [batch, n, support]
         def f(probs):
-            return jnp.sum(probs * self._centers)
+            centers = (self.support[:-1] + self.support[1:]) / 2
+            return jnp.sum(probs * centers)
 
         return jax.vmap(jax.vmap(f))(probs)
 
@@ -233,31 +229,38 @@ class C51(Q_Network_Family):
         self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
     ):
         next_prob = self.get_q(target_params, nxtobses, key)
-        if self.double_q:
-            next_action_q = self.to_scalar(self.get_q(params, nxtobses, key))
-        else:
-            next_action_q = self.to_scalar(next_prob)
-        next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
-        next_distribution = jnp.squeeze(jnp.take_along_axis(next_prob, next_actions, axis=1))
-
+        next_q = self.to_scalar(next_prob)
         if self.munchausen:
-            next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
+            if self.double_q:
+                next_action_probs = self.get_q(params, nxtobses, key)
+                next_action_q = self.to_scalar(next_action_probs)
+                next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
+            else:
+                next_sub_q, tau_log_pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
-            next_centers = self._centers - jnp.sum(pi_next * tau_log_pi_next, axis=1, keepdims=True)
+            next_vals = (
+                jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True)
+                * not_terminateds
+            )
 
-            q_k_targets = self.to_scalar(self.get_q(target_params, obses, key))
+            q_k_targets = self.get_q(target_params, obses, key)
             q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
-            munchausen_addon = jnp.take_along_axis(log_pi, jnp.squeeze(actions, axis=2), axis=1)
+            munchausen_addon = jnp.take_along_axis(log_pi, actions, axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0
             )
         else:
-            next_centers = self._centers
-        target_centers = self._gamma * not_terminateds * next_centers + rewards  # [32, 51]
-
-        target_distribution = self.to_probs(target_centers, next_distribution)  # [32, 51]
+            if self.double_q:
+                next_action_probs = self.get_q(params, nxtobses, key)
+                next_action_q = self.to_scalar(next_action_probs)
+                next_actions = jnp.argmax(next_action_q, axis=1, keepdims=True)
+            else:
+                next_actions = jnp.argmax(next_q, axis=1, keepdims=True)
+            next_vals = not_terminateds * jnp.take_along_axis(next_q, next_actions, axis=1)
+        target_q = (next_vals * self._gamma) + rewards
+        target_distribution = self.to_probs(target_q)
         return target_distribution
 
     def learn(
@@ -265,7 +268,7 @@ class C51(Q_Network_Family):
         total_timesteps,
         callback=None,
         log_interval=100,
-        tb_log_name="C51",
+        tb_log_name="HL_GAUSS_C51",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):

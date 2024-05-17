@@ -4,11 +4,13 @@ import os
 import gymnasium as gym
 
 from jax_baselines.C51.c51 import C51
+from jax_baselines.C51.hl_gauss_c51 import HL_GAUSS_C51
 from jax_baselines.DQN.dqn import DQN
 from jax_baselines.FQF.fqf import FQF
 from jax_baselines.IQN.iqn import IQN
 from jax_baselines.QRDQN.qrdqn import QRDQN
 from jax_baselines.SPR.spr import SPR
+from jax_baselines.SPR.hl_gauss_spr import HL_GAUSS_SPR
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -56,6 +58,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--clip_rewards", action="store_true")
     parser.add_argument("--compress_memory", action="store_true")
+    parser.add_argument("--hl_gauss", action="store_true")
     parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
@@ -139,32 +142,61 @@ if __name__ == "__main__":
             from model_builder.flax.qnet.c51_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.c51_builder import model_builder_maker
-        agent = C51(
-            env,
-            model_builder_maker=model_builder_maker,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_size=args.batch,
-            buffer_size=int(args.buffer_size),
-            target_network_update_freq=args.target_update,
-            prioritized_replay=args.per,
-            double_q=args.double,
-            dueling_model=args.dueling,
-            exploration_final_eps=args.final_eps,
-            param_noise=args.noisynet,
-            n_step=args.n_step,
-            munchausen=args.munchausen,
-            gradient_steps=args.gradient_steps,
-            train_freq=args.train_freq,
-            learning_starts=args.learning_starts,
-            categorial_max=args.max,
-            categorial_min=args.min,
-            exploration_fraction=args.exploration_fraction,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            compress_memory=args.compress_memory,
-        )
+
+        if args.hl_gauss:
+            agent = HL_GAUSS_C51(
+                env,
+                model_builder_maker=model_builder_maker,
+                gamma=args.gamma,
+                learning_rate=args.learning_rate,
+                batch_size=args.batch,
+                buffer_size=int(args.buffer_size),
+                target_network_update_freq=args.target_update,
+                prioritized_replay=args.per,
+                double_q=args.double,
+                dueling_model=args.dueling,
+                exploration_final_eps=args.final_eps,
+                param_noise=args.noisynet,
+                n_step=args.n_step,
+                munchausen=args.munchausen,
+                gradient_steps=args.gradient_steps,
+                train_freq=args.train_freq,
+                learning_starts=args.learning_starts,
+                categorial_max=args.max,
+                categorial_min=args.min,
+                exploration_fraction=args.exploration_fraction,
+                tensorboard_log=args.logdir + env_type + "/" + env_name,
+                policy_kwargs=policy_kwargs,
+                optimizer=args.optimizer,
+                compress_memory=args.compress_memory,
+            )
+        else:
+            agent = C51(
+                env,
+                model_builder_maker=model_builder_maker,
+                gamma=args.gamma,
+                learning_rate=args.learning_rate,
+                batch_size=args.batch,
+                buffer_size=int(args.buffer_size),
+                target_network_update_freq=args.target_update,
+                prioritized_replay=args.per,
+                double_q=args.double,
+                dueling_model=args.dueling,
+                exploration_final_eps=args.final_eps,
+                param_noise=args.noisynet,
+                n_step=args.n_step,
+                munchausen=args.munchausen,
+                gradient_steps=args.gradient_steps,
+                train_freq=args.train_freq,
+                learning_starts=args.learning_starts,
+                categorial_max=args.max,
+                categorial_min=args.min,
+                exploration_fraction=args.exploration_fraction,
+                tensorboard_log=args.logdir + env_type + "/" + env_name,
+                policy_kwargs=policy_kwargs,
+                optimizer=args.optimizer,
+                compress_memory=args.compress_memory,
+            )
     elif args.algo == "QRDQN":
         if args.model_lib == "flax":
             from model_builder.flax.qnet.qrdqn_builder import model_builder_maker
@@ -264,33 +296,64 @@ if __name__ == "__main__":
             from model_builder.flax.qnet.spr_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.spr_builder import model_builder_maker
-        agent = SPR(
-            env,
-            model_builder_maker=model_builder_maker,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_size=args.batch,
-            buffer_size=int(args.buffer_size),
-            target_network_update_freq=args.target_update,
-            prioritized_replay=args.per,
-            double_q=args.double,
-            dueling_model=args.dueling,
-            exploration_final_eps=args.final_eps,
-            param_noise=args.noisynet,
-            n_step=args.n_step,
-            off_policy_fix=args.off_policy_fix,
-            munchausen=args.munchausen,
-            gradient_steps=args.gradient_steps,
-            train_freq=args.train_freq,
-            learning_starts=args.learning_starts,
-            categorial_max=args.max,
-            categorial_min=args.min,
-            exploration_fraction=args.exploration_fraction,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            compress_memory=args.compress_memory,
-        )
+    
+
+        if args.hl_gauss:
+            agent = HL_GAUSS_SPR(
+                env,
+                model_builder_maker=model_builder_maker,
+                gamma=args.gamma,
+                learning_rate=args.learning_rate,
+                batch_size=args.batch,
+                buffer_size=int(args.buffer_size),
+                target_network_update_freq=args.target_update,
+                prioritized_replay=args.per,
+                double_q=args.double,
+                dueling_model=args.dueling,
+                exploration_final_eps=args.final_eps,
+                param_noise=args.noisynet,
+                n_step=args.n_step,
+                off_policy_fix=args.off_policy_fix,
+                munchausen=args.munchausen,
+                gradient_steps=args.gradient_steps,
+                train_freq=args.train_freq,
+                learning_starts=args.learning_starts,
+                categorial_max=args.max,
+                categorial_min=args.min,
+                exploration_fraction=args.exploration_fraction,
+                tensorboard_log=args.logdir + env_type + "/" + env_name,
+                policy_kwargs=policy_kwargs,
+                optimizer=args.optimizer,
+                compress_memory=args.compress_memory,
+            )
+        else:
+            agent = SPR(
+                env,
+                model_builder_maker=model_builder_maker,
+                gamma=args.gamma,
+                learning_rate=args.learning_rate,
+                batch_size=args.batch,
+                buffer_size=int(args.buffer_size),
+                target_network_update_freq=args.target_update,
+                prioritized_replay=args.per,
+                double_q=args.double,
+                dueling_model=args.dueling,
+                exploration_final_eps=args.final_eps,
+                param_noise=args.noisynet,
+                n_step=args.n_step,
+                off_policy_fix=args.off_policy_fix,
+                munchausen=args.munchausen,
+                gradient_steps=args.gradient_steps,
+                train_freq=args.train_freq,
+                learning_starts=args.learning_starts,
+                categorial_max=args.max,
+                categorial_min=args.min,
+                exploration_fraction=args.exploration_fraction,
+                tensorboard_log=args.logdir + env_type + "/" + env_name,
+                policy_kwargs=policy_kwargs,
+                optimizer=args.optimizer,
+                compress_memory=args.compress_memory,
+            )
 
     agent.learn(int(args.steps))
 

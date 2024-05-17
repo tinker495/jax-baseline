@@ -13,7 +13,7 @@ from jax_baselines.SPR.efficent_buffer import (
 )
 
 
-class SPR(Q_Network_Family):
+class HL_GAUSS_SPR(Q_Network_Family):
     def __init__(
         self,
         env,
@@ -52,7 +52,7 @@ class SPR(Q_Network_Family):
         compress_memory=False,
     ):
 
-        self.name = "SPR"
+        self.name = "HL_GAUSS_SPR"
         self.shift_size = 4
         self.prediction_depth = 5
         self.off_policy_fix = off_policy_fix
@@ -143,8 +143,6 @@ class SPR(Q_Network_Family):
             self.categorial_min, self.categorial_max, self.categorial_bar_n + 1, dtype=jnp.float32
         )
         bin_width = self.support[1] - self.support[0]
-        self.centers = (self.support[:-1] + self.support[1:]) / 2
-        self._centers = jnp.expand_dims(self.centers, axis=0)
         self.sigma = self.sigma * bin_width
 
         self.get_q = jax.jit(self.get_q)
@@ -156,23 +154,21 @@ class SPR(Q_Network_Family):
     def get_q(self, params, obses, key=None) -> jnp.ndarray:
         return self.model(params, key, self.preproc(params, key, obses))
 
-    def to_probs(self, target: jax.Array, probs: jax.Array):
-        # target: [batch, support]
-        # probs: [batch, support]
+    def to_probs(self, target: jax.Array):
+        # target: [batch, 1]
         def f(target):
             cdf_evals = jax.scipy.special.erf((self.support - target) / (jnp.sqrt(2) * self.sigma))
             z = cdf_evals[-1] - cdf_evals[0]
             bin_probs = cdf_evals[1:] - cdf_evals[:-1]
             return bin_probs / z
 
-        hl_gauss_probs = jax.vmap(jax.vmap(f))(target)  # [batch, support, support]
-        probs = jnp.expand_dims(probs, axis=1)
-        return jnp.sum(hl_gauss_probs * probs, axis=2)
+        return jax.vmap(f)(target)
 
     def to_scalar(self, probs: jax.Array):
         # probs: [batch, n, support]
         def f(probs):
-            return jnp.sum(probs * self._centers)
+            centers = (self.support[:-1] + self.support[1:]) / 2
+            return jnp.sum(probs * centers)
 
         return jax.vmap(jax.vmap(f))(probs)
 
@@ -274,13 +270,7 @@ class SPR(Q_Network_Family):
             return last_idxs, parsed_filled
         action_obs = [o[:, 1 : self.n_step] for o in obses]  # 1 ~ n_step
         pred_actions = jax.vmap(
-            lambda o: jnp.argmax(
-                jnp.sum(
-                    self.get_q(params, o, key) * self._categorial_bar,
-                    axis=2,
-                ),
-                axis=1,
-            ),
+            lambda o: self._get_actions(params, o, key).squeeze(),
             in_axes=1,
             out_axes=1,
         )(
@@ -400,7 +390,7 @@ class SPR(Q_Network_Family):
         )
         centropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
         mean_centropy = jnp.mean(centropy)
-        total_loss = mean_centropy + 0.1 * rprloss
+        total_loss = mean_centropy + rprloss
         return total_loss, (
             centropy,
             mean_centropy,
@@ -449,31 +439,38 @@ class SPR(Q_Network_Family):
         self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, gammas, key
     ):
         next_prob = self.get_q(target_params, nxtobses, key)
-        if self.double_q:
-            next_action_q = self.to_scalar(self.get_q(params, nxtobses, key))
-        else:
-            next_action_q = self.to_scalar(next_prob)
-        next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
-        next_distribution = jnp.squeeze(jnp.take_along_axis(next_prob, next_actions, axis=1))
-
+        next_q = self.to_scalar(next_prob)
         if self.munchausen:
-            next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
+            if self.double_q:
+                next_action_probs = self.get_q(params, nxtobses, key)
+                next_action_q = self.to_scalar(next_action_probs)
+                next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
+            else:
+                next_sub_q, tau_log_pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
-            next_centers = self._centers - jnp.sum(pi_next * tau_log_pi_next, axis=1, keepdims=True)
+            next_vals = (
+                jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True)
+                * not_terminateds
+            )
 
-            q_k_targets = self.to_scalar(self.get_q(target_params, obses, key))
+            q_k_targets = self.get_q(target_params, obses, key)
             q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
-            munchausen_addon = jnp.take_along_axis(log_pi, jnp.squeeze(actions, axis=2), axis=1)
+            munchausen_addon = jnp.take_along_axis(log_pi, actions, axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0
             )
         else:
-            next_centers = self._centers
-        target_centers = gammas * not_terminateds * next_centers + rewards  # [32, 51]
-
-        target_distribution = self.to_probs(target_centers, next_distribution)  # [32, 51]
+            if self.double_q:
+                next_action_probs = self.get_q(params, nxtobses, key)
+                next_action_q = self.to_scalar(next_action_probs)
+                next_actions = jnp.argmax(next_action_q, axis=1, keepdims=True)
+            else:
+                next_actions = jnp.argmax(next_q, axis=1, keepdims=True)
+            next_vals = not_terminateds * jnp.take_along_axis(next_q, next_actions, axis=1)
+        target_q = (next_vals * gammas) + rewards
+        target_distribution = self.to_probs(target_q)
         return target_distribution
 
     def tb_log_name_update(self, tb_log_name):
@@ -500,7 +497,7 @@ class SPR(Q_Network_Family):
         total_timesteps,
         callback=None,
         log_interval=100,
-        tb_log_name="SPR",
+        tb_log_name="HL_GAUSS_SPR",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
