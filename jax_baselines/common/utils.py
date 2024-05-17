@@ -16,6 +16,35 @@ def key_gen(seed):
         yield subkey
 
 
+def random_split_like_tree(rng_key, target=None, treedef=None):
+    if treedef is None:
+        treedef = jax.tree_structure(target)
+    keys = jax.random.split(rng_key, treedef.num_leaves)
+    return jax.tree_unflatten(treedef, keys)
+
+
+def tree_random_normal_like(rng_key, target):
+    keys_tree = random_split_like_tree(rng_key, target)
+    return jax.tree_map(
+        lambda t, k: jax.random.normal(k, t.shape, t.dtype),
+        target,
+        keys_tree,
+    )
+
+
+def soft_reset(tensors, key: jax.random.PRNGKey, steps: int, update_period: int, tau: float):
+    update = steps % update_period == 0
+
+    def _soft_reset(old_tensors, key):
+        new_tensors = tree_random_normal_like(key, tensors)
+        return jax.tree_map(
+            lambda new, old: tau * new + (1.0 - tau) * old, new_tensors, old_tensors
+        )
+
+    tensors, key = jax.lax.cond(update, lambda x: x, _soft_reset, tensors, key)
+    return tensors
+
+
 def hard_update(new_tensors, old_tensors, steps: int, update_period: int):
     update = steps % update_period == 0
     return jax.tree_map(lambda new, old: jax.lax.select(update, new, old), new_tensors, old_tensors)
