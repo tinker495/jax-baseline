@@ -269,16 +269,11 @@ class C51(Q_Network_Family):
 
         def tdist(next_distribution, C51_L, C51_H, C51_b):
             target_distribution = jnp.zeros((self.categorial_bar_n))
-
-            def add_distribution(target_distribution, x):
-                index, value = x
-                return target_distribution.at[index].add(value), value
-
-            target_distribution, _ = jax.lax.scan(
-                add_distribution, target_distribution, (C51_L, next_distribution * (C51_H - C51_b))
+            target_distribution = target_distribution.at[C51_L].add(
+                next_distribution * (C51_H.astype(jnp.float32) - C51_b)
             )
-            target_distribution, _ = jax.lax.scan(
-                add_distribution, target_distribution, (C51_H, next_distribution * (C51_b - C51_L))
+            target_distribution = target_distribution.at[C51_H].add(
+                next_distribution * (C51_b - C51_L.astype(jnp.float32))
             )
             return target_distribution
 

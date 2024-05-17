@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.common.utils import convert_jax, q_log_pi
+from jax_baselines.common.utils import convert_jax, q_log_pi, soft_update
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.SPR.efficent_buffer import (
     PrioritizedTransitionReplayBuffer,
@@ -353,8 +353,8 @@ class SPR(Q_Network_Family):
             key,
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-        target_params = params
         params = optax.apply_updates(params, updates)
+        target_params = soft_update(params, target_params, 0.005)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = centropy
@@ -485,16 +485,11 @@ class SPR(Q_Network_Family):
 
         def tdist(next_distribution, C51_L, C51_H, C51_b):
             target_distribution = jnp.zeros((self.categorial_bar_n))
-
-            def add_distribution(target_distribution, x):
-                index, value = x
-                return target_distribution.at[index].add(value), value
-
-            target_distribution, _ = jax.lax.scan(
-                add_distribution, target_distribution, (C51_L, next_distribution * (C51_H - C51_b))
+            target_distribution = target_distribution.at[C51_L].add(
+                next_distribution * (C51_H.astype(jnp.float32) - C51_b)
             )
-            target_distribution, _ = jax.lax.scan(
-                add_distribution, target_distribution, (C51_H, next_distribution * (C51_b - C51_L))
+            target_distribution = target_distribution.at[C51_H].add(
+                next_distribution * (C51_b - C51_L.astype(jnp.float32))
             )
             return target_distribution
 

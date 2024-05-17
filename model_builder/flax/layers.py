@@ -2,7 +2,7 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 from flax.linen.dtypes import promote_dtype
-
+SIGMA_INIT = 0.5
 
 class NoisyDense(nn.Dense):
     rng_collection: str = "params"
@@ -26,14 +26,14 @@ class NoisyDense(nn.Dense):
         )
         kernel_sigma = self.param(
             "kernel_sigma",
-            self.kernel_init,
+            jax.nn.initializers.constant(SIGMA_INIT/jnp.sqrt(input_size)),
             (input_size, self.features),
             self.param_dtype,
         )
         if self.use_bias:
             bias_mu = self.param("bias_mu", self.bias_init, (self.features,), self.param_dtype)
             bias_sigma = self.param(
-                "bias_sigma", self.bias_init, (self.features,), self.param_dtype
+                "bias_sigma", jax.nn.initializers.constant(SIGMA_INIT/jnp.sqrt(input_size)), (self.features,), self.param_dtype
             )
         else:
             bias_mu = None

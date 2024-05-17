@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.common.utils import convert_jax, q_log_pi
+from jax_baselines.common.utils import convert_jax, q_log_pi, soft_update
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.SPR.efficent_buffer import (
     PrioritizedTransitionReplayBuffer,
@@ -356,8 +356,8 @@ class HL_GAUSS_SPR(Q_Network_Family):
             key,
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-        target_params = params
         params = optax.apply_updates(params, updates)
+        target_params = soft_update(params, target_params, 0.005)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = centropy
