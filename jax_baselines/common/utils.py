@@ -26,7 +26,7 @@ def random_split_like_tree(rng_key, target=None, treedef=None):
 def tree_random_normal_like(rng_key, target):
     keys_tree = random_split_like_tree(rng_key, target)
     return jax.tree_map(
-        lambda t, k: jax.random.normal(k, t.shape, t.dtype),
+        lambda t, k: jax.random.normal(k, t.shape, t.dtype) * jnp.std(t),
         target,
         keys_tree,
     )
@@ -37,11 +37,13 @@ def soft_reset(tensors, key: jax.random.PRNGKey, steps: int, update_period: int,
 
     def _soft_reset(old_tensors, key):
         new_tensors = tree_random_normal_like(key, tensors)
-        return jax.tree_map(
+        soft_reseted = jax.tree_map(
             lambda new, old: tau * new + (1.0 - tau) * old, new_tensors, old_tensors
         )
+        # name dense is hardreset
+        return soft_reseted
 
-    tensors, key = jax.lax.cond(update, lambda x: x, _soft_reset, tensors, key)
+    tensors = jax.lax.cond(update, _soft_reset, lambda x, k: x, tensors, key)
     return tensors
 
 
