@@ -14,7 +14,7 @@ class Actor(nn.Module):
     action_type: str
     node: int
     hidden_n: int
-    layer: nn.Module = nn.Dense
+    layer: nn.Module = Dense
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
@@ -37,7 +37,7 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     node: int
     hidden_n: int
-    layer: nn.Module = nn.Dense
+    layer: nn.Module = Dense
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:

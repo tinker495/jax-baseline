@@ -1,11 +1,19 @@
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+from model_builder.flax.initializers import clip_factorized_uniform
+from typing import Callable
 from flax.linen.dtypes import promote_dtype
 SIGMA_INIT = 0.5
 
+class Dense(nn.Dense):
+    kernel_init: Callable = clip_factorized_uniform()
+    bias_init: Callable = clip_factorized_uniform()
+
 class NoisyDense(nn.Dense):
     rng_collection: str = "params"
+    kernel_init: Callable = clip_factorized_uniform()
+    bias_init: Callable = clip_factorized_uniform()
 
     @nn.compact
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:

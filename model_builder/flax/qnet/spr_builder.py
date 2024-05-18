@@ -5,7 +5,7 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_uniform_initializers
-from model_builder.flax.layers import NoisyDense
+from model_builder.flax.layers import Dense, NoisyDense
 from model_builder.flax.Module import PreProcess
 from model_builder.utils import print_param
 
@@ -14,7 +14,7 @@ class Projection(nn.Module):
     embed_size: int = 128
     node: int = 512
     hidden_n: int = 2
-    layer: nn.Module = nn.Dense
+    layer: nn.Module = Dense
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
@@ -61,7 +61,7 @@ class Transition(nn.Module):
 class Prediction(nn.Module):
     node: int = 128
     hidden_n: int = 1
-    layer: nn.Module = nn.Dense
+    layer: nn.Module = Dense
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
@@ -82,7 +82,7 @@ class Model(nn.Module):
 
     def setup(self) -> None:
         if not self.noisy:
-            self.layer = nn.Dense
+            self.layer = Dense
         else:
             self.layer = NoisyDense
 
