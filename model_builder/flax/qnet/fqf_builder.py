@@ -5,7 +5,7 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_uniform_initializers
-from model_builder.flax.layers import NoisyDense
+from model_builder.flax.layers import Dense, NoisyDense
 from model_builder.flax.Module import PreProcess
 from model_builder.utils import print_param
 
@@ -19,7 +19,7 @@ class Model(nn.Module):
 
     def setup(self) -> None:
         if not self.noisy:
-            self.layer = nn.Dense
+            self.layer = Dense
         else:
             self.layer = NoisyDense
 
@@ -90,9 +90,9 @@ class FractionProposal(nn.Module):
         batch = feature.shape[0]
         log_probs = jax.nn.log_softmax(
             nn.Sequential(
-                [nn.Dense(self.node) if i % 2 == 0 else nn.relu for i in range(2 * self.hidden_n)]
+                [Dense(self.node) if i % 2 == 0 else nn.relu for i in range(2 * self.hidden_n)]
                 + [
-                    nn.Dense(
+                    Dense(
                         self.support_size,
                         kernel_init=jax.nn.initializers.variance_scaling(
                             0.01, mode="fan_in", distribution="normal"
