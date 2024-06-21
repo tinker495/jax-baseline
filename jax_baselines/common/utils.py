@@ -1,5 +1,5 @@
 from functools import partial
-from typing import List
+from typing import Any, Callable
 
 import jax
 import jax.numpy as jnp
@@ -7,6 +7,8 @@ import numpy as np
 
 cpu_jit = partial(jax.jit, backend="cpu")
 gpu_jit = partial(jax.jit, backend="gpu")
+
+PyTree = Any
 
 
 def key_gen(seed):
@@ -16,14 +18,14 @@ def key_gen(seed):
         yield subkey
 
 
-def random_split_like_tree(rng_key, target=None, treedef=None):
+def random_split_like_tree(rng_key: jax.random.KeyArray, target: PyTree = None, treedef=None):
     if treedef is None:
         treedef = jax.tree_structure(target)
     keys = jax.random.split(rng_key, treedef.num_leaves)
     return jax.tree_unflatten(treedef, keys)
 
 
-def tree_random_normal_like(rng_key, target):
+def tree_random_normal_like(rng_key: jax.random.KeyArray, target: PyTree):
     keys_tree = random_split_like_tree(rng_key, target)
     return jax.tree_map(
         lambda t, k: jax.random.normal(k, t.shape, t.dtype) * jnp.std(t),
@@ -32,13 +34,15 @@ def tree_random_normal_like(rng_key, target):
     )
 
 
-def soft_reset(tensors, key: jax.random.PRNGKey, steps: int, update_period: int, tau: float):
+def soft_reset(
+    tensors: PyTree, key: jax.random.KeyArray, steps: int, update_period: int, taus: PyTree
+):
     update = steps % update_period == 0
 
     def _soft_reset(old_tensors, key):
         new_tensors = tree_random_normal_like(key, tensors)
         soft_reseted = jax.tree_map(
-            lambda new, old: tau * new + (1.0 - tau) * old, new_tensors, old_tensors
+            lambda new, old, tau: tau * new + (1.0 - tau) * old, new_tensors, old_tensors, taus
         )
         # name dense is hardreset
         return soft_reseted
@@ -47,12 +51,31 @@ def soft_reset(tensors, key: jax.random.PRNGKey, steps: int, update_period: int,
     return tensors
 
 
-def hard_update(new_tensors, old_tensors, steps: int, update_period: int):
+def filter_like_tree(tensors: PyTree, name_filter: str, filter_fn: Callable):
+    # name_filter: "qnet"
+    # filter_fn: lambda x,filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2
+    # make a new tree with the same structure as the input tree, but with the values filtered by the filter_fn
+    # for making tau = 1.0 for qnet and tau = 0.2 for the rest
+    # this making hard_reset for qnet and soft_reset for the rest
+    tensors = jax.tree_map(lambda x: x, tensors)
+
+    def _filter_like_tree(tensors, filtered: bool):
+        for name, value in tensors.items():
+            if isinstance(value, dict):
+                tensors[name] = _filter_like_tree(value, filtered or name_filter in name)
+            else:
+                tensors[name] = filter_fn(value, filtered)
+        return tensors
+
+    return _filter_like_tree(tensors, False)
+
+
+def hard_update(new_tensors: PyTree, old_tensors: PyTree, steps: int, update_period: int):
     update = steps % update_period == 0
     return jax.tree_map(lambda new, old: jax.lax.select(update, new, old), new_tensors, old_tensors)
 
 
-def soft_update(new_tensors, old_tensors, tau: float):
+def soft_update(new_tensors: PyTree, old_tensors: PyTree, tau: float):
     return jax.tree_map(lambda new, old: tau * new + (1.0 - tau) * old, new_tensors, old_tensors)
 
 
@@ -63,11 +86,11 @@ def truncated_mixture(quantiles, cut):
 
 
 @cpu_jit
-def convert_states(obs: List):
+def convert_states(obs: list):
     return [(o * 255.0).astype(np.uint8) if len(o.shape) >= 4 else o for o in obs]
 
 
-def convert_jax(obs: List):
+def convert_jax(obs: list):
     return [jax.device_get(o).astype(jnp.float32) for o in obs]
 
 

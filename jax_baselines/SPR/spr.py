@@ -1,11 +1,17 @@
-from copy import deepcopy
-
 import dm_pix as pix
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 
-from jax_baselines.common.utils import convert_jax, q_log_pi, soft_update
+from jax_baselines.common.utils import (
+    convert_jax,
+    filter_like_tree,
+    q_log_pi,
+    soft_reset,
+    soft_update,
+    tree_random_normal_like,
+)
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.SPR.efficent_buffer import (
     PrioritizedTransitionReplayBuffer,
@@ -134,7 +140,12 @@ class SPR(Q_Network_Family):
             self.prediction,
             self.params,
         ) = model_builder(next(self.key_seq), print_model=True)
-        self.target_params = deepcopy(self.params)
+        self.target_params = tree_random_normal_like(next(self.key_seq), self.params)
+        self.reset_hardsoft = filter_like_tree(
+            self.params,
+            "qnet",
+            lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2,
+        )  # hard_reset for qnet and soft_reset for the rest
 
         self.opt_state = self.optimizer.init(self.params)
 
@@ -152,6 +163,17 @@ class SPR(Q_Network_Family):
         self._loss = jax.jit(self._loss)
         self._target = jax.jit(self._target)
         self._train_step = jax.jit(self._train_step)
+
+    def actions(self, obs, epsilon):
+        if epsilon <= np.random.uniform(0, 1):
+            actions = np.asarray(
+                self._get_actions(
+                    self.target_params, obs, next(self.key_seq) if self.param_noise else None
+                )
+            )
+        else:
+            actions = np.random.choice(self.action_size[0], [self.worker_size, 1])
+        return actions
 
     def get_q(self, params, obses, key=None) -> jnp.ndarray:
         return self.model(params, key, self.preproc(params, key, obses))
@@ -355,6 +377,7 @@ class SPR(Q_Network_Family):
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         target_params = soft_update(params, target_params, 0.005)
+        params = soft_reset(params, key, steps, 40000, self.reset_hardsoft)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = centropy
