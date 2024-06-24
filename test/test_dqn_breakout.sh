@@ -19,7 +19,7 @@ LR="--learning_rate 0.00005"
 
 LR="--learning_rate 0.0001"
 TRAIN="--steps 1e5 --batch 32 --train_freq 1 --final_eps 0.01 --learning_starts 2000 --gamma 0.99 --buffer_size 1e5 --exploration_fraction 0.2"
-OPTIONS="--target_update 1000 --gradient_steps 2 --double --dueling --per --noisynet"
+OPTIONS="--target_update 1000 --gradient_steps 2 --double --dueling --per --n_step 3 --noisynet"
 #python run_qnet.py --algo C51 $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 #python run_qnet.py --algo C51 $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS --n_step 10
 python run_qnet.py --algo SPR $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
