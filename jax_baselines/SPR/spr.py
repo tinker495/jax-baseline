@@ -196,32 +196,33 @@ class SPR(Q_Network_Family):
 
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
-        for _ in range(gradient_steps):
-            self.train_steps_count += 1
-            if self.prioritized_replay:
-                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
-            else:
-                data = self.replay_buffer.sample(self.batch_size)
 
-            (
-                self.params,
-                self.target_params,
-                self.opt_state,
-                loss,
-                t_mean,
-                new_priorities,
-                rprloss,
-            ) = self._train_step(
-                self.params,
-                self.target_params,
-                self.opt_state,
-                self.train_steps_count,
-                next(self.key_seq),
-                **data,
-            )
+        if self.prioritized_replay:
+            data = self.replay_buffer.sample(gradient_steps * self.batch_size, self.prioritized_replay_beta0)
+        else:
+            data = self.replay_buffer.sample(gradient_steps * self.batch_size)
 
-            if self.prioritized_replay:
-                self.replay_buffer.update_priorities(data["indexes"], new_priorities)
+        (
+            self.params,
+            self.target_params,
+            self.opt_state,
+            loss,
+            t_mean,
+            new_priorities,
+            rprloss,
+        ) = self._train_step(
+            self.params,
+            self.target_params,
+            self.opt_state,
+            self.train_steps_count,
+            next(self.key_seq),
+            **data,
+        )
+
+        self.train_steps_count += gradient_steps
+
+        if self.prioritized_replay:
+            self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
         if self.summary and steps % self.log_interval == 0:
             self.summary.add_scalar("loss/qloss", loss, steps)
@@ -336,67 +337,102 @@ class SPR(Q_Network_Family):
             )
             for o in obses
         ]
-        parsed_obses = [jnp.reshape(o[:, 0], (-1, *o.shape[2:])) for o in obses]
-        last_idxs, parsed_filled = self.get_last_idx(params, obses, actions, filled, key)
-        parsed_nxtobses = [
-            jnp.reshape(
-                jnp.take_along_axis(o, jnp.reshape(last_idxs + 1, (-1, 1, 1, 1, 1)), axis=1),
-                (-1, *o.shape[2:]),
+
+        batch_idxes = jnp.arange(obses[0].shape[0]).reshape(
+                -1, self.batch_size
+            ) # nbatches x batch_size
+        batched_obses = [o[batch_idxes] for o in obses]
+        batched_actions = actions[batch_idxes]
+        batched_rewards = rewards[batch_idxes]
+        batched_not_terminateds = not_terminateds[batch_idxes]
+        batched_filled = filled[batch_idxes]
+        batched_weights = weights[batch_idxes] if self.prioritized_replay else 1
+        gradient_steps = batch_idxes.shape[0]
+        batched_steps = steps + jnp.arange(gradient_steps)
+
+        def f(updates, input):
+            params, target_params, opt_state, key = updates
+            obses, actions, rewards, not_terminateds, filled, weights, steps = input
+            parsed_obses = [jnp.reshape(o[:, 0], (-1, *o.shape[2:])) for o in obses]
+            last_idxs, parsed_filled = self.get_last_idx(params, obses, actions, filled, key)
+            parsed_nxtobses = [
+                jnp.reshape(
+                    jnp.take_along_axis(o, jnp.reshape(last_idxs + 1, (-1, 1, 1, 1, 1)), axis=1),
+                    (-1, *o.shape[2:]),
+                )
+                for o in obses
+            ]
+            parsed_actions = jnp.reshape(actions[:, 0], (-1, 1, 1))
+            rewards = jnp.reshape(rewards[:, : self.n_step], (-1, self.n_step))
+            parsed_rewards = jnp.sum(rewards * self._gamma * parsed_filled, axis=1, keepdims=True)
+            parsed_not_terminateds = jnp.take_along_axis(not_terminateds, last_idxs, axis=1)
+            parsed_gamma = (
+                jnp.take_along_axis(jnp.expand_dims(self._gamma, 0), last_idxs, axis=1) * self.gamma
             )
-            for o in obses
-        ]
-        parsed_actions = jnp.reshape(actions[:, 0], (-1, 1, 1))
-        rewards = jnp.reshape(rewards[:, : self.n_step], (-1, self.n_step))
-        parsed_rewards = jnp.sum(rewards * self._gamma * parsed_filled, axis=1, keepdims=True)
-        parsed_not_terminateds = jnp.take_along_axis(not_terminateds, last_idxs, axis=1)
-        parsed_gamma = (
-            jnp.take_along_axis(jnp.expand_dims(self._gamma, 0), last_idxs, axis=1) * self.gamma
+            target_distribution = self._target(
+                params,
+                target_params,
+                parsed_obses,
+                parsed_actions,
+                parsed_rewards,
+                parsed_nxtobses,
+                parsed_not_terminateds,
+                parsed_gamma,
+                key,
+            )
+            transition_obses = [o[:, : (self.prediction_depth + 1)] for o in obses]
+            transition_actions = actions[:, : self.prediction_depth]
+            transition_filled = filled[:, : self.prediction_depth]
+            (loss, (centropy, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
+                params,
+                target_params,
+                transition_obses,
+                transition_actions,
+                transition_filled,
+                parsed_obses,
+                parsed_actions,
+                target_distribution,
+                weights,
+                key,
+            )
+            updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+            params = optax.apply_updates(params, updates)
+            target_params = soft_update(params, target_params, 0.005)
+            if self.soft_reset:
+                params = soft_reset(params, key, steps, 40000, self.reset_hardsoft)
+            target_q = jnp.sum(
+                    target_distribution * self.categorial_bar,
+                    axis=1,
+                )
+            return (params, target_params, opt_state, key), (centropy, qloss, rprloss, target_q)
+        
+        (params, target_params, opt_state, key), outputs = jax.lax.scan(
+            f,
+            (params, target_params, opt_state, key),
+            (
+                batched_obses,
+                batched_actions,
+                batched_rewards,
+                batched_not_terminateds,
+                batched_filled,
+                batched_weights,
+                batched_steps,
+            ),
         )
-        target_distribution = self._target(
-            params,
-            target_params,
-            parsed_obses,
-            parsed_actions,
-            parsed_rewards,
-            parsed_nxtobses,
-            parsed_not_terminateds,
-            parsed_gamma,
-            key,
-        )
-        transition_obses = [o[:, : (self.prediction_depth + 1)] for o in obses]
-        transition_actions = actions[:, : self.prediction_depth]
-        transition_filled = filled[:, : self.prediction_depth]
-        (loss, (centropy, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
-            params,
-            target_params,
-            transition_obses,
-            transition_actions,
-            transition_filled,
-            parsed_obses,
-            parsed_actions,
-            target_distribution,
-            weights,
-            key,
-        )
-        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-        params = optax.apply_updates(params, updates)
-        target_params = soft_update(params, target_params, 0.005)
-        if self.soft_reset:
-            params = soft_reset(params, key, steps, 40000, self.reset_hardsoft)
+        centropy, qloss, rprloss, target_q = outputs
+        qloss = jnp.mean(qloss)
+        rprloss = jnp.mean(rprloss)
+        target_q = jnp.mean(target_q)
         new_priorities = None
         if self.prioritized_replay:
-            new_priorities = centropy
+            # nbatches x batch_size -> flatten
+            new_priorities = jnp.hstack(centropy)
         return (
             params,
             target_params,
             opt_state,
             qloss,
-            jnp.mean(
-                jnp.sum(
-                    target_distribution * self.categorial_bar,
-                    axis=1,
-                )
-            ),
+            target_q,
             new_priorities,
             rprloss,
         )
