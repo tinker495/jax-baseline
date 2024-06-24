@@ -5,6 +5,7 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_uniform_initializers
+from model_builder.flax.layers import Dense
 from model_builder.flax.Module import PreProcess
 from model_builder.utils import print_param
 
