@@ -57,6 +57,10 @@ def filter_like_tree(tensors: PyTree, name_filter: str, filter_fn: Callable):
     # make a new tree with the same structure as the input tree, but with the values filtered by the filter_fn
     # for making tau = 1.0 for qnet and tau = 0.2 for the rest
     # this making hard_reset for qnet and soft_reset for the rest
+    def sigma_filter(x, sigma):
+        return jnp.zeros_like(x) if sigma else x
+
+    # noisynet's sigma is 0.0 for did not reset noisynet noise
     tensors = jax.tree_map(lambda x: x, tensors)
 
     def _filter_like_tree(tensors, filtered: bool):
@@ -64,7 +68,7 @@ def filter_like_tree(tensors: PyTree, name_filter: str, filter_fn: Callable):
             if isinstance(value, dict):
                 tensors[name] = _filter_like_tree(value, filtered or name_filter in name)
             else:
-                tensors[name] = filter_fn(value, filtered)
+                tensors[name] = sigma_filter(filter_fn(value, filtered), "sigma" in name)
         return tensors
 
     return _filter_like_tree(tensors, False)

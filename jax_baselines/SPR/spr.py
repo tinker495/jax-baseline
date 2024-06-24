@@ -37,6 +37,7 @@ class SPR(Q_Network_Family):
         dueling_model=False,
         n_step=1,
         off_policy_fix=False,
+        soft_reset=False,
         learning_starts=1000,
         target_network_update_freq=2000,
         prioritized_replay=False,
@@ -62,6 +63,7 @@ class SPR(Q_Network_Family):
         self.shift_size = 4
         self.prediction_depth = 5
         self.off_policy_fix = off_policy_fix
+        self.soft_reset = soft_reset
         self.intensity_scale = 0.05
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = float(categorial_max)
@@ -141,12 +143,12 @@ class SPR(Q_Network_Family):
             self.params,
         ) = model_builder(next(self.key_seq), print_model=True)
         self.target_params = tree_random_normal_like(next(self.key_seq), self.params)
-        self.reset_hardsoft = filter_like_tree(
-            self.params,
-            "qnet",
-            lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2,
-        )  # hard_reset for qnet and soft_reset for the rest
-
+        if self.soft_reset:
+            self.reset_hardsoft = filter_like_tree(
+                self.params,
+                "qnet",
+                (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2),
+            )  # hard_reset for qnet and soft_reset for the rest
         self.opt_state = self.optimizer.init(self.params)
 
         self.categorial_bar = jnp.expand_dims(
@@ -168,7 +170,9 @@ class SPR(Q_Network_Family):
         if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(
                 self._get_actions(
-                    self.target_params, obs, next(self.key_seq) if self.param_noise else None
+                    self.target_params if self.soft_reset else self.params,
+                    obs,
+                    next(self.key_seq) if self.param_noise else None,
                 )
             )
         else:
@@ -377,7 +381,8 @@ class SPR(Q_Network_Family):
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
         params = optax.apply_updates(params, updates)
         target_params = soft_update(params, target_params, 0.005)
-        params = soft_reset(params, key, steps, 40000, self.reset_hardsoft)
+        if self.soft_reset:
+            params = soft_reset(params, key, steps, 40000, self.reset_hardsoft)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = centropy
@@ -522,6 +527,8 @@ class SPR(Q_Network_Family):
         return target_distribution
 
     def tb_log_name_update(self, tb_log_name):
+        if self.soft_reset:
+            tb_log_name = "SR-" + tb_log_name
         if self.munchausen:
             tb_log_name = "M-" + tb_log_name
         if self.param_noise:

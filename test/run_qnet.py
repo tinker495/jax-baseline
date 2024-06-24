@@ -9,8 +9,8 @@ from jax_baselines.DQN.dqn import DQN
 from jax_baselines.FQF.fqf import FQF
 from jax_baselines.IQN.iqn import IQN
 from jax_baselines.QRDQN.qrdqn import QRDQN
-from jax_baselines.SPR.spr import SPR
 from jax_baselines.SPR.hl_gauss_spr import HL_GAUSS_SPR
+from jax_baselines.SPR.spr import SPR
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -59,6 +59,7 @@ if __name__ == "__main__":
     parser.add_argument("--clip_rewards", action="store_true")
     parser.add_argument("--compress_memory", action="store_true")
     parser.add_argument("--hl_gauss", action="store_true")
+    parser.add_argument("--soft_reset", action="store_true")
     parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
@@ -296,7 +297,6 @@ if __name__ == "__main__":
             from model_builder.flax.qnet.spr_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.spr_builder import model_builder_maker
-    
 
         if args.hl_gauss:
             agent = HL_GAUSS_SPR(
@@ -314,6 +314,7 @@ if __name__ == "__main__":
                 param_noise=args.noisynet,
                 n_step=args.n_step,
                 off_policy_fix=args.off_policy_fix,
+                soft_reset=args.soft_reset,
                 munchausen=args.munchausen,
                 gradient_steps=args.gradient_steps,
                 train_freq=args.train_freq,
@@ -342,6 +343,7 @@ if __name__ == "__main__":
                 param_noise=args.noisynet,
                 n_step=args.n_step,
                 off_policy_fix=args.off_policy_fix,
+                soft_reset=args.soft_reset,
                 munchausen=args.munchausen,
                 gradient_steps=args.gradient_steps,
                 train_freq=args.train_freq,
