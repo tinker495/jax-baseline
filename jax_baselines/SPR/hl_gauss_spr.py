@@ -358,6 +358,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
         def f(updates, input):
             params, target_params, opt_state, key = updates
             obses, actions, rewards, not_terminateds, filled, weights, steps = input
+            key, subkey = jax.random.split(key)
             parsed_obses = [jnp.reshape(o[:, 0], (-1, *o.shape[2:])) for o in obses]
             last_idxs, parsed_filled = self.get_last_idx(params, obses, actions, filled, key)
             parsed_nxtobses = [
@@ -406,9 +407,9 @@ class HL_GAUSS_SPR(Q_Network_Family):
             if self.soft_reset:
                 params = soft_reset(params, key, steps, 40000, self.reset_hardsoft)
             target_q = self.to_scalar(jnp.expand_dims(target_distribution, 1)).mean()
-            return (params, target_params, opt_state, key), (centropy, qloss, rprloss, target_q)
+            return (params, target_params, opt_state, subkey), (centropy, qloss, rprloss, target_q)
         
-        (params, target_params, opt_state, key), outputs = jax.lax.scan(
+        (params, target_params, opt_state, _), outputs = jax.lax.scan(
             f,
             (params, target_params, opt_state, key),
             (
