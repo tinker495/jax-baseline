@@ -363,7 +363,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
             obses, actions, rewards, not_terminateds, filled, weights, steps = input
             key, subkey = jax.random.split(key)
             parsed_obses = [jnp.reshape(o[:, 0], (-1, *o.shape[2:])) for o in obses]
-            last_idxs, parsed_filled = self.get_last_idx(params, obses, actions, filled, key)
+            last_idxs, parsed_filled = self.get_last_idx(target_params, obses, actions, filled, key)
             parsed_nxtobses = [
                 jnp.reshape(
                     jnp.take_along_axis(o, jnp.reshape(last_idxs + 1, (-1, 1, 1, 1, 1)), axis=1),
