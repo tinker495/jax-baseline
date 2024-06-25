@@ -151,6 +151,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
                 "qnet",
                 (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2),
             )  # hard_reset for qnet and soft_reset for the rest
+            self.soft_reset_freq = 40000
 
         self.opt_state = self.optimizer.init(self.params)
 
@@ -209,7 +210,9 @@ class HL_GAUSS_SPR(Q_Network_Family):
         # Sample a batch from the replay buffer
 
         if self.prioritized_replay:
-            data = self.replay_buffer.sample(gradient_steps * self.batch_size, self.prioritized_replay_beta0)
+            data = self.replay_buffer.sample(
+                gradient_steps * self.batch_size, self.prioritized_replay_beta0
+            )
         else:
             data = self.replay_buffer.sample(gradient_steps * self.batch_size)
 
@@ -344,8 +347,8 @@ class HL_GAUSS_SPR(Q_Network_Family):
         ]
 
         batch_idxes = jnp.arange(obses[0].shape[0]).reshape(
-                -1, self.batch_size
-            ) # nbatches x batch_size
+            -1, self.batch_size
+        )  # nbatches x batch_size
         batched_obses = [o[batch_idxes] for o in obses]
         batched_actions = actions[batch_idxes]
         batched_rewards = rewards[batch_idxes]
@@ -405,10 +408,10 @@ class HL_GAUSS_SPR(Q_Network_Family):
             params = optax.apply_updates(params, updates)
             target_params = soft_update(params, target_params, 0.005)
             if self.soft_reset:
-                params = soft_reset(params, key, steps, 40000, self.reset_hardsoft)
+                params = soft_reset(params, key, steps, self.soft_reset_freq, self.reset_hardsoft)
             target_q = self.to_scalar(jnp.expand_dims(target_distribution, 1)).mean()
             return (params, target_params, opt_state, subkey), (centropy, qloss, rprloss, target_q)
-        
+
         (params, target_params, opt_state, _), outputs = jax.lax.scan(
             f,
             (params, target_params, opt_state, key),
