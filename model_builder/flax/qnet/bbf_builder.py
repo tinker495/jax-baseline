@@ -38,7 +38,7 @@ class Transition(nn.Module):
                 padding="SAME",
                 kernel_init=nn.initializers.orthogonal(scale=1.0),
             ),
-            nn.GroupNorm(4),
+            nn.GroupNorm(num_groups=4),
             nn.relu,
         ]
     )
@@ -146,7 +146,9 @@ def model_builder_maker(
     def model_builder(key=None, print_model=False):
         class Merged(nn.Module):
             def setup(self):
-                self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
+                self.preproc = PreProcess(
+                    observation_space, embedding_mode=embedding_mode, flatten=False
+                )
                 self.qnet = Model(
                     action_space,
                     dueling=dueling_model,
