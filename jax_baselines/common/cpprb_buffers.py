@@ -285,7 +285,7 @@ class NstepReplayBuffer(ReplayBuffer):
                 action=action[w],
                 reward=reward[w],
                 **nextobsdict,
-                terminated=terminated[w],
+                done=terminated[w],
             )
             if terminated[w] or truncated[w]:
                 self.local_buffers[w].on_episode_end()
