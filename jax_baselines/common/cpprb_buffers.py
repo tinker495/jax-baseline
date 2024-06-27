@@ -121,7 +121,7 @@ class ReplayBuffer(object):
                     "action": {"shape": action_space},
                     "reward": {},
                     **self.nextobsdict,
-                    "terminated": {},
+                    "done": {},
                 },
                 next_of=self.obscompress,
                 stack_compress=self.obscompress,
@@ -151,7 +151,7 @@ class ReplayBuffer(object):
     def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False):
         obsdict = dict(zip(self.obsdict.keys(), obs_t))
         nextobsdict = dict(zip(self.nextobsdict.keys(), nxtobs_t))
-        self.buffer.add(**obsdict, action=action, reward=reward, **nextobsdict, terminated=terminated)
+        self.buffer.add(**obsdict, action=action, reward=reward, **nextobsdict, done=terminated)
 
     def episode_end(self):
         self.buffer.on_episode_end()
@@ -163,7 +163,7 @@ class ReplayBuffer(object):
             "actions": smpl["action"],
             "rewards": smpl["reward"],
             "nxtobses": [smpl[no] for no in self.nextobsdict.keys()],
-            "terminateds": smpl["terminated"],
+            "terminateds": smpl["done"],
         }
 
     def get_buffer(self):
@@ -175,7 +175,7 @@ class ReplayBuffer(object):
             "actions": transitions["action"],
             "rewards": transitions["reward"],
             "nxtobses": [transitions[no] for no in self.nextobsdict.keys()],
-            "terminateds": transitions["terminated"],
+            "terminateds": transitions["done"],
         }
 
     def clear(self):
@@ -236,7 +236,7 @@ class NstepReplayBuffer(ReplayBuffer):
                     "action": {"shape": action_space},
                     "reward": {},
                     **self.nextobsdict,
-                    "terminated": {},
+                    "done": {},
                 },
                 next_of=self.obscompress,
                 stack_compress=self.obscompress,
@@ -249,7 +249,7 @@ class NstepReplayBuffer(ReplayBuffer):
                         "action": {"shape": action_space},
                         "reward": {},
                         **self.nextobsdict,
-                        "terminated": {},
+                        "done": {},
                     },
                     Nstep=n_s,
                 )
@@ -264,7 +264,7 @@ class NstepReplayBuffer(ReplayBuffer):
                     "action": {"shape": action_space},
                     "reward": {},
                     **self.nextobsdict,
-                    "terminated": {},
+                    "done": {},
                 },
                 Nstep=n_s,
                 next_of=self.obscompress,
@@ -337,7 +337,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                 "action": {"shape": action_space},
                 "reward": {},
                 **self.nextobsdict,
-                "terminated": {},
+                "done": {},
             },
             alpha=alpha,
             eps=eps,
@@ -352,7 +352,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             "actions": smpl["action"],
             "rewards": smpl["reward"],
             "nxtobses": [smpl[no] for no in self.nextobsdict.keys()],
-            "terminateds": smpl["terminated"],
+            "terminateds": smpl["done"],
             "weights": smpl["weights"],
             "indexes": smpl["indexes"],
         }
@@ -417,7 +417,7 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
                     "action": {"shape": action_space},
                     "reward": {},
                     **self.nextobsdict,
-                    "terminated": {},
+                    "done": {},
                 },
                 alpha=alpha,
                 eps=eps,
@@ -432,7 +432,7 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
                         "action": {"shape": action_space},
                         "reward": {},
                         **self.nextobsdict,
-                        "terminated": {},
+                        "done": {},
                     },
                     Nstep=n_s,
                 )
@@ -447,7 +447,7 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
                     "action": {"shape": action_space},
                     "reward": {},
                     **self.nextobsdict,
-                    "terminated": {},
+                    "done": {},
                 },
                 alpha=alpha,
                 eps=eps,
@@ -463,7 +463,7 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
             "actions": smpl["action"],
             "rewards": smpl["reward"],
             "nxtobses": [smpl[no] for no in self.nextobsdict.keys()],
-            "terminateds": smpl["terminated"],
+            "terminateds": smpl["done"],
             "weights": smpl["weights"],
             "indexes": smpl["indexes"],
         }
@@ -517,7 +517,7 @@ class MultiPrioritizedReplayBuffer:
             "action": {"shape": action_space},
             "reward": {},
             **self.nextobsdict,
-            "terminated": {},
+            "done": {},
         }
 
         self.n_s = None
@@ -551,7 +551,7 @@ class MultiPrioritizedReplayBuffer:
             "actions": smpl["action"],
             "rewards": smpl["reward"],
             "nxtobses": [smpl[no] for no in self.nextobsdict.keys()],
-            "terminateds": smpl["terminated"],
+            "terminateds": smpl["done"],
             "weights": smpl["weights"],
             "indexes": smpl["indexes"],
         }
