@@ -14,44 +14,52 @@ pip install -r requirement.txt
 pip install .
 ```
 
-## Implemented Environments
+## Implement log
+
+- :heavy_check_mark: : Optional implemented
+- :white_check_mark: : Defualt implemented at papers
+- :x: : Not implemeted yet or can not implemented
+- :zzz: : Implemented but didn't update a while (can not guarantee working well now)
+
+### Implemented Environments
 
 | **Name**                | **Q-Net based**    | **Actor-Critic based** | **DPG based**      |
 | ----------------------- | ------------------ | ---------------------- | ------------------ |
 | Gymnasium               | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
 | MultiworkerGym with Ray | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
-| Unity-ML Environments   | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
+| Unity-ML Environments   | :zzz:              | :zzz:                  | :zzz:              |
 
-## Implemented Algorithms
+### Implemented Algorithms
 
-### Q-Net bases
+#### Q-Net bases
 
 | **Name** | `Per`              | `N-step`           | `NoisyNet`         | `Munchausen`       | `Ape-X`            |
 | -------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
 | DQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | C51      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | QRDQN    | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| IQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | X                  |
-| FQF      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | X                  |
-| SPR      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | X                  |
+| IQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| FQF      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| SPR      | :white_check_mark: | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :x:                |
+| BBF      | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
 
-### Actor-Critic based
+#### Actor-Critic based
 
 | **Name**        | `Box`              | `Discrete`         | `IMPALA`           |
 | --------------- | ------------------ | ------------------ | ------------------ |
 | A2C             | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | PPO             | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| Truly PPO(TPPO) | :heavy_check_mark: | :heavy_check_mark: | X                  |
+| Truly PPO(TPPO) | :heavy_check_mark: | :heavy_check_mark: | :x:                |
 
-### DPG bases
+#### DPG bases
 
-| **Name** | `Per`                   | `N-step`           | `Ape-X`            |
+| **Name** | `Per`                   | `N-step`           | `Ape-:x:`          |
 | -------- | ----------------------- | ------------------ | ------------------ |
 | DDPG     | :heavy_check_mark:      | :heavy_check_mark: | :heavy_check_mark: |
 | TD3      | :heavy_check_mark:      | :heavy_check_mark: | :heavy_check_mark: |
-| SAC      | :heavy_check_mark:      | :heavy_check_mark: | X                  |
-| TQC      | :heavy_check_mark:      | :heavy_check_mark: | X                  |
-| TD7      | :heavy_check_mark:(LAP) | X                  | X                  |
+| SAC      | :heavy_check_mark:      | :heavy_check_mark: | :x:                |
+| TQC      | :heavy_check_mark:      | :heavy_check_mark: | :x:                |
+| TD7      | :white_check_mark:(LAP) | :x:                | :x:                |
 
 ## Test
 
