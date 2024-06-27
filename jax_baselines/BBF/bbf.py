@@ -278,11 +278,13 @@ class BBF(Q_Network_Family):
             jnp.minimum((steps % self.soft_reset_freq) / self.soft_reset_freq, 1 / 4) * 4
         )  # 0 ~ 1 increasing at 1/4
         n_steps = 10 - jnp.round(7 * ratio)  # 10 ~ 3 decreasing at 1/4
-        # start_horizon = 1/(1 - 0.97)
-        # end_horizon = 1/(1 - 0.997)
-        # horizon = start_horizon + (end_horizon - start_horizon) * ratio # 0.97 ~ 0.997 increasing at 1/4
-        # gamma = 1 - 1/horizon
-        return n_steps, self.gamma
+        start_horizon = 1 / (1 - 0.97)
+        end_horizon = 1 / (1 - 0.997)
+        horizon = (
+            start_horizon + (end_horizon - start_horizon) * ratio
+        )  # 0.97 ~ 0.997 increasing at 1/4
+        gamma = 1 - 1 / horizon
+        return n_steps, gamma  # self.gamma
 
     def _train_step(
         self,
