@@ -33,15 +33,18 @@ pip install .
 
 #### Q-Net bases
 
-| **Name** | `Per`              | `N-step`           | `NoisyNet`         | `Munchausen`       | `Ape-X`            |
-| -------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
-| DQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| C51      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| QRDQN    | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| IQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
-| FQF      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
-| SPR      | :white_check_mark: | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :x:                |
-| BBF      | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| **Name**    | `Per`              | `N-step`           | `NoisyNet`         | `Munchausen`       | `Ape-X`            |
+| ----------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
+| DQN\[^DQN\] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| C51\[^C51\] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| QRDQN       | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| IQN         | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| FQF         | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| SPR         | :white_check_mark: | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :x:                |
+| BBF         | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+
+\[^DQN\]: [DQN paper](https://arxiv.org/abs/1312.5602v1)
+\[^C51\]: [C51 paper](https://arxiv.org/abs/1707.06887)
 
 #### Actor-Critic based
 
