@@ -28,24 +28,11 @@ class HL_GAUSS_SPR(Q_Network_Family):
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
-        exploration_fraction=0.3,
-        exploration_final_eps=0.02,
-        exploration_initial_eps=1.0,
-        train_freq=1,
         gradient_steps=1,
         batch_size=32,
-        double_q=False,
-        dueling_model=False,
-        n_step=1,
         off_policy_fix=False,
         soft_reset=False,
         learning_starts=1000,
-        target_network_update_freq=2000,
-        prioritized_replay=False,
-        prioritized_replay_alpha=0.6,
-        prioritized_replay_beta0=0.4,
-        prioritized_replay_eps=1e-3,
-        param_noise=False,
         munchausen=False,
         log_interval=200,
         tensorboard_log=None,
@@ -77,22 +64,22 @@ class HL_GAUSS_SPR(Q_Network_Family):
             gamma,
             learning_rate,
             buffer_size,
-            exploration_fraction,
-            exploration_final_eps,
-            exploration_initial_eps,
-            train_freq,
+            0,
+            0,
+            0,
+            1,
             gradient_steps,
             batch_size,
-            double_q,
-            dueling_model,
-            n_step,
+            True,
+            True,
+            10,
             learning_starts,
-            target_network_update_freq,
-            prioritized_replay,
-            prioritized_replay_alpha,
-            prioritized_replay_beta0,
-            prioritized_replay_eps,
-            param_noise,
+            0,
+            True,
+            0.6,
+            0.4,
+            1e-3,
+            True,
             munchausen,
             log_interval,
             tensorboard_log,
@@ -550,20 +537,9 @@ class HL_GAUSS_SPR(Q_Network_Family):
             tb_log_name = "SR-" + tb_log_name
         if self.munchausen:
             tb_log_name = "M-" + tb_log_name
-        if self.param_noise:
-            tb_log_name = "Noisy_" + tb_log_name
-        if self.dueling_model:
-            tb_log_name = "Dueling_" + tb_log_name
-        if self.double_q:
-            tb_log_name = "Double_" + tb_log_name
-        if self.n_step_method:
-            if self.off_policy_fix:
-                n_step_str = f"{self.n_step}~1Step_"
-            else:
-                n_step_str = f"{self.n_step}Step_"
+        if self.off_policy_fix:
+            n_step_str = f"OF_"
             tb_log_name = n_step_str + tb_log_name
-        if self.prioritized_replay:
-            tb_log_name = tb_log_name + "+PER"
         return tb_log_name
 
     def learn(
