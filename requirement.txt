@@ -9,12 +9,12 @@ mujoco
 box2d
 box2d-py
 box2d-kengz
-jax[cuda12_pip]==0.4.20
+jax[cuda12_pip]
 dm_pix
 dm-haiku
 flax
 optax
-numpy
+numpy==1.26.4
 ray[default]
 colabgymrender
 cpprb @ git+https://github.com/tinker495/cpprb.git

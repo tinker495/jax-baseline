@@ -482,6 +482,7 @@ class Q_Network_Family(object):
         from gymnasium.wrappers import RecordVideo
 
         Render_env = RecordVideo(self.env, directory, episode_trigger=lambda x: True)
+        total_rewards = []
         for i in range(episode):
             state, info = Render_env.reset()
             state = [np.expand_dims(state, axis=0)]
@@ -495,3 +496,7 @@ class Q_Network_Family(object):
                 episode_rew += reward
             Render_env.close()
             print("episod reward :", episode_rew)
+            total_rewards.append(episode_rew)
+        avg_reward = np.mean(total_rewards)
+        std_reward = np.std(total_rewards)
+        print(f"reward : {avg_reward} +- {std_reward}(std)")

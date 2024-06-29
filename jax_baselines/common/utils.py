@@ -18,14 +18,14 @@ def key_gen(seed):
         yield subkey
 
 
-def random_split_like_tree(rng_key: jax.random.KeyArray, target: PyTree = None, treedef=None):
+def random_split_like_tree(rng_key: jax.random.PRNGKey, target: PyTree = None, treedef=None):
     if treedef is None:
         treedef = jax.tree_structure(target)
     keys = jax.random.split(rng_key, treedef.num_leaves)
     return jax.tree_unflatten(treedef, keys)
 
 
-def tree_random_normal_like(rng_key: jax.random.KeyArray, target: PyTree):
+def tree_random_normal_like(rng_key: jax.random.PRNGKey, target: PyTree):
     keys_tree = random_split_like_tree(rng_key, target)
     return jax.tree_map(
         lambda t, k: jax.random.normal(k, t.shape, t.dtype) * jnp.std(t),
@@ -35,7 +35,7 @@ def tree_random_normal_like(rng_key: jax.random.KeyArray, target: PyTree):
 
 
 def soft_reset(
-    tensors: PyTree, key: jax.random.KeyArray, steps: int, update_period: int, taus: PyTree
+    tensors: PyTree, key: jax.random.PRNGKey, steps: int, update_period: int, taus: PyTree
 ):
     update = steps % update_period == 0
 
