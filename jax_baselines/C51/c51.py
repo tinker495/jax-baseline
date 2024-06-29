@@ -263,7 +263,7 @@ class C51(Q_Network_Family):
         if self.munchausen:
             next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau) # [32, action_size]
-            next_categorials = self._categorial_bar - jnp.expand_dims(pi_next * tau_log_pi_next, axis=2) # [32, action_size, 51]
+            next_categorials = self._categorial_bar - jnp.expand_dims(tau_log_pi_next, axis=2) # [32, action_size, 51]
 
             q_k_targets = jnp.sum(
                 self.get_q(target_params, obses, key) * self.categorial_bar, axis=2
