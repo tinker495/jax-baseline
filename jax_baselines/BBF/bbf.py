@@ -480,22 +480,46 @@ class BBF(Q_Network_Family):
     def _target(
         self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, gammas, key
     ):
-        next_q = self.get_q(target_params, nxtobses, key)
+        next_distributions = self.get_q(target_params, nxtobses, key)
         if self.double_q:
             next_action_q = jnp.sum(
                 self.get_q(params, nxtobses, key) * self._categorial_bar, axis=2
             )
         else:
-            next_action_q = jnp.sum(next_q * self._categorial_bar, axis=2)
-        next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
-        next_distribution = jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))
+            next_action_q = jnp.sum(next_distributions * self._categorial_bar, axis=2)
+
+        def tdist(next_distribution, target_categorial):
+            Tz = jnp.clip(
+                target_categorial, self.categorial_min, self.categorial_max
+            )  # clip to range of bar
+            C51_B = ((Tz - self.categorial_min) / self.delta_bar).astype(
+                jnp.float32
+            )  # bar index as float
+            C51_L = jnp.floor(C51_B).astype(jnp.int32)  # bar lower index as int
+            C51_H = jnp.ceil(C51_B).astype(jnp.int32)  # bar higher index as int
+            C51_L = jnp.where((C51_L > 0) * (C51_L == C51_H), C51_L - 1, C51_L)  # C51_L.at[].add(-1)
+            C51_H = jnp.where(
+                (C51_H < (self.categorial_bar_n - 1)) * (C51_L == C51_H), C51_H + 1, C51_H
+            )  # C51_H.at[].add(1)
+
+            def tdist(next_distribution, C51_L, C51_H, C51_b):
+                target_distribution = jnp.zeros((self.categorial_bar_n))
+                target_distribution = target_distribution.at[C51_L].add(
+                    next_distribution * (C51_H.astype(jnp.float32) - C51_b)
+                )
+                target_distribution = target_distribution.at[C51_H].add(
+                    next_distribution * (C51_b - C51_L.astype(jnp.float32))
+                )
+                return target_distribution
+
+            return jax.vmap(tdist, in_axes=(0, 0, 0, 0))(
+                next_distribution, C51_L, C51_H, C51_B
+            )
 
         if self.munchausen:
             next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
-            pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
-            next_categorial = self.categorial_bar - jnp.sum(
-                pi_next * tau_log_pi_next, axis=1, keepdims=True
-            )
+            pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau) # [32, action_size]
+            next_categorials = self._categorial_bar - jnp.expand_dims(pi_next * tau_log_pi_next, axis=2) # [32, action_size, 51]
 
             q_k_targets = jnp.sum(
                 self.get_q(target_params, obses, key) * self.categorial_bar, axis=2
@@ -506,36 +530,16 @@ class BBF(Q_Network_Family):
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0
-            )
+            ) # [32, 1]
+            target_categorials = jnp.expand_dims(gammas * not_terminateds, axis=2) * next_categorials + jnp.expand_dims(rewards, axis=2) # [32, action_size, 51]
+            target_distributions = jax.vmap(tdist, in_axes=(1, 1))(next_distributions, target_categorials)
+            target_distribution = jnp.sum(jnp.expand_dims(pi_next, axis=2) * target_distributions, axis=1)
         else:
-            next_categorial = self.categorial_bar
-        target_categorial = gammas * not_terminateds * next_categorial + rewards  # [32, 51]
-        Tz = jnp.clip(
-            target_categorial, self.categorial_min, self.categorial_max
-        )  # clip to range of bar
-        C51_B = ((Tz - self.categorial_min) / self.delta_bar).astype(
-            jnp.float32
-        )  # bar index as float
-        C51_L = jnp.floor(C51_B).astype(jnp.int32)  # bar lower index as int
-        C51_H = jnp.ceil(C51_B).astype(jnp.int32)  # bar higher index as int
-        C51_L = jnp.where((C51_L > 0) * (C51_L == C51_H), C51_L - 1, C51_L)  # C51_L.at[].add(-1)
-        C51_H = jnp.where(
-            (C51_H < (self.categorial_bar_n - 1)) * (C51_L == C51_H), C51_H + 1, C51_H
-        )  # C51_H.at[].add(1)
+            next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
+            next_distribution = jnp.squeeze(jnp.take_along_axis(next_distributions, next_actions, axis=1))
+            target_categorial = gammas * not_terminateds * self.categorial_bar + rewards  # [32, 51]
+            target_distribution = tdist(next_distribution, target_categorial)
 
-        def tdist(next_distribution, C51_L, C51_H, C51_b):
-            target_distribution = jnp.zeros((self.categorial_bar_n))
-            target_distribution = target_distribution.at[C51_L].add(
-                next_distribution * (C51_H.astype(jnp.float32) - C51_b)
-            )
-            target_distribution = target_distribution.at[C51_H].add(
-                next_distribution * (C51_b - C51_L.astype(jnp.float32))
-            )
-            return target_distribution
-
-        target_distribution = jax.vmap(tdist, in_axes=(0, 0, 0, 0))(
-            next_distribution, C51_L, C51_H, C51_B
-        )
         return target_distribution
 
     def tb_log_name_update(self, tb_log_name):
