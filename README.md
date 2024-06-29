@@ -33,15 +33,15 @@ pip install .
 
 #### Q-Net bases
 
-| **Name**    | `Per`[^PER] | `N-step`[^NSTEP][^RAINBOW]   | `NoisyNet`[^NOISY]    | `Munchausen`[^MUNCHAUSEN]       | `Ape-X`[^APEX] |
-| ----------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
-| DQN[^DQN] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| C51[^C51] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| QRDQN[^QRDQN]| :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| IQN[^IQN] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
-| FQF[^FQF] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
-| SPR[^SPR] | :white_check_mark: | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :x:                |
-| BBF[^BBF] | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| **Name**    | `Per`[^PER] | `N-step`[^NSTEP][^RAINBOW]   | `NoisyNet`[^NOISY]    | `Munchausen`[^MUNCHAUSEN]       | `Ape-X`[^APEX] | `HL-Gauss`[^HL_GAUSS] |
+| ----------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |------------------ |
+| DQN[^DQN] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| C51[^C51] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| QRDQN[^QRDQN]| :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| IQN[^IQN] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |
+| FQF[^FQF] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |
+| SPR[^SPR] | :white_check_mark: | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :x:                | :heavy_check_mark: |
+| BBF[^BBF] | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                | :heavy_check_mark: |
 
 #### Actor-Critic based
 
@@ -85,6 +85,7 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 [^NOISY]: [Noisy network](https://arxiv.org/abs/1706.10295)
 [^MUNCHAUSEN]: [Munchausen rl](https://arxiv.org/abs/2007.14430)
 [^APEX]: [Ape-X](https://arxiv.org/abs/1803.00933)
+[^HL_GAUSS]: [HL-GAUSS](https://arxiv.org/abs/2403.03950)
 [^C51]: [C51](https://arxiv.org/abs/1707.06887)
 [^QRDQN]: [QRDQN](https://arxiv.org/abs/1710.10044)
 [^IQN]: [IQN](https://arxiv.org/abs/1806.06923)
