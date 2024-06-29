@@ -59,7 +59,7 @@ pip install .
 | TD3[^TD3]  | :heavy_check_mark:      | :heavy_check_mark: | :heavy_check_mark: |
 | SAC[^SAC]  | :heavy_check_mark:      | :heavy_check_mark: | :x:                |
 | TQC[^TQC]  | :heavy_check_mark:      | :heavy_check_mark: | :x:                |
-| TD7[^TD7]  | :white_check_mark:(LAP) | :x:                | :x:                |
+| TD7[^TD7]  | :white_check_mark:(LAP[^LaP]) | :x:                | :x:                |
 
 ## Test
 
@@ -104,3 +104,4 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 [^SAC]: [SAC](https://arxiv.org/abs/1801.01290)
 [^TQC]: [TQC](https://arxiv.org/abs/2005.04269)
 [^TD7]: [TD7](https://arxiv.org/abs/2306.02451)
+[^LaP]: [LaP](https://arxiv.org/abs/2007.06049)
