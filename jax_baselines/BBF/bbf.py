@@ -524,9 +524,8 @@ class BBF(Q_Network_Family):
             q_k_targets = jnp.sum(
                 self.get_q(target_params, obses, key) * self.categorial_bar, axis=2
             )
-            q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
-            log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
-            munchausen_addon = jnp.take_along_axis(log_pi, jnp.squeeze(actions, axis=2), axis=1)
+            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0
