@@ -35,7 +35,7 @@ pip install .
 
 | **Name**    | `Double`[^DOUBLE]  | `Dueling`[^DUELING] | `Per`[^PER] | `N-step`[^NSTEP][^RAINBOW]   | `NoisyNet`[^NOISY]    | `Munchausen`[^MUNCHAUSEN]       | `Ape-X`[^APEX] | `HL-Gauss`[^HL_GAUSS] |
 | ----------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |------------------ |
-| DQN[^DQN] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| DQN[^DQN] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
 | C51[^C51] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
 | QRDQN[^QRDQN]| :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
 | IQN[^IQN] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |
