@@ -33,15 +33,15 @@ pip install .
 
 #### Q-Net bases
 
-| **Name**    | `Per`[^PER] | `N-step`[^NSTEP][^RAINBOW]   | `NoisyNet`[^NOISY]    | `Munchausen`[^MUNCHAUSEN]       | `Ape-X`[^APEX] | `HL-Gauss`[^HL_GAUSS] |
-| ----------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |------------------ |
+| **Name**    | `Double`[^DOUBLE]  | `Dueling`[^DUELING] | `Per`[^PER] | `N-step`[^NSTEP][^RAINBOW]   | `NoisyNet`[^NOISY]    | `Munchausen`[^MUNCHAUSEN]       | `Ape-X`[^APEX] | `HL-Gauss`[^HL_GAUSS] |
+| ----------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |------------------ |
 | DQN[^DQN] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
-| C51[^C51] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| QRDQN[^QRDQN]| :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
-| IQN[^IQN] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |
-| FQF[^FQF] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |
-| SPR[^SPR] | :white_check_mark: | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :x:                | :heavy_check_mark: |
-| BBF[^BBF] | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                | :heavy_check_mark: |
+| C51[^C51] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| QRDQN[^QRDQN]| :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| IQN[^IQN] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |
+| FQF[^FQF] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |
+| SPR[^SPR] | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :x:                | :heavy_check_mark: |
+| BBF[^BBF] | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                | :heavy_check_mark: |
 
 #### Actor-Critic based
 
@@ -79,6 +79,8 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 ```
 
 [^DQN]: [DQN](https://arxiv.org/abs/1312.5602v1)
+[^DOUBLE]: [Double DQN paper](https://arxiv.org/abs/1509.06461)
+[^DUELING]: [Dueling DQN paper](https://arxiv.org/abs/1511.06581)
 [^PER]: [PER](https://arxiv.org/abs/1511.05952)
 [^NSTEP]: [N-step TD](https://link.springer.com/article/10.1007/BF00115009)
 [^RAINBOW]: [RAINBOW DQN](https://arxiv.org/abs/1710.02298)
