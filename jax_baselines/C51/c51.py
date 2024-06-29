@@ -276,7 +276,7 @@ class C51(Q_Network_Family):
                 munchausen_addon, a_min=-1, a_max=0
             ) # [32, 1]
             target_categorials = jnp.expand_dims(self._gamma * not_terminateds, axis=2) * next_categorials + jnp.expand_dims(rewards, axis=2) # [32, action_size, 51]
-            target_distributions = jax.vmap(tdist, in_axes=(1, 1))(next_distributions, target_categorials)
+            target_distributions = jax.vmap(tdist, in_axes=(1, 1), out_axes=1)(next_distributions, target_categorials)
             target_distribution = jnp.sum(jnp.expand_dims(pi_next, axis=2) * target_distributions, axis=1)
         else:
             next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
