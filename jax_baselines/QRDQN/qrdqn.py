@@ -228,7 +228,10 @@ class QRDQN(Q_Network_Family):
                 * not_terminateds
             )
 
-            q_k_targets = jnp.mean(self.get_q(target_params, obses, key), axis=2)
+            if self.double_q:
+                q_k_targets = jnp.mean(self.get_q(params, obses, key), axis=2)
+            else:
+                q_k_targets = jnp.mean(self.get_q(target_params, obses, key), axis=2)
             _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
 

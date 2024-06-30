@@ -521,9 +521,14 @@ class BBF(Q_Network_Family):
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau) # [32, action_size]
             next_categorials = self._categorial_bar - jnp.expand_dims(tau_log_pi_next, axis=2) # [32, action_size, 51]
 
-            q_k_targets = jnp.sum(
-                self.get_q(target_params, obses, key) * self.categorial_bar, axis=2
-            )
+            if self.double_q:
+                q_k_targets = jnp.sum(
+                    self.get_q(params, obses, key) * self.categorial_bar, axis=2
+                )
+            else:
+                q_k_targets = jnp.sum(
+                    self.get_q(target_params, obses, key) * self.categorial_bar, axis=2
+                )
             _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
