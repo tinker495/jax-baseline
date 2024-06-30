@@ -506,7 +506,7 @@ class HL_GAUSS_BBF(Q_Network_Family):
                 q_k_targets = self.get_q(target_params, obses, key)
                 q_k_targets = self.to_scalar(q_k_targets)
             _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
-            munchausen_addon = jnp.take_along_axis(tau_log_pi, actions, axis=1)
+            munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions,axis=1), axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0
