@@ -381,7 +381,12 @@ class HL_GAUSS_BBF(Q_Network_Family):
             )
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
-            target_params = soft_update(params, target_params, 0.005)
+            stop_soft_update = steps % self.soft_reset_freq < 100
+            target_params = jax.lax.cond(
+                stop_soft_update,
+                lambda target_params: target_params,
+                lambda target_params: soft_update(params, target_params, 0.005),
+            )(target_params)
             params = soft_reset(params, key, steps, self.soft_reset_freq, self.reset_hardsoft)
             target_q = self.to_scalar(jnp.expand_dims(target_distribution, 1)).mean()
             return (params, target_params, opt_state, subkey), (centropy, qloss, rprloss, target_q)
@@ -506,7 +511,7 @@ class HL_GAUSS_BBF(Q_Network_Family):
                 q_k_targets = self.get_q(target_params, obses, key)
                 q_k_targets = self.to_scalar(q_k_targets)
             _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
-            munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions,axis=1), axis=1)
+            munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=1), axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0

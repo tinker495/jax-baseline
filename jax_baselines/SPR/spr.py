@@ -70,7 +70,7 @@ class SPR(Q_Network_Family):
             batch_size,
             True,
             True,
-            3, # n_step 3 is better than 10 in breakout
+            3,  # n_step 3 is better than 10 in breakout
             learning_starts,
             0,
             True,
@@ -390,7 +390,15 @@ class SPR(Q_Network_Family):
             params = optax.apply_updates(params, updates)
             target_params = soft_update(params, target_params, 0.005)
             if self.soft_reset:
+                stop_soft_update = steps % self.soft_reset_freq < 100
+                target_params = jax.lax.cond(
+                    stop_soft_update,
+                    lambda target_params: target_params,
+                    lambda target_params: soft_update(params, target_params, 0.005),
+                )(target_params)
                 params = soft_reset(params, key, steps, self.soft_reset_freq, self.reset_hardsoft)
+            else:
+                target_params = soft_update(params, target_params, 0.005)
             target_q = jnp.sum(
                 target_distribution * self.categorial_bar,
                 axis=1,
@@ -512,7 +520,9 @@ class SPR(Q_Network_Family):
             )  # bar index as float
             C51_L = jnp.floor(C51_B).astype(jnp.int32)  # bar lower index as int
             C51_H = jnp.ceil(C51_B).astype(jnp.int32)  # bar higher index as int
-            C51_L = jnp.where((C51_L > 0) * (C51_L == C51_H), C51_L - 1, C51_L)  # C51_L.at[].add(-1)
+            C51_L = jnp.where(
+                (C51_L > 0) * (C51_L == C51_H), C51_L - 1, C51_L
+            )  # C51_L.at[].add(-1)
             C51_H = jnp.where(
                 (C51_H < (self.categorial_bar_n - 1)) * (C51_L == C51_H), C51_H + 1, C51_H
             )  # C51_H.at[].add(1)
@@ -527,19 +537,17 @@ class SPR(Q_Network_Family):
                 )
                 return target_distribution
 
-            return jax.vmap(tdist, in_axes=(0, 0, 0, 0))(
-                next_distribution, C51_L, C51_H, C51_B
-            )
+            return jax.vmap(tdist, in_axes=(0, 0, 0, 0))(next_distribution, C51_L, C51_H, C51_B)
 
         if self.munchausen:
             next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
-            pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau) # [32, action_size]
-            next_categorials = self._categorial_bar - jnp.expand_dims(tau_log_pi_next, axis=2) # [32, action_size, 51]
+            pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)  # [32, action_size]
+            next_categorials = self._categorial_bar - jnp.expand_dims(
+                tau_log_pi_next, axis=2
+            )  # [32, action_size, 51]
 
             if self.double_q:
-                q_k_targets = jnp.sum(
-                    self.get_q(params, obses, key) * self.categorial_bar, axis=2
-                )
+                q_k_targets = jnp.sum(self.get_q(params, obses, key) * self.categorial_bar, axis=2)
             else:
                 q_k_targets = jnp.sum(
                     self.get_q(target_params, obses, key) * self.categorial_bar, axis=2
@@ -549,13 +557,23 @@ class SPR(Q_Network_Family):
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0
-            ) # [32, 1]
-            target_categorials = jnp.expand_dims(gammas * not_terminateds, axis=2) * next_categorials + jnp.expand_dims(rewards, axis=2) # [32, action_size, 51]
-            target_distributions = jax.vmap(tdist, in_axes=(1, 1), out_axes=1)(next_distributions, target_categorials)
-            target_distribution = jnp.sum(jnp.expand_dims(pi_next, axis=2) * target_distributions, axis=1)
+            )  # [32, 1]
+            target_categorials = jnp.expand_dims(
+                gammas * not_terminateds, axis=2
+            ) * next_categorials + jnp.expand_dims(
+                rewards, axis=2
+            )  # [32, action_size, 51]
+            target_distributions = jax.vmap(tdist, in_axes=(1, 1), out_axes=1)(
+                next_distributions, target_categorials
+            )
+            target_distribution = jnp.sum(
+                jnp.expand_dims(pi_next, axis=2) * target_distributions, axis=1
+            )
         else:
             next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
-            next_distribution = jnp.squeeze(jnp.take_along_axis(next_distributions, next_actions, axis=1))
+            next_distribution = jnp.squeeze(
+                jnp.take_along_axis(next_distributions, next_actions, axis=1)
+            )
             target_categorial = gammas * not_terminateds * self.categorial_bar + rewards  # [32, 51]
             target_distribution = tdist(next_distribution, target_categorial)
 
@@ -567,7 +585,7 @@ class SPR(Q_Network_Family):
         if self.munchausen:
             tb_log_name = "M-" + tb_log_name
         if self.off_policy_fix:
-            n_step_str = f"OF_"
+            n_step_str = "OF_"
             tb_log_name = n_step_str + tb_log_name
         return tb_log_name
 
