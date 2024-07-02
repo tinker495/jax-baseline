@@ -139,6 +139,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
                 (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2),
             )  # hard_reset for qnet and soft_reset for the rest
             self.soft_reset_freq = 40000
+            self.stop_soft_update = self.soft_reset_freq // 10
 
         self.opt_state = self.optimizer.init(self.params)
 
@@ -394,7 +395,9 @@ class HL_GAUSS_SPR(Q_Network_Family):
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
             if self.soft_reset:
-                stop_soft_update = steps % self.soft_reset_freq < 100
+                stop_soft_update = (steps % self.soft_reset_freq < self.stop_soft_update) & (
+                    steps > self.soft_reset_freq
+                )
                 target_params = jax.lax.cond(
                     stop_soft_update,
                     lambda target_params: target_params,

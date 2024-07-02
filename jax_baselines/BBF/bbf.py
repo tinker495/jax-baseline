@@ -137,6 +137,7 @@ class BBF(Q_Network_Family):
             (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.5),
         )  # hard_reset for qnet and soft_reset for the rest
         self.soft_reset_freq = 40000
+        self.stop_soft_update = self.soft_reset_freq // 10
         self.optimizer = optax.adamw(learning_rate=self.learning_rate, weight_decay=0.1)
         self.opt_state = self.optimizer.init(self.params)
 
@@ -374,7 +375,9 @@ class BBF(Q_Network_Family):
             )
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
-            stop_soft_update = steps % self.soft_reset_freq < 100
+            stop_soft_update = (steps % self.soft_reset_freq < self.stop_soft_update) & (
+                steps > self.soft_reset_freq
+            )
             target_params = jax.lax.cond(
                 stop_soft_update,
                 lambda target_params: target_params,
