@@ -386,7 +386,8 @@ class HL_GAUSS_BBF(Q_Network_Family):
                 stop_soft_update,
                 lambda target_params: target_params,
                 lambda target_params: soft_update(params, target_params, 0.005),
-            )(target_params)
+                target_params,
+            )
             params = soft_reset(params, key, steps, self.soft_reset_freq, self.reset_hardsoft)
             target_q = self.to_scalar(jnp.expand_dims(target_distribution, 1)).mean()
             return (params, target_params, opt_state, subkey), (centropy, qloss, rprloss, target_q)

@@ -379,7 +379,8 @@ class BBF(Q_Network_Family):
                 stop_soft_update,
                 lambda target_params: target_params,
                 lambda target_params: soft_update(params, target_params, 0.005),
-            )(target_params)
+                target_params,
+            )
             params = soft_reset(params, key, steps, self.soft_reset_freq, self.reset_hardsoft)
             target_q = jnp.sum(
                 target_distribution * self.categorial_bar,

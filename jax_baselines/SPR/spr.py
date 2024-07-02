@@ -388,14 +388,14 @@ class SPR(Q_Network_Family):
             )
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
-            target_params = soft_update(params, target_params, 0.005)
             if self.soft_reset:
                 stop_soft_update = steps % self.soft_reset_freq < 100
                 target_params = jax.lax.cond(
                     stop_soft_update,
                     lambda target_params: target_params,
                     lambda target_params: soft_update(params, target_params, 0.005),
-                )(target_params)
+                    target_params,
+                )
                 params = soft_reset(params, key, steps, self.soft_reset_freq, self.reset_hardsoft)
             else:
                 target_params = soft_update(params, target_params, 0.005)
