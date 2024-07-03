@@ -238,7 +238,7 @@ class IQN(Q_Network_Family):
             )  # batch x actions x support
             sample_pi = jax.random.categorical(
                 key, jnp.tile(pi_next, (1, 1, self.n_support)), 1
-            )  # batch x actions x 1
+            )  # batch x 1 x support
             next_vals = jnp.take_along_axis(
                 next_vals, jnp.expand_dims(sample_pi, axis=1), axis=1
             )  # batch x 1 x support
