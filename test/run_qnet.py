@@ -4,6 +4,7 @@ import os
 import gymnasium as gym
 
 from jax_baselines.BBF.bbf import BBF
+from jax_baselines.BBF.bbf_iqn import BBF_IQN
 from jax_baselines.BBF.hl_gauss_bbf import HL_GAUSS_BBF
 from jax_baselines.C51.c51 import C51
 from jax_baselines.C51.hl_gauss_c51 import HL_GAUSS_C51
@@ -393,6 +394,33 @@ if __name__ == "__main__":
                 optimizer=args.optimizer,
                 compress_memory=args.compress_memory,
             )
+    elif args.algo == "BBF_IQN":
+        if args.model_lib == "flax":
+            from model_builder.flax.qnet.bbf_iqn_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            raise NotImplementedError
+
+        agent = BBF_IQN(
+            env,
+            model_builder_maker=model_builder_maker,
+            gamma=args.gamma,
+            learning_rate=args.learning_rate,
+            batch_size=args.batch,
+            buffer_size=int(args.buffer_size),
+            exploration_final_eps=args.final_eps,
+            param_noise=args.noisynet,
+            off_policy_fix=args.off_policy_fix,
+            munchausen=args.munchausen,
+            gradient_steps=args.gradient_steps,
+            train_freq=args.train_freq,
+            learning_starts=args.learning_starts,
+            n_support=args.n_support,
+            exploration_fraction=args.exploration_fraction,
+            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            policy_kwargs=policy_kwargs,
+            optimizer=args.optimizer,
+            compress_memory=args.compress_memory,
+        )
 
     agent.learn(int(args.steps))
 
