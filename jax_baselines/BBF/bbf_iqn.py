@@ -57,6 +57,7 @@ class BBF_IQN(Q_Network_Family):
         self.off_policy_fix = off_policy_fix
         self.intensity_scale = 0.05
         self.CVaR = CVaR
+        self.risk_avoid = CVaR != 1.0
         self.n_support = n_support
         self.delta = delta
 
@@ -523,6 +524,11 @@ class BBF_IQN(Q_Network_Family):
         return (next_vals * gammas) + rewards  # batch x support
 
     def tb_log_name_update(self, tb_log_name):
+        tb_log_name = tb_log_name + (
+            "({:d})_CVaR({:.2f})".format(self.n_support, self.CVaR)
+            if self.risk_avoid
+            else "({:d})".format(self.n_support)
+        )
         if self.munchausen:
             tb_log_name = "M-" + tb_log_name
         if self.param_noise:
