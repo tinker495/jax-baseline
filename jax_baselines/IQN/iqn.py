@@ -124,7 +124,7 @@ class IQN(Q_Network_Family):
         tau = jax.random.uniform(key, (self.worker_size, self.n_support)) * self.CVaR
         return jnp.expand_dims(
             jnp.argmax(
-                jnp.mean(self.get_q(params, convert_jax(obses), tau, key), axis=2),
+                jnp.sum(self.get_q(params, convert_jax(obses), tau, key), axis=2),
                 axis=1,
             ),
             axis=1,

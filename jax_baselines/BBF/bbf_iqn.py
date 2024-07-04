@@ -31,18 +31,20 @@ class BBF_IQN(Q_Network_Family):
         exploration_fraction=0.3,
         exploration_final_eps=0.02,
         exploration_initial_eps=1.0,
+        n_support=32,
+        delta=0.1,
         train_freq=1,
         gradient_steps=1,
         batch_size=32,
         off_policy_fix=False,
         learning_starts=1000,
+        CVaR=1.0,
         param_noise=False,
         munchausen=False,
         log_interval=200,
         tensorboard_log=None,
         _init_setup_model=True,
         policy_kwargs=None,
-        n_support=200,
         full_tensorboard_log=False,
         seed=None,
         optimizer="adamw",
@@ -54,7 +56,9 @@ class BBF_IQN(Q_Network_Family):
         self.prediction_depth = 5
         self.off_policy_fix = off_policy_fix
         self.intensity_scale = 0.05
+        self.CVaR = CVaR
         self.n_support = n_support
+        self.delta = delta
 
         super().__init__(
             env,
@@ -148,21 +152,22 @@ class BBF_IQN(Q_Network_Family):
                 self._get_actions(
                     self.target_params,
                     obs,
-                    next(self.key_seq) if self.param_noise else None,
+                    next(self.key_seq),
                 )
             )
         else:
             actions = np.random.choice(self.action_size[0], [self.worker_size, 1])
         return actions
 
-    def get_q(self, params, obses, key=None) -> jnp.ndarray:
-        return self.model(params, key, self.preproc(params, key, obses))
+    def get_q(self, params, obses, tau, key=None) -> jnp.ndarray:
+        return self.model(params, key, self.preproc(params, key, obses), tau)
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
+        tau = jax.random.uniform(key, (self.worker_size, self.n_support)) * self.CVaR
         return jnp.expand_dims(
             jnp.argmax(
                 jnp.sum(
-                    self.get_q(params, convert_jax(obses), key),
+                    self.get_q(params, convert_jax(obses), tau, key),
                     axis=2,
                 ),
                 axis=1,
