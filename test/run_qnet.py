@@ -415,6 +415,7 @@ if __name__ == "__main__":
             train_freq=args.train_freq,
             learning_starts=args.learning_starts,
             n_support=args.n_support,
+            delta=args.delta,
             CVaR=args.CVaR,
             exploration_fraction=args.exploration_fraction,
             tensorboard_log=args.logdir + env_type + "/" + env_name,
