@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=3
 export DISPLAY=:0
 
 pip install -q ..
@@ -10,8 +10,8 @@ MODEL="--node 512 --hidden_n 1"
 OPTIONS="--target_update 1000"
 OPTIMIZER="--optimizer adam"
 
-python run_qnet.py --algo DQN $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
-python run_qnet.py --algo C51 $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
-python run_qnet.py --algo QRDQN $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS --n_support 200
-python run_qnet.py --algo IQN $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
-python run_qnet.py --algo FQF $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
+#python run_qnet.py --algo DQN $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
+#python run_qnet.py --algo C51 $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
+#python run_qnet.py --algo QRDQN $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS --n_support 200
+#python run_qnet.py --algo IQN $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
+python run_qnet.py --algo FQF $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS # --munchausen
