@@ -7,7 +7,7 @@ import optax
 
 from jax_baselines.common.base_classes import select_optimizer
 from jax_baselines.common.losses import FQFQuantileLosses, QuantileHuberLosses
-from jax_baselines.common.utils import convert_jax, hard_update
+from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
 
 
@@ -83,7 +83,7 @@ class FQF(Q_Network_Family):
         self.name = "FQF"
         self.n_support = n_support
         self.delta = delta
-        self.fqf_factor = 1e-4
+        self.fqf_factor = 1e-2
         self.ent_coef = 0.01
 
         if _init_setup_model:
@@ -216,7 +216,7 @@ class FQF(Q_Network_Family):
         not_terminateds = 1.0 - terminateds
         (
             loss,
-            (abs_error, feature, taus, tau_hats, theta_loss_tile, targets),
+            (abs_error, feature, taus, tau_hats, theta_loss_tile, targets, target_weights),
         ), grad = jax.value_and_grad(self._loss, has_aux=True,)(
             params,
             fqf_params,
@@ -250,7 +250,7 @@ class FQF(Q_Network_Family):
             fqf_opt_state,
             loss,
             fqf_loss,
-            jnp.mean(jnp.sum((taus[:, 1:] - taus[:, :-1]) * targets, axis=1)),
+            jnp.mean(jnp.sum(target_weights * targets, axis=1)),
             jnp.mean(jnp.std(targets, axis=1)),
             tau_hats,
             new_priorities,
@@ -271,11 +271,12 @@ class FQF(Q_Network_Family):
     ):
         feature = self.preproc(params, key, obses)
         taus, tau_hats, _ = self.fpf(fqf_params, key, jax.lax.stop_gradient(feature))
-        targets = jax.lax.stop_gradient(
+        targets, target_weights = jax.lax.stop_gradient(
             self._target(
                 params,
                 fqf_params,
                 target_params,
+                taus,
                 tau_hats,
                 obses,
                 actions,
@@ -292,11 +293,13 @@ class FQF(Q_Network_Family):
             axis=1,
         )  # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets, axis=2)  # batch x support x 1
+        logit_valid_weight = jnp.expand_dims(target_weights, axis=2)  # batch x support x 1
         hubber = QuantileHuberLosses(
             logit_valid_tile,
             theta_loss_tile,
             jnp.expand_dims(tau_hats, axis=1),
             self.delta,
+            logit_valid_weight,
         )
         return jnp.mean(hubber * weights), (
             hubber,
@@ -305,6 +308,7 @@ class FQF(Q_Network_Family):
             tau_hats,
             theta_loss_tile,
             targets,
+            target_weights,
         )
 
     def _fqf_loss(self, fqf_params, params, feature, actions, tau_hat_vals, key):
@@ -313,7 +317,7 @@ class FQF(Q_Network_Family):
         tau_vals = jnp.take_along_axis(
             self.get_quantile(params, feature, tau[:, 1:-1], key), actions, axis=1
         )  # batch x 1 x support
-        tau_vals = jax.lax.stop_gradient(jnp.squeeze(tau_vals))
+        tau_vals = jnp.squeeze(tau_vals)
         tau_hat_vals = jax.lax.stop_gradient(jnp.squeeze(tau_hat_vals))
         quantile_loss = jnp.mean(
             FQFQuantileLosses(
@@ -331,6 +335,7 @@ class FQF(Q_Network_Family):
         params,
         fqf_params,
         target_params,
+        taus,
         tau_hats,
         obses,
         actions,
@@ -339,9 +344,19 @@ class FQF(Q_Network_Family):
         not_terminateds,
         key,
     ):
+        feature = self.preproc(target_params, key, nxtobses)
+        _tau, _tau_hats, _ = self.fpf(fqf_params, key, feature)
+        target_weights = _tau[:, 1:] - _tau[:, :-1]
+        next_quantiles = self.get_quantile(
+            target_params,
+            feature,
+            _tau_hats,
+            key,
+        )
+        next_q = self.quantiles_to_q(next_quantiles, _tau)
+
         if self.double_q:
             feature = self.preproc(params, key, nxtobses)
-            _tau, _tau_hats, _ = self.fpf(fqf_params, key, feature)
             next_q = self.get_q(
                 params,
                 feature,
@@ -349,69 +364,43 @@ class FQF(Q_Network_Family):
                 _tau_hats,
                 key,
             )
-            feature = self.preproc(target_params, key, nxtobses)
         else:
-            feature = self.preproc(target_params, key, nxtobses)
-            _tau, _tau_hats, _ = self.fpf(fqf_params, key, feature)
-            next_q = self.get_q(
-                target_params,
-                feature,
-                _tau,
-                _tau_hats,
-                key,
-            )
-        tau_hats = jax.random.uniform(key, (self.batch_size, self.n_support))
-        next_quantiles = self.get_quantile(target_params, feature, tau_hats, key)
+            next_q = self.quantiles_to_q(next_quantiles, _tau)
 
         if self.munchausen:
-            logsum = jax.nn.logsumexp(
-                (next_q - jnp.max(next_q, axis=1, keepdims=True)) / self.munchausen_entropy_tau,
-                axis=1,
-                keepdims=True,
-            )  # []
-            tau_log_pi_next = jnp.expand_dims(
-                next_q
-                - jnp.max(next_q, axis=1, keepdims=True)
-                - self.munchausen_entropy_tau * logsum,
-                axis=2,
-            )
+            next_sub_q, tau_log_pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
             pi_next = jnp.expand_dims(
-                jax.nn.softmax(next_q / self.munchausen_entropy_tau, axis=1),
-                axis=2,
-            )
-            next_vals = (
-                jnp.sum(
-                    pi_next * (next_quantiles - jnp.expand_dims(tau_log_pi_next, axis=2)),
-                    axis=1,
-                )
-                * not_terminateds
-            )
+                jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau), axis=2
+            )  # batch x actions x 1
+            next_vals = next_quantiles - jnp.expand_dims(
+                tau_log_pi_next, axis=2
+            )  # batch x actions x support
+            sample_pi = jax.random.categorical(
+                key, jnp.tile(pi_next, (1, 1, self.n_support)), 1
+            )  # batch x 1 x support
+            next_vals = jnp.take_along_axis(
+                next_vals, jnp.expand_dims(sample_pi, axis=1), axis=1
+            )  # batch x 1 x support
+            next_vals = not_terminateds * jnp.squeeze(next_vals, axis=1)
 
-            q_k_targets = self.get_q(
-                target_params,
-                self.preproc(target_params, key, obses),
-                _tau,
-                tau_hats,
-                key,
-            )
-            v_k_target = jnp.max(q_k_targets, axis=1, keepdims=True)
-            logsum = jax.nn.logsumexp(
-                (q_k_targets - v_k_target) / self.munchausen_entropy_tau,
-                axis=1,
-                keepdims=True,
-            )
-            log_pi = jnp.expand_dims(
-                q_k_targets - v_k_target - self.munchausen_entropy_tau * logsum, axis=2
-            )
-            munchausen_addon = jnp.take_along_axis(log_pi, actions, axis=1)
+            if self.double_q:
+                feature = self.preproc(params, key, obses)
+                q_k_targets = self.get_q(params, feature, taus, tau_hats, key)
+            else:
+                feature = self.preproc(target_params, key, obses)
+                q_k_targets = self.get_q(target_params, feature, taus, tau_hats, key)
+            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
-            rewards += self.munchausen_alpha * jnp.clip(munchausen_addon, a_min=-1, a_max=0)
+            rewards = rewards + self.munchausen_alpha * jnp.clip(
+                munchausen_addon, a_min=-1, a_max=0
+            )
         else:
             next_actions = jnp.expand_dims(jnp.argmax(next_q, axis=1), axis=(1, 2))
             next_vals = not_terminateds * jnp.squeeze(
                 jnp.take_along_axis(next_quantiles, next_actions, axis=1)
             )  # batch x support
-        return (next_vals * self._gamma) + rewards  # batch x support
+        return (next_vals * self._gamma) + rewards, target_weights
 
     def learn(
         self,
