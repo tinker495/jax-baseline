@@ -218,16 +218,19 @@ class Q_Network_Family(object):
     def tb_log_name_update(self, tb_log_name):
         if self.munchausen:
             tb_log_name = "M-" + tb_log_name
-        if self.param_noise:
-            tb_log_name = "Noisy_" + tb_log_name
-        if self.dueling_model:
-            tb_log_name = "Dueling_" + tb_log_name
-        if self.double_q:
-            tb_log_name = "Double_" + tb_log_name
-        if self.n_step_method:
-            tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
-        if self.prioritized_replay:
-            tb_log_name = tb_log_name + "+PER"
+        if self.param_noise & self.dueling_model & self.double_q & self.n_step_method & self.prioritized_replay:
+            tb_log_name = f"Rainbow({self.n_step} step)_" + tb_log_name
+        else:
+            if self.param_noise:
+                tb_log_name = "Noisy_" + tb_log_name
+            if self.dueling_model:
+                tb_log_name = "Dueling_" + tb_log_name
+            if self.double_q:
+                tb_log_name = "Double_" + tb_log_name
+            if self.n_step_method:
+                tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
+            if self.prioritized_replay:
+                tb_log_name = tb_log_name + "+PER"
         return tb_log_name
 
     def learn(
@@ -482,6 +485,7 @@ class Q_Network_Family(object):
         from gymnasium.wrappers import RecordVideo
 
         Render_env = RecordVideo(self.env, directory, episode_trigger=lambda x: True)
+        total_rewards = []
         for i in range(episode):
             state, info = Render_env.reset()
             state = [np.expand_dims(state, axis=0)]
@@ -495,3 +499,7 @@ class Q_Network_Family(object):
                 episode_rew += reward
             Render_env.close()
             print("episod reward :", episode_rew)
+            total_rewards.append(episode_rew)
+        avg_reward = np.mean(total_rewards)
+        std_reward = np.std(total_rewards)
+        print(f"reward : {avg_reward} +- {std_reward}(std)")

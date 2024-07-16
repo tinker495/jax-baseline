@@ -19,7 +19,7 @@ from jax_baselines.SPR.efficent_buffer import (
 )
 
 
-class SPR(Q_Network_Family):
+class BBF(Q_Network_Family):
     def __init__(
         self,
         env,
@@ -27,11 +27,15 @@ class SPR(Q_Network_Family):
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
+        exploration_fraction=0.3,
+        exploration_final_eps=0.02,
+        exploration_initial_eps=1.0,
+        train_freq=1,
         gradient_steps=1,
         batch_size=32,
         off_policy_fix=False,
-        soft_reset=False,
         learning_starts=1000,
+        param_noise=False,
         munchausen=False,
         log_interval=200,
         tensorboard_log=None,
@@ -50,7 +54,6 @@ class SPR(Q_Network_Family):
         self.shift_size = 4
         self.prediction_depth = 5
         self.off_policy_fix = off_policy_fix
-        self.soft_reset = soft_reset
         self.intensity_scale = 0.05
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = float(categorial_max)
@@ -62,22 +65,22 @@ class SPR(Q_Network_Family):
             gamma,
             learning_rate,
             buffer_size,
-            0,
-            0,
-            0,
-            1,
+            exploration_fraction,
+            exploration_final_eps,
+            exploration_initial_eps,
+            train_freq,
             gradient_steps,
             batch_size,
             True,
             True,
-            3, # n_step 3 is better than 10 in breakout
+            10,
             learning_starts,
             0,
             True,
             0.6,
             0.4,
             1e-3,
-            True,
+            param_noise,
             munchausen,
             log_interval,
             tensorboard_log,
@@ -88,8 +91,6 @@ class SPR(Q_Network_Family):
             optimizer,
             compress_memory,
         )
-
-        self._gamma = jnp.power(self.gamma, jnp.arange(self.n_step))
 
         if _init_setup_model:
             self.setup_model()
@@ -130,13 +131,13 @@ class SPR(Q_Network_Family):
             self.params,
         ) = model_builder(next(self.key_seq), print_model=True)
         self.target_params = tree_random_normal_like(next(self.key_seq), self.params)
-        if self.soft_reset:
-            self.reset_hardsoft = filter_like_tree(
-                self.params,
-                "qnet",
-                (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2),
-            )  # hard_reset for qnet and soft_reset for the rest
-            self.soft_reset_freq = 40000
+        self.reset_hardsoft = filter_like_tree(
+            self.params,
+            "qnet",
+            (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.5),
+        )  # hard_reset for qnet and soft_reset for the rest
+        self.soft_reset_freq = 40000
+        self.optimizer = optax.adamw(learning_rate=self.learning_rate, weight_decay=0.1)
         self.opt_state = self.optimizer.init(self.params)
 
         self.categorial_bar = jnp.expand_dims(
@@ -158,7 +159,7 @@ class SPR(Q_Network_Family):
         if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(
                 self._get_actions(
-                    self.target_params if self.soft_reset else self.params,
+                    self.target_params,
                     obs,
                     next(self.key_seq) if self.param_noise else None,
                 )
@@ -265,41 +266,25 @@ class SPR(Q_Network_Family):
         batch_size = obs.shape[0]
         return jax.vmap(augment)(obs, jax.random.split(key, batch_size))
 
-    def get_last_idx(self, params, obses, actions, filled, key):
-        if self.n_step == 1:
-            return jnp.zeros((obses[0].shape[0], 1), jnp.int32), jnp.ones(
-                (obses[0].shape[0], 1), jnp.bool_
-            )
-        parsed_filled = jnp.reshape(filled[:, : self.n_step], (-1, self.n_step))
+    def get_last_idx(self, filled, n_step):
+        parsed_filled = jnp.where(jnp.arange(self.n_step) < n_step, filled, 0)
         last_idxs = jnp.argmax(
             parsed_filled * jnp.arange(1, self.n_step + 1), axis=1, keepdims=True
         )
-        if not self.off_policy_fix:
-            return last_idxs, parsed_filled
-        action_obs = [o[:, 1 : self.n_step] for o in obses]  # 1 ~ n_step
-        pred_actions = jax.vmap(
-            lambda o: jnp.argmax(
-                jnp.sum(
-                    self.get_q(params, o, key) * self._categorial_bar,
-                    axis=2,
-                ),
-                axis=1,
-            ),
-            in_axes=1,
-            out_axes=1,
-        )(
-            action_obs
-        )  # B x n_step - 1
-        action_equal = jnp.not_equal(
-            pred_actions, jnp.squeeze(actions[:, 1 : self.n_step + 1])
-        )  # B x n_step - 1
-        minimum_not_equal = 1 + jnp.argmax(
-            action_equal * jnp.arange(self.n_step, 1, -1), axis=1, keepdims=True
-        )
-        last_idxs = jnp.minimum(last_idxs, minimum_not_equal)
-        # fill partial filled
-        parsed_filled = jnp.less_equal(jnp.arange(0, self.n_step), last_idxs)
         return last_idxs, parsed_filled
+
+    def get_scheduled_gamma_nstep(self, steps):
+        ratio = (
+            jnp.minimum((steps % self.soft_reset_freq) / self.soft_reset_freq, 1 / 4) * 4
+        )  # 0 ~ 1 increasing at 1/4
+        n_steps = 10 - jnp.round(7 * ratio)  # 10 ~ 3 decreasing at 1/4
+        start_horizon = 1 / (1 - 0.97)
+        end_horizon = 1 / (1 - 0.997)
+        horizon = (
+            start_horizon + (end_horizon - start_horizon) * ratio
+        )  # 0.97 ~ 0.997 increasing at 1/4
+        gamma = 1 - 1 / horizon
+        return n_steps, gamma  # self.gamma
 
     def _train_step(
         self,
@@ -339,13 +324,15 @@ class SPR(Q_Network_Family):
         batched_weights = weights[batch_idxes] if self.prioritized_replay else 1
         gradient_steps = batch_idxes.shape[0]
         batched_steps = steps + jnp.arange(gradient_steps)
+        n_step, gamma = self.get_scheduled_gamma_nstep(steps)
+        _gamma = jnp.power(gamma, jnp.arange(self.n_step))
 
         def f(updates, input):
             params, target_params, opt_state, key = updates
             obses, actions, rewards, not_terminateds, filled, weights, steps = input
             key, subkey = jax.random.split(key)
             parsed_obses = [jnp.reshape(o[:, 0], (-1, *o.shape[2:])) for o in obses]
-            last_idxs, parsed_filled = self.get_last_idx(target_params, obses, actions, filled, key)
+            last_idxs, parsed_filled = self.get_last_idx(filled, n_step)
             parsed_nxtobses = [
                 jnp.reshape(
                     jnp.take_along_axis(o, jnp.reshape(last_idxs + 1, (-1, 1, 1, 1, 1)), axis=1),
@@ -354,11 +341,10 @@ class SPR(Q_Network_Family):
                 for o in obses
             ]
             parsed_actions = jnp.reshape(actions[:, 0], (-1, 1, 1))
-            rewards = jnp.reshape(rewards[:, : self.n_step], (-1, self.n_step))
-            parsed_rewards = jnp.sum(rewards * self._gamma * parsed_filled, axis=1, keepdims=True)
+            parsed_rewards = jnp.sum(rewards * _gamma * parsed_filled, axis=1, keepdims=True)
             parsed_not_terminateds = jnp.take_along_axis(not_terminateds, last_idxs, axis=1)
             parsed_gamma = (
-                jnp.take_along_axis(jnp.expand_dims(self._gamma, 0), last_idxs, axis=1) * self.gamma
+                jnp.take_along_axis(jnp.expand_dims(_gamma, 0), last_idxs, axis=1) * gamma
             )
             target_distribution = self._target(
                 params,
@@ -389,8 +375,7 @@ class SPR(Q_Network_Family):
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
             target_params = soft_update(params, target_params, 0.005)
-            if self.soft_reset:
-                params = soft_reset(params, key, steps, self.soft_reset_freq, self.reset_hardsoft)
+            params = soft_reset(params, key, steps, self.soft_reset_freq, self.reset_hardsoft)
             target_q = jnp.sum(
                 target_distribution * self.categorial_bar,
                 axis=1,
@@ -562,13 +547,10 @@ class SPR(Q_Network_Family):
         return target_distribution
 
     def tb_log_name_update(self, tb_log_name):
-        if self.soft_reset:
-            tb_log_name = "SR-" + tb_log_name
         if self.munchausen:
             tb_log_name = "M-" + tb_log_name
-        if self.off_policy_fix:
-            n_step_str = f"OF_"
-            tb_log_name = n_step_str + tb_log_name
+        if self.param_noise:
+            tb_log_name = "Noisy_" + tb_log_name
         return tb_log_name
 
     def learn(
@@ -576,7 +558,7 @@ class SPR(Q_Network_Family):
         total_timesteps,
         callback=None,
         log_interval=100,
-        tb_log_name="SPR",
+        tb_log_name="BBF",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):

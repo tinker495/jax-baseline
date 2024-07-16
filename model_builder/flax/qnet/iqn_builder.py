@@ -5,7 +5,7 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_uniform_initializers
-from model_builder.flax.layers import NoisyDense
+from model_builder.flax.layers import Dense, NoisyDense
 from model_builder.flax.Module import PreProcess
 from model_builder.utils import print_param
 
@@ -19,7 +19,7 @@ class Model(nn.Module):
 
     def setup(self) -> None:
         if not self.noisy:
-            self.layer = nn.Dense
+            self.layer = Dense
         else:
             self.layer = NoisyDense
 
@@ -39,24 +39,37 @@ class Model(nn.Module):
                 costau
             )  # [ batch x feature ]
             mul_embedding = feature * quantile_embedding  # [ batch x feature ]
-            if self.hidden_n != 0:
-                mul_embedding = nn.Sequential(
+            if not self.dueling:
+                q_net = nn.Sequential(
                     [
                         self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                         for i in range(2 * self.hidden_n)
                     ]
-                )(mul_embedding)
-            if not self.dueling:
-                q_net = self.layer(
-                    self.action_size[0],
-                    kernel_init=clip_uniform_initializers(-0.03, 0.03),
+                    + [
+                        self.layer(
+                            self.action_size[0], kernel_init=clip_uniform_initializers(-0.03, 0.03)
+                        )
+                    ]
                 )(mul_embedding)
                 return q_net
             else:
-                v = self.layer(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))(mul_embedding)
-                a = self.layer(
-                    self.action_size[0],
-                    kernel_init=clip_uniform_initializers(-0.03, 0.03),
+                v = nn.Sequential(
+                    [
+                        self.layer(self.node) if i % 2 == 0 else jax.nn.relu
+                        for i in range(2 * self.hidden_n)
+                    ]
+                    + [self.layer(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))]
+                )(mul_embedding)
+                a = nn.Sequential(
+                    [
+                        self.layer(self.node) if i % 2 == 0 else jax.nn.relu
+                        for i in range(2 * self.hidden_n)
+                    ]
+                    + [
+                        self.layer(
+                            self.action_size[0], kernel_init=clip_uniform_initializers(-0.03, 0.03)
+                        )
+                    ]
                 )(mul_embedding)
                 q = v + a - jnp.max(a, axis=1, keepdims=True)
                 return q

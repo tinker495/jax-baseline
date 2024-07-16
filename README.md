@@ -14,44 +14,52 @@ pip install -r requirement.txt
 pip install .
 ```
 
-## Implemented Environments
+## Implement log
+
+- :heavy_check_mark: : Optional implemented
+- :white_check_mark: : Defualt implemented at papers
+- :x: : Not implemeted yet or can not implemented
+- :zzz: : Implemented but didn't update a while (can not guarantee working well now)
+
+### Implemented Environments
 
 | **Name**                | **Q-Net based**    | **Actor-Critic based** | **DPG based**      |
 | ----------------------- | ------------------ | ---------------------- | ------------------ |
 | Gymnasium               | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
 | MultiworkerGym with Ray | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
-| Unity-ML Environments   | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
+| Unity-ML Environments   | :zzz:              | :zzz:                  | :zzz:              |
 
-## Implemented Algorithms
+### Implemented Algorithms
 
-### Q-Net bases
+#### Q-Net bases
 
-| **Name** | `Per`              | `N-step`           | `NoisyNet`         | `Munchausen`       | `Ape-X`            |
-| -------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |
-| DQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| C51      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| QRDQN    | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| IQN      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | X                  |
-| FQF      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | X                  |
-| SPR      | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | X                  |
+| **Name**    | `Double`[^DOUBLE]  | `Dueling`[^DUELING] | `Per`[^PER] | `N-step`[^NSTEP][^RAINBOW]   | `NoisyNet`[^NOISY]    | `Munchausen`[^MUNCHAUSEN]       | `Ape-X`[^APEX] | `HL-Gauss`[^HL_GAUSS] |
+| ----------- | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ | ------------------ |------------------ |
+| DQN[^DQN] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| C51[^C51] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| QRDQN[^QRDQN]| :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| IQN[^IQN] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |
+| FQF[^FQF] | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |
+| SPR[^SPR] | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :x:                | :heavy_check_mark: |
+| BBF[^BBF] | :white_check_mark: | :white_check_mark: | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                | :heavy_check_mark: |
 
-### Actor-Critic based
+#### Actor-Critic based
 
-| **Name**        | `Box`              | `Discrete`         | `IMPALA`           |
+| **Name**        | `Box`              | `Discrete`         | `IMPALA`[^IMPALA]    |
 | --------------- | ------------------ | ------------------ | ------------------ |
-| A2C             | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| PPO             | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| Truly PPO(TPPO) | :heavy_check_mark: | :heavy_check_mark: | X                  |
+| A2C[^A3C]       | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
+| PPO[^PPO]       | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:[^APPO] |
+| Truly PPO(TPPO)[^TPPO] | :heavy_check_mark: | :heavy_check_mark: | :x:                |
 
-### DPG bases
+#### DPG bases
 
-| **Name** | `Per`                   | `N-step`           | `Ape-X`            |
+| **Name** | `Per`[^PER]             | `N-step`[^NSTEP][^RAINBOW]| `Ape-X`[^APEX]     |
 | -------- | ----------------------- | ------------------ | ------------------ |
-| DDPG     | :heavy_check_mark:      | :heavy_check_mark: | :heavy_check_mark: |
-| TD3      | :heavy_check_mark:      | :heavy_check_mark: | :heavy_check_mark: |
-| SAC      | :heavy_check_mark:      | :heavy_check_mark: | X                  |
-| TQC      | :heavy_check_mark:      | :heavy_check_mark: | X                  |
-| TD7      | :heavy_check_mark:(LAP) | X                  | X                  |
+| DDPG[^DDPG]| :heavy_check_mark:      | :heavy_check_mark: | :heavy_check_mark: |
+| TD3[^TD3]  | :heavy_check_mark:      | :heavy_check_mark: | :heavy_check_mark: |
+| SAC[^SAC]  | :heavy_check_mark:      | :heavy_check_mark: | :x:                |
+| TQC[^TQC]  | :heavy_check_mark:      | :heavy_check_mark: | :x:                |
+| TD7[^TD7]  | :white_check_mark:(LAP[^LaP]) | :x:                | :x:                |
 
 ## Test
 
@@ -69,3 +77,31 @@ This performance measurement was on Nvidia RTX3080 and AMD Ryzen 9 5950X in a si
 ```
 score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 500000/500000 [15:24<00:00, 540.88it/s]
 ```
+
+[^DQN]: [DQN](https://arxiv.org/abs/1312.5602v1)
+[^DOUBLE]: [Double DQN paper](https://arxiv.org/abs/1509.06461)
+[^DUELING]: [Dueling DQN paper](https://arxiv.org/abs/1511.06581)
+[^PER]: [PER](https://arxiv.org/abs/1511.05952)
+[^NSTEP]: [N-step TD](https://link.springer.com/article/10.1007/BF00115009)
+[^RAINBOW]: [RAINBOW DQN](https://arxiv.org/abs/1710.02298)
+[^NOISY]: [Noisy network](https://arxiv.org/abs/1706.10295)
+[^MUNCHAUSEN]: [Munchausen rl](https://arxiv.org/abs/2007.14430)
+[^APEX]: [Ape-X](https://arxiv.org/abs/1803.00933)
+[^HL_GAUSS]: [HL-GAUSS](https://arxiv.org/abs/2403.03950)
+[^C51]: [C51](https://arxiv.org/abs/1707.06887)
+[^QRDQN]: [QRDQN](https://arxiv.org/abs/1710.10044)
+[^IQN]: [IQN](https://arxiv.org/abs/1806.06923)
+[^FQF]: [FQF](https://arxiv.org/abs/1911.02140)
+[^SPR]: [SPR](https://arxiv.org/abs/2007.05929)
+[^BBF]: [BBF](https://arxiv.org/abs/2305.19452)
+[^A3C]: [A3C](https://arxiv.org/pdf/1602.01783)
+[^PPO]: [PPO](https://arxiv.org/abs/1707.06347)
+[^TPPO]: [Truly PPO](https://arxiv.org/abs/1903.07940)
+[^IMPALA]: [IMPALA](https://arxiv.org/abs/1802.01561)
+[^APPO]: [IMPALA + PPO, APPO](https://docs.ray.io/en/latest/rllib/rllib-algorithms.html#appo)
+[^DDPG]: [DDPG](https://arxiv.org/abs/1509.02971)
+[^TD3]: [TD3](https://arxiv.org/abs/1802.09477)
+[^SAC]: [SAC](https://arxiv.org/abs/1801.01290)
+[^TQC]: [TQC](https://arxiv.org/abs/2005.04269)
+[^TD7]: [TD7](https://arxiv.org/abs/2306.02451)
+[^LaP]: [LaP](https://arxiv.org/abs/2007.06049)

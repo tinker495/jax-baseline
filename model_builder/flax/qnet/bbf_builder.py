@@ -141,7 +141,7 @@ def model_builder_maker(
         embedding_mode = policy_kwargs["embedding_mode"]
         del policy_kwargs["embedding_mode"]
     else:
-        embedding_mode = "normal"
+        embedding_mode = "resnet"
 
     def model_builder(key=None, print_model=False):
         class Merged(nn.Module):
@@ -169,7 +169,8 @@ def model_builder_maker(
                 return q, transition, projection, prediction
 
             def preprocess(self, x):
-                return self.preproc(x)
+                x = self.preproc(x)
+                return x  # jnp.reshape(x, (x.shape[0], 11, 11, 32))
 
             def q(self, x):
                 x = jnp.reshape(x, (x.shape[0], -1))

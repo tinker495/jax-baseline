@@ -5,7 +5,7 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_uniform_initializers
-from model_builder.flax.layers import NoisyDense
+from model_builder.flax.layers import Dense, NoisyDense
 from model_builder.flax.Module import PreProcess
 from model_builder.utils import print_param
 
@@ -20,22 +20,19 @@ class Model(nn.Module):
 
     def setup(self) -> None:
         if not self.noisy:
-            self.layer = nn.Dense
+            self.layer = Dense
         else:
             self.layer = NoisyDense
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
-        if self.hidden_n != 0:
-            feature = nn.Sequential(
+        if not self.dueling:
+            q_net = nn.Sequential(
                 [
                     self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n)
                 ]
-            )(feature)
-        if not self.dueling:
-            q_net = nn.Sequential(
-                [
+                + [
                     self.layer(
                         self.action_size[0] * self.support_n,
                         kernel_init=clip_uniform_initializers(-0.03, 0.03),
@@ -47,12 +44,20 @@ class Model(nn.Module):
         else:
             v = nn.Sequential(
                 [
+                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
+                    for i in range(2 * self.hidden_n)
+                ]
+                + [
                     self.layer(self.support_n, kernel_init=clip_uniform_initializers(-0.03, 0.03)),
                     lambda x: jnp.reshape(x, (x.shape[0], 1, self.support_n)),
                 ]
             )(feature)
             a = nn.Sequential(
                 [
+                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
+                    for i in range(2 * self.hidden_n)
+                ]
+                + [
                     self.layer(
                         self.action_size[0] * self.support_n,
                         kernel_init=clip_uniform_initializers(-0.03, 0.03),

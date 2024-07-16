@@ -5,6 +5,7 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_uniform_initializers
+from model_builder.flax.layers import Dense
 from model_builder.flax.Module import PreProcess
 from model_builder.utils import print_param
 
@@ -16,7 +17,7 @@ def avgl1norm(x, epsilon=1e-6):
 class Encoder(nn.Module):
     node: int = 256
     hidden_n: int = 3
-    layer: nn.Module = nn.Dense
+    layer: nn.Module = Dense
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
@@ -32,7 +33,7 @@ class Encoder(nn.Module):
 class Action_Encoder(nn.Module):
     node: int = 256
     hidden_n: int = 3
-    layer: nn.Module = nn.Dense
+    layer: nn.Module = Dense
 
     @nn.compact
     def __call__(self, zs: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
@@ -50,7 +51,7 @@ class Actor(nn.Module):
     action_size: tuple
     node: int = 256
     hidden_n: int = 2
-    layer: nn.Module = nn.Dense
+    layer: nn.Module = Dense
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray, zs: jnp.ndarray) -> jnp.ndarray:
@@ -69,7 +70,7 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     node: int = 256
     hidden_n: int = 2
-    layer: nn.Module = nn.Dense
+    layer: nn.Module = Dense
 
     @nn.compact
     def __call__(

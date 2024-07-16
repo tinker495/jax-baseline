@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import dm_pix as pix
 import jax
 import jax.numpy as jnp
@@ -10,7 +12,6 @@ from jax_baselines.common.utils import (
     q_log_pi,
     soft_reset,
     soft_update,
-    tree_random_normal_like,
 )
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.SPR.efficent_buffer import (
@@ -19,7 +20,7 @@ from jax_baselines.SPR.efficent_buffer import (
 )
 
 
-class SPR(Q_Network_Family):
+class HL_GAUSS_SPR(Q_Network_Family):
     def __init__(
         self,
         env,
@@ -46,12 +47,13 @@ class SPR(Q_Network_Family):
         compress_memory=False,
     ):
 
-        self.name = "SPR"
+        self.name = "HL_GAUSS_SPR"
         self.shift_size = 4
         self.prediction_depth = 5
         self.off_policy_fix = off_policy_fix
         self.soft_reset = soft_reset
         self.intensity_scale = 0.05
+        self.sigma = 0.75
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = float(categorial_max)
         self.categorial_min = float(categorial_min)
@@ -70,7 +72,7 @@ class SPR(Q_Network_Family):
             batch_size,
             True,
             True,
-            3, # n_step 3 is better than 10 in breakout
+            10,
             learning_starts,
             0,
             True,
@@ -129,7 +131,7 @@ class SPR(Q_Network_Family):
             self.prediction,
             self.params,
         ) = model_builder(next(self.key_seq), print_model=True)
-        self.target_params = tree_random_normal_like(next(self.key_seq), self.params)
+        self.target_params = deepcopy(self.params)
         if self.soft_reset:
             self.reset_hardsoft = filter_like_tree(
                 self.params,
@@ -137,16 +139,14 @@ class SPR(Q_Network_Family):
                 (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2),
             )  # hard_reset for qnet and soft_reset for the rest
             self.soft_reset_freq = 40000
+
         self.opt_state = self.optimizer.init(self.params)
 
-        self.categorial_bar = jnp.expand_dims(
-            jnp.linspace(self.categorial_min, self.categorial_max, self.categorial_bar_n),
-            axis=0,
-        )  # [1, 51]
-        self._categorial_bar = jnp.expand_dims(self.categorial_bar, axis=0)  # [1, 1, 51]
-        self.delta_bar = jax.device_put(
-            (self.categorial_max - self.categorial_min) / (self.categorial_bar_n - 1)
+        self.support = jnp.linspace(
+            self.categorial_min, self.categorial_max, self.categorial_bar_n + 1, dtype=jnp.float32
         )
+        bin_width = self.support[1] - self.support[0]
+        self.sigma = self.sigma * bin_width
 
         self.get_q = jax.jit(self.get_q)
         self._get_actions = jax.jit(self._get_actions)
@@ -170,16 +170,27 @@ class SPR(Q_Network_Family):
     def get_q(self, params, obses, key=None) -> jnp.ndarray:
         return self.model(params, key, self.preproc(params, key, obses))
 
+    def to_probs(self, target: jax.Array):
+        # target: [batch, 1]
+        def f(target):
+            cdf_evals = jax.scipy.special.erf((self.support - target) / (jnp.sqrt(2) * self.sigma))
+            z = cdf_evals[-1] - cdf_evals[0]
+            bin_probs = cdf_evals[1:] - cdf_evals[:-1]
+            return bin_probs / z
+
+        return jax.vmap(f)(target)
+
+    def to_scalar(self, probs: jax.Array):
+        # probs: [batch, n, support]
+        def f(probs):
+            centers = (self.support[:-1] + self.support[1:]) / 2
+            return jnp.sum(probs * centers)
+
+        return jax.vmap(jax.vmap(f))(probs)
+
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        return jnp.expand_dims(
-            jnp.argmax(
-                jnp.sum(
-                    self.get_q(params, convert_jax(obses), key) * self._categorial_bar,
-                    axis=2,
-                ),
-                axis=1,
-            ),
-            axis=1,
+        return jnp.argmax(
+            self.to_scalar(self.get_q(params, convert_jax(obses), key)), axis=1, keepdims=True
         )
 
     def train_step(self, steps, gradient_steps):
@@ -278,13 +289,7 @@ class SPR(Q_Network_Family):
             return last_idxs, parsed_filled
         action_obs = [o[:, 1 : self.n_step] for o in obses]  # 1 ~ n_step
         pred_actions = jax.vmap(
-            lambda o: jnp.argmax(
-                jnp.sum(
-                    self.get_q(params, o, key) * self._categorial_bar,
-                    axis=2,
-                ),
-                axis=1,
-            ),
+            lambda o: self._get_actions(params, o, key).squeeze(),
             in_axes=1,
             out_axes=1,
         )(
@@ -391,10 +396,7 @@ class SPR(Q_Network_Family):
             target_params = soft_update(params, target_params, 0.005)
             if self.soft_reset:
                 params = soft_reset(params, key, steps, self.soft_reset_freq, self.reset_hardsoft)
-            target_q = jnp.sum(
-                target_distribution * self.categorial_bar,
-                axis=1,
-            )
+            target_q = self.to_scalar(jnp.expand_dims(target_distribution, 1)).mean()
             return (params, target_params, opt_state, subkey), (centropy, qloss, rprloss, target_q)
 
         (params, target_params, opt_state, _), outputs = jax.lax.scan(
@@ -495,70 +497,43 @@ class SPR(Q_Network_Family):
     def _target(
         self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, gammas, key
     ):
-        next_distributions = self.get_q(target_params, nxtobses, key)
-        if self.double_q:
-            next_action_q = jnp.sum(
-                self.get_q(params, nxtobses, key) * self._categorial_bar, axis=2
-            )
-        else:
-            next_action_q = jnp.sum(next_distributions * self._categorial_bar, axis=2)
-
-        def tdist(next_distribution, target_categorial):
-            Tz = jnp.clip(
-                target_categorial, self.categorial_min, self.categorial_max
-            )  # clip to range of bar
-            C51_B = ((Tz - self.categorial_min) / self.delta_bar).astype(
-                jnp.float32
-            )  # bar index as float
-            C51_L = jnp.floor(C51_B).astype(jnp.int32)  # bar lower index as int
-            C51_H = jnp.ceil(C51_B).astype(jnp.int32)  # bar higher index as int
-            C51_L = jnp.where((C51_L > 0) * (C51_L == C51_H), C51_L - 1, C51_L)  # C51_L.at[].add(-1)
-            C51_H = jnp.where(
-                (C51_H < (self.categorial_bar_n - 1)) * (C51_L == C51_H), C51_H + 1, C51_H
-            )  # C51_H.at[].add(1)
-
-            def tdist(next_distribution, C51_L, C51_H, C51_b):
-                target_distribution = jnp.zeros((self.categorial_bar_n))
-                target_distribution = target_distribution.at[C51_L].add(
-                    next_distribution * (C51_H.astype(jnp.float32) - C51_b)
-                )
-                target_distribution = target_distribution.at[C51_H].add(
-                    next_distribution * (C51_b - C51_L.astype(jnp.float32))
-                )
-                return target_distribution
-
-            return jax.vmap(tdist, in_axes=(0, 0, 0, 0))(
-                next_distribution, C51_L, C51_H, C51_B
-            )
-
+        next_prob = self.get_q(target_params, nxtobses, key)
+        next_q = self.to_scalar(next_prob)
         if self.munchausen:
-            next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
-            pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau) # [32, action_size]
-            next_categorials = self._categorial_bar - jnp.expand_dims(tau_log_pi_next, axis=2) # [32, action_size, 51]
+            if self.double_q:
+                next_action_probs = self.get_q(params, nxtobses, key)
+                next_action_q = self.to_scalar(next_action_probs)
+                next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
+            else:
+                next_sub_q, tau_log_pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
+            pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
+            next_vals = (
+                jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True)
+                * not_terminateds
+            )
 
             if self.double_q:
-                q_k_targets = jnp.sum(
-                    self.get_q(params, obses, key) * self.categorial_bar, axis=2
-                )
+                q_k_targets = self.get_q(params, obses, key)
+                q_k_targets = self.to_scalar(q_k_targets)
             else:
-                q_k_targets = jnp.sum(
-                    self.get_q(target_params, obses, key) * self.categorial_bar, axis=2
-                )
+                q_k_targets = self.get_q(target_params, obses, key)
+                q_k_targets = self.to_scalar(q_k_targets)
             _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
-            munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
+            munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions,axis=1), axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0
-            ) # [32, 1]
-            target_categorials = jnp.expand_dims(gammas * not_terminateds, axis=2) * next_categorials + jnp.expand_dims(rewards, axis=2) # [32, action_size, 51]
-            target_distributions = jax.vmap(tdist, in_axes=(1, 1), out_axes=1)(next_distributions, target_categorials)
-            target_distribution = jnp.sum(jnp.expand_dims(pi_next, axis=2) * target_distributions, axis=1)
+            )
         else:
-            next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
-            next_distribution = jnp.squeeze(jnp.take_along_axis(next_distributions, next_actions, axis=1))
-            target_categorial = gammas * not_terminateds * self.categorial_bar + rewards  # [32, 51]
-            target_distribution = tdist(next_distribution, target_categorial)
-
+            if self.double_q:
+                next_action_probs = self.get_q(params, nxtobses, key)
+                next_action_q = self.to_scalar(next_action_probs)
+                next_actions = jnp.argmax(next_action_q, axis=1, keepdims=True)
+            else:
+                next_actions = jnp.argmax(next_q, axis=1, keepdims=True)
+            next_vals = not_terminateds * jnp.take_along_axis(next_q, next_actions, axis=1)
+        target_q = (next_vals * gammas) + rewards
+        target_distribution = self.to_probs(target_q)
         return target_distribution
 
     def tb_log_name_update(self, tb_log_name):
@@ -576,7 +551,7 @@ class SPR(Q_Network_Family):
         total_timesteps,
         callback=None,
         log_interval=100,
-        tb_log_name="SPR",
+        tb_log_name="HL_GAUSS_SPR",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
