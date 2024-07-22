@@ -116,20 +116,20 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
 
             def action_encoder(self, zs, a):
                 return self.act_enc(zs, a)
+            
+            def feature_and_zs(self, x):
+                feature = self.preprocess(x)
+                zs = self.encoder(feature)
+                return feature, zs
 
-        class Merged_actor_critic(nn.Module):
+        class Merged_critic(nn.Module):
             def setup(self):
-                self.act = Actor(action_size, **policy_kwargs)
                 self.crit1 = Critic(**policy_kwargs)
                 self.crit2 = Critic(**policy_kwargs)
 
-            def __call__(self, feature, zs, zsa):
-                action = self.actor(feature, zs)
-                q = self.critic(feature, zs, zsa, action)
+            def __call__(self, feature, zs, zsa, actions):
+                q = self.critic(feature, zs, zsa, actions)
                 return q
-
-            def actor(self, feature, zs):
-                return self.act(feature, zs)
 
             def critic(self, feature, zs, zsa, a):
                 return (self.crit1(feature, zs, zsa, a), self.crit2(feature, zs, zsa, a))
@@ -138,29 +138,41 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         preproc_fn = get_apply_fn_flax_module(encoder_model, encoder_model.preprocess)
         encoder_fn = get_apply_fn_flax_module(encoder_model, encoder_model.encoder)
         action_encoder_fn = get_apply_fn_flax_module(encoder_model, encoder_model.action_encoder)
-        model = Merged_actor_critic()
-        actor_fn = get_apply_fn_flax_module(model, model.actor)
-        critic_fn = get_apply_fn_flax_module(model, model.critic)
+        policy_model = Actor(action_size=action_size)
+        critic_model = Merged_critic()
+        actor_fn = get_apply_fn_flax_module(policy_model)
+        critic_fn = get_apply_fn_flax_module(critic_model)
         if key is not None:
             encoder_params = encoder_model.init(
                 key,
                 [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
                 np.zeros((1, *action_size), dtype=np.float32),
             )
-            params = model.init(
+            policy_params = policy_model.init(
                 key,
                 *encoder_model.apply(
                     encoder_params,
                     [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                    np.zeros((1, *action_size), dtype=np.float32),
+                    method=encoder_model.feature_and_zs
                 )
+            )
+
+            critic_params = critic_model.init(
+                key,
+                *encoder_model.apply(
+                    encoder_params,
+                    [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
+                    np.zeros((1, *action_size), dtype=np.float32)
+                ),
+                np.zeros((1, *action_size), dtype=np.float32)
             )
 
             if print_model:
                 print("------------------build-flax-model--------------------")
                 print_param("", encoder_params)
                 print("------------------------------------------------------")
-                print_param("", params)
+                print_param("", policy_params)
+                print_param("", critic_params)
                 print("------------------------------------------------------")
             return (
                 preproc_fn,
@@ -169,7 +181,8 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 actor_fn,
                 critic_fn,
                 encoder_params,
-                params,
+                policy_params,
+                critic_params
             )
         else:
             return preproc_fn, encoder_fn, action_encoder_fn, actor_fn, critic_fn

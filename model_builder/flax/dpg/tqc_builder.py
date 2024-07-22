@@ -62,43 +62,52 @@ def model_builder_maker(observation_space, action_size, support_n, policy_kwargs
         embedding_mode = "normal"
 
     def model_builder(key=None, print_model=False):
-        class Merged(nn.Module):
+        class Merged_Actor(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
                 self.act = Actor(action_size, **policy_kwargs)
-                self.crit1 = Critic(support_n=support_n, **policy_kwargs)
-                self.crit2 = Critic(support_n=support_n, **policy_kwargs)
 
             def __call__(self, x):
                 feature = self.preprocess(x)
                 mu, log_std = self.actor(feature)
-                q = self.critic(feature, mu)
-                return q
-
+                return mu, log_std
+            
             def preprocess(self, x):
                 x = self.preproc(x)
                 return x
-
+            
             def actor(self, x):
                 return self.act(x)
 
-            def critic(self, x, a):
+        class Merged_Critic(nn.Module):
+            def setup(self):
+                self.crit1 = Critic(support_n=support_n, **policy_kwargs)
+                self.crit2 = Critic(support_n=support_n, **policy_kwargs)
+
+            def __call__(self, x, a):
                 return (self.crit1(x, a), self.crit2(x, a))
 
-        model = Merged()
-        preproc_fn = get_apply_fn_flax_module(model, model.preprocess)
-        actor_fn = get_apply_fn_flax_module(model, model.actor)
-        critic_fn = get_apply_fn_flax_module(model, model.critic)
+        model_actor = Merged_Actor()
+        preproc_fn = get_apply_fn_flax_module(model_actor, model_actor.preprocess)
+        actor_fn = get_apply_fn_flax_module(model_actor, model_actor.actor)
+        model_critic = Merged_Critic()
+        critic_fn = get_apply_fn_flax_module(model_critic)
         if key is not None:
-            params = model.init(
+            policy_params = model_actor.init(
                 key,
                 [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
             )
+            critic_params = model_critic.init(
+                key,
+                preproc_fn(policy_params, key, [np.zeros((1, *o), dtype=np.float32) for o in observation_space]),
+                np.zeros((1, *action_size), dtype=np.float32),
+            )
             if print_model:
                 print("------------------build-flax-model--------------------")
-                print_param("", params)
+                print_param("", policy_params)
+                print_param("", critic_params)
                 print("------------------------------------------------------")
-            return preproc_fn, actor_fn, critic_fn, params
+            return preproc_fn, actor_fn, critic_fn, policy_params, critic_params
         else:
             return preproc_fn, actor_fn, critic_fn
 
