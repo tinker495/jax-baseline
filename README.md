@@ -101,7 +101,7 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 [^APPO]: [IMPALA + PPO, APPO](https://docs.ray.io/en/latest/rllib/rllib-algorithms.html#appo)
 [^DDPG]: [DDPG](https://arxiv.org/abs/1509.02971)
 [^TD3]: [TD3](https://arxiv.org/abs/1802.09477)
-[^SAC]: [SAC](https://arxiv.org/abs/1801.01290)
+[^SAC]: [SAC](https://arxiv.org/abs/1812.05905)
 [^TQC]: [TQC](https://arxiv.org/abs/2005.04269)
 [^TD7]: [TD7](https://arxiv.org/abs/2306.02451)
 [^LaP]: [LaP](https://arxiv.org/abs/2007.06049)
