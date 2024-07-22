@@ -52,12 +52,10 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         embedding_mode = "normal"
 
     def model_builder(key=None, print_model=False):
-        class Merged_actor(nn.Module):
+        class Merged_Actor(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
                 self.act = Actor(action_size, **policy_kwargs)
-                self.crit1 = Critic(**policy_kwargs)
-                self.crit2 = Critic(**policy_kwargs)
 
             def __call__(self, x):
                 feature = self.preprocess(x)
@@ -71,7 +69,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
             def actor(self, x):
                 return self.act(x)
             
-        class Merged_critics(nn.Module):
+        class Merged_Critics(nn.Module):
             def setup(self):
                 self.crit1 = Critic(**policy_kwargs)
                 self.crit2 = Critic(**policy_kwargs)
@@ -81,10 +79,10 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 q2 = self.crit2(x, a)
                 return q1, q2
 
-        model_actor = Merged_actor()
+        model_actor = Merged_Actor()
         preproc_fn = get_apply_fn_flax_module(model_actor, model_actor.preprocess)
         actor_fn = get_apply_fn_flax_module(model_actor, model_actor.actor)
-        model_critic = Merged_critics()
+        model_critic = Merged_Critics()
         critic_fn = get_apply_fn_flax_module(model_critic)
         if key is not None:
             policy_params = model_actor.init(

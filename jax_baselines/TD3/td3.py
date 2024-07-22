@@ -175,21 +175,21 @@ class TD3(Deteministic_Policy_Gradient_Family):
         updates, opt_critic_state = self.optimizer.update(grad, opt_critic_state, params=critic_params)
         critic_params = optax.apply_updates(critic_params, updates)
 
-        def _opt_actor(policy_params, opt_policy_state, key):
+        def _opt_actor(policy_params, critic_params, target_policy_params, target_critic_params, opt_policy_state, key):
             grad = jax.grad(self._actor_loss)(policy_params, critic_params, obses, key)
             updates, opt_policy_state = self.optimizer.update(grad, opt_policy_state, params=policy_params)
             policy_params = optax.apply_updates(policy_params, updates)
-            return policy_params, opt_policy_state, key
+            target_policy_params = soft_update(policy_params, target_policy_params, self.target_network_update_tau)
+            target_critic_params = soft_update(critic_params, target_critic_params, self.target_network_update_tau)
+            return policy_params, critic_params, target_policy_params, target_critic_params, opt_policy_state, key
 
-        policy_params, opt_policy_state, key = jax.lax.cond(
+        policy_params, critic_params, target_policy_params, target_critic_params, opt_policy_state, key = jax.lax.cond(
             step % self.policy_delay == 0,
             lambda x: _opt_actor(*x),
             lambda x: x,
-            (policy_params, opt_policy_state, key),
+            (policy_params, critic_params, target_policy_params, target_critic_params, opt_policy_state, key),
         )
 
-        target_critic_params = soft_update(critic_params, target_critic_params, self.target_network_update_tau)
-        target_policy_params = soft_update(policy_params, target_policy_params, self.target_network_update_tau)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
