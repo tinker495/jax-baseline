@@ -63,8 +63,10 @@ class SAC(Deteministic_Policy_Gradient_Family):
 
         self.name = "SAC"
         self._ent_coef = ent_coef
-        self.target_entropy = -2.0 * np.prod(self.action_size).astype(np.float32)  #
-        self.ent_coef_learning_rate = 1e-6
+        self.target_entropy = -1.0 * np.prod(self.action_size).astype(
+            np.float32
+        )  # -np.sqrt(np.prod(self.action_size).astype(np.float32))
+        self.ent_coef_learning_rate = 1e-4
 
         if _init_setup_model:
             self.setup_model()
@@ -245,8 +247,8 @@ class SAC(Deteministic_Policy_Gradient_Family):
     def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
         feature = self.preproc(policy_params, key, obses)
         policy, log_prob = self._get_pi_log_prob(policy_params, feature, key)
-        q1_pi, _ = self.critic(critic_params, key, feature, policy)
-        actor_loss = jnp.mean(ent_coef * log_prob - q1_pi)
+        q1_pi, q2_pi = self.critic(critic_params, key, feature, policy)
+        actor_loss = jnp.mean(ent_coef * log_prob - (q1_pi + q2_pi)/2.0)
         return actor_loss, log_prob
 
     def _target(self, policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key, ent_coef):
