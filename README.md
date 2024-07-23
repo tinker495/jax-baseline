@@ -62,7 +62,7 @@ pip install .
 | TD7[^TD7]  | :white_check_mark:(LAP[^LaP]) | :x:                | :x:                |
 
 ## Performance Compariton
-- [DQN 50M](docs/dqn_50m.md)
+- [DQN 5M](docs/dqn_5m.md)
 - [DQN 100K](docs/dqn_100k.md)
 - [DPG](docs/dpg_comparison.md)
 
