@@ -3,10 +3,10 @@ import seaborn as sns
 import pandas as pd
 exit
 csvdict = {
-    'TD3': 'test/dpg_log/TD3.csv',
-    'SAC': 'test/dpg_log/SAC.csv',
-    'TQC': 'test/dpg_log/TQC(25)_truncated(5).csv',
-    'TD7': 'test/dpg_log/TD7.csv'
+    'TD3': 'docs/csv/dpg_humanoid/TD3.csv',
+    'SAC': 'docs/csv/dpg_humanoid/SAC.csv',
+    'TQC': 'docs/csv/dpg_humanoid/TQC(25)_truncated(5).csv',
+    'TD7': 'docs/csv/dpg_humanoid/TD7.csv'
 }
 dfdict = {}
 average_dict = {}

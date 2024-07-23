@@ -7,6 +7,5 @@
 *__pycache__
 repositories/
 build/
-log/
-csv/
+**log/
 log.zip
