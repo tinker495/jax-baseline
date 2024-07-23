@@ -61,6 +61,11 @@ pip install .
 | TQC[^TQC]  | :heavy_check_mark:      | :heavy_check_mark: | :x:                |
 | TD7[^TD7]  | :white_check_mark:(LAP[^LaP]) | :x:                | :x:                |
 
+## Performance Compariton
+- [DQN 50M](docs/dqn_50m.md)
+- [DQN 100K](docs/dqn_100k.md)
+- [DPG](docs/dpg_comparison.md)
+
 ## Test
 
 To test atari with DQN(or C51, QRQDN, IQN, FQF)
