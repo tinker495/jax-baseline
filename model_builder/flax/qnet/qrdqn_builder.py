@@ -29,7 +29,7 @@ class Model(nn.Module):
         if not self.dueling:
             q_net = nn.Sequential(
                 [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
+                    self.layer(self.node * 4) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n)
                 ]
                 + [
@@ -44,7 +44,7 @@ class Model(nn.Module):
         else:
             v = nn.Sequential(
                 [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
+                    self.layer(self.node * 4) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n)
                 ]
                 + [
@@ -54,7 +54,7 @@ class Model(nn.Module):
             )(feature)
             a = nn.Sequential(
                 [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
+                    self.layer(self.node * 4) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n)
                 ]
                 + [

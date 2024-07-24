@@ -20,7 +20,7 @@ class IQN(Q_Network_Family):
         buffer_size=100000,
         exploration_fraction=0.3,
         n_support=32,
-        delta=0.1,
+        delta=1.0,
         exploration_final_eps=0.02,
         exploration_initial_eps=1.0,
         train_freq=1,

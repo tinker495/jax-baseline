@@ -3,7 +3,8 @@
 
 ![Humanoid-v4](figures/dpg_Humanoid-v4.png)
 
-| **Algorithm** | 'Humanoid-v4'|
+## Max Reward
+| **Algorithm** | Reward |
 | -------- | ----- |
 | TD3  | 4444.00 |
 | SAC  | 5004.58 |
