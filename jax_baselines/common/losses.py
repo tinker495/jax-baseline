@@ -41,7 +41,19 @@ def QuantileHuberLosses(target_tile, q_tile, quantile, delta, target_tile_weight
 
 
 def FQFQuantileLosses(tau_vals, tau_hat_vals, tau):
-    """Compute the fqf loss."""
-    grad_of_taus = jax.lax.stop_gradient(2 * tau_vals - tau_hat_vals[:, :-1] - tau_hat_vals[:, 1:])
+    """Compute the fqf loss.
+
+    Args:
+        tau_vals: target tau values (batch_size, num_tau)
+        tau_hat_vals: predicted tau values (batch_size, num_tau + 1)
+        tau: tau values (batch_size, num_tau_prime)
+    """
+    grad1 = tau_vals - tau_hat_vals[:, :-1]  # (batch_size, num_tau)
+    grad2 = tau_vals - tau_hat_vals[:, 1:]  # (batch_size, num_tau)
+    flag1 = tau_vals > jnp.concat((tau_hat_vals[:, :1], tau_vals[:, :-1]), axis=1)
+    flag2 = tau_vals < jnp.concat((tau_vals[:, 1:], tau_hat_vals[:, -1:]), axis=1)
+    grad_of_taus = jax.lax.stop_gradient(
+        jnp.where(flag1, grad1, -grad1) + jnp.where(flag2, grad2, -grad2)
+    )
     chex.assert_shape(grad_of_taus, tau[:, 1:-1].shape)
     return jnp.sum(grad_of_taus * tau[:, 1:-1], axis=1)
