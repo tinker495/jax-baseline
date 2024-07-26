@@ -345,7 +345,8 @@ class FQF(Q_Network_Family):
         key,
     ):
         feature = self.preproc(target_params, key, nxtobses)
-        _tau, _tau_hats, _ = self.fpf(fqf_params, key, feature)
+        online_feature = self.preproc(params, key, nxtobses)
+        _tau, _tau_hats, _ = self.fpf(fqf_params, key, online_feature)
         target_weights = _tau[:, 1:] - _tau[:, :-1]
         next_quantiles = self.get_quantile(
             target_params,
@@ -353,13 +354,11 @@ class FQF(Q_Network_Family):
             _tau_hats,
             key,
         )
-        next_q = self.quantiles_to_q(next_quantiles, _tau)
 
         if self.double_q:
-            feature = self.preproc(params, key, nxtobses)
             next_q = self.get_q(
                 params,
-                feature,
+                online_feature,
                 _tau,
                 _tau_hats,
                 key,
