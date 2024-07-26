@@ -101,13 +101,13 @@ class QRDQN(Q_Network_Family):
 
         self.opt_state = self.optimizer.init(self.params)
 
-        self.quantile = (
+        quantile = (
             jnp.linspace(0.0, 1.0, self.n_support + 1)[1:]
             + jnp.linspace(0.0, 1.0, self.n_support + 1)[:-1]
         ) / 2.0  # [support]
         self.quantile = jax.device_put(
-            jnp.expand_dims(self.quantile, axis=(0, 1))
-        )  # [1 x 1 x support]
+            jnp.tile(jnp.expand_dims(quantile, axis=(0, 1)), (self.batch_size, 1, 1))
+        )  # [batch x 1 x support]
 
         self.get_q = jax.jit(self.get_q)
         self._get_actions = jax.jit(self._get_actions)
