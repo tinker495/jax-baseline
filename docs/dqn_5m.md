@@ -3,10 +3,6 @@
 ## DQNs
 ![DQNs](figures/dqn_breakout_5m.png)
 
-## M-DQNs
-
-
-
 ## Max Reward 
 | **Algorithm** | Signed Reward | Original Reward |
 | -------- | ----- | ----- |
