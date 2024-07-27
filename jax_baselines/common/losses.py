@@ -29,7 +29,7 @@ def QuantileHuberLosses(target_tile, q_tile, quantile, delta, target_tile_weight
     """
     error = target_tile - q_tile
     error_neg = (error < 0.0).astype(jnp.float32)
-    weight = jnp.abs(quantile - error_neg)
+    weight = jax.lax.stop_gradient(jnp.abs(quantile - error_neg))
     huber = hubberloss(error, delta) / delta
     if target_tile_weight is None:
         return jnp.sum(jnp.mean(weight * huber, axis=1), axis=1)

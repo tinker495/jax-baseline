@@ -48,7 +48,7 @@ class Critic(nn.Module):
         concat = jnp.concatenate([feature, actions], axis=1)
         q_net = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [self.layer(self.support_n, kernel_init=clip_uniform_initializers(-0.03, 0.03))]
+            + [self.layer(self.support_n, kernel_init=clip_uniform_initializers(-0.03 / self.support_n, 0.03 / self.support_n))]
         )(concat)
         return q_net
 
