@@ -3,6 +3,7 @@ import os
 
 import gymnasium as gym
 
+from jax_baselines.common.env_builer import get_env_builder
 from jax_baselines.BBF.bbf import BBF
 from jax_baselines.BBF.hl_gauss_bbf import HL_GAUSS_BBF
 from jax_baselines.C51.c51 import C51
@@ -69,46 +70,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     env_name = args.env
     embedding_mode = "normal"
-    if os.path.exists(env_name):
-        from mlagents_envs.environment import UnityEnvironment
-        from mlagents_envs.side_channel.engine_configuration_channel import (
-            EngineConfigurationChannel,
-        )
-        from mlagents_envs.side_channel.environment_parameters_channel import (
-            EnvironmentParametersChannel,
-        )
-
-        engine_configuration_channel = EngineConfigurationChannel()
-        channel = EnvironmentParametersChannel()
-        engine_configuration_channel.set_configuration_parameters(
-            time_scale=args.time_scale, capture_frame_rate=args.capture_frame_rate
-        )
-        env = UnityEnvironment(
-            file_name=env_name,
-            no_graphics=False,
-            side_channels=[engine_configuration_channel, channel],
-            timeout_wait=10000,
-        )
-        env_name = env_name.split("/")[-1].split(".")[0]
-        env_type = "unity"
-    else:
-        if args.worker > 1:
-            from jax_baselines.common.worker import gymnasium as gymMultiworker
-
-            env = gymMultiworker(env_name, worker_num=args.worker)
-        else:
-            from jax_baselines.common.atari_wrappers import (
-                get_env_type,
-                make_wrap_atari,
-            )
-
-            env_type, env_id = get_env_type(env_name)
-            if env_type == "atari_env":
-                env = make_wrap_atari(env_name, clip_rewards=True)
-            else:
-                env = gym.make(env_name)
-        env_type = "gym"
-
+    env_builder, env_info = get_env_builder(env_name, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate)
+    env_name = env_info["env_id"]
+    env_type = env_info["env_type"]
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n}
 
     if args.algo == "DQN":
@@ -117,8 +81,9 @@ if __name__ == "__main__":
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.dqn_builder import model_builder_maker
         agent = DQN(
-            env,
+            env_builder,
             model_builder_maker=model_builder_maker,
+            num_workers=args.worker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,
@@ -148,8 +113,9 @@ if __name__ == "__main__":
 
         if args.hl_gauss:
             agent = HL_GAUSS_C51(
-                env,
+                env_builder,
                 model_builder_maker=model_builder_maker,
+                num_workers=args.worker,
                 gamma=args.gamma,
                 learning_rate=args.learning_rate,
                 batch_size=args.batch,
@@ -175,8 +141,9 @@ if __name__ == "__main__":
             )
         else:
             agent = C51(
-                env,
+                env_builder,
                 model_builder_maker=model_builder_maker,
+                num_workers=args.worker,
                 gamma=args.gamma,
                 learning_rate=args.learning_rate,
                 batch_size=args.batch,
@@ -206,8 +173,9 @@ if __name__ == "__main__":
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.qrdqn_builder import model_builder_maker
         agent = QRDQN(
-            env,
+            env_builder,
             model_builder_maker=model_builder_maker,
+            num_workers=args.worker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,
@@ -237,8 +205,9 @@ if __name__ == "__main__":
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.iqn_builder import model_builder_maker
         agent = IQN(
-            env,
+            env_builder,
             model_builder_maker=model_builder_maker,
+            num_workers=args.worker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,
@@ -269,8 +238,9 @@ if __name__ == "__main__":
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.fqf_builder import model_builder_maker
         agent = FQF(
-            env,
+            env_builder,
             model_builder_maker=model_builder_maker,
+            num_workers=args.worker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,
@@ -302,8 +272,9 @@ if __name__ == "__main__":
 
         if args.hl_gauss:
             agent = HL_GAUSS_SPR(
-                env,
+                env_builder,
                 model_builder_maker=model_builder_maker,
+                num_workers=args.worker,
                 gamma=args.gamma,
                 learning_rate=args.learning_rate,
                 batch_size=args.batch,
@@ -322,8 +293,9 @@ if __name__ == "__main__":
             )
         else:
             agent = SPR(
-                env,
+                env_builder,
                 model_builder_maker=model_builder_maker,
+                num_workers=args.worker,
                 gamma=args.gamma,
                 learning_rate=args.learning_rate,
                 batch_size=args.batch,
@@ -349,8 +321,9 @@ if __name__ == "__main__":
 
         if args.hl_gauss:
             agent = HL_GAUSS_BBF(
-                env,
+                env_builder,
                 model_builder_maker=model_builder_maker,
+                num_workers=args.worker,
                 gamma=args.gamma,
                 learning_rate=args.learning_rate,
                 batch_size=args.batch,
@@ -372,8 +345,9 @@ if __name__ == "__main__":
             )
         else:
             agent = BBF(
-                env,
+                env_builder,
                 model_builder_maker=model_builder_maker,
+                num_workers=args.worker,
                 gamma=args.gamma,
                 learning_rate=args.learning_rate,
                 batch_size=args.batch,
@@ -397,5 +371,3 @@ if __name__ == "__main__":
     agent.learn(int(args.steps))
 
     agent.test()
-
-    env.close()

@@ -22,8 +22,10 @@ from jax_baselines.SPR.efficent_buffer import (
 class HL_GAUSS_BBF(Q_Network_Family):
     def __init__(
         self,
-        env,
+        env_bulder : callable,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
@@ -50,7 +52,7 @@ class HL_GAUSS_BBF(Q_Network_Family):
         compress_memory=False,
     ):
 
-        self.name = "SPR"
+        self.name = "HL_GAUSS_BBF"
         self.shift_size = 4
         self.prediction_depth = 5
         self.off_policy_fix = off_policy_fix
@@ -61,8 +63,10 @@ class HL_GAUSS_BBF(Q_Network_Family):
         self.categorial_min = float(categorial_min)
 
         super().__init__(
-            env,
+            env_bulder,
             model_builder_maker,
+            num_workers,
+            eval_eps,
             gamma,
             learning_rate,
             buffer_size,
