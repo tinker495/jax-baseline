@@ -205,7 +205,7 @@ class Q_Network_Family(object):
             actions = np.random.choice(self.action_size[0], [self.worker_size, 1])
         return actions
 
-    def discription(self):
+    def discription(self, mean_original_score=None, mean_reward=None):
         if self.param_noise:
             return "score : {:.3f}, loss : {:.3f} |".format(
                 np.mean(self.scoreque), np.mean(self.lossque)
@@ -344,45 +344,17 @@ class Q_Network_Family(object):
 
     def learn_gym(self, pbar, callback=None, log_interval=100):
         state, info = self.env.reset()
-        have_original_reward = "original_reward" in info.keys()
-        have_lives = "lives" in info.keys()
         state = [np.expand_dims(state, axis=0)]
-        if have_original_reward:
-            self.original_score = np.zeros([self.worker_size])
-        self.scores = np.zeros([self.worker_size])
-        self.eplen = np.zeros([self.worker_size])
-        self.scoreque = deque(maxlen=10)
-        self.lossque = deque(maxlen=10)
+
         for steps in pbar:
             self.eplen += 1
             actions = self.actions(state, self.update_eps)
             next_state, reward, terminated, truncated, info = self.env.step(actions[0][0])
             next_state = [np.expand_dims(next_state, axis=0)]
             self.replay_buffer.add(state, actions[0], reward, next_state, terminated, truncated)
-            if have_original_reward:
-                self.original_score[0] += info["original_reward"]
-            self.scores[0] += reward
             state = next_state
+
             if terminated or truncated:
-                self.scoreque.append(self.scores[0])
-                if self.summary:
-                    if have_original_reward:
-                        if have_lives:
-                            if info["lives"] == 0:
-                                self.summary.add_scalar(
-                                    "env/original_reward", self.original_score[0], steps
-                                )
-                                self.original_score[0] = 0
-                        else:
-                            self.summary.add_scalar(
-                                "env/original_reward", self.original_score[0], steps
-                            )
-                            self.original_score[0] = 0
-                    self.summary.add_scalar("env/episode_reward", self.scores[0], steps)
-                    self.summary.add_scalar("env/episode_len", self.eplen[0], steps)
-                    self.summary.add_scalar("env/time_over", float(truncated), steps)
-                self.scores[0] = 0
-                self.eplen[0] = 0
                 state, info = self.env.reset()
                 state = [np.expand_dims(state, axis=0)]
 
@@ -394,6 +366,63 @@ class Q_Network_Family(object):
             if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
                 pbar.set_description(self.discription())
         return np.mean(self.scoreque)
+    
+    def eval_gym(self, steps):
+        original_rewards = []
+        total_reward = np.zeros(self.eval_eps)
+        total_ep_len = np.zeros(self.eval_eps)
+        total_truncated = np.zeros(self.eval_eps)
+
+        state, info = self.eval_env.reset()
+        state = [np.expand_dims(state, axis=0)]
+        have_original_reward = "original_reward" in info.keys()
+        have_lives = "lives" in info.keys()
+        if have_original_reward:
+            original_reward = info["original_reward"]
+        terminated = False
+        truncated = False
+        eplen = 0
+        
+        for ep in range(self.eval_eps):
+            while not terminated and not truncated:
+                actions = self.actions(
+                    state, self.learning_starts + 1, use_checkpoint=True, exploration=False
+                )
+                next_state, reward, terminated, truncated, info = self.eval_env.step(actions[0])
+                next_state = [np.expand_dims(next_state, axis=0)]
+                if have_original_reward:
+                    original_reward += info["original_reward"]
+                total_reward[ep] += reward
+                state = next_state
+                eplen += 1
+
+            total_ep_len[ep] = eplen
+            total_truncated[ep] = float(truncated)
+            if have_original_reward:
+                if have_lives:
+                    if info["lives"] == 0:
+                        original_rewards.append(original_reward)
+                        original_reward = 0
+                else:
+                    original_rewards.append(original_reward)
+                    original_reward = 0
+
+            state, info = self.eval_env.reset()
+            state = [np.expand_dims(state, axis=0)]
+            terminated = False
+            truncated = False
+            eplen = 0
+
+        mean_original_score = np.mean(original_rewards)
+        mean_reward = np.mean(total_reward)
+
+        if self.summary:
+            if have_original_reward:
+                self.summary.add_scalar("env/original_reward", mean_original_score, steps)
+            self.summary.add_scalar("env/episode_reward", mean_reward, steps)
+            self.summary.add_scalar("env/episode len", np.mean(total_ep_len), steps)
+            self.summary.add_scalar("env/time over", np.mean(total_truncated), steps)
+        return mean_reward
 
     def learn_gymMultiworker(self, pbar, callback=None, log_interval=100):
         state, _, _, _, info, _, _ = self.env.get_steps()
