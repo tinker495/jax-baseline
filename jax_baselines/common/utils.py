@@ -185,7 +185,7 @@ def get_hyper_params(agent):
     )
 
 
-def add_hparams(agent, writer, metric_dict, step):
+def add_hparams(agent, writer, metric_dict=dict()):
     from tensorboardX.summary import hparams
 
     hparam_dict = get_hyper_params(agent)
@@ -195,5 +195,3 @@ def add_hparams(agent, writer, metric_dict, step):
     writer.file_writer.add_summary(exp)
     writer.file_writer.add_summary(ssi)
     writer.file_writer.add_summary(sei)
-    for k, v in metric_dict.items():
-        writer.add_scalar(k, v, step)

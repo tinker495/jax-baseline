@@ -197,11 +197,11 @@ class Q_Network_Family(object):
             actions = np.random.choice(self.action_size[0], [self.worker_size, 1])
         return actions
 
-    def discription(self, outdict=None):
+    def discription(self, eval_result=None):
         discription = ""
-        if outdict is not None:
-            for k, v in outdict.items():
-                discription += f"{k} : {v}, "
+        if eval_result is not None:
+            for k, v in eval_result.items():
+                discription += f"{k} : {v:8.2f}, "
 
         discription += f"loss : {np.mean(self.lossque):.3f}"
 
@@ -256,10 +256,12 @@ class Q_Network_Family(object):
             self.save_path,
         ):
             if self.env_type == "gym":
-                score_mean = self.learn_gym(pbar, callback, log_interval)
+                self.learn_gym(pbar, callback, log_interval)
+                self.eval_gym(total_timesteps)
             if self.env_type == "Multiworker":
-                score_mean = self.learn_Multiworker(pbar, callback, log_interval)
-            add_hparams(self, self.summary, {"env/episode_reward": score_mean}, total_timesteps)
+                self.learn_Multiworker(pbar, callback, log_interval)
+            
+            add_hparams(self, self.summary)
             self.save_params(self.save_path)
 
     def learn_gym(self, pbar, callback=None, log_interval=100):
@@ -267,7 +269,7 @@ class Q_Network_Family(object):
         self.lossque = deque(maxlen=10)
         state, info = self.env.reset()
         state = [np.expand_dims(state, axis=0)]
-        outdict = None
+        eval_result = None
 
         for steps in pbar:
             actions = self.actions(state, self.update_eps)
@@ -286,12 +288,10 @@ class Q_Network_Family(object):
                 self.lossque.append(loss)
 
             if steps % self.eval_freq == 0:
-                outdict = self.eval_gym(steps)
+                eval_result = self.eval_gym(steps)
 
-            if steps % log_interval == 0 and outdict is not None and len(self.lossque) > 0:
-                pbar.set_description(self.discription(outdict))
-
-        return outdict["mean_reward"]
+            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+                pbar.set_description(self.discription(eval_result))
     
     def eval_gym(self, steps):
         original_rewards = []
@@ -342,19 +342,20 @@ class Q_Network_Family(object):
         if have_original_reward:
             mean_original_score = np.mean(original_rewards)
         mean_reward = np.mean(total_reward)
+        mean_ep_len = np.mean(total_ep_len)
 
         if self.summary:
             if have_original_reward:
                 self.summary.add_scalar("env/original_reward", mean_original_score, steps)
             self.summary.add_scalar("env/episode_reward", mean_reward, steps)
-            self.summary.add_scalar("env/episode len", np.mean(total_ep_len), steps)
+            self.summary.add_scalar("env/episode len", mean_ep_len, steps)
             self.summary.add_scalar("env/time over", np.mean(total_truncated), steps)
 
         if have_original_reward:
-            outdict = {"mean_reward": mean_reward, "mean_original_score": mean_original_score}
+            eval_result = {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len, "mean_original_score": mean_original_score}
         else:
-            outdict = {"mean_reward": mean_reward}
-        return outdict
+            eval_result = {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
+        return eval_result
 
     def learn_Multiworker(self, pbar, callback=None, log_interval=100):
         state, _, _, _, info, _, _ = self.env.get_steps()
