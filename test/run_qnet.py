@@ -62,7 +62,7 @@ if __name__ == "__main__":
     parser.add_argument("--clip_rewards", action="store_true")
     parser.add_argument("--compress_memory", action="store_true")
     parser.add_argument("--hl_gauss", action="store_true")
-    parser.add_argument("--soft_reset", action="store_true")
+    parser.add_argument("--scaled_by_reset", action="store_true")
     parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
@@ -280,7 +280,7 @@ if __name__ == "__main__":
                 batch_size=args.batch,
                 buffer_size=int(args.buffer_size),
                 off_policy_fix=args.off_policy_fix,
-                soft_reset=args.soft_reset,
+                scaled_by_reset=args.scaled_by_reset,
                 munchausen=args.munchausen,
                 gradient_steps=args.gradient_steps,
                 learning_starts=args.learning_starts,
@@ -301,7 +301,7 @@ if __name__ == "__main__":
                 batch_size=args.batch,
                 buffer_size=int(args.buffer_size),
                 off_policy_fix=args.off_policy_fix,
-                soft_reset=args.soft_reset,
+                scaled_by_reset=args.scaled_by_reset,
                 munchausen=args.munchausen,
                 gradient_steps=args.gradient_steps,
                 learning_starts=args.learning_starts,

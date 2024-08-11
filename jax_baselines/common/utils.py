@@ -34,7 +34,7 @@ def tree_random_normal_like(rng_key: jax.random.PRNGKey, target: PyTree):
     )
 
 
-def soft_reset(
+def scaled_by_reset(
     tensors: PyTree, key: jax.random.PRNGKey, steps: int, update_period: int, taus: PyTree
 ):
     update = steps % update_period == 0
@@ -56,7 +56,7 @@ def filter_like_tree(tensors: PyTree, name_filter: str, filter_fn: Callable):
     # filter_fn: lambda x,filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2
     # make a new tree with the same structure as the input tree, but with the values filtered by the filter_fn
     # for making tau = 1.0 for qnet and tau = 0.2 for the rest
-    # this making hard_reset for qnet and soft_reset for the rest
+    # this making hard_reset for qnet and scaled_by_reset for the rest
     def sigma_filter(x, sigma):
         return jnp.zeros_like(x) if sigma else x
 

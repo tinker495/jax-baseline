@@ -8,7 +8,7 @@ from jax_baselines.common.utils import (
     convert_jax,
     filter_like_tree,
     q_log_pi,
-    soft_reset,
+    scaled_by_reset,
     soft_update,
     tree_random_normal_like,
 )
@@ -139,7 +139,7 @@ class BBF(Q_Network_Family):
             self.params,
             "qnet",
             (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.5),
-        )  # hard_reset for qnet and soft_reset for the rest
+        )  # hard_reset for qnet and scaled_by_reset for the rest
         self.soft_reset_freq = 40000
         self.optimizer = optax.adamw(learning_rate=self.learning_rate, weight_decay=0.1)
         self.opt_state = self.optimizer.init(self.params)
@@ -379,7 +379,7 @@ class BBF(Q_Network_Family):
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
             target_params = soft_update(params, target_params, 0.005)
-            params = soft_reset(params, key, steps, self.soft_reset_freq, self.reset_hardsoft)
+            params = scaled_by_reset(params, key, steps, self.soft_reset_freq, self.reset_hardsoft)
             target_q = jnp.sum(
                 target_distribution * self.categorial_bar,
                 axis=1,
