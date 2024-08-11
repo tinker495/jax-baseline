@@ -3,6 +3,7 @@ import multiprocessing as mp
 
 import ray
 
+from jax_baselines.common.env_builer import get_env_builder
 from jax_baselines.APE_X.dpg_worker import Ape_X_Worker
 from jax_baselines.DDPG.apex_ddpg import APE_X_DDPG
 from jax_baselines.TD3.apex_td3 import APE_X_TD3
@@ -10,6 +11,7 @@ from jax_baselines.TD3.apex_td3 import APE_X_TD3
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
+    parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="Pendulum-v0", help="environment")
     parser.add_argument("--worker_id", type=int, default=0, help="unlty ml agent's worker id")
     parser.add_argument("--worker", type=int, default=1, help="gym_worker_size")
@@ -57,15 +59,23 @@ if __name__ == "__main__":
 
     ray.init(num_cpus=args.worker + 2, num_gpus=0)
 
-    workers = [Ape_X_Worker.remote(env_name) for i in range(args.worker)]
+    env_builder, env_info = get_env_builder(env_name)
+    workers = [Ape_X_Worker.remote(env_builder) for i in range(args.worker)]
 
-    env_type = "gym"
+    env_type = env_info["env_type"]
+    env_name = env_info["env_id"]
 
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
     if args.algo == "DDPG":
+        if args.model_lib == "flax":
+            from model_builder.flax.dpg.ddpg_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            from model_builder.haiku.dpg.ddpg_builder import model_builder_maker
+
         agent = APE_X_DDPG(
             workers,
+            model_builder_maker,
             manger,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
@@ -84,8 +94,14 @@ if __name__ == "__main__":
             optimizer=args.optimizer,
         )
     elif args.algo == "TD3":
+        if args.model_lib == "flax":
+            from model_builder.flax.dpg.td3_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            from model_builder.haiku.dpg.td3_builder import model_builder_maker
+
         agent = APE_X_TD3(
             workers,
+            model_builder_maker,
             manger,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
