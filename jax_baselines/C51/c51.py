@@ -11,7 +11,7 @@ from jax_baselines.DQN.base_class import Q_Network_Family
 class C51(Q_Network_Family):
     def __init__(
         self,
-        env_bulder : callable,
+        env_builder : callable,
         model_builder_maker,
         num_workers=1,
         eval_eps=20,
@@ -48,7 +48,7 @@ class C51(Q_Network_Family):
         compress_memory=False,
     ):
         super().__init__(
-            env_bulder,
+            env_builder,
             model_builder_maker,
             num_workers,
             eval_eps,

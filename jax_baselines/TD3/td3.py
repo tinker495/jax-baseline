@@ -12,8 +12,10 @@ from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 class TD3(Deteministic_Policy_Gradient_Family):
     def __init__(
         self,
-        env,
+        env_builder : callable,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
@@ -39,8 +41,10 @@ class TD3(Deteministic_Policy_Gradient_Family):
         optimizer="adamw",
     ):
         super().__init__(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers,
+            eval_eps,
             gamma,
             learning_rate,
             buffer_size,
@@ -91,11 +95,6 @@ class TD3(Deteministic_Policy_Gradient_Family):
 
     def _get_actions(self, policy_params, obses, key=None) -> jnp.ndarray:
         return self.actor(policy_params, key, self.preproc(policy_params, key, convert_jax(obses)))  #
-
-    def discription(self):
-        return "score : {:.3f}, loss : {:.3f} |".format(
-            np.mean(self.scoreque), np.mean(self.lossque)
-        )
 
     def actions(self, obs, steps):
         if self.learning_starts < steps:

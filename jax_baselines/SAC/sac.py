@@ -12,8 +12,10 @@ from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 class SAC(Deteministic_Policy_Gradient_Family):
     def __init__(
         self,
-        env,
+        env_builder : callable,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
@@ -37,8 +39,10 @@ class SAC(Deteministic_Policy_Gradient_Family):
         optimizer="adamw",
     ):
         super().__init__(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers,
+            eval_eps,
             gamma,
             learning_rate,
             buffer_size,
@@ -120,11 +124,6 @@ class SAC(Deteministic_Policy_Gradient_Family):
         std = jnp.exp(log_std)
         pi = jax.nn.tanh(mu + std * jax.random.normal(key, std.shape))
         return pi
-
-    def discription(self):
-        return "score : {:.3f}, loss : {:.3f} |".format(
-            np.mean(self.scoreque), np.mean(self.lossque)
-        )
 
     def actions(self, obs, steps):
         if self.learning_starts < steps:

@@ -24,7 +24,7 @@ from jax_baselines.common.env_builer import Multiworker
 class Q_Network_Family(object):
     def __init__(
         self,
-        env_bulder : callable,
+        env_builder : callable,
         model_builder_maker,
         num_workers=1,
         eval_eps=20,
@@ -58,7 +58,7 @@ class Q_Network_Family(object):
         compress_memory=False,
     ):
         self.name = "Q_Network_Family"
-        self.env_bulder = env_bulder
+        self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
         self.num_workers = num_workers
         self.eval_eps = eval_eps
@@ -114,8 +114,8 @@ class Q_Network_Family(object):
         self.params = self.target_params = restore(path)
 
     def get_env_setup(self):
-        self.env = self.env_bulder(self.num_workers)
-        self.eval_env = self.env_bulder(1)
+        self.env = self.env_builder(self.num_workers)
+        self.eval_env = self.env_builder(1)
 
         print("----------------------env------------------------")
         if isinstance(self.env, Multiworker):
@@ -266,9 +266,9 @@ class Q_Network_Family(object):
 
     def learn_gym(self, pbar, callback=None, log_interval=100):
 
-        self.lossque = deque(maxlen=10)
         state, info = self.env.reset()
         state = [np.expand_dims(state, axis=0)]
+        self.lossque = deque(maxlen=10)
         eval_result = None
 
         for steps in pbar:

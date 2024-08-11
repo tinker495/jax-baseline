@@ -23,7 +23,7 @@ from jax_baselines.SPR.efficent_buffer import (
 class HL_GAUSS_SPR(Q_Network_Family):
     def __init__(
         self,
-        env_bulder : callable,
+        env_builder : callable,
         model_builder_maker,
         num_workers=1,
         eval_eps=20,
@@ -61,7 +61,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
         self.categorial_min = float(categorial_min)
 
         super().__init__(
-            env_bulder,
+            env_builder,
             model_builder_maker,
             num_workers,
             eval_eps,

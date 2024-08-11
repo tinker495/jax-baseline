@@ -14,8 +14,10 @@ from jax_baselines.DDPG.ou_noise import OUNoise
 class DDPG(Deteministic_Policy_Gradient_Family):
     def __init__(
         self,
-        env,
+        env_builder : callable,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
@@ -41,8 +43,10 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         optimizer="adamw",
     ):
         super().__init__(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers,
+            eval_eps,
             gamma,
             learning_rate,
             buffer_size,
@@ -95,11 +99,16 @@ class DDPG(Deteministic_Policy_Gradient_Family):
     def _get_actions(self, policy_params, obses, key=None) -> jnp.ndarray:
         return self.actor(policy_params, key, self.preproc(policy_params, key, convert_jax(obses)))  #
 
-    def discription(self):
-        return "score : {:.3f}, epsilon : {:.3f}, loss : {:.3f} |".format(
-            np.mean(self.scoreque), self.epsilon, np.mean(self.lossque)
-        )
+    def discription(self, eval_result=None):
+        discription = ""
+        if eval_result is not None:
+            for k, v in eval_result.items():
+                discription += f"{k} : {v:8.2f}, "
 
+        discription += f"loss : {np.mean(self.lossque):.3f}"
+        discription += f"epsilon : {self.epsilon:.3f}"
+        return discription
+    
     def actions(self, obs, steps):
         if self.learning_starts < steps:
             self.epsilon = self.exploration.value(steps)
