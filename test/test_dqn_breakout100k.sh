@@ -20,5 +20,5 @@ python run_qnet.py --algo DQN $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 python run_qnet.py --algo C51 $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 OPTIONS="--gradient_steps 2"
 python run_qnet.py --algo SPR $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
-python run_qnet.py --algo SPR $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS --soft_reset
+python run_qnet.py --algo SPR $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS --scaled_by_reset
 python run_qnet.py --algo BBF $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS

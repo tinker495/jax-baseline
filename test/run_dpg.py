@@ -3,6 +3,7 @@ import os
 
 import gymnasium as gym
 
+from jax_baselines.common.env_builer import get_env_builder
 from jax_baselines.DDPG.ddpg import DDPG
 from jax_baselines.SAC.sac import SAC
 from jax_baselines.TD3.td3 import TD3
@@ -54,37 +55,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     env_name = args.env
     embedding_mode = "normal"
-    if os.path.exists(env_name):
-        from mlagents_envs.environment import UnityEnvironment
-        from mlagents_envs.side_channel.engine_configuration_channel import (
-            EngineConfigurationChannel,
-        )
-        from mlagents_envs.side_channel.environment_parameters_channel import (
-            EnvironmentParametersChannel,
-        )
-
-        engine_configuration_channel = EngineConfigurationChannel()
-        channel = EnvironmentParametersChannel()
-        engine_configuration_channel.set_configuration_parameters(
-            time_scale=args.time_scale, capture_frame_rate=args.capture_frame_rate
-        )
-        env = UnityEnvironment(
-            file_name=env_name,
-            worker_id=args.worker_id,
-            no_graphics=False,
-            side_channels=[engine_configuration_channel, channel],
-        )
-        env_name = env_name.split("/")[-1].split(".")[0]
-        env_type = "unity"
-    else:
-        # import mujoco_py
-        if args.worker > 1:
-            from jax_baselines.common.worker import gymnasium as gymMultiworker
-
-            env = gymMultiworker(env_name, worker_num=args.worker)
-        else:
-            env = gym.make(env_name)
-        env_type = "gym"
+    env_builder, env_info = get_env_builder(env_name, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate)
+    env_name = env_info["env_id"]
+    env_type = env_info["env_type"]
 
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
@@ -94,8 +67,9 @@ if __name__ == "__main__":
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.ddpg_builder import model_builder_maker
         agent = DDPG(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers=args.worker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,
@@ -117,8 +91,9 @@ if __name__ == "__main__":
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.td3_builder import model_builder_maker
         agent = TD3(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers=args.worker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,
@@ -141,8 +116,9 @@ if __name__ == "__main__":
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.sac_builder import model_builder_maker
         agent = SAC(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers=args.worker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,
@@ -165,8 +141,9 @@ if __name__ == "__main__":
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.tqc_builder import model_builder_maker
         agent = TQC(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers=args.worker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,
@@ -194,9 +171,9 @@ if __name__ == "__main__":
             from model_builder.haiku.dpg.td7_builder import model_builder_maker
         eval_env = gym.make(env_name)
         agent = TD7(
-            env,
-            eval_env,
+            env_builder,
             model_builder_maker,
+            num_workers=args.worker,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_size=args.batch,
@@ -215,5 +192,3 @@ if __name__ == "__main__":
     agent.learn(int(args.steps))
 
     agent.test()
-
-    env.close()

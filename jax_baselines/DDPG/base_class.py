@@ -18,14 +18,16 @@ from jax_baselines.common.cpprb_buffers import (
     ReplayBuffer,
 )
 from jax_baselines.common.utils import add_hparams, convert_states, key_gen
-from jax_baselines.common.worker import gymMultiworker
+from jax_baselines.common.worker import Multiworker
 
 
 class Deteministic_Policy_Gradient_Family(object):
     def __init__(
         self,
-        env,
+        env_builder : callable,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         learning_rate=5e-5,
         buffer_size=50000,
@@ -48,8 +50,10 @@ class Deteministic_Policy_Gradient_Family(object):
         optimizer="adamw",
     ):
         self.name = "Deteministic_Policy_Gradient_Family"
-        self.env = env
+        self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
+        self.num_workers = num_workers
+        self.eval_eps = eval_eps
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
@@ -89,20 +93,16 @@ class Deteministic_Policy_Gradient_Family(object):
         self.params = self.target_params = restore(path)
 
     def get_env_setup(self):
-        print("----------------------env------------------------")
-        if isinstance(self.env, UnityEnvironment):
-            print("unity-ml agent environmet")
-            self.env.reset()
-            group_name = list(self.env.behavior_specs.keys())[0]
-            group_spec = self.env.behavior_specs[group_name]
-            self.env.step()
-            dec, term = self.env.get_steps(group_name)
-            self.group_name = group_name
+        self.env = self.env_builder(self.num_workers)
+        self.eval_env = self.env_builder(1)
 
-            self.observation_space = [list(spec.shape) for spec in group_spec.observation_specs]
-            self.action_size = [group_spec.action_spec.continuous_size]
-            self.worker_size = len(dec.agent_id)
-            self.env_type = "unity"
+        if isinstance(self.env, Multiworker):
+            print("multiworker environmet")
+            env_info = self.env.env_info
+            self.observation_space = [list(env_info["observation_space"].shape)]
+            self.action_size = [env_info["action_space"].n]
+            self.worker_size = self.env.worker_num
+            self.env_type = "Multiworker"
 
         elif isinstance(self.env, gym.Env) or isinstance(self.env, gym.Wrapper):
             print("openai gym environmet")
@@ -112,14 +112,6 @@ class Deteministic_Policy_Gradient_Family(object):
             self.action_size = [action_space.shape[0]]
             self.worker_size = 1
             self.env_type = "gym"
-
-        elif isinstance(self.env, gymMultiworker):
-            print("gymMultiworker")
-            env_info = self.env.env_info
-            self.observation_space = [list(env_info["observation_space"].shape)]
-            self.action_size = [env_info["action_space"].n]
-            self.worker_size = self.env.worker_num
-            self.env_type = "gymMultiworker"
 
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
@@ -190,120 +182,44 @@ class Deteministic_Policy_Gradient_Family(object):
             tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
         if self.prioritized_replay:
             tb_log_name = tb_log_name + "+PER"
+        self.eval_freq = total_timesteps // 100
 
         pbar = trange(total_timesteps, miniters=log_interval)
         with TensorboardWriter(self.tensorboard_log, tb_log_name) as (
             self.summary,
             self.save_path,
         ):
-            if self.env_type == "unity":
-                score_mean = self.learn_unity(pbar, callback, log_interval)
             if self.env_type == "gym":
-                score_mean = self.learn_gym(pbar, callback, log_interval)
-            if self.env_type == "gymMultiworker":
-                score_mean = self.learn_gymMultiworker(pbar, callback, log_interval)
-            add_hparams(self, self.summary, {"env/episode_reward": score_mean}, total_timesteps)
+                self.learn_gym(pbar, callback, log_interval)
+                self.eval_gym(total_timesteps)
+            if self.env_type == "Multiworker":
+                self.learn_Multiworker(pbar, callback, log_interval)
+            
+            add_hparams(self, self.summary)
             self.save_params(self.save_path)
 
-    def discription(self):
-        return "score : {:.3f}, loss : {:.3f} |".format(
-            np.mean(self.scoreque), np.mean(self.lossque)
-        )
+    def discription(self, eval_result=None):
+        discription = ""
+        if eval_result is not None:
+            for k, v in eval_result.items():
+                discription += f"{k} : {v:8.2f}, "
 
-    def learn_unity(self, pbar, callback=None, log_interval=100):
-        self.env.reset()
-        self.env.step()
-        dec, term = self.env.get_steps(self.group_name)
-        self.scores = np.zeros([self.worker_size])
-        self.eplen = np.zeros([self.worker_size])
-        self.scoreque = deque(maxlen=10)
-        self.lossque = deque(maxlen=10)
-        obses = convert_states(dec.obs)
-        for steps in pbar:
-            self.eplen += 1
-            actions = self.actions(obses, steps)
-            self.env.set_actions(self.group_name, ActionTuple(continuous=actions))
-            self.env.step()
-
-            if (
-                steps > self.learning_starts and steps % self.train_freq == 0
-            ):  # train in step the environments
-                loss = self.train_step(steps, self.gradient_steps)
-                self.lossque.append(loss)
-
-            dec, term = self.env.get_steps(self.group_name)
-            term_ids = term.agent_id
-            term_obses = convert_states(term.obs)
-            term_rewards = term.reward
-            term_interrupted = term.interrupted
-            while len(dec) == 0:
-                self.env.step()
-                dec, term = self.env.get_steps(self.group_name)
-                if len(term.agent_id):
-                    term_ids = np.append(term_ids, term.agent_id)
-                    term_obses = [
-                        np.concatenate((to, o), axis=0)
-                        for to, o in zip(term_obses, convert_states(term.obs))
-                    ]
-                    term_rewards = np.append(term_rewards, term.reward)
-                    term_interrupted = np.append(term_interrupted, term.interrupted)
-            nxtobs = convert_states(dec.obs)
-            terminated = np.full((self.worker_size), False)
-            truncated = np.full((self.worker_size), False)
-            reward = dec.reward
-            term_on = len(term_ids) > 0
-            if term_on:
-                nxtobs_t = [n.at[term_ids].set(t) for n, t in zip(nxtobs, term_obses)]
-                terminated[term_ids] = term_interrupted
-                truncated[term_ids] = np.logical_not(term_interrupted)
-                reward[term_ids] = term_rewards
-                self.replay_buffer.add(obses, actions, reward, nxtobs_t, terminated, truncated)
-            else:
-                self.replay_buffer.add(obses, actions, reward, nxtobs, terminated, truncated)
-            self.scores += reward
-            obses = nxtobs
-            if term_on:
-                if self.summary:
-                    self.summary.add_scalar(
-                        "env/episode_reward", np.mean(self.scores[term_ids]), steps
-                    )
-                    self.summary.add_scalar("env/episode_len", np.mean(self.eplen[term_ids]), steps)
-                    self.summary.add_scalar(
-                        "env/time_over",
-                        np.mean(truncated[term_ids].astype(np.float32)),
-                        steps,
-                    )
-                self.scoreque.extend(self.scores[term_ids])
-                self.scores[term_ids] = reward[term_ids]
-                self.eplen[term_ids] = 0
-
-            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
-                pbar.set_description(self.discription())
-        return np.mean(self.scoreque)
+        discription += f"loss : {np.mean(self.lossque):.3f}"
+        return discription
 
     def learn_gym(self, pbar, callback=None, log_interval=100):
         state, info = self.env.reset()
         state = [np.expand_dims(state, axis=0)]
-        self.scores = np.zeros([self.worker_size])
-        self.eplen = np.zeros([self.worker_size])
-        self.scoreque = deque(maxlen=10)
         self.lossque = deque(maxlen=10)
+        eval_result = None
+
         for steps in pbar:
-            self.eplen += 1
             actions = self.actions(state, steps)
             next_state, reward, terminated, truncated, info = self.env.step(actions[0])
             next_state = [np.expand_dims(next_state, axis=0)]
             self.replay_buffer.add(state, actions[0], reward, next_state, terminated, truncated)
-            self.scores[0] += reward
             state = next_state
             if terminated or truncated:
-                self.scoreque.append(self.scores[0])
-                if self.summary:
-                    self.summary.add_scalar("env/episode_reward", self.scores[0], steps)
-                    self.summary.add_scalar("env/episode len", self.eplen[0], steps)
-                    self.summary.add_scalar("env/time over", float(truncated), steps)
-                self.scores[0] = 0
-                self.eplen[0] = 0
                 state, info = self.env.reset()
                 state = [np.expand_dims(state, axis=0)]
 
@@ -311,11 +227,53 @@ class Deteministic_Policy_Gradient_Family(object):
                 loss = self.train_step(steps, self.gradient_steps)
                 self.lossque.append(loss)
 
-            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
-                pbar.set_description(self.discription())
-        return np.mean(self.scoreque)
+            if steps % self.eval_freq == 0:
+                eval_result = self.eval_gym(steps)
 
-    def learn_gymMultiworker(self, pbar, callback=None, log_interval=100):
+            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+                pbar.set_description(self.discription(eval_result))
+
+    def eval_gym(self, steps):
+        total_reward = np.zeros(self.eval_eps)
+        total_ep_len = np.zeros(self.eval_eps)
+        total_truncated = np.zeros(self.eval_eps)
+
+        state, info = self.eval_env.reset()
+        state = [np.expand_dims(state, axis=0)]
+        terminated = False
+        truncated = False
+        eplen = 0
+        
+        for ep in range(self.eval_eps):
+            while not terminated and not truncated:
+                actions = self.actions(
+                    state, steps
+                )
+                next_state, reward, terminated, truncated, info = self.eval_env.step(actions[0])
+                next_state = [np.expand_dims(next_state, axis=0)]
+                total_reward[ep] += reward
+                state = next_state
+                eplen += 1
+
+            total_ep_len[ep] = eplen
+            total_truncated[ep] = float(truncated)
+
+            state, info = self.eval_env.reset()
+            state = [np.expand_dims(state, axis=0)]
+            terminated = False
+            truncated = False
+            eplen = 0
+
+        mean_reward = np.mean(total_reward)
+        mean_ep_len = np.mean(total_ep_len)
+
+        if self.summary:
+            self.summary.add_scalar("env/episode_reward", mean_reward, steps)
+            self.summary.add_scalar("env/episode len", mean_ep_len, steps)
+            self.summary.add_scalar("env/time over", np.mean(total_truncated), steps)
+        return {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
+
+    def learn_Multiworker(self, pbar, callback=None, log_interval=100):
         state, _, _, _, _, _ = self.env.get_steps()
         self.scores = np.zeros([self.worker_size])
         self.eplen = np.zeros([self.worker_size])
