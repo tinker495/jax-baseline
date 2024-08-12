@@ -397,11 +397,20 @@ class SPR(Q_Network_Family):
                 stop_soft_update = (steps % self.soft_reset_freq < self.stop_soft_update) & (
                     steps > self.soft_reset_freq
                 )
+                hard_update = (steps % self.soft_reset_freq != self.stop_soft_update) | (
+                    steps <= self.soft_reset_freq
+                )
+                target_params = jax.lax.cond(
+                    hard_update,
+                    lambda _: target_params,
+                    lambda _: params,
+                    None,
+                )
                 target_params = jax.lax.cond(
                     stop_soft_update,
-                    lambda target_params: target_params,
-                    lambda target_params: soft_update(params, target_params, 0.005),
-                    target_params,
+                    lambda _: target_params,
+                    lambda _: soft_update(params, target_params, 0.005),
+                    None,
                 )
                 params = scaled_by_reset(params, key, steps, self.soft_reset_freq, self.reset_hardsoft)
             else:
