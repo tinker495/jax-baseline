@@ -15,9 +15,10 @@ from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 class TD7(Deteministic_Policy_Gradient_Family):
     def __init__(
         self,
-        env,
-        eval_env,
+        env_builder : callable,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
@@ -30,8 +31,6 @@ class TD7(Deteministic_Policy_Gradient_Family):
         learning_starts=1000,
         target_network_update_freq=250,
         prioritized_replay_alpha=0.4,
-        prioritized_replay_beta0=0.4,
-        prioritized_replay_eps=1e-3,
         log_interval=200,
         tensorboard_log=None,
         _init_setup_model=True,
@@ -41,8 +40,10 @@ class TD7(Deteministic_Policy_Gradient_Family):
         optimizer="adamw",
     ):
         super().__init__(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers,
+            eval_eps,
             gamma,
             learning_rate,
             buffer_size,
@@ -54,8 +55,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
             0,
             True,
             prioritized_replay_alpha,
-            prioritized_replay_beta0,
-            prioritized_replay_eps,
+            0,
+            0,
             log_interval,
             tensorboard_log,
             _init_setup_model,
@@ -78,12 +79,9 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.min_return = 1e8
         self.best_min_return = -1e8
 
-        self.steps_before_checkpointing = int(75e4)
-        self.max_eps_before_checkpointing = 25
-
-        self.eval_env = eval_env
-        self.eval_freq = self.steps_before_checkpointing // 5
-        self.eval_eps = 10
+        self.checkpointing = False
+        self.steps_before_checkpointing = int(5e5)
+        self.max_eps_before_checkpointing = 20
 
         if _init_setup_model:
             self.setup_model()
@@ -101,44 +99,47 @@ class TD7(Deteministic_Policy_Gradient_Family):
             self.actor,
             self.critic,
             self.encoder_params,
-            self.params,
+            self.policy_params,
+            self.critic_params,
         ) = model_builder(next(self.key_seq), print_model=True)
         self.fixed_encoder_params = deepcopy(self.encoder_params)
         self.fixed_encoder_target_params = deepcopy(self.encoder_params)
-        self.target_params = deepcopy(self.params)
+        self.target_policy_params = deepcopy(self.policy_params)
+        self.target_critic_params = deepcopy(self.critic_params)
         self.checkpoint_encoder_params = deepcopy(self.encoder_params)
-        self.checkpoint_params = deepcopy(self.params)
+        self.checkpoint_policy_params = deepcopy(self.policy_params)
 
-        self.params["values"] = {
+        self.critic_params["values"] = {
             "min_value": jnp.array([np.inf], dtype=jnp.float32),
             "max_value": jnp.array([-np.inf], dtype=jnp.float32),
         }
-        self.target_params["values"] = {
+        self.target_critic_params["values"] = {
             "min_value": jnp.array([0], dtype=jnp.float32),
             "max_value": jnp.array([0], dtype=jnp.float32),
         }
 
         self.encoder_opt_state = self.optimizer.init(self.encoder_params)
-        self.opt_state = self.optimizer.init(self.params)
+        self.opt_policy_state = self.optimizer.init(self.policy_params)
+        self.opt_critic_state = self.optimizer.init(self.critic_params)
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
 
-    def _get_actions(self, encoder_params, params, obses, key=None) -> jnp.ndarray:
+    def _get_actions(self, encoder_params, policy_params, obses, key=None) -> jnp.ndarray:
         feature = self.preproc(encoder_params, key, convert_jax(obses))
         zs = self.encoder(encoder_params, key, feature)
-        return self.actor(params, key, feature, zs)
+        return self.actor(policy_params, key, feature, zs)
 
     def actions(self, obs, steps, use_checkpoint=False, exploration=True):
         if self.learning_starts < steps:
             if use_checkpoint:
                 actions = np.asarray(
                     self._get_actions(
-                        self.checkpoint_encoder_params, self.checkpoint_params, obs, None
+                        self.checkpoint_encoder_params, self.checkpoint_policy_params, obs, None
                     )
                 )
             else:
                 actions = np.asarray(
-                    self._get_actions(self.fixed_encoder_params, self.params, obs, None)
+                    self._get_actions(self.fixed_encoder_params, self.policy_params, obs, None)
                 )
             if exploration:
                 actions = np.clip(
@@ -167,13 +168,15 @@ class TD7(Deteministic_Policy_Gradient_Family):
         # Update checkpoint
         elif self.eps_since_update >= self.max_eps_before_update:
             self.best_min_return = self.min_return
-            self.checkpoint_params = self.params
+            self.checkpoint_policy_params = self.policy_params
             self.checkpoint_encoder_params = self.fixed_encoder_params
             self.train_and_reset(steps)
 
     def train_and_reset(self, steps):
-        if steps > self.steps_before_checkpointing:
+        if not self.checkpointing and steps > self.steps_before_checkpointing:
+            self.best_min_return = 0.9 * self.best_min_return
             self.max_eps_before_update = self.max_eps_before_checkpointing
+            self.checkpointing = True
         self.loss_mean = self.train_step(steps, self.timesteps_since_update * self.gradient_steps)
 
         self.eps_since_update = 0
@@ -187,28 +190,37 @@ class TD7(Deteministic_Policy_Gradient_Family):
         targets = []
         for _ in range(gradient_steps):
             self.train_steps_count += 1
-            data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
+            if self.prioritized_replay:
+                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
+            else:
+                data = self.replay_buffer.sample(self.batch_size)
 
             (
                 self.encoder_params,
-                self.params,
+                self.policy_params,
+                self.critic_params,
                 self.fixed_encoder_params,
                 self.fixed_encoder_target_params,
-                self.target_params,
+                self.target_policy_params,
+                self.target_critic_params,
                 self.encoder_opt_state,
-                self.opt_state,
+                self.opt_policy_state,
+                self.opt_critic_state,
                 repr_loss,
                 loss,
                 t_mean,
                 new_priorities,
             ) = self._train_step(
                 self.encoder_params,
-                self.params,
+                self.policy_params,
+                self.critic_params,
                 self.fixed_encoder_params,
                 self.fixed_encoder_target_params,
-                self.target_params,
+                self.target_policy_params,
+                self.target_critic_params,
                 self.encoder_opt_state,
-                self.opt_state,
+                self.opt_policy_state,
+                self.opt_critic_state,
                 next(self.key_seq),
                 self.train_steps_count,
                 **data,
@@ -217,7 +229,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
             losses.append(loss)
             targets.append(t_mean)
 
-            self.replay_buffer.update_priorities(data["indexes"], new_priorities)
+            if self.prioritized_replay:
+                self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
         mean_repr_loss = jnp.mean(jnp.array(repr_losses))
         mean_loss = jnp.mean(jnp.array(losses))
@@ -227,20 +240,23 @@ class TD7(Deteministic_Policy_Gradient_Family):
             self.summary.add_scalar("loss/encoder_loss", mean_repr_loss, steps)
             self.summary.add_scalar("loss/qloss", mean_loss, steps)
             self.summary.add_scalar("loss/targets", mean_target, steps)
-            self.summary.add_scalar("loss/min_value", self.params["values"]["min_value"], steps)
-            self.summary.add_scalar("loss/max_value", self.params["values"]["max_value"], steps)
+            self.summary.add_scalar("loss/min_value", self.critic_params["values"]["min_value"], steps)
+            self.summary.add_scalar("loss/max_value", self.critic_params["values"]["max_value"], steps)
 
         return mean_loss
 
     def _train_step(
         self,
         encoder_params,
-        params,
+        policy_params,
+        critic_params,
         fixed_encoder_params,
         fixed_encoder_target_params,
-        target_params,
+        target_policy_params,
+        target_critic_params,
         encoder_opt_state,
-        opt_state,
+        opt_policy_state,
+        opt_critic_state,
         key,
         step,
         obses,
@@ -264,18 +280,34 @@ class TD7(Deteministic_Policy_Gradient_Family):
         encoder_params = optax.apply_updates(encoder_params, updates)
 
         targets = self._target(
-            fixed_encoder_target_params, target_params, rewards, nxtobses, not_terminateds, key
+            fixed_encoder_target_params, target_policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key
         )
-        params["values"]["min_value"] = jnp.minimum(jnp.min(targets), params["values"]["min_value"])
-        params["values"]["max_value"] = jnp.maximum(jnp.max(targets), params["values"]["max_value"])
+        critic_params["values"]["min_value"] = jnp.minimum(jnp.min(targets), critic_params["values"]["min_value"])
+        critic_params["values"]["max_value"] = jnp.maximum(jnp.max(targets), critic_params["values"]["max_value"])
 
-        (total_loss, (critic_loss, actor_loss, priority)), grad = jax.value_and_grad(
-            self._loss, has_aux=True
-        )(params, fixed_encoder_params, obses, actions, targets, key, step)
-        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-        params = optax.apply_updates(params, updates)
+        feature, zs = self.feature_and_zs(fixed_encoder_params, obses, key)
 
-        target_params = hard_update(params, target_params, step, self.target_network_update_freq)
+        (critic_loss, priority), grad = jax.value_and_grad(
+            self._critic_loss, has_aux=True
+        )(critic_params, fixed_encoder_params, feature, zs, actions, targets, key)
+        updates, opt_critic_state = self.optimizer.update(grad, opt_critic_state, params=critic_params)
+        critic_params = optax.apply_updates(critic_params, updates)
+
+        def _opt_actor(policy_params, opt_policy_state, key):
+            grad = jax.grad(self._actor_loss)(policy_params, critic_params, fixed_encoder_params, feature, zs, key)
+            updates, opt_policy_state = self.optimizer.update(grad, opt_policy_state, params=policy_params)
+            policy_params = optax.apply_updates(policy_params, updates)
+            return policy_params, opt_policy_state, key
+
+        policy_params, opt_policy_state, key = jax.lax.cond(
+            step % self.policy_delay == 0,
+            lambda x: _opt_actor(*x),
+            lambda x: x,
+            (policy_params, opt_policy_state, key),
+        )
+
+        target_policy_params = hard_update(policy_params, target_policy_params, step, self.target_network_update_freq)
+        target_critic_params = hard_update(critic_params, target_critic_params, step, self.target_network_update_freq)
         fixed_encoder_target_params = hard_update(
             fixed_encoder_params, fixed_encoder_target_params, step, self.target_network_update_freq
         )
@@ -284,17 +316,25 @@ class TD7(Deteministic_Policy_Gradient_Family):
         )
         return (
             encoder_params,
-            params,
+            policy_params,
+            critic_params,
             fixed_encoder_params,
             fixed_encoder_target_params,
-            target_params,
+            target_policy_params,
+            target_critic_params,
             encoder_opt_state,
-            opt_state,
+            opt_policy_state,
+            opt_critic_state,
             repr_loss,
             critic_loss,
-            -actor_loss,
+            jnp.mean(targets),
             priority,
         )
+    
+    def feature_and_zs(self, encoder_params, obses, key):
+        feature = self.preproc(encoder_params, key, convert_jax(obses))
+        zs = self.encoder(encoder_params, key, feature)
+        return feature, zs
 
     def _encoder_loss(self, encoder_params, obses, next_obses, actions, key):
         next_zs = jax.lax.stop_gradient(
@@ -304,36 +344,32 @@ class TD7(Deteministic_Policy_Gradient_Family):
         pred_zs = self.action_encoder(encoder_params, key, zs, actions)
         loss = jnp.mean(jnp.square(next_zs - pred_zs))
         return loss
+    
+    def _actor_loss(self, policy_params, critic_params, fixed_encoder_params, feature, zs, key):
+        actions = self.actor(policy_params, key, feature, zs)
+        zsa = self.action_encoder(fixed_encoder_params, key, zs, actions)
+        q1, q2 = self.critic(critic_params, key, feature, zs, zsa, actions)
+        return -jnp.mean(jnp.minimum(q1, q2))
 
-    def _loss(self, params, fixed_encoder_params, obses, actions, targets, key, step):
-        feature = self.preproc(fixed_encoder_params, key, obses)
-        zs = self.encoder(fixed_encoder_params, key, feature)
+    def _critic_loss(self, critic_params, fixed_encoder_params, feature, zs, actions, targets, key):
         zsa = self.action_encoder(fixed_encoder_params, key, zs, actions)
 
-        q1, q2 = self.critic(params, key, feature, zs, zsa, actions)
+        q1, q2 = self.critic(critic_params, key, feature, zs, zsa, actions)
         error1 = jnp.squeeze(q1 - targets)
         error2 = jnp.squeeze(q2 - targets)
         critic_loss = jnp.mean(hubberloss(error1, 1.0)) + jnp.mean(hubberloss(error2, 1.0))
 
         priority = jnp.maximum(jnp.maximum(jnp.abs(error1), jnp.abs(error2)), 1.0)
-
-        policy = self.actor(params, key, feature, zs)
-        policy_zsa = self.action_encoder(fixed_encoder_params, key, zs, policy)
-        Q1, Q2 = self.critic(jax.lax.stop_gradient(params), key, feature, zs, policy_zsa, policy)
-        actor_loss = -jnp.mean(jnp.concatenate([Q1, Q2], axis=1))
-        total_loss = jax.lax.select(
-            step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss
-        )
-        return total_loss, (critic_loss, actor_loss, priority)
+        return critic_loss, priority
 
     def _target(
-        self, fixed_encoder_target_params, target_params, rewards, nxtobses, not_terminateds, key
+        self, fixed_encoder_target_params, target_policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key
     ):
         next_feature = self.preproc(fixed_encoder_target_params, key, nxtobses)
         fixed_target_zs = self.encoder(fixed_encoder_target_params, key, next_feature)
 
         next_action = jnp.clip(
-            self.actor(target_params, key, next_feature, fixed_target_zs)
+            self.actor(target_policy_params, key, next_feature, fixed_target_zs)
             + jnp.clip(
                 self.target_action_noise
                 * jax.random.normal(key, (self.batch_size, self.action_size[0])),
@@ -349,17 +385,23 @@ class TD7(Deteministic_Policy_Gradient_Family):
         )
 
         q1, q2 = self.critic(
-            target_params, key, next_feature, fixed_target_zs, fixed_target_zsa, next_action
+            target_critic_params, key, next_feature, fixed_target_zs, fixed_target_zsa, next_action
         )
         next_q = jnp.clip(
             jnp.minimum(q1, q2),
-            target_params["values"]["min_value"],
-            target_params["values"]["max_value"],
+            target_critic_params["values"]["min_value"],
+            target_critic_params["values"]["max_value"],
         )
         return rewards + not_terminateds * self.gamma * next_q
 
-    def discription(self):
-        return "score : {:.3f}, loss : {:.3f} |".format(self.score_mean, self.loss_mean)
+    def discription(self, eval_result=None):
+        discription = ""
+        if eval_result is not None:
+            for k, v in eval_result.items():
+                discription += f"{k} : {v:8.2f}, "
+
+        discription += f"loss : {np.mean(self.loss_mean):.3f}"
+        return discription
 
     def learn(
         self,
@@ -370,20 +412,14 @@ class TD7(Deteministic_Policy_Gradient_Family):
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
-        pbar = trange(total_timesteps, miniters=log_interval)
-        self.eval_freq = total_timesteps // 100
-        with TensorboardWriter(self.tensorboard_log, tb_log_name) as (
-            self.summary,
-            self.save_path,
-        ):
-            if self.env_type == "unity":
-                score_mean = self.learn_unity(pbar, callback, log_interval)
-            if self.env_type == "gym":
-                score_mean = self.learn_gym(pbar, callback, log_interval)
-            if self.env_type == "gymMultiworker":
-                score_mean = self.learn_gymMultiworker(pbar, callback, log_interval)
-            add_hparams(self, self.summary, {"env/episode_reward": score_mean}, total_timesteps)
-            self.save_params(self.save_path)
+        super().learn(
+            total_timesteps,
+            callback,
+            log_interval,
+            tb_log_name,
+            reset_num_timesteps,
+            replay_wrapper,
+        )
 
     def learn_gym(self, pbar, callback=None, log_interval=100):
         state, info = self.env.reset()
@@ -407,18 +443,13 @@ class TD7(Deteministic_Policy_Gradient_Family):
                 state, info = self.env.reset()
                 state = [np.expand_dims(state, axis=0)]
 
-            if (
-                steps % log_interval == 0
-                and self.loss_mean is not None
-                and self.score_mean is not None
-            ):
-                pbar.set_description(self.discription())
-
             if steps % self.eval_freq == 0:
-                self.score_mean = self.eval(steps)
-        return self.eval(steps + 1)
+                eval_result = self.eval_gym(steps)
 
-    def eval(self, steps):
+            if steps % log_interval == 0 and eval_result is not None and self.loss_mean is not None :
+                pbar.set_description(self.discription(eval_result))
+
+    def eval_gym(self, steps):
         total_reward = np.zeros(self.eval_eps)
         total_ep_len = np.zeros(self.eval_eps)
         total_truncated = np.zeros(self.eval_eps)
@@ -430,7 +461,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             eplen = 0
             while not terminated and not truncated:
                 actions = self.actions(
-                    state, self.learning_starts + 1, use_checkpoint=True, exploration=False
+                    state, steps, use_checkpoint=True, exploration=False
                 )
                 next_state, reward, terminated, truncated, info = self.eval_env.step(actions[0])
                 next_state = [np.expand_dims(next_state, axis=0)]
@@ -442,9 +473,10 @@ class TD7(Deteministic_Policy_Gradient_Family):
             total_truncated[ep] = float(truncated)
 
         mean_reward = np.mean(total_reward)
+        mean_ep_len = np.mean(total_ep_len)
 
         if self.summary:
             self.summary.add_scalar("env/episode_reward", mean_reward, steps)
-            self.summary.add_scalar("env/episode len", np.mean(total_ep_len), steps)
+            self.summary.add_scalar("env/episode len", mean_ep_len, steps)
             self.summary.add_scalar("env/time over", np.mean(total_truncated), steps)
-        return mean_reward
+        return {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}

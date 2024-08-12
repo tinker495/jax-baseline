@@ -13,14 +13,16 @@ from jax_baselines.DQN.base_class import Q_Network_Family
 class IQN(Q_Network_Family):
     def __init__(
         self,
-        env,
+        env_builder : callable,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
         exploration_fraction=0.3,
         n_support=32,
-        delta=0.1,
+        delta=1.0,
         exploration_final_eps=0.02,
         exploration_initial_eps=1.0,
         train_freq=1,
@@ -48,8 +50,10 @@ class IQN(Q_Network_Family):
         compress_memory=False,
     ):
         super().__init__(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers,
+            eval_eps,
             gamma,
             learning_rate,
             buffer_size,
@@ -218,7 +222,9 @@ class IQN(Q_Network_Family):
         )
         return jnp.mean(loss * weights), loss
 
-    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key):
+    def _target(
+        self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
+    ):
         target_tau = jax.random.uniform(key, (self.batch_size, self.n_support))
         next_q = self.get_q(target_params, nxtobses, target_tau, key)
 
@@ -230,14 +236,17 @@ class IQN(Q_Network_Family):
             next_sub_q, tau_log_pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
             pi_next = jnp.expand_dims(
                 jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau), axis=2
-            )
-            next_vals = (
-                jnp.sum(
-                    pi_next * (next_q - jnp.expand_dims(tau_log_pi_next, axis=2)),
-                    axis=1,
-                )
-                * not_terminateds
-            )
+            )  # batch x actions x 1
+            next_vals = next_q - jnp.expand_dims(
+                tau_log_pi_next, axis=2
+            )  # batch x actions x support
+            sample_pi = jax.random.categorical(
+                key, jnp.tile(pi_next, (1, 1, self.n_support)), 1
+            )  # batch x 1 x support
+            next_vals = jnp.take_along_axis(
+                next_vals, jnp.expand_dims(sample_pi, axis=1), axis=1
+            )  # batch x 1 x support
+            next_vals = not_terminateds * jnp.squeeze(next_vals, axis=1)
 
             if self.double_q:
                 q_k_targets = jnp.mean(self.get_q(params, obses, target_tau, key), axis=2)

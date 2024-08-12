@@ -1,11 +1,11 @@
 # Jax-Baseline
 
-Jax-Baseline is the same Reinforcement Learning implementation as any Baseline implemented through the JAX and Flax/Haiku libraries.
+Jax-Baseline is a Reinforcement Learning implementation using JAX and Flax/Haiku libraries, mirroring the functionality of standard baselines.
 
-It's not compared to any Baseline yet, but it's two to three times faster than the Torch and Tensorflow works that we've implemented before.
-Using JAX's JIT(Just In Time) compilation, we optimized a series of courses for learning and constructed them based on functions. This allows you to see how JAX's capabilities can be used effectively in various Reinforcement Learning implementations.
-
-This implementation is configured to flexibly solve the commonly used gym and unity ml environment for testing algorithms in various complex environments.
+## Features
+- 2-3 times faster than previous Torch and Tensorflow implementations
+- Optimized using JAX's Just-In-Time (JIT) compilation
+- Flexible solution for Gym and Unity ML environments
 
 ## Installation
 
@@ -14,14 +14,14 @@ pip install -r requirement.txt
 pip install .
 ```
 
-## Implement log
+## Implementation Status
 
 - :heavy_check_mark: : Optional implemented
 - :white_check_mark: : Defualt implemented at papers
 - :x: : Not implemeted yet or can not implemented
 - :zzz: : Implemented but didn't update a while (can not guarantee working well now)
 
-### Implemented Environments
+### Supported Environments
 
 | **Name**                | **Q-Net based**    | **Actor-Critic based** | **DPG based**      |
 | ----------------------- | ------------------ | ---------------------- | ------------------ |
@@ -61,9 +61,14 @@ pip install .
 | TQC[^TQC]  | :heavy_check_mark:      | :heavy_check_mark: | :x:                |
 | TD7[^TD7]  | :white_check_mark:(LAP[^LaP]) | :x:                | :x:                |
 
+## Performance Compariton
+- [DQN 5M](docs/dqn_5m.md)
+- [DQN 100K](docs/dqn_100k.md)
+- [DPG](docs/dpg_comparison.md)
+
 ## Test
 
-To test atari with DQN(or C51, QRQDN, IQN, FQF)
+To test Atari with DQN (or C51, QRDQN, IQN, FQF):
 
 ```
 python test/run_qnet.py --algo DQN --env BreakoutNoFrameskip-v4 --learning_rate 0.0002 \
@@ -71,8 +76,8 @@ python test/run_qnet.py --algo DQN --env BreakoutNoFrameskip-v4 --learning_rate 
 		--hidden_n 1 --final_eps 0.01 --learning_starts 20000 --gamma 0.995 --clip_rewards
 ```
 
-Only 15 minutes is sufficient to run 500K steps on DQNs learning atari breakout (540 steps/sec).
-This performance measurement was on Nvidia RTX3080 and AMD Ryzen 9 5950X in a single process.
+500K steps can be run in just 15 minutes on Atari Breakout (540 steps/sec).
+Performance measured on Nvidia RTX3080 and AMD Ryzen 9 5950X in a single process.
 
 ```
 score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 500000/500000 [15:24<00:00, 540.88it/s]
@@ -101,7 +106,7 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 [^APPO]: [IMPALA + PPO, APPO](https://docs.ray.io/en/latest/rllib/rllib-algorithms.html#appo)
 [^DDPG]: [DDPG](https://arxiv.org/abs/1509.02971)
 [^TD3]: [TD3](https://arxiv.org/abs/1802.09477)
-[^SAC]: [SAC](https://arxiv.org/abs/1801.01290)
+[^SAC]: [SAC](https://arxiv.org/abs/1812.05905)
 [^TQC]: [TQC](https://arxiv.org/abs/2005.04269)
 [^TD7]: [TD7](https://arxiv.org/abs/2306.02451)
 [^LaP]: [LaP](https://arxiv.org/abs/2007.06049)

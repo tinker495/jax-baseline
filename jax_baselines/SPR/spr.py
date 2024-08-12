@@ -8,7 +8,7 @@ from jax_baselines.common.utils import (
     convert_jax,
     filter_like_tree,
     q_log_pi,
-    soft_reset,
+    scaled_by_reset,
     soft_update,
     tree_random_normal_like,
 )
@@ -22,15 +22,17 @@ from jax_baselines.SPR.efficent_buffer import (
 class SPR(Q_Network_Family):
     def __init__(
         self,
-        env,
+        env_builder : callable,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
         gradient_steps=1,
         batch_size=32,
         off_policy_fix=False,
-        soft_reset=False,
+        scaled_by_reset=False,
         learning_starts=1000,
         munchausen=False,
         log_interval=200,
@@ -50,15 +52,17 @@ class SPR(Q_Network_Family):
         self.shift_size = 4
         self.prediction_depth = 5
         self.off_policy_fix = off_policy_fix
-        self.soft_reset = soft_reset
+        self.scaled_by_reset = scaled_by_reset
         self.intensity_scale = 0.05
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = float(categorial_max)
         self.categorial_min = float(categorial_min)
 
         super().__init__(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers,
+            eval_eps,
             gamma,
             learning_rate,
             buffer_size,
@@ -130,12 +134,12 @@ class SPR(Q_Network_Family):
             self.params,
         ) = model_builder(next(self.key_seq), print_model=True)
         self.target_params = tree_random_normal_like(next(self.key_seq), self.params)
-        if self.soft_reset:
+        if self.scaled_by_reset:
             self.reset_hardsoft = filter_like_tree(
                 self.params,
                 "qnet",
                 (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2),
-            )  # hard_reset for qnet and soft_reset for the rest
+            )  # hard_reset for qnet and scaled_by_reset for the rest
             self.soft_reset_freq = 40000
             self.stop_soft_update = self.soft_reset_freq // 10
         self.opt_state = self.optimizer.init(self.params)
@@ -159,7 +163,7 @@ class SPR(Q_Network_Family):
         if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(
                 self._get_actions(
-                    self.target_params if self.soft_reset else self.params,
+                    self.target_params if self.scaled_by_reset else self.params,
                     obs,
                     next(self.key_seq) if self.param_noise else None,
                 )
@@ -389,7 +393,7 @@ class SPR(Q_Network_Family):
             )
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
-            if self.soft_reset:
+            if self.scaled_by_reset:
                 stop_soft_update = (steps % self.soft_reset_freq < self.stop_soft_update) & (
                     steps > self.soft_reset_freq
                 )
@@ -399,7 +403,7 @@ class SPR(Q_Network_Family):
                     lambda target_params: soft_update(params, target_params, 0.005),
                     target_params,
                 )
-                params = soft_reset(params, key, steps, self.soft_reset_freq, self.reset_hardsoft)
+                params = scaled_by_reset(params, key, steps, self.soft_reset_freq, self.reset_hardsoft)
             else:
                 target_params = soft_update(params, target_params, 0.005)
             target_q = jnp.sum(
@@ -583,7 +587,7 @@ class SPR(Q_Network_Family):
         return target_distribution
 
     def tb_log_name_update(self, tb_log_name):
-        if self.soft_reset:
+        if self.scaled_by_reset:
             tb_log_name = "SR-" + tb_log_name
         if self.munchausen:
             tb_log_name = "M-" + tb_log_name

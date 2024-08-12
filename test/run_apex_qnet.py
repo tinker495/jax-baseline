@@ -3,6 +3,7 @@ import multiprocessing as mp
 
 import ray
 
+from jax_baselines.common.env_builer import get_env_builder
 from jax_baselines.APE_X.worker import Ape_X_Worker
 from jax_baselines.C51.apex_c51 import APE_X_C51
 from jax_baselines.DQN.apex_dqn import APE_X_DQN
@@ -12,6 +13,7 @@ from jax_baselines.QRDQN.apex_qrdqn import APE_X_QRDQN
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
+    parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="Cartpole-v1", help="environment")
     parser.add_argument("--algo", type=str, default="DQN", help="algo ID")
     parser.add_argument("--gamma", type=float, default=0.99, help="gamma")
@@ -61,15 +63,23 @@ if __name__ == "__main__":
 
     ray.init(num_cpus=args.worker + 2, num_gpus=0)
 
-    workers = [Ape_X_Worker.remote(env_name) for i in range(args.worker)]
+    env_builder, env_info = get_env_builder(env_name)
+    workers = [Ape_X_Worker.remote(env_builder) for i in range(args.worker)]
 
-    env_type = "gym"
+    env_type = env_info["env_type"]
+    env_name = env_info["env_id"]
 
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
     if args.algo == "DQN":
+        if args.model_lib == "flax":
+            from model_builder.flax.qnet.dqn_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            from model_builder.haiku.qnet.dqn_builder import model_builder_maker
+
         agent = APE_X_DQN(
             workers,
+            model_builder_maker,
             manger,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
@@ -92,8 +102,14 @@ if __name__ == "__main__":
             compress_memory=args.compress_memory,
         )
     elif args.algo == "C51":
+        if args.model_lib == "flax":
+            from model_builder.flax.qnet.c51_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            from model_builder.haiku.qnet.c51_builder import model_builder_maker
+
         agent = APE_X_C51(
             workers,
+            model_builder_maker,
             manger,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
@@ -118,8 +134,14 @@ if __name__ == "__main__":
             categorial_min=args.min,
         )
     elif args.algo == "QRDQN":
+        if args.model_lib == "flax":
+            from model_builder.flax.qnet.qrdqn_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            from model_builder.haiku.qnet.qrdqn_builder import model_builder_maker
+        
         agent = APE_X_QRDQN(
             workers,
+            model_builder_maker,
             manger,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
@@ -144,8 +166,14 @@ if __name__ == "__main__":
             delta=args.delta,
         )
     elif args.algo == "IQN":
+        if args.model_lib == "flax":
+            from model_builder.flax.qnet.iqn_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            from model_builder.haiku.qnet.iqn_builder import model_builder_maker
+
         agent = APE_X_IQN(
             workers,
+            model_builder_maker,
             manger,
             gamma=args.gamma,
             learning_rate=args.learning_rate,

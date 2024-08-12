@@ -39,7 +39,7 @@ class APE_X_IQN(Ape_X_Family):
         _init_setup_model=True,
         policy_kwargs=None,
         n_support=200,
-        delta=0.1,
+        delta=1.0,
         full_tensorboard_log=False,
         seed=None,
         optimizer="adamw",

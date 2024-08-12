@@ -11,8 +11,10 @@ from jax_baselines.DQN.base_class import Q_Network_Family
 class DQN(Q_Network_Family):
     def __init__(
         self,
-        env,
+        env_builder : callable,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
@@ -43,8 +45,10 @@ class DQN(Q_Network_Family):
         compress_memory=False,
     ):
         super().__init__(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers,
+            eval_eps,
             gamma,
             learning_rate,
             buffer_size,
