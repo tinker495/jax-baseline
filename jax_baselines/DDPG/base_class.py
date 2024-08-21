@@ -18,7 +18,7 @@ from jax_baselines.common.cpprb_buffers import (
     ReplayBuffer,
 )
 from jax_baselines.common.utils import add_hparams, convert_states, key_gen
-from jax_baselines.common.worker import Multiworker
+from jax_baselines.common.env_builer import Multiworker
 
 
 class Deteministic_Policy_Gradient_Family(object):
