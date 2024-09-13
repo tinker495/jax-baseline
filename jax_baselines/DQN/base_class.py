@@ -2,7 +2,6 @@ from collections import deque
 
 import gymnasium as gym
 import numpy as np
-from mlagents_envs.environment import ActionTuple, UnityEnvironment
 from tqdm.auto import trange
 
 from jax_baselines.common.base_classes import (
@@ -17,14 +16,15 @@ from jax_baselines.common.cpprb_buffers import (
     PrioritizedReplayBuffer,
     ReplayBuffer,
 )
+from jax_baselines.common.env_builer import Multiworker
 from jax_baselines.common.schedules import ConstantSchedule, LinearSchedule
 from jax_baselines.common.utils import add_hparams, key_gen
-from jax_baselines.common.env_builer import Multiworker
+
 
 class Q_Network_Family(object):
     def __init__(
         self,
-        env_builder : callable,
+        env_builder: callable,
         model_builder_maker,
         num_workers=1,
         eval_eps=20,
@@ -213,7 +213,13 @@ class Q_Network_Family(object):
     def tb_log_name_update(self, tb_log_name):
         if self.munchausen:
             tb_log_name = "M-" + tb_log_name
-        if self.param_noise & self.dueling_model & self.double_q & self.n_step_method & self.prioritized_replay:
+        if (
+            self.param_noise
+            & self.dueling_model
+            & self.double_q
+            & self.n_step_method
+            & self.prioritized_replay
+        ):
             tb_log_name = f"Rainbow({self.n_step} step)_" + tb_log_name
         else:
             if self.param_noise:
@@ -260,12 +266,11 @@ class Q_Network_Family(object):
                 self.eval_gym(total_timesteps)
             if self.env_type == "Multiworker":
                 self.learn_Multiworker(pbar, callback, log_interval)
-            
+
             add_hparams(self, self.summary)
             self.save_params(self.save_path)
 
     def learn_gym(self, pbar, callback=None, log_interval=100):
-
         state, info = self.env.reset()
         state = [np.expand_dims(state, axis=0)]
         self.lossque = deque(maxlen=10)
@@ -292,7 +297,7 @@ class Q_Network_Family(object):
 
             if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
                 pbar.set_description(self.discription(eval_result))
-    
+
     def eval_gym(self, steps):
         original_rewards = []
         total_reward = np.zeros(self.eval_eps)
@@ -308,12 +313,10 @@ class Q_Network_Family(object):
         terminated = False
         truncated = False
         eplen = 0
-        
+
         for ep in range(self.eval_eps):
             while not terminated and not truncated:
-                actions = self.actions(
-                    state, 0.001
-                )
+                actions = self.actions(state, 0.001)
                 next_state, reward, terminated, truncated, info = self.eval_env.step(actions[0][0])
                 next_state = [np.expand_dims(next_state, axis=0)]
                 if have_original_reward:
@@ -352,7 +355,11 @@ class Q_Network_Family(object):
             self.summary.add_scalar("env/time over", np.mean(total_truncated), steps)
 
         if have_original_reward:
-            eval_result = {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len, "mean_original_score": mean_original_score}
+            eval_result = {
+                "mean_reward": mean_reward,
+                "mean_ep_len": mean_ep_len,
+                "mean_original_score": mean_original_score,
+            }
         else:
             eval_result = {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
         return eval_result
@@ -422,7 +429,9 @@ class Q_Network_Family(object):
                 self.scoreque.extend(self.scores[end_idx])
                 self.scores[end_idx] = 0
                 self.eplen[end_idx] = 0
-                self.replay_buffer.add([state], actions, rewards, [nxtstates], terminateds, truncateds)
+                self.replay_buffer.add(
+                    [state], actions, rewards, [nxtstates], terminateds, truncateds
+                )
             else:
                 self.replay_buffer.add(
                     [state], actions, rewards, [real_nextstates], terminateds, truncateds
@@ -447,6 +456,7 @@ class Q_Network_Family(object):
         from gymnasium.wrappers import RecordVideo
 
         Render_env = RecordVideo(self.env, directory, episode_trigger=lambda x: True)
+        Render_env.start_video_recorder()
         total_rewards = []
         for i in range(episode):
             state, info = Render_env.reset()
