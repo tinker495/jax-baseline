@@ -1,9 +1,9 @@
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=5
 export DISPLAY=:0
 
 pip install -q ..
 
-ENV="--env BreakoutNoFrameskip-v4"
+ENV="--env AsterixNoFrameskip-v4"
 LR="--learning_rate 0.0001"
 OPTIMIZER="--optimizer adam"
 MODEL="--node 512 --hidden_n 1"

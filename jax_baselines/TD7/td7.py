@@ -403,6 +403,11 @@ class TD7(Deteministic_Policy_Gradient_Family):
         discription += f"loss : {np.mean(self.loss_mean):.3f}"
         return discription
 
+    def tb_log_name_update(self, tb_log_name):
+        if self.n_step_method:
+            tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
+        return tb_log_name
+
     def learn(
         self,
         total_timesteps,

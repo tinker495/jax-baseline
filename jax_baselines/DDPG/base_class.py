@@ -18,7 +18,7 @@ from jax_baselines.common.cpprb_buffers import (
     ReplayBuffer,
 )
 from jax_baselines.common.utils import add_hparams, convert_states, key_gen
-from jax_baselines.common.worker import Multiworker
+from jax_baselines.common.env_builer import Multiworker
 
 
 class Deteministic_Policy_Gradient_Family(object):
@@ -169,19 +169,23 @@ class Deteministic_Policy_Gradient_Family(object):
     def actions(self, obs, steps):
         pass
 
+    def tb_log_name_update(self, tb_log_name):
+        if self.n_step_method:
+            tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
+        if self.prioritized_replay:
+            tb_log_name = tb_log_name + "+PER"
+        return tb_log_name
+
     def learn(
         self,
         total_timesteps,
         callback=None,
         log_interval=1000,
-        tb_log_name="Q_network",
+        tb_log_name="DPG_network",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
-        if self.n_step_method:
-            tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
-        if self.prioritized_replay:
-            tb_log_name = tb_log_name + "+PER"
+        tb_log_name = self.tb_log_name_update(tb_log_name)
         self.eval_freq = total_timesteps // 100
 
         pbar = trange(total_timesteps, miniters=log_interval)

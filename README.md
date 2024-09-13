@@ -1,6 +1,6 @@
 # Jax-Baseline
 
-Jax-Baseline is a Reinforcement Learning implementation using JAX and Flax/Haiku libraries, mirroring the functionality of standard baselines.
+Jax-Baseline is a Reinforcement Learning implementation using JAX and Flax/Haiku libraries, mirroring the functionality of Stable-Baselines.
 
 ## Features
 - 2-3 times faster than previous Torch and Tensorflow implementations
