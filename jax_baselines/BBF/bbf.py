@@ -135,14 +135,13 @@ class BBF(Q_Network_Family):
             self.params,
         ) = model_builder(next(self.key_seq), print_model=True)
         self.target_params = tree_random_normal_like(next(self.key_seq), self.params)
-        self.action_params = tree_random_normal_like(next(self.key_seq), self.params)
         self.reset_hardsoft = filter_like_tree(
             self.params,
             "qnet",
             (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.5),
         )  # hard_reset for qnet and scaled_by_reset for the rest
         self.soft_reset_freq = 40000
-        self.stop_action_update = self.soft_reset_freq // 4
+        self.hold_steps = self.soft_reset_freq // 4
         self.optimizer = optax.adamw(learning_rate=self.learning_rate, weight_decay=0.1)
         self.opt_state = self.optimizer.init(self.params)
 
@@ -165,7 +164,7 @@ class BBF(Q_Network_Family):
         if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(
                 self._get_actions(
-                    self.action_params,
+                    self.target_params,
                     obs,
                     next(self.key_seq) if self.param_noise else None,
                 )
@@ -202,7 +201,6 @@ class BBF(Q_Network_Family):
         (
             self.params,
             self.target_params,
-            self.action_params,
             self.opt_state,
             loss,
             t_mean,
@@ -211,17 +209,45 @@ class BBF(Q_Network_Family):
         ) = self._train_step(
             self.params,
             self.target_params,
-            self.action_params,
             self.opt_state,
             self.train_steps_count,
             next(self.key_seq),
             **data,
         )
 
-        self.train_steps_count += gradient_steps
-
         if self.prioritized_replay:
             self.replay_buffer.update_priorities(data["indexes"], new_priorities)
+
+        self.train_steps_count += gradient_steps
+        mod = self.train_steps_count % self.soft_reset_freq
+
+        while self.train_steps_count > self.soft_reset_freq and mod < self.hold_steps:
+            if self.prioritized_replay:
+                data = self.replay_buffer.sample(
+                    gradient_steps * self.batch_size, self.prioritized_replay_beta0
+                )
+            else:
+                data = self.replay_buffer.sample(gradient_steps * self.batch_size)
+
+            (
+                self.params,
+                self.target_params,
+                self.opt_state,
+                loss,
+                t_mean,
+                new_priorities,
+                rprloss,
+            ) = self._train_step(
+                self.params,
+                self.target_params,
+                self.opt_state,
+                self.train_steps_count,
+                next(self.key_seq),
+                **data,
+            )
+
+            self.train_steps_count += gradient_steps
+            mod = self.train_steps_count % self.soft_reset_freq
 
         if self.summary and steps % self.log_interval == 0:
             self.summary.add_scalar("loss/qloss", loss, steps)
@@ -298,7 +324,6 @@ class BBF(Q_Network_Family):
         self,
         params,
         target_params,
-        action_params,
         opt_state,
         steps,
         key,
@@ -413,20 +438,9 @@ class BBF(Q_Network_Family):
             # nbatches x batch_size -> flatten
             new_priorities = jnp.hstack(centropy)
 
-        stop_action_update = (
-            batched_steps[-1] % self.soft_reset_freq < self.stop_action_update
-        ) & (steps > self.soft_reset_freq)
-        action_params = jax.lax.cond(
-            stop_action_update,
-            lambda _: action_params,
-            lambda _: target_params,
-            None,
-        )
-
         return (
             params,
             target_params,
-            action_params,
             opt_state,
             qloss,
             target_q,
