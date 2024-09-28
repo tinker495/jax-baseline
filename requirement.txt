@@ -13,6 +13,7 @@ jax[cuda12_pip]
 dm_pix
 dm-haiku
 flax
+equinox
 optax
 numpy==1.26.4
 ray[default]

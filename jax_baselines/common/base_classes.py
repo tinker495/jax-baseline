@@ -88,6 +88,8 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
         optim = optax.rmsprop(lr, eps=eps)
     elif optim_str == "sgd":
         optim = optax.sgd(lr)
+    elif optim_str == "adabelief":
+        optim = optax.adabelief(lr, eps=eps)
     elif optim_str == "lion":
         optim = optax.lion(lr, weight_decay=1e-5)
 
