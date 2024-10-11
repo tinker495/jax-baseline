@@ -23,7 +23,7 @@ def get_env_builder(env_name, **kwargs):
             "env_id": env_name,
         }
     else:
-        def env_builder(worker=1):
+        def env_builder(worker=1, render_mode=None):
             if worker > 1:
                 return gymMultiworker(env_name, worker_num=worker)
             else:
@@ -36,7 +36,7 @@ def get_env_builder(env_name, **kwargs):
                 if env_type == "atari_env":
                     env = make_wrap_atari(env_name, clip_rewards=True)
                 else:
-                    env = gym.make(env_name)
+                    env = gym.make(env_name, render_mode=render_mode)
                 return env
         env_type = "gym"
         env_info = {

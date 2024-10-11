@@ -229,10 +229,10 @@ class HL_GAUSS_BBF(Q_Network_Family):
         if self.prioritized_replay:
             self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.mlflowrun and steps % self.log_interval == 0:
-            self.mlflowrun.log_metric("loss/qloss", loss, steps)
-            self.mlflowrun.log_metric("loss/rprloss", rprloss, steps)
-            self.mlflowrun.log_metric("loss/targets", t_mean, steps)
+        if self.logger_run and steps % self.log_interval == 0:
+            self.logger_run.log_metric("loss/qloss", loss, steps)
+            self.logger_run.log_metric("loss/rprloss", rprloss, steps)
+            self.logger_run.log_metric("loss/targets", t_mean, steps)
 
         return loss
 
@@ -528,15 +528,12 @@ class HL_GAUSS_BBF(Q_Network_Family):
         target_distribution = self.to_probs(target_q)
         return target_distribution
 
-    def run_name_update_with_tags(self, run_name):
-        tags = {"algorithm": self.name}
+    def run_name_update(self, run_name):
         if self.munchausen:
             run_name = "M-" + run_name
-            tags["munchausen"] = True
         if self.param_noise:
             run_name = "Noisy_" + run_name
-            tags["param_noise"] = True
-        return run_name, tags
+        return run_name
 
     def learn(
         self,

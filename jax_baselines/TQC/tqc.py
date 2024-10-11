@@ -190,10 +190,10 @@ class TQC(Deteministic_Policy_Gradient_Family):
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.mlflowrun and steps % self.log_interval == 0:
-            self.mlflowrun.log_metric("loss/qloss", loss, steps)
-            self.mlflowrun.log_metric("loss/targets", t_mean, steps)
-            self.mlflowrun.log_metric("loss/ent_coef", np.exp(self.log_ent_coef), steps)
+        if self.logger_run and steps % self.log_interval == 0:
+            self.logger_run.log_metric("loss/qloss", loss, steps)
+            self.logger_run.log_metric("loss/targets", t_mean, steps)
+            self.logger_run.log_metric("loss/ent_coef", np.exp(self.log_ent_coef), steps)
 
         return loss
 
@@ -307,9 +307,8 @@ class TQC(Deteministic_Policy_Gradient_Family):
         total_timesteps,
         callback=None,
         log_interval=1000,
+        experiment_name="TQC",
         run_name="TQC",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
     ):
         run_name = run_name + "({:d})".format(self.n_support)
         if self.mixture_type == "truncated":
@@ -322,7 +321,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
             total_timesteps,
             callback,
             log_interval,
+            experiment_name,
             run_name,
-            reset_num_timesteps,
-            replay_wrapper,
         )

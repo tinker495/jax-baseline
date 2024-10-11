@@ -10,6 +10,7 @@ mujoco
 box2d
 box2d-py
 box2d-kengz
+tensorboardX
 jax[cuda12_pip]
 dm_pix
 dm-haiku

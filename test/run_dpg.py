@@ -12,6 +12,7 @@ from jax_baselines.TQC.tqc import TQC
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--experiment_name", type=str, default="DPG", help="experiment name")
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="Pendulum-v0", help="environment")
@@ -189,6 +190,6 @@ if __name__ == "__main__":
             optimizer=args.optimizer,
         )
 
-    agent.learn(int(args.steps))
+    agent.learn(int(args.steps), experiment_name=args.experiment_name)
 
     agent.test()

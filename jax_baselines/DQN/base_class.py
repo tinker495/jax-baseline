@@ -5,7 +5,7 @@ import gymnasium as gym
 import numpy as np
 from tqdm.auto import trange
 
-from jax_baselines.common.logger import MLflowLogger
+from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.cpprb_buffers import (
     NstepReplayBuffer,
     PrioritizedNstepReplayBuffer,
@@ -14,7 +14,7 @@ from jax_baselines.common.cpprb_buffers import (
 )
 from jax_baselines.common.env_builer import Multiworker
 from jax_baselines.common.schedules import ConstantSchedule, LinearSchedule
-from jax_baselines.common.utils import add_hparams, key_gen, restore, save, select_optimizer
+from jax_baselines.common.utils import key_gen, restore, save, select_optimizer
 
 
 class Q_Network_Family(object):
@@ -206,11 +206,9 @@ class Q_Network_Family(object):
         else:
             return discription + f", epsilon : {self.update_eps:.3f}"
 
-    def run_name_update_with_tags(self, run_name):
-        tags = {"algorithm": self.name}
+    def run_name_update(self, run_name):
         if self.munchausen:
             run_name = "M-" + run_name
-            tags["munchausen"] = True
         if (
             self.param_noise
             & self.dueling_model
@@ -219,24 +217,18 @@ class Q_Network_Family(object):
             & self.prioritized_replay
         ):
             run_name = f"Rainbow({self.n_step} step)_" + run_name
-            tags["rainbow"] = True
         else:
             if self.param_noise:
                 run_name = "Noisy_" + run_name
-                tags["noisy"] = True
             if self.dueling_model:
                 run_name = "Dueling_" + run_name
-                tags["dueling"] = True
             if self.double_q:
                 run_name = "Double_" + run_name
-                tags["double_q"] = True
             if self.n_step_method:
                 run_name = "{}Step_".format(self.n_step) + run_name
-                tags["n_step"] = self.n_step
             if self.prioritized_replay:
                 run_name = run_name + "+PER"
-                tags["prioritized_replay"] = True
-        return run_name, tags
+        return run_name
 
     def learn(
         self,
@@ -246,7 +238,7 @@ class Q_Network_Family(object):
         experiment_name="Q_network",
         run_name="Q_network"
     ):
-        run_name, tags = self.run_name_update_with_tags(run_name)
+        run_name = self.run_name_update(run_name)
 
         if self.param_noise:
             self.exploration = ConstantSchedule(0)
@@ -260,18 +252,15 @@ class Q_Network_Family(object):
         self.eval_freq = total_timesteps // 100
 
         pbar = trange(total_timesteps, miniters=log_interval)
-        self.logger = MLflowLogger(run_name, experiment_name, self.log_dir, tags)
-        with self.logger as self.mlflowrun:
-            add_hparams(self, self.mlflowrun)
-
+        self.logger = TensorboardLogger(run_name, experiment_name, self.log_dir, self)
+        with self.logger as self.logger_run:
             if self.env_type == "gym":
                 self.learn_gym(pbar, callback, log_interval)
                 self.eval_gym(total_timesteps)
             if self.env_type == "Multiworker":
                 self.learn_Multiworker(pbar, callback, log_interval)
 
-            self.save_params(self.mlflowrun.get_local_path("params"))
-            self.mlflowrun.log_artifact("params")
+            self.save_params(self.logger_run.get_local_path("params"))
 
     def learn_gym(self, pbar, callback=None, log_interval=1000):
         state, info = self.env.reset()
@@ -350,12 +339,12 @@ class Q_Network_Family(object):
         mean_reward = np.mean(total_reward)
         mean_ep_len = np.mean(total_ep_len)
 
-        if self.mlflowrun:
+        if self.logger_run:
             if have_original_reward:
-                self.mlflowrun.log_metric("env/original_reward", mean_original_score, steps)
-            self.mlflowrun.log_metric("env/episode_reward", mean_reward, steps)
-            self.mlflowrun.log_metric("env/episode len", mean_ep_len, steps)
-            self.mlflowrun.log_metric("env/time over", np.mean(total_truncated), steps)
+                self.logger_run.log_metric("env/original_reward", mean_original_score, steps)
+            self.logger_run.log_metric("env/episode_reward", mean_reward, steps)
+            self.logger_run.log_metric("env/episode len", mean_ep_len, steps)
+            self.logger_run.log_metric("env/time over", np.mean(total_truncated), steps)
 
         if have_original_reward:
             eval_result = {
@@ -403,28 +392,28 @@ class Q_Network_Family(object):
             if end_states is not None:
                 nxtstates = np.copy(real_nextstates)
                 nxtstates[end_idx] = end_states
-                if self.mlflowrun:
+                if self.logger_run:
                     if have_original_reward:
                         if have_lives:
                             end_lives = np.asarray([infos[ei]["lives"] for ei in end_idx])
                             done_lives = np.logical_not(end_lives)
                             if np.sum(done_lives) > 0:
-                                self.mlflowrun.log_metric(
+                                self.logger_run.log_metric(
                                     "env/original_reward",
                                     np.mean(self.original_score[end_idx[done_lives]]),
                                     steps,
                                 )
                                 self.original_score[end_idx[done_lives]] = 0
                         else:
-                            self.mlflowrun.log_metric(
+                            self.logger_run.log_metric(
                                 "env/original_reward", self.original_score[end_idx], steps
                             )
                             self.original_score[end_idx] = 0
-                    self.mlflowrun.log_metric(
+                    self.logger_run.log_metric(
                         "env/episode_reward", np.mean(self.scores[end_idx]), steps
                     )
-                    self.mlflowrun.log_metric("env/episode_len", np.mean(self.eplen[end_idx]), steps)
-                    self.mlflowrun.log_metric(
+                    self.logger_run.log_metric("env/episode_len", np.mean(self.eplen[end_idx]), steps)
+                    self.logger_run.log_metric(
                         "env/time_over",
                         np.mean(truncateds[end_idx].astype(np.float32)),
                         steps,
@@ -445,7 +434,7 @@ class Q_Network_Family(object):
         return np.mean(self.scoreque)
 
     def test(self, episode=10):
-        with self.logger as self.mlflowrun:
+        with self.logger as self.logger_run:
             if self.env_type == "gym":
                 self.test_gym(episode)
 
@@ -454,7 +443,7 @@ class Q_Network_Family(object):
 
     def test_gym(self, episode):
         from gymnasium.wrappers import RecordVideo
-        directory = self.mlflowrun.get_local_path("video")
+        directory = self.logger_run.get_local_path("video")
         os.makedirs(directory, exist_ok=True)
 
         Render_env = RecordVideo(self.eval_env, directory, episode_trigger=lambda x: True)
@@ -477,5 +466,3 @@ class Q_Network_Family(object):
         avg_reward = np.mean(total_rewards)
         std_reward = np.std(total_rewards)
         print(f"reward : {avg_reward} +- {std_reward}(std)")
-
-        self.mlflowrun.log_artifact("video")

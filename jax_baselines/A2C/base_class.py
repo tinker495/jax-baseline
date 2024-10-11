@@ -8,7 +8,7 @@ from gymnasium import spaces
 from mlagents_envs.environment import ActionTuple, UnityEnvironment
 from tqdm.auto import trange
 
-from jax_baselines.common.logger import MLflowLogger
+from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.cpprb_buffers import EpochBuffer
 from jax_baselines.common.utils import add_hparams, convert_jax, convert_states, key_gen, restore, save, select_optimizer
 from jax_baselines.common.worker import gymMultiworker
@@ -210,14 +210,14 @@ class Actor_Critic_Policy_Gradient_Family(object):
         replay_wrapper=None,
     ):
         pbar = trange(total_timesteps, miniters=log_interval, smoothing=0.01)
-        with MLflowLogger(self.log_dir, run_name) as self.mlflowrun:
+        with TensorboardLogger(self.log_dir, run_name) as self.logger_run:
             if self.env_type == "unity":
                 score_mean = self.learn_unity(pbar, callback, log_interval)
             if self.env_type == "gym":
                 score_mean = self.learn_gym(pbar, callback, log_interval)
             if self.env_type == "gymMultiworker":
                 score_mean = self.learn_gymMultiworker(pbar, callback, log_interval)
-            add_hparams(self, self.mlflowrun, {"env/episode_reward": score_mean}, total_timesteps)
+            add_hparams(self, self.logger_run, {"env/episode_reward": score_mean}, total_timesteps)
             self.save_params(self.save_path)
 
     def discription(self):
@@ -288,12 +288,12 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.scores += reward
             obses = nxtobs
             if term_on:
-                if self.mlflowrun:
-                    self.mlflowrun.log_metric(
+                if self.logger_run:
+                    self.logger_run.log_metric(
                         "env/episode_reward", np.mean(self.scores[term_ids]), steps
                     )
-                    self.mlflowrun.log_metric("env/episode len", np.mean(self.eplen[term_ids]), steps)
-                    self.mlflowrun.log_metric(
+                    self.logger_run.log_metric("env/episode len", np.mean(self.eplen[term_ids]), steps)
+                    self.logger_run.log_metric(
                         "env/time over",
                         np.mean(1 - terminated[term_ids].astype(np.float32)),
                         steps,
@@ -333,22 +333,22 @@ class Actor_Critic_Policy_Gradient_Family(object):
             state = next_state
             if terminated or truncated:
                 self.scoreque.append(self.scores[0])
-                if self.mlflowrun:
+                if self.logger_run:
                     if have_original_reward:
                         if have_lives:
                             if info["lives"] == 0:
-                                self.mlflowrun.log_metric(
+                                self.logger_run.log_metric(
                                     "env/original_reward", self.original_score[0], steps
                                 )
                                 self.original_score[0] = 0
                         else:
-                            self.mlflowrun.log_metric(
+                            self.logger_run.log_metric(
                                 "env/original_reward", self.original_score[0], steps
                             )
                             self.original_score[0] = 0
-                    self.mlflowrun.log_metric("env/episode_reward", self.scores[0], steps)
-                    self.mlflowrun.log_metric("env/episode len", self.eplen[0], steps)
-                    self.mlflowrun.log_metric("env/time over", float(truncated), steps)
+                    self.logger_run.log_metric("env/episode_reward", self.scores[0], steps)
+                    self.logger_run.log_metric("env/episode len", self.eplen[0], steps)
+                    self.logger_run.log_metric("env/time over", float(truncated), steps)
                 self.scores[0] = 0
                 self.eplen[0] = 0
                 state, info = self.env.reset()
@@ -392,28 +392,28 @@ class Actor_Critic_Policy_Gradient_Family(object):
             if end_states is not None:
                 nxtstates = np.copy(real_nextstates)
                 nxtstates[end_idx] = end_states
-                if self.mlflowrun:
+                if self.logger_run:
                     if have_original_reward:
                         if have_lives:
                             end_lives = np.asarray([infos[ei]["lives"] for ei in end_idx])
                             done_lives = np.logical_not(end_lives)
                             if np.sum(done_lives) > 0:
-                                self.mlflowrun.log_metric(
+                                self.logger_run.log_metric(
                                     "env/original_reward",
                                     np.mean(self.original_score[end_idx[done_lives]]),
                                     steps,
                                 )
                                 self.original_score[end_idx[done_lives]] = 0
                         else:
-                            self.mlflowrun.log_metric(
+                            self.logger_run.log_metric(
                                 "env/original_reward", self.original_score[end_idx], steps
                             )
                             self.original_score[end_idx] = 0
-                    self.mlflowrun.log_metric(
+                    self.logger_run.log_metric(
                         "env/episode_reward", np.mean(self.scores[end_idx]), steps
                     )
-                    self.mlflowrun.log_metric("env/episode len", np.mean(self.eplen[end_idx]), steps)
-                    self.mlflowrun.log_metric(
+                    self.logger_run.log_metric("env/episode len", np.mean(self.eplen[end_idx]), steps)
+                    self.logger_run.log_metric(
                         "env/time over",
                         np.mean(1 - terminateds[end_idx].astype(np.float32)),
                         steps,

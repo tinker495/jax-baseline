@@ -158,9 +158,9 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.mlflowrun and steps % self.log_interval == 0:
-            self.mlflowrun.log_metric("loss/qloss", loss, steps)
-            self.mlflowrun.log_metric("loss/targets", t_mean, steps)
+        if self.logger_run and steps % self.log_interval == 0:
+            self.logger_run.log_metric("loss/qloss", loss, steps)
+            self.logger_run.log_metric("loss/targets", t_mean, steps)
 
         return loss
 
@@ -237,9 +237,8 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         total_timesteps,
         callback=None,
         log_interval=1000,
+        experiment_name="DDPG",
         run_name="DDPG",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
     ):
         self.exploration = LinearSchedule(
             schedule_timesteps=int(self.exploration_fraction * total_timesteps),
@@ -251,7 +250,6 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             total_timesteps,
             callback,
             log_interval,
+            experiment_name,
             run_name,
-            reset_num_timesteps,
-            replay_wrapper,
         )

@@ -4,11 +4,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from tqdm.auto import trange
 
-from jax_baselines.common.base_classes import TensorboardWriter
 from jax_baselines.common.losses import hubberloss
-from jax_baselines.common.utils import add_hparams, convert_jax, hard_update
+from jax_baselines.common.utils import convert_jax, hard_update
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 
 
@@ -236,12 +234,12 @@ class TD7(Deteministic_Policy_Gradient_Family):
         mean_loss = jnp.mean(jnp.array(losses))
         mean_target = jnp.mean(jnp.array(targets))
 
-        if self.mlflowrun:
-            self.mlflowrun.log_metric("loss/encoder_loss", mean_repr_loss, steps)
-            self.mlflowrun.log_metric("loss/qloss", mean_loss, steps)
-            self.mlflowrun.log_metric("loss/targets", mean_target, steps)
-            self.mlflowrun.log_metric("loss/min_value", self.critic_params["values"]["min_value"], steps)
-            self.mlflowrun.log_metric("loss/max_value", self.critic_params["values"]["max_value"], steps)
+        if self.logger_run:
+            self.logger_run.log_metric("loss/encoder_loss", mean_repr_loss, steps)
+            self.logger_run.log_metric("loss/qloss", mean_loss, steps)
+            self.logger_run.log_metric("loss/targets", mean_target, steps)
+            self.logger_run.log_metric("loss/min_value", self.critic_params["values"]["min_value"], steps)
+            self.logger_run.log_metric("loss/max_value", self.critic_params["values"]["max_value"], steps)
 
         return mean_loss
 
@@ -403,7 +401,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         discription += f"loss : {np.mean(self.loss_mean):.3f}"
         return discription
 
-    def run_name_update_with_tags(self, run_name):
+    def run_name_update(self, run_name):
         if self.n_step_method:
             run_name = "{}Step_".format(self.n_step) + run_name
         return run_name
@@ -413,17 +411,15 @@ class TD7(Deteministic_Policy_Gradient_Family):
         total_timesteps,
         callback=None,
         log_interval=1000,
+        experiment_name="TD7",
         run_name="TD7",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
+            experiment_name,
             run_name,
-            reset_num_timesteps,
-            replay_wrapper,
         )
 
     def learn_gym(self, pbar, callback=None, log_interval=1000):
@@ -480,8 +476,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
         mean_reward = np.mean(total_reward)
         mean_ep_len = np.mean(total_ep_len)
 
-        if self.mlflowrun:
-            self.mlflowrun.log_metric("env/episode_reward", mean_reward, steps)
-            self.mlflowrun.log_metric("env/episode len", mean_ep_len, steps)
-            self.mlflowrun.log_metric("env/time over", np.mean(total_truncated), steps)
+        if self.logger_run:
+            self.logger_run.log_metric("env/episode_reward", mean_reward, steps)
+            self.logger_run.log_metric("env/episode len", mean_ep_len, steps)
+            self.logger_run.log_metric("env/time over", np.mean(total_truncated), steps)
         return {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}

@@ -78,11 +78,11 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             targets,
         ) = self._train_step(self.params, self.opt_state, None, **data)
 
-        if self.mlflowrun:
-            self.mlflowrun.log_metric("loss/critic_loss", critic_loss, steps)
-            self.mlflowrun.log_metric("loss/actor_loss", actor_loss, steps)
-            self.mlflowrun.log_metric("loss/entropy_loss", entropy_loss, steps)
-            self.mlflowrun.log_metric("loss/mean_target", targets, steps)
+        if self.logger_run:
+            self.logger_run.log_metric("loss/critic_loss", critic_loss, steps)
+            self.logger_run.log_metric("loss/actor_loss", actor_loss, steps)
+            self.logger_run.log_metric("loss/entropy_loss", entropy_loss, steps)
+            self.logger_run.log_metric("loss/mean_target", targets, steps)
 
         return critic_loss
 

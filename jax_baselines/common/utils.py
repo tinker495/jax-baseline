@@ -9,8 +9,6 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-from jax_baselines.common.logger import MLflowRun
-
 cpu_jit = partial(jax.jit, backend="cpu")
 gpu_jit = partial(jax.jit, backend="gpu")
 
@@ -210,13 +208,9 @@ def get_hyper_params(agent):
         ]
     )
 
-def add_hparams(agent, mlflowrun: MLflowRun, metric_dict=dict()):
+def add_hparams(agent, tensorboardrun):
     hparam_dict = get_hyper_params(agent)
-
-    for k, v in hparam_dict.items():
-        mlflowrun.log_param(k, v)
-    for k, v in metric_dict.items():
-        mlflowrun.log_metric(k, v)
+    tensorboardrun.log_param(hparam_dict)
 
 def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
     optim = None

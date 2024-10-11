@@ -156,10 +156,10 @@ class QRDQN(Q_Network_Family):
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.mlflowrun and steps % self.log_interval == 0:
-            self.mlflowrun.log_metric("loss/qloss", loss, steps)
-            self.mlflowrun.log_metric("loss/targets", t_mean, steps)
-            self.mlflowrun.log_metric("loss/target_stds", t_std, steps)
+        if self.logger_run and steps % self.log_interval == 0:
+            self.logger_run.log_metric("loss/qloss", loss, steps)
+            self.logger_run.log_metric("loss/targets", t_mean, steps)
+            self.logger_run.log_metric("loss/target_stds", t_std, steps)
 
         return loss
 

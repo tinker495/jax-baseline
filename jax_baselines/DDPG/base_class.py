@@ -1,23 +1,19 @@
 from collections import deque
+import os
 
 import gymnasium as gym
 import numpy as np
 from mlagents_envs.environment import ActionTuple, UnityEnvironment
 from tqdm.auto import trange
 
-from jax_baselines.common.base_classes import (
-    TensorboardWriter,
-    restore,
-    save,
-    select_optimizer,
-)
+from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.cpprb_buffers import (
     NstepReplayBuffer,
     PrioritizedNstepReplayBuffer,
     PrioritizedReplayBuffer,
     ReplayBuffer,
 )
-from jax_baselines.common.utils import add_hparams, convert_states, key_gen
+from jax_baselines.common.utils import key_gen, restore, save, select_optimizer
 from jax_baselines.common.env_builer import Multiworker
 
 
@@ -169,7 +165,7 @@ class Deteministic_Policy_Gradient_Family(object):
     def actions(self, obs, steps):
         pass
 
-    def run_name_update_with_tags(self, run_name):
+    def run_name_update(self, run_name):
         if self.n_step_method:
             run_name = "{}Step_".format(self.n_step) + run_name
         if self.prioritized_replay:
@@ -181,26 +177,22 @@ class Deteministic_Policy_Gradient_Family(object):
         total_timesteps,
         callback=None,
         log_interval=1000,
-        run_name="DPG_network",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        experiment_name="DPG_network",
+        run_name="DPG_network"
     ):
-        run_name = self.run_name_update_with_tags(run_name)
+        run_name = self.run_name_update(run_name)
         self.eval_freq = total_timesteps // 100
 
         pbar = trange(total_timesteps, miniters=log_interval)
-        with TensorboardWriter(self.log_dir, run_name) as (
-            self.mlflowrun,
-            self.save_path,
-        ):
+        self.logger = TensorboardLogger(run_name, experiment_name, self.log_dir, self)
+        with self.logger as self.logger_run:
             if self.env_type == "gym":
                 self.learn_gym(pbar, callback, log_interval)
                 self.eval_gym(total_timesteps)
             if self.env_type == "Multiworker":
                 self.learn_Multiworker(pbar, callback, log_interval)
             
-            add_hparams(self, self.mlflowrun)
-            self.save_params(self.save_path)
+            self.save_params(self.logger_run.get_local_path("params"))
 
     def discription(self, eval_result=None):
         discription = ""
@@ -271,10 +263,10 @@ class Deteministic_Policy_Gradient_Family(object):
         mean_reward = np.mean(total_reward)
         mean_ep_len = np.mean(total_ep_len)
 
-        if self.mlflowrun:
-            self.mlflowrun.log_metric("env/episode_reward", mean_reward, steps)
-            self.mlflowrun.log_metric("env/episode len", mean_ep_len, steps)
-            self.mlflowrun.log_metric("env/time over", np.mean(total_truncated), steps)
+        if self.logger_run:
+            self.logger_run.log_metric("env/episode_reward", mean_reward, steps)
+            self.logger_run.log_metric("env/episode len", mean_ep_len, steps)
+            self.logger_run.log_metric("env/time over", np.mean(total_truncated), steps)
         return {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
 
     def learn_Multiworker(self, pbar, callback=None, log_interval=1000):
@@ -303,12 +295,12 @@ class Deteministic_Policy_Gradient_Family(object):
             nxtstates = np.copy(next_states)
             if end_states is not None:
                 nxtstates[end_idx] = end_states
-                if self.mlflowrun:
-                    self.mlflowrun.log_metric(
+                if self.logger_run:
+                    self.logger_run.log_metric(
                         "env/episode_reward", np.mean(self.scores[end_idx]), steps
                     )
-                    self.mlflowrun.log_metric("env/episode len", np.mean(self.eplen[end_idx]), steps)
-                    self.mlflowrun.log_metric(
+                    self.logger_run.log_metric("env/episode len", np.mean(self.eplen[end_idx]), steps)
+                    self.logger_run.log_metric(
                         "env/time over",
                         np.mean(truncateds[end_idx].astype(np.float32)),
                         steps,
@@ -325,23 +317,23 @@ class Deteministic_Policy_Gradient_Family(object):
         return np.mean(self.scoreque)
 
     def test(self, episode=10, run_name=None):
-        if run_name is None:
-            run_name = self.save_path
+        with self.logger as self.logger_run:
+            if self.env_type == "gym":
+                self.test_gym(episode)
 
-        directory = run_name
-        if self.env_type == "gym":
-            self.test_gym(episode, directory)
-
-    def test_unity(self, episode, directory):
+    def test_unity(self, episode):
         pass
 
     def test_action(self, state):
         return self.actions(state, np.inf)
 
-    def test_gym(self, episode, directory):
+    def test_gym(self, episode):
         from gymnasium.wrappers import RecordVideo
+        directory = self.logger_run.get_local_path("video")
+        os.makedirs(directory, exist_ok=True)
+        test_env = self.env_builder(1, render_mode="rgb_array")
 
-        Render_env = RecordVideo(self.env, directory, episode_trigger=lambda x: True)
+        Render_env = RecordVideo(test_env, directory, episode_trigger=lambda x: True)
         for i in range(episode):
             state, info = Render_env.reset()
             state = [np.expand_dims(state, axis=0)]
