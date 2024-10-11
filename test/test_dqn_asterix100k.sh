@@ -3,6 +3,7 @@ export DISPLAY=:0
 
 pip install -q ..
 
+EXPERIMENT_NAME="--experiment_name DQN_Asterix100k"
 ENV="--env AsterixNoFrameskip-v4"
 LR="--learning_rate 0.0001"
 OPTIMIZER="--optimizer adam"

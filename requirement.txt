@@ -10,7 +10,7 @@ mujoco
 box2d
 box2d-py
 box2d-kengz
-jax[cuda12_pip]==0.4.22
+jax[cuda12_pip]
 dm_pix
 dm-haiku
 flax
