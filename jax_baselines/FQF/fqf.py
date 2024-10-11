@@ -193,7 +193,6 @@ class FQF(Q_Network_Family):
             self.mlflowrun.log_metric("loss/fqf_loss", fqf_loss, steps)
             self.mlflowrun.log_metric("loss/targets", t_mean, steps)
             self.mlflowrun.log_metric("loss/target_stds", t_std, steps)
-            self.mlflowrun.add_histogram("loss/tau", tau, steps)
 
         return loss
 

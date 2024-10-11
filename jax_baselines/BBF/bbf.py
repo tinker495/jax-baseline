@@ -551,26 +551,27 @@ class BBF(Q_Network_Family):
         return target_distribution
 
     def run_name_update_with_tags(self, run_name):
+        tags = {}
         if self.munchausen:
             run_name = "M-" + run_name
+            tags["munchausen"] = True
         if self.param_noise:
             run_name = "Noisy_" + run_name
-        return run_name
+            tags["param_noise"] = True
+        return run_name, tags
 
     def learn(
         self,
         total_timesteps,
         callback=None,
         log_interval=100,
-        run_name="BBF",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        experiment_name="BBF",
+        run_name="BBF"
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
-            run_name,
-            reset_num_timesteps,
-            replay_wrapper,
+            experiment_name,
+            run_name
         )

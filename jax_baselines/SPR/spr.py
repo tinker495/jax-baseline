@@ -566,29 +566,31 @@ class SPR(Q_Network_Family):
         return target_distribution
 
     def run_name_update_with_tags(self, run_name):
+        tags = {}
         if self.scaled_by_reset:
             run_name = "SR-" + run_name
+            tags["scaled_by_reset"] = True
         if self.munchausen:
             run_name = "M-" + run_name
+            tags["munchausen"] = True
         if self.off_policy_fix:
             n_step_str = f"OF_"
             run_name = n_step_str + run_name
-        return run_name
+            tags["off_policy_fix"] = True
+        return run_name, tags
 
     def learn(
         self,
         total_timesteps,
         callback=None,
         log_interval=100,
-        run_name="SPR",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        experiment_name="SPR",
+        run_name="SPR"
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
-            run_name,
-            reset_num_timesteps,
-            replay_wrapper,
+            experiment_name,
+            run_name
         )
