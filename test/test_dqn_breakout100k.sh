@@ -18,7 +18,7 @@ python run_qnet.py --algo C51 $EXPERIMENT_NAME $ENV $LR $TRAIN $MODEL $OPTIMIZER
 TRAIN="--steps 1e5 --batch 32 --train_freq 1 --final_eps 0.01 --learning_starts 2000 --gamma 0.99 --buffer_size 1e5 --exploration_fraction 0.2"
 OPTIONS="--target_update 1000 --gradient_steps 2 --double --dueling --per --n_step 3 --noisynet"
 python run_qnet.py --algo DQN $EXPERIMENT_NAME $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
-    python run_qnet.py --algo C51 $EXPERIMENT_NAME $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
+python run_qnet.py --algo C51 $EXPERIMENT_NAME $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 OPTIONS="--gradient_steps 2 --max 15 --min -15"
 python run_qnet.py --algo SPR $EXPERIMENT_NAME $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 python run_qnet.py --algo SPR $EXPERIMENT_NAME $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS --scaled_by_reset
