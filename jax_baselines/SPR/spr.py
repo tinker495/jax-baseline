@@ -47,6 +47,16 @@ class SPR(Q_Network_Family):
         optimizer="adamw",
         compress_memory=False,
     ):
+
+        self.shift_size = 4
+        self.prediction_depth = 5
+        self.off_policy_fix = off_policy_fix
+        self.scaled_by_reset = scaled_by_reset
+        self.intensity_scale = 0.05
+        self.categorial_bar_n = categorial_bar_n
+        self.categorial_max = float(categorial_max)
+        self.categorial_min = float(categorial_min)
+
         super().__init__(
             env_builder,
             model_builder_maker,
@@ -83,14 +93,6 @@ class SPR(Q_Network_Family):
         )
 
         self.name = "SPR"
-        self.shift_size = 4
-        self.prediction_depth = 5
-        self.off_policy_fix = off_policy_fix
-        self.scaled_by_reset = scaled_by_reset
-        self.intensity_scale = 0.05
-        self.categorial_bar_n = categorial_bar_n
-        self.categorial_max = float(categorial_max)
-        self.categorial_min = float(categorial_min)
 
         self._gamma = jnp.power(self.gamma, jnp.arange(self.n_step))
 

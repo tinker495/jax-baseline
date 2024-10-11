@@ -49,6 +49,16 @@ class HL_GAUSS_SPR(Q_Network_Family):
         compress_memory=False,
     ):
 
+        self.shift_size = 4
+        self.prediction_depth = 5
+        self.off_policy_fix = off_policy_fix
+        self.scaled_by_reset = scaled_by_reset
+        self.intensity_scale = 0.05
+        self.sigma = 0.75
+        self.categorial_bar_n = categorial_bar_n
+        self.categorial_max = float(categorial_max)
+        self.categorial_min = float(categorial_min)
+
         super().__init__(
             env_builder,
             model_builder_maker,
@@ -85,15 +95,6 @@ class HL_GAUSS_SPR(Q_Network_Family):
         )
 
         self.name = "HL_GAUSS_SPR"
-        self.shift_size = 4
-        self.prediction_depth = 5
-        self.off_policy_fix = off_policy_fix
-        self.scaled_by_reset = scaled_by_reset
-        self.intensity_scale = 0.05
-        self.sigma = 0.75
-        self.categorial_bar_n = categorial_bar_n
-        self.categorial_max = float(categorial_max)
-        self.categorial_min = float(categorial_min)
 
         self._gamma = jnp.power(self.gamma, jnp.arange(self.n_step))
 
