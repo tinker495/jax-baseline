@@ -412,7 +412,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self,
         total_timesteps,
         callback=None,
-        log_interval=100,
+        log_interval=1000,
         run_name="TD7",
         reset_num_timesteps=True,
         replay_wrapper=None,
@@ -426,7 +426,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             replay_wrapper,
         )
 
-    def learn_gym(self, pbar, callback=None, log_interval=100):
+    def learn_gym(self, pbar, callback=None, log_interval=1000):
         state, info = self.env.reset()
         state = [np.expand_dims(state, axis=0)]
         self.scores = np.zeros([self.worker_size])

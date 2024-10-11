@@ -224,7 +224,7 @@ class DQN(Q_Network_Family):
         self,
         total_timesteps,
         callback=None,
-        log_interval=100,
+        log_interval=1000,
         experiment_name="DQN",
         run_name="DQN"
     ):

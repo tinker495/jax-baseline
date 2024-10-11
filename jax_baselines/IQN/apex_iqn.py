@@ -292,7 +292,7 @@ class APE_X_IQN(Ape_X_Family):
         self,
         total_timesteps,
         callback=None,
-        log_interval=100,
+        log_interval=1000,
         run_name="Ape_X_QRDQN",
         reset_num_timesteps=True,
         replay_wrapper=None,

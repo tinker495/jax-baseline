@@ -225,7 +225,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             np.mean(self.scoreque), np.mean(self.lossque)
         )
 
-    def learn_unity(self, pbar, callback=None, log_interval=100):
+    def learn_unity(self, pbar, callback=None, log_interval=1000):
         self.env.reset()
         self.env.step()
         dec, term = self.env.get_steps(self.group_name)
@@ -310,7 +310,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 pbar.set_description(self.discription())
         return np.mean(self.scoreque)
 
-    def learn_gym(self, pbar, callback=None, log_interval=100):
+    def learn_gym(self, pbar, callback=None, log_interval=1000):
         state, info = self.env.reset()
         have_original_reward = "original_reward" in info.keys()
         have_lives = "lives" in info.keys()
@@ -362,7 +362,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 pbar.set_description(self.discription())
         return np.mean(self.scoreque)
 
-    def learn_gymMultiworker(self, pbar, callback=None, log_interval=100):
+    def learn_gymMultiworker(self, pbar, callback=None, log_interval=1000):
         state, _, _, _, info, _, _ = self.env.get_steps()
         have_original_reward = "original_reward" in info[0].keys()
         have_lives = "lives" in info[0].keys()

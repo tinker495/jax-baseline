@@ -273,7 +273,7 @@ class Q_Network_Family(object):
             self.save_params(self.mlflowrun.get_local_path("params"))
             self.mlflowrun.log_artifact("params")
 
-    def learn_gym(self, pbar, callback=None, log_interval=100):
+    def learn_gym(self, pbar, callback=None, log_interval=1000):
         state, info = self.env.reset()
         state = [np.expand_dims(state, axis=0)]
         self.lossque = deque(maxlen=10)
@@ -367,7 +367,7 @@ class Q_Network_Family(object):
             eval_result = {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
         return eval_result
 
-    def learn_Multiworker(self, pbar, callback=None, log_interval=100):
+    def learn_Multiworker(self, pbar, callback=None, log_interval=1000):
         state, _, _, _, info, _, _ = self.env.get_steps()
         have_original_reward = "original_reward" in info[0].keys()
         have_lives = "lives" in info[0].keys()

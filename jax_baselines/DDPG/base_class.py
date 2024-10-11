@@ -211,7 +211,7 @@ class Deteministic_Policy_Gradient_Family(object):
         discription += f"loss : {np.mean(self.lossque):.3f}"
         return discription
 
-    def learn_gym(self, pbar, callback=None, log_interval=100):
+    def learn_gym(self, pbar, callback=None, log_interval=1000):
         state, info = self.env.reset()
         state = [np.expand_dims(state, axis=0)]
         self.lossque = deque(maxlen=10)
@@ -277,7 +277,7 @@ class Deteministic_Policy_Gradient_Family(object):
             self.mlflowrun.log_metric("env/time over", np.mean(total_truncated), steps)
         return {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
 
-    def learn_Multiworker(self, pbar, callback=None, log_interval=100):
+    def learn_Multiworker(self, pbar, callback=None, log_interval=1000):
         state, _, _, _, _, _ = self.env.get_steps()
         self.scores = np.zeros([self.worker_size])
         self.eplen = np.zeros([self.worker_size])
