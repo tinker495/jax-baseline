@@ -34,7 +34,7 @@ class IQN(Q_Network_Family):
         learning_starts=1000,
         target_network_update_freq=2000,
         prioritized_replay=False,
-        prioritized_replay_alpha=0.9,
+        prioritized_replay_alpha=0.6,
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-3,
         CVaR=1.0,
