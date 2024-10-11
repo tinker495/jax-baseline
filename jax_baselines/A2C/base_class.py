@@ -8,14 +8,9 @@ from gymnasium import spaces
 from mlagents_envs.environment import ActionTuple, UnityEnvironment
 from tqdm.auto import trange
 
-from jax_baselines.common.base_classes import (
-    TensorboardWriter,
-    restore,
-    save,
-    select_optimizer,
-)
+from jax_baselines.common.logger import MLflowLogger
 from jax_baselines.common.cpprb_buffers import EpochBuffer
-from jax_baselines.common.utils import add_hparams, convert_jax, convert_states, key_gen
+from jax_baselines.common.utils import add_hparams, convert_jax, convert_states, key_gen, restore, save, select_optimizer
 from jax_baselines.common.worker import gymMultiworker
 
 
@@ -30,7 +25,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         val_coef=0.2,
         ent_coef=0.01,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -50,7 +45,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.gamma = gamma
         self.val_coef = val_coef
         self.ent_coef = ent_coef
-        self.tensorboard_log = tensorboard_log
+        self.log_dir = log_dir
         self.full_tensorboard_log = full_tensorboard_log
 
         self.params = None
@@ -210,22 +205,19 @@ class Actor_Critic_Policy_Gradient_Family(object):
         total_timesteps,
         callback=None,
         log_interval=1000,
-        tb_log_name="Q_network",
+        run_name="Q_network",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
         pbar = trange(total_timesteps, miniters=log_interval, smoothing=0.01)
-        with TensorboardWriter(self.tensorboard_log, tb_log_name) as (
-            self.summary,
-            self.save_path,
-        ):
+        with MLflowLogger(self.log_dir, run_name) as self.mlflowrun:
             if self.env_type == "unity":
                 score_mean = self.learn_unity(pbar, callback, log_interval)
             if self.env_type == "gym":
                 score_mean = self.learn_gym(pbar, callback, log_interval)
             if self.env_type == "gymMultiworker":
                 score_mean = self.learn_gymMultiworker(pbar, callback, log_interval)
-            add_hparams(self, self.summary, {"env/episode_reward": score_mean}, total_timesteps)
+            add_hparams(self, self.mlflowrun, {"env/episode_reward": score_mean}, total_timesteps)
             self.save_params(self.save_path)
 
     def discription(self):
@@ -296,12 +288,12 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.scores += reward
             obses = nxtobs
             if term_on:
-                if self.summary:
-                    self.summary.add_scalar(
+                if self.mlflowrun:
+                    self.mlflowrun.log_metric(
                         "env/episode_reward", np.mean(self.scores[term_ids]), steps
                     )
-                    self.summary.add_scalar("env/episode len", np.mean(self.eplen[term_ids]), steps)
-                    self.summary.add_scalar(
+                    self.mlflowrun.log_metric("env/episode len", np.mean(self.eplen[term_ids]), steps)
+                    self.mlflowrun.log_metric(
                         "env/time over",
                         np.mean(1 - terminated[term_ids].astype(np.float32)),
                         steps,
@@ -341,22 +333,22 @@ class Actor_Critic_Policy_Gradient_Family(object):
             state = next_state
             if terminated or truncated:
                 self.scoreque.append(self.scores[0])
-                if self.summary:
+                if self.mlflowrun:
                     if have_original_reward:
                         if have_lives:
                             if info["lives"] == 0:
-                                self.summary.add_scalar(
+                                self.mlflowrun.log_metric(
                                     "env/original_reward", self.original_score[0], steps
                                 )
                                 self.original_score[0] = 0
                         else:
-                            self.summary.add_scalar(
+                            self.mlflowrun.log_metric(
                                 "env/original_reward", self.original_score[0], steps
                             )
                             self.original_score[0] = 0
-                    self.summary.add_scalar("env/episode_reward", self.scores[0], steps)
-                    self.summary.add_scalar("env/episode len", self.eplen[0], steps)
-                    self.summary.add_scalar("env/time over", float(truncated), steps)
+                    self.mlflowrun.log_metric("env/episode_reward", self.scores[0], steps)
+                    self.mlflowrun.log_metric("env/episode len", self.eplen[0], steps)
+                    self.mlflowrun.log_metric("env/time over", float(truncated), steps)
                 self.scores[0] = 0
                 self.eplen[0] = 0
                 state, info = self.env.reset()
@@ -400,28 +392,28 @@ class Actor_Critic_Policy_Gradient_Family(object):
             if end_states is not None:
                 nxtstates = np.copy(real_nextstates)
                 nxtstates[end_idx] = end_states
-                if self.summary:
+                if self.mlflowrun:
                     if have_original_reward:
                         if have_lives:
                             end_lives = np.asarray([infos[ei]["lives"] for ei in end_idx])
                             done_lives = np.logical_not(end_lives)
                             if np.sum(done_lives) > 0:
-                                self.summary.add_scalar(
+                                self.mlflowrun.log_metric(
                                     "env/original_reward",
                                     np.mean(self.original_score[end_idx[done_lives]]),
                                     steps,
                                 )
                                 self.original_score[end_idx[done_lives]] = 0
                         else:
-                            self.summary.add_scalar(
+                            self.mlflowrun.log_metric(
                                 "env/original_reward", self.original_score[end_idx], steps
                             )
                             self.original_score[end_idx] = 0
-                    self.summary.add_scalar(
+                    self.mlflowrun.log_metric(
                         "env/episode_reward", np.mean(self.scores[end_idx]), steps
                     )
-                    self.summary.add_scalar("env/episode len", np.mean(self.eplen[end_idx]), steps)
-                    self.summary.add_scalar(
+                    self.mlflowrun.log_metric("env/episode len", np.mean(self.eplen[end_idx]), steps)
+                    self.mlflowrun.log_metric(
                         "env/time over",
                         np.mean(1 - terminateds[end_idx].astype(np.float32)),
                         steps,
@@ -456,11 +448,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 pbar.set_description(self.discription())
         return np.mean(self.scoreque)
 
-    def test(self, episode=10, tb_log_name=None):
-        if tb_log_name is None:
-            tb_log_name = self.save_path
+    def test(self, episode=10, run_name=None):
+        if run_name is None:
+            run_name = self.save_path
 
-        directory = tb_log_name
+        directory = run_name
         if self.env_type == "gym":
             self.test_gym(episode, directory)
         if self.env_type == "gymMultiworker":

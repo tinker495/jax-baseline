@@ -167,9 +167,9 @@ class C51(Q_Network_Family):
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.summary and steps % self.log_interval == 0:
-            self.summary.add_scalar("loss/qloss", loss, steps)
-            self.summary.add_scalar("loss/targets", t_mean, steps)
+        if self.mlflowrun and steps % self.log_interval == 0:
+            self.mlflowrun.log_metric("loss/qloss", loss, steps)
+            self.mlflowrun.log_metric("loss/targets", t_mean, steps)
 
         return loss
 
@@ -299,15 +299,13 @@ class C51(Q_Network_Family):
         total_timesteps,
         callback=None,
         log_interval=100,
-        tb_log_name="C51",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        experiment_name="C51",
+        run_name="C51"
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
-            tb_log_name,
-            reset_num_timesteps,
-            replay_wrapper,
+            experiment_name,
+            run_name
         )

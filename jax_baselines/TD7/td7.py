@@ -32,7 +32,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         target_network_update_freq=250,
         prioritized_replay_alpha=0.4,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -58,7 +58,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             0,
             0,
             log_interval,
-            tensorboard_log,
+            log_dir,
             _init_setup_model,
             policy_kwargs,
             full_tensorboard_log,
@@ -236,12 +236,12 @@ class TD7(Deteministic_Policy_Gradient_Family):
         mean_loss = jnp.mean(jnp.array(losses))
         mean_target = jnp.mean(jnp.array(targets))
 
-        if self.summary:
-            self.summary.add_scalar("loss/encoder_loss", mean_repr_loss, steps)
-            self.summary.add_scalar("loss/qloss", mean_loss, steps)
-            self.summary.add_scalar("loss/targets", mean_target, steps)
-            self.summary.add_scalar("loss/min_value", self.critic_params["values"]["min_value"], steps)
-            self.summary.add_scalar("loss/max_value", self.critic_params["values"]["max_value"], steps)
+        if self.mlflowrun:
+            self.mlflowrun.log_metric("loss/encoder_loss", mean_repr_loss, steps)
+            self.mlflowrun.log_metric("loss/qloss", mean_loss, steps)
+            self.mlflowrun.log_metric("loss/targets", mean_target, steps)
+            self.mlflowrun.log_metric("loss/min_value", self.critic_params["values"]["min_value"], steps)
+            self.mlflowrun.log_metric("loss/max_value", self.critic_params["values"]["max_value"], steps)
 
         return mean_loss
 
@@ -403,17 +403,17 @@ class TD7(Deteministic_Policy_Gradient_Family):
         discription += f"loss : {np.mean(self.loss_mean):.3f}"
         return discription
 
-    def tb_log_name_update(self, tb_log_name):
+    def run_name_update_with_tags(self, run_name):
         if self.n_step_method:
-            tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
-        return tb_log_name
+            run_name = "{}Step_".format(self.n_step) + run_name
+        return run_name
 
     def learn(
         self,
         total_timesteps,
         callback=None,
         log_interval=100,
-        tb_log_name="TD7",
+        run_name="TD7",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
@@ -421,7 +421,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             total_timesteps,
             callback,
             log_interval,
-            tb_log_name,
+            run_name,
             reset_num_timesteps,
             replay_wrapper,
         )
@@ -480,8 +480,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
         mean_reward = np.mean(total_reward)
         mean_ep_len = np.mean(total_ep_len)
 
-        if self.summary:
-            self.summary.add_scalar("env/episode_reward", mean_reward, steps)
-            self.summary.add_scalar("env/episode len", mean_ep_len, steps)
-            self.summary.add_scalar("env/time over", np.mean(total_truncated), steps)
+        if self.mlflowrun:
+            self.mlflowrun.log_metric("env/episode_reward", mean_reward, steps)
+            self.mlflowrun.log_metric("env/episode len", mean_ep_len, steps)
+            self.mlflowrun.log_metric("env/time over", np.mean(total_truncated), steps)
         return {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}

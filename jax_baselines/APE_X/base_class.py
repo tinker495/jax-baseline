@@ -44,7 +44,7 @@ class Ape_X_Family(object):
         param_noise=False,
         munchausen=False,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -76,7 +76,7 @@ class Ape_X_Family(object):
         self.gradient_steps = gradient_steps
         self.gamma = gamma
         self._gamma = np.power(gamma, n_step)  # n_step gamma
-        self.tensorboard_log = tensorboard_log
+        self.log_dir = log_dir
         self.full_tensorboard_log = full_tensorboard_log
         self.double_q = double_q
         self.dueling_model = dueling_model
@@ -154,25 +154,25 @@ class Ape_X_Family(object):
         total_trainstep,
         callback=None,
         log_interval=1000,
-        tb_log_name="APE_X",
+        run_name="APE_X",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
         if self.munchausen:
-            tb_log_name = "M-" + tb_log_name
+            run_name = "M-" + run_name
         if self.param_noise:
-            tb_log_name = "Noisy_" + tb_log_name
+            run_name = "Noisy_" + run_name
         if self.dueling_model:
-            tb_log_name = "Dueling_" + tb_log_name
+            run_name = "Dueling_" + run_name
         if self.double_q:
-            tb_log_name = "Double_" + tb_log_name
+            run_name = "Double_" + run_name
         if self.n_step_method:
-            tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
+            run_name = "{}Step_".format(self.n_step) + run_name
         self.update_eps = 1.0
 
         pbar = trange(total_trainstep, miniters=log_interval)
 
-        self.logger_server = Logger_server.remote(self.tensorboard_log, tb_log_name)
+        self.logger_server = Logger_server.remote(self.log_dir, run_name)
 
         if self.env_type == "unity":
             self.learn_unity(pbar, callback, log_interval)

@@ -93,7 +93,7 @@ if __name__ == "__main__":
             batch_size=args.batch,
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir + env_type + "/" + env_name,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
@@ -108,7 +108,7 @@ if __name__ == "__main__":
             minibatch_size=args.mini_batch,
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir + env_type + "/" + env_name,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
@@ -123,7 +123,7 @@ if __name__ == "__main__":
             minibatch_size=args.mini_batch,
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir + env_type + "/" + env_name,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )

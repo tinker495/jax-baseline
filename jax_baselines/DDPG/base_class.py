@@ -42,7 +42,7 @@ class Deteministic_Policy_Gradient_Family(object):
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-3,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -73,7 +73,7 @@ class Deteministic_Policy_Gradient_Family(object):
         self.learning_rate = learning_rate
         self.gamma = gamma
         self._gamma = self.gamma**n_step  # n_step gamma
-        self.tensorboard_log = tensorboard_log
+        self.log_dir = log_dir
         self.full_tensorboard_log = full_tensorboard_log
         self.n_step_method = n_step > 1
         self.n_step = n_step
@@ -169,28 +169,28 @@ class Deteministic_Policy_Gradient_Family(object):
     def actions(self, obs, steps):
         pass
 
-    def tb_log_name_update(self, tb_log_name):
+    def run_name_update_with_tags(self, run_name):
         if self.n_step_method:
-            tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
+            run_name = "{}Step_".format(self.n_step) + run_name
         if self.prioritized_replay:
-            tb_log_name = tb_log_name + "+PER"
-        return tb_log_name
+            run_name = run_name + "+PER"
+        return run_name
 
     def learn(
         self,
         total_timesteps,
         callback=None,
         log_interval=1000,
-        tb_log_name="DPG_network",
+        run_name="DPG_network",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
-        tb_log_name = self.tb_log_name_update(tb_log_name)
+        run_name = self.run_name_update_with_tags(run_name)
         self.eval_freq = total_timesteps // 100
 
         pbar = trange(total_timesteps, miniters=log_interval)
-        with TensorboardWriter(self.tensorboard_log, tb_log_name) as (
-            self.summary,
+        with TensorboardWriter(self.log_dir, run_name) as (
+            self.mlflowrun,
             self.save_path,
         ):
             if self.env_type == "gym":
@@ -199,7 +199,7 @@ class Deteministic_Policy_Gradient_Family(object):
             if self.env_type == "Multiworker":
                 self.learn_Multiworker(pbar, callback, log_interval)
             
-            add_hparams(self, self.summary)
+            add_hparams(self, self.mlflowrun)
             self.save_params(self.save_path)
 
     def discription(self, eval_result=None):
@@ -271,10 +271,10 @@ class Deteministic_Policy_Gradient_Family(object):
         mean_reward = np.mean(total_reward)
         mean_ep_len = np.mean(total_ep_len)
 
-        if self.summary:
-            self.summary.add_scalar("env/episode_reward", mean_reward, steps)
-            self.summary.add_scalar("env/episode len", mean_ep_len, steps)
-            self.summary.add_scalar("env/time over", np.mean(total_truncated), steps)
+        if self.mlflowrun:
+            self.mlflowrun.log_metric("env/episode_reward", mean_reward, steps)
+            self.mlflowrun.log_metric("env/episode len", mean_ep_len, steps)
+            self.mlflowrun.log_metric("env/time over", np.mean(total_truncated), steps)
         return {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
 
     def learn_Multiworker(self, pbar, callback=None, log_interval=100):
@@ -303,12 +303,12 @@ class Deteministic_Policy_Gradient_Family(object):
             nxtstates = np.copy(next_states)
             if end_states is not None:
                 nxtstates[end_idx] = end_states
-                if self.summary:
-                    self.summary.add_scalar(
+                if self.mlflowrun:
+                    self.mlflowrun.log_metric(
                         "env/episode_reward", np.mean(self.scores[end_idx]), steps
                     )
-                    self.summary.add_scalar("env/episode len", np.mean(self.eplen[end_idx]), steps)
-                    self.summary.add_scalar(
+                    self.mlflowrun.log_metric("env/episode len", np.mean(self.eplen[end_idx]), steps)
+                    self.mlflowrun.log_metric(
                         "env/time over",
                         np.mean(truncateds[end_idx].astype(np.float32)),
                         steps,
@@ -324,11 +324,11 @@ class Deteministic_Policy_Gradient_Family(object):
                 pbar.set_description(self.discription())
         return np.mean(self.scoreque)
 
-    def test(self, episode=10, tb_log_name=None):
-        if tb_log_name is None:
-            tb_log_name = self.save_path
+    def test(self, episode=10, run_name=None):
+        if run_name is None:
+            run_name = self.save_path
 
-        directory = tb_log_name
+        directory = run_name
         if self.env_type == "gym":
             self.test_gym(episode, directory)
 

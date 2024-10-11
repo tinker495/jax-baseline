@@ -76,7 +76,7 @@ if __name__ == "__main__":
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
             rho_max=args.rho_max,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir + env_type + "/" + env_name,
         )
 
     elif args.algo == "PPO":
@@ -96,7 +96,7 @@ if __name__ == "__main__":
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
             rho_max=args.rho_max,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir + env_type + "/" + env_name,
         )
 
     elif args.algo == "TPPO":
@@ -116,7 +116,7 @@ if __name__ == "__main__":
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
             rho_max=args.rho_max,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir + env_type + "/" + env_name,
         )
 
     agent.learn(int(args.steps))

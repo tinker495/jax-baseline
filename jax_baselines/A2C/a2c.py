@@ -18,7 +18,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         val_coef=0.2,
         ent_coef=0.5,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -34,7 +34,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             val_coef,
             ent_coef,
             log_interval,
-            tensorboard_log,
+            log_dir,
             _init_setup_model,
             policy_kwargs,
             full_tensorboard_log,
@@ -78,11 +78,11 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             targets,
         ) = self._train_step(self.params, self.opt_state, None, **data)
 
-        if self.summary:
-            self.summary.add_scalar("loss/critic_loss", critic_loss, steps)
-            self.summary.add_scalar("loss/actor_loss", actor_loss, steps)
-            self.summary.add_scalar("loss/entropy_loss", entropy_loss, steps)
-            self.summary.add_scalar("loss/mean_target", targets, steps)
+        if self.mlflowrun:
+            self.mlflowrun.log_metric("loss/critic_loss", critic_loss, steps)
+            self.mlflowrun.log_metric("loss/actor_loss", actor_loss, steps)
+            self.mlflowrun.log_metric("loss/entropy_loss", entropy_loss, steps)
+            self.mlflowrun.log_metric("loss/mean_target", targets, steps)
 
         return critic_loss
 
@@ -170,7 +170,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         total_timesteps,
         callback=None,
         log_interval=100,
-        tb_log_name="A2C",
+        run_name="A2C",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
@@ -178,7 +178,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             total_timesteps,
             callback,
             log_interval,
-            tb_log_name,
+            run_name,
             reset_num_timesteps,
             replay_wrapper,
         )

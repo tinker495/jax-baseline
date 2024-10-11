@@ -1,15 +1,41 @@
+import os
+import pickle
+
 from functools import partial
 from typing import Any, Callable
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optax
+
+from jax_baselines.common.logger import MLflowRun
 
 cpu_jit = partial(jax.jit, backend="cpu")
 gpu_jit = partial(jax.jit, backend="gpu")
 
 PyTree = Any
 
+def save(ckpt_dir: str, state) -> None:
+    os.makedirs(ckpt_dir, exist_ok=True)
+    with open(os.path.join(ckpt_dir, "arrays.npy"), "wb") as f:
+        for x in jax.tree_util.tree_leaves(state):
+            np.save(f, x, allow_pickle=False)
+
+    tree_struct = jax.tree_map(lambda t: 0, state)
+    with open(os.path.join(ckpt_dir, "tree.pkl"), "wb") as f:
+        pickle.dump(tree_struct, f)
+
+
+def restore(ckpt_dir):
+    with open(os.path.join(ckpt_dir, "tree.pkl"), "rb") as f:
+        tree_struct = pickle.load(f)
+
+    leaves, treedef = jax.tree_flatten(tree_struct)
+    with open(os.path.join(ckpt_dir, "arrays.npy"), "rb") as f:
+        flat_state = [np.load(f) for _ in leaves]
+
+    return jax.tree_unflatten(treedef, flat_state)
 
 def key_gen(seed):
     key = jax.random.PRNGKey(seed)
@@ -184,14 +210,30 @@ def get_hyper_params(agent):
         ]
     )
 
-
-def add_hparams(agent, writer, metric_dict=dict()):
-    from tensorboardX.summary import hparams
-
+def add_hparams(agent, mlflowrun: MLflowRun, metric_dict=dict()):
     hparam_dict = get_hyper_params(agent)
-    # metric_dict = dict([m,None] for m in metric)
-    exp, ssi, sei = hparams(hparam_dict, metric_dict)
 
-    writer.file_writer.add_summary(exp)
-    writer.file_writer.add_summary(ssi)
-    writer.file_writer.add_summary(sei)
+    for k, v in hparam_dict.items():
+        mlflowrun.log_param(k, v)
+    for k, v in metric_dict.items():
+        mlflowrun.log_metric(k, v)
+
+def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
+    optim = None
+    if optim_str == "adam":
+        optim = optax.adam(lr, b1=0.9, b2=0.999, eps=eps)
+    elif optim_str == "adamw":
+        optim = optax.adamw(lr, b1=0.9, b2=0.999, eps=eps, weight_decay=1e-4)
+    elif optim_str == "rmsprop":
+        optim = optax.rmsprop(lr, eps=eps)
+    elif optim_str == "sgd":
+        optim = optax.sgd(lr)
+    elif optim_str == "adabelief":
+        optim = optax.adabelief(lr, eps=eps)
+    elif optim_str == "lion":
+        optim = optax.lion(lr, weight_decay=1e-5)
+
+    if grad_max is not None:
+        optim = optax.chain(optax.clip_by_global_norm(grad_max), optim)
+
+    return optim

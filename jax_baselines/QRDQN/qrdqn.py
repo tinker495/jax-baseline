@@ -39,7 +39,7 @@ class QRDQN(Q_Network_Family):
         param_noise=False,
         munchausen=False,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -73,7 +73,7 @@ class QRDQN(Q_Network_Family):
             param_noise,
             munchausen,
             log_interval,
-            tensorboard_log,
+            log_dir,
             _init_setup_model,
             policy_kwargs,
             full_tensorboard_log,
@@ -156,10 +156,10 @@ class QRDQN(Q_Network_Family):
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.summary and steps % self.log_interval == 0:
-            self.summary.add_scalar("loss/qloss", loss, steps)
-            self.summary.add_scalar("loss/targets", t_mean, steps)
-            self.summary.add_scalar("loss/target_stds", t_std, steps)
+        if self.mlflowrun and steps % self.log_interval == 0:
+            self.mlflowrun.log_metric("loss/qloss", loss, steps)
+            self.mlflowrun.log_metric("loss/targets", t_mean, steps)
+            self.mlflowrun.log_metric("loss/target_stds", t_std, steps)
 
         return loss
 
@@ -268,16 +268,14 @@ class QRDQN(Q_Network_Family):
         total_timesteps,
         callback=None,
         log_interval=100,
-        tb_log_name="QRDQN",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        experiment_name="QRDQN",
+        run_name="QRDQN"
     ):
-        tb_log_name = tb_log_name + "({:d})".format(self.n_support)
+        run_name = run_name + "({:d})".format(self.n_support)
         super().learn(
             total_timesteps,
             callback,
             log_interval,
-            tb_log_name,
-            reset_num_timesteps,
-            replay_wrapper,
+            experiment_name,
+            run_name
         )

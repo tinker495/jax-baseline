@@ -38,7 +38,7 @@ class IMPALA_Family(object):
         ent_coef=0.01,
         rho_max=1.0,
         log_interval=1,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -65,7 +65,7 @@ class IMPALA_Family(object):
         self.ent_coef = ent_coef
         self.rho_max = rho_max
         self.cut_max = 1.0
-        self.tensorboard_log = tensorboard_log
+        self.log_dir = log_dir
 
         self.params = None
         self.target_params = None
@@ -215,13 +215,13 @@ class IMPALA_Family(object):
         total_trainstep,
         callback=None,
         log_interval=1000,
-        tb_log_name="IMPALA",
+        run_name="IMPALA",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
         pbar = trange(total_trainstep, miniters=log_interval)
 
-        self.logger_server = Logger_server.remote(self.tensorboard_log, tb_log_name)
+        self.logger_server = Logger_server.remote(self.log_dir, run_name)
 
         if self.env_type == "unity":
             self.learn_unity(pbar, callback, log_interval)

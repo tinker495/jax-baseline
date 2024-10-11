@@ -40,7 +40,7 @@ class BBF(Q_Network_Family):
         param_noise=False,
         munchausen=False,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         categorial_bar_n=51,
@@ -87,7 +87,7 @@ class BBF(Q_Network_Family):
             param_noise,
             munchausen,
             log_interval,
-            tensorboard_log,
+            log_dir,
             _init_setup_model,
             policy_kwargs,
             full_tensorboard_log,
@@ -219,10 +219,10 @@ class BBF(Q_Network_Family):
         if self.prioritized_replay:
             self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.summary and steps % self.log_interval == 0:
-            self.summary.add_scalar("loss/qloss", loss, steps)
-            self.summary.add_scalar("loss/rprloss", rprloss, steps)
-            self.summary.add_scalar("loss/targets", t_mean, steps)
+        if self.mlflowrun and steps % self.log_interval == 0:
+            self.mlflowrun.log_metric("loss/qloss", loss, steps)
+            self.mlflowrun.log_metric("loss/rprloss", rprloss, steps)
+            self.mlflowrun.log_metric("loss/targets", t_mean, steps)
 
         return loss
 
@@ -550,19 +550,19 @@ class BBF(Q_Network_Family):
 
         return target_distribution
 
-    def tb_log_name_update(self, tb_log_name):
+    def run_name_update_with_tags(self, run_name):
         if self.munchausen:
-            tb_log_name = "M-" + tb_log_name
+            run_name = "M-" + run_name
         if self.param_noise:
-            tb_log_name = "Noisy_" + tb_log_name
-        return tb_log_name
+            run_name = "Noisy_" + run_name
+        return run_name
 
     def learn(
         self,
         total_timesteps,
         callback=None,
         log_interval=100,
-        tb_log_name="BBF",
+        run_name="BBF",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
@@ -570,7 +570,7 @@ class BBF(Q_Network_Family):
             total_timesteps,
             callback,
             log_interval,
-            tb_log_name,
+            run_name,
             reset_num_timesteps,
             replay_wrapper,
         )
