@@ -207,7 +207,7 @@ class Q_Network_Family(object):
             return discription + f", epsilon : {self.update_eps:.3f}"
 
     def run_name_update_with_tags(self, run_name):
-        tags = {}
+        tags = {"algorithm": self.name}
         if self.munchausen:
             run_name = "M-" + run_name
             tags["munchausen"] = True

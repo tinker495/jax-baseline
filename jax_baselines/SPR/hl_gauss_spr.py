@@ -541,7 +541,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
         return target_distribution
 
     def run_name_update_with_tags(self, run_name):
-        tags = {}
+        tags = {"algorithm": self.name}
         if self.scaled_by_reset:
             run_name = "SR-" + run_name
             tags["scaled_by_reset"] = True

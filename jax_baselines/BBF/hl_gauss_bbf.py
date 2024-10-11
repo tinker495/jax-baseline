@@ -528,7 +528,7 @@ class HL_GAUSS_BBF(Q_Network_Family):
         return target_distribution
 
     def run_name_update_with_tags(self, run_name):
-        tags = {}
+        tags = {"algorithm": self.name}
         if self.munchausen:
             run_name = "M-" + run_name
             tags["munchausen"] = True
