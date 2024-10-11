@@ -1,5 +1,6 @@
 --find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 requests
+mlflow
 protobuf==3.20
 mlagents_envs
 swig
@@ -19,7 +20,6 @@ numpy==1.26.4
 ray[default]
 colabgymrender
 cpprb @ git+https://github.com/tinker495/cpprb.git
-tensorboardX
 imageio-ffmpeg
 opencv-python
 pre-commit

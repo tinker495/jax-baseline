@@ -5,7 +5,7 @@ import numpy as np
 from tqdm.auto import trange
 
 from jax_baselines.common.base_classes import (
-    TensorboardWriter,
+    MLflowLogger,
     restore,
     save,
     select_optimizer,
