@@ -237,15 +237,13 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         )
         ratio = jnp.exp(log_prob - old_act_prob)
         kl = jax.vmap(kl_divergence_discrete)(old_prob, prob)
-        actor_loss = -jnp.mean(
-            jnp.where(
-                (kl >= self.kl_range) & (adv * (ratio - 1.0) > 0.0),
-                adv * ratio - self.kl_coef * kl,
-                adv * ratio,
+        actor_loss = - jnp.mean(adv * ratio - self.kl_coef * jnp.where(
+                (kl >= self.kl_range) & (ratio > 1.0),
+                kl,
+                self.kl_range,
             )
         )
-        entropy = prob * jnp.log(prob)
-        entropy_loss = jnp.mean(entropy)
+        entropy_loss = jnp.mean(prob * jnp.log(prob))
         total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss, jnp.mean(kl))
 
@@ -259,11 +257,10 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         )
         ratio = jnp.exp(log_prob - old_act_prob)
         kl = jax.vmap(kl_divergence_continuous)(old_prob, prob)
-        actor_loss = -jnp.mean(
-            jnp.where(
-                (kl >= self.kl_range) & (adv * (ratio - 1.0) > 0.0),
-                adv * ratio - self.kl_coef * kl,
-                adv * ratio,
+        actor_loss = - jnp.mean(adv * ratio - self.kl_coef * jnp.where(
+                (kl >= self.kl_range) & (ratio > 1.0),
+                kl,
+                self.kl_range,
             )
         )
         mu, log_std = prob
