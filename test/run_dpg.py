@@ -82,7 +82,7 @@ if __name__ == "__main__":
             train_freq=args.train_freq,
             seed=args.seed,
             gradient_steps=args.gradient_steps,
-            log_dir=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
@@ -107,7 +107,7 @@ if __name__ == "__main__":
             train_freq=args.train_freq,
             seed=args.seed,
             gradient_steps=args.gradient_steps,
-            log_dir=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
@@ -132,7 +132,7 @@ if __name__ == "__main__":
             ent_coef=args.ent_coef,
             seed=args.seed,
             gradient_steps=args.gradient_steps,
-            log_dir=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
@@ -161,7 +161,7 @@ if __name__ == "__main__":
             n_support=args.n_support,
             critic_num=args.critic_num,
             mixture_type=args.mixture,
-            log_dir=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
@@ -185,7 +185,7 @@ if __name__ == "__main__":
             train_freq=args.train_freq,
             seed=args.seed,
             gradient_steps=args.gradient_steps,
-            log_dir=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )

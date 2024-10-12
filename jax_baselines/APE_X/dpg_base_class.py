@@ -101,11 +101,11 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
             pass
 
         elif isinstance(self.workers, list) or isinstance(self.env, gym.Wrapper):
-            print("openai gym environmet")
+            print("Single environmet")
             env_dict = ray.get(self.workers[0].get_info.remote())
             self.observation_space = [list(env_dict["observation_space"].shape)]
             self.action_size = [env_dict["action_space"].shape[0]]
-            self.env_type = "gym"
+            self.env_type = "SingleEnv"
 
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
@@ -157,15 +157,15 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
 
         if self.env_type == "unity":
             self.learn_unity(pbar, callback, log_interval)
-        if self.env_type == "gym":
-            self.learn_gym(pbar, callback, log_interval)
+        if self.env_type == "SingleEnv":
+            self.learn_SingleEnv(pbar, callback, log_interval)
 
         self.save_params(ray.get(self.logger_server.get_log_dir.remote()))
 
     def learn_unity(self, pbar, callback, log_interval):
         pass
 
-    def learn_gym(self, pbar, callback, log_interval):
+    def learn_SingleEnv(self, pbar, callback, log_interval):
         stop = self.m.Event()
         worker_num = len(self.workers)
         update = [self.m.Event() for i in range(worker_num)]

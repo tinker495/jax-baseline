@@ -17,7 +17,7 @@ class Ape_X_Worker(object):
 
     def __init__(self, env_name_) -> None:
         mp.current_process().authkey = base64.b64decode(self.encoded)
-        self.env_type = "gym"
+        self.env_type = "SingleEnv"
         self.env_id = env_name_
         self.env = gym.make(env_name_)
 
@@ -62,8 +62,8 @@ class Ape_X_Worker(object):
             get_action = random_action
 
             score = 0
-            state, info = self.env.reset()
-            state = [np.expand_dims(state, axis=0)]
+            obs, info = self.env.reset()
+            obs = [np.expand_dims(obs, axis=0)]
             params = ray.get(param_server.get_params.remote())
             eplen = 0
             episode = 0
@@ -83,19 +83,19 @@ class Ape_X_Worker(object):
                     get_action = _get_action
 
                 eplen += 1
-                actions = get_action(params, state, noise, eps, next(key_seq))
-                next_state, reward, terminated, truncated, info = self.env.step(actions)
-                next_state = [np.expand_dims(next_state, axis=0)]
+                actions = get_action(params, obs, noise, eps, next(key_seq))
+                next_obs, reward, terminated, truncated, info = self.env.step(actions)
+                next_obs = [np.expand_dims(next_obs, axis=0)]
                 local_buffer.add(
-                    state, actions, reward, next_state, terminated or truncated, truncated
+                    obs, actions, reward, next_obs, terminated or truncated, truncated
                 )
                 score += reward
-                state = next_state
+                obs = next_obs
 
                 if terminated or truncated:
                     local_buffer.episode_end()
-                    state, info = self.env.reset()
-                    state = [np.expand_dims(state, axis=0)]
+                    obs, info = self.env.reset()
+                    obs = [np.expand_dims(obs, axis=0)]
                     if logger_server is not None:
                         log_dict = {
                             rw_label: score,

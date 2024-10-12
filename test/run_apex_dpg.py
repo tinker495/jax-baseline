@@ -89,7 +89,7 @@ if __name__ == "__main__":
             n_step=args.n_step,
             seed=args.seed,
             gradient_steps=args.gradient_steps,
-            log_dir=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
@@ -115,7 +115,7 @@ if __name__ == "__main__":
             n_step=args.n_step,
             seed=args.seed,
             gradient_steps=args.gradient_steps,
-            log_dir=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )

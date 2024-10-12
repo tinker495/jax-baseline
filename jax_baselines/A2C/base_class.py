@@ -1,24 +1,26 @@
 from collections import deque
+import os
 
 import gymnasium as gym
 import jax
 import jax.numpy as jnp
 import numpy as np
 from gymnasium import spaces
-from mlagents_envs.environment import ActionTuple, UnityEnvironment
 from tqdm.auto import trange
 
 from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.cpprb_buffers import EpochBuffer
-from jax_baselines.common.utils import add_hparams, convert_jax, convert_states, key_gen, restore, save, select_optimizer
-from jax_baselines.common.worker import gymMultiworker
+from jax_baselines.common.utils import convert_jax, key_gen, restore, save, select_optimizer
+from jax_baselines.common.env_builer import VectorizedEnv
 
 
 class Actor_Critic_Policy_Gradient_Family(object):
     def __init__(
         self,
-        env,
+        env_builder,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         learning_rate=3e-4,
         batch_size=32,
@@ -33,8 +35,10 @@ class Actor_Critic_Policy_Gradient_Family(object):
         optimizer="adamw",
     ):
         self.name = "Actor_Critic_Policy_Gradient_Family"
-        self.env = env
+        self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
+        self.num_workers = num_workers
+        self.eval_eps = eval_eps
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
@@ -69,48 +73,12 @@ class Actor_Critic_Policy_Gradient_Family(object):
         )
 
     def get_env_setup(self):
+        self.env = self.env_builder(self.num_workers)
+        self.eval_env = self.env_builder(1)
+
         print("----------------------env------------------------")
-        if isinstance(self.env, UnityEnvironment):
-            print("unity-ml agent environmet")
-            self.env.reset()
-            group_name = list(self.env.behavior_specs.keys())[0]
-            group_spec = self.env.behavior_specs[group_name]
-            self.env.step()
-            dec, term = self.env.get_steps(group_name)
-            self.group_name = group_name
-
-            self.observation_space = [list(spec.shape) for spec in group_spec.observation_specs]
-            if group_spec.action_spec.continuous_size == 0:
-                self.action_size = [branch for branch in group_spec.action_spec.discrete_branches]
-                self.action_type = "discrete"
-                self.conv_action = lambda a: ActionTuple(discrete=a)
-            else:
-                self.action_size = [group_spec.action_spec.continuous_size]
-                self.action_type = "continuous"
-                self.conv_action = lambda a: ActionTuple(
-                    continuous=np.clip(a, -3.0, 3.0) / 3.0
-                )  # np.clip(a, -3.0, 3.0) / 3.0)
-            self.worker_size = len(dec.agent_id)
-            self.env_type = "unity"
-
-        elif isinstance(self.env, gym.Env) or isinstance(self.env, gym.Wrapper):
-            print("openai gym environmet")
-            action_space = self.env.action_space
-            observation_space = self.env.observation_space
-            self.observation_space = [list(observation_space.shape)]
-            if not isinstance(action_space, spaces.Box):
-                self.action_size = [action_space.n]
-                self.action_type = "discrete"
-                self.conv_action = lambda a: a[0][0]
-            else:
-                self.action_size = [action_space.shape[0]]
-                self.action_type = "continuous"
-                self.conv_action = lambda a: np.clip(a[0], -3.0, 3.0) / 3.0
-            self.worker_size = 1
-            self.env_type = "gym"
-
-        elif isinstance(self.env, gymMultiworker):
-            print("gymMultiworker")
+        if isinstance(self.env, VectorizedEnv):
+            print("Vectorized environmet")
             env_info = self.env.env_info
             self.observation_space = [list(env_info["observation_space"].shape)]
             if not isinstance(env_info["action_space"], spaces.Box):
@@ -122,7 +90,23 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 self.action_type = "continuous"
                 self.conv_action = lambda a: np.clip(a, -3.0, 3.0) / 3.0
             self.worker_size = self.env.worker_num
-            self.env_type = "gymMultiworker"
+            self.env_type = "VectorizedEnv"
+
+        elif isinstance(self.env, gym.Env) or isinstance(self.env, gym.Wrapper):
+            print("Single environmet")
+            action_space = self.env.action_space
+            observation_space = self.env.observation_space
+            self.observation_space = [list(observation_space.shape)]
+            if not isinstance(action_space, spaces.Box):
+                self.action_size = [action_space.n]
+                self.action_type = "discrete"
+                self.conv_action = lambda a: a[0]
+            else:
+                self.action_size = [action_space.shape[0]]
+                self.action_type = "continuous"
+                self.conv_action = lambda a: np.clip(a, -3.0, 3.0) / 3.0
+            self.worker_size = 1
+            self.env_type = "SingleEnv"
 
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
@@ -200,309 +184,187 @@ class Actor_Critic_Policy_Gradient_Family(object):
     def _get_actions(self, params, obses) -> np.ndarray:
         pass
 
+    def discription(self, eval_result=None):
+        discription = ""
+        if eval_result is not None:
+            for k, v in eval_result.items():
+                discription += f"{k} : {v:8.2f}, "
+
+        discription += f"loss : {np.mean(self.lossque):.3f}"
+
+        return discription
+
     def learn(
         self,
         total_timesteps,
         callback=None,
         log_interval=1000,
-        run_name="Q_network",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        experiment_name="A2C",
+        run_name="A2C"
     ):
-        pbar = trange(total_timesteps, miniters=log_interval, smoothing=0.01)
-        with TensorboardLogger(self.log_dir, run_name) as self.logger_run:
-            if self.env_type == "unity":
-                score_mean = self.learn_unity(pbar, callback, log_interval)
-            if self.env_type == "gym":
-                score_mean = self.learn_gym(pbar, callback, log_interval)
-            if self.env_type == "gymMultiworker":
-                score_mean = self.learn_gymMultiworker(pbar, callback, log_interval)
-            add_hparams(self, self.logger_run, {"env/episode_reward": score_mean}, total_timesteps)
-            self.save_params(self.save_path)
+        self.update_eps = 1.0
+        self.eval_freq = ((total_timesteps // 100) // self.worker_size) * self.worker_size
 
-    def discription(self):
-        return "score : {:.3f}, loss : {:.3f} |".format(
-            np.mean(self.scoreque), np.mean(self.lossque)
-        )
+        pbar = trange(0, total_timesteps, self.worker_size, miniters=log_interval)
+        self.logger = TensorboardLogger(run_name, experiment_name, self.log_dir, self)
+        with self.logger as self.logger_run:
+            if self.env_type == "SingleEnv":
+                self.learn_SingleEnv(pbar, callback, log_interval)
+            if self.env_type == "VectorizedEnv":
+                self.learn_VectorizedEnv(pbar, callback, log_interval)
 
-    def learn_unity(self, pbar, callback=None, log_interval=1000):
-        self.env.reset()
-        self.env.step()
-        dec, term = self.env.get_steps(self.group_name)
-        self.scores = np.zeros([self.worker_size])
-        self.eplen = np.zeros([self.worker_size])
-        self.scoreque = deque(maxlen=10)
-        self.lossque = deque(maxlen=10)
-        obses = convert_states(dec.obs)
-        for steps in pbar:
-            self.eplen += 1
-            actions = self.actions(obses)
-            action_tuple = self.conv_action(actions)
+            self.eval(total_timesteps)
 
-            self.env.set_actions(self.group_name, action_tuple)
-            self.env.step()
+            self.save_params(self.logger_run.get_local_path("params"))
 
-            dec, term = self.env.get_steps(self.group_name)
-            term_ids = term.agent_id
-            term_obses = convert_states(term.obs)
-            term_rewards = term.reward
-            term_done = term.interrupted
-            while len(dec) == 0:
-                self.env.step()
-                dec, term = self.env.get_steps(self.group_name)
-                if len(term.agent_id):
-                    term_ids = np.append(term_ids, term.agent_id)
-                    term_obses = [
-                        np.concatenate((to, o), axis=0)
-                        for to, o in zip(term_obses, convert_states(term.obs))
-                    ]
-                    term_rewards = np.append(term_rewards, term.reward)
-                    term_done = np.append(term_done, term.interrupted)
-            nxtobs = convert_states(dec.obs)
-            terminated = np.full((self.worker_size), False)
-            terminated = np.full((self.worker_size), False)
-            reward = dec.reward
-            term_on = len(term_ids) > 0
-            if term_on:
-                nxtobs_t = [n.at[term_ids].set(t) for n, t in zip(nxtobs, term_obses)]
-                terminated[term_ids] = np.logical_not(term_done)
-                terminated[term_ids] = True
-                reward[term_ids] = term_rewards
-                self.buffer.add(
-                    obses,
-                    actions,
-                    np.expand_dims(reward, axis=1),
-                    nxtobs_t,
-                    np.expand_dims(terminated, axis=1),
-                    np.expand_dims(terminated, axis=1),
-                )
-            else:
-                self.buffer.add(
-                    obses,
-                    actions,
-                    np.expand_dims(reward, axis=1),
-                    nxtobs,
-                    np.expand_dims(terminated, axis=1),
-                    np.expand_dims(terminated, axis=1),
-                )
-            self.scores += reward
-            obses = nxtobs
-            if term_on:
-                if self.logger_run:
-                    self.logger_run.log_metric(
-                        "env/episode_reward", np.mean(self.scores[term_ids]), steps
-                    )
-                    self.logger_run.log_metric("env/episode len", np.mean(self.eplen[term_ids]), steps)
-                    self.logger_run.log_metric(
-                        "env/time over",
-                        np.mean(1 - terminated[term_ids].astype(np.float32)),
-                        steps,
-                    )
-                self.scoreque.extend(self.scores[term_ids])
-                self.scores[term_ids] = reward[term_ids]
-                self.eplen[term_ids] = 0
-
-            if (steps + 1) % self.batch_size == 0:  # train in step the environments
-                loss = self.train_step(steps)
-                self.lossque.append(loss)
-
-            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
-                pbar.set_description(self.discription())
-        return np.mean(self.scoreque)
-
-    def learn_gym(self, pbar, callback=None, log_interval=1000):
-        state, info = self.env.reset()
-        have_original_reward = "original_reward" in info.keys()
-        have_lives = "lives" in info.keys()
-        state = [np.expand_dims(state, axis=0)]
-        if have_original_reward:
-            self.original_score = np.zeros([self.worker_size])
-        self.scores = np.zeros([self.worker_size])
-        self.eplen = np.zeros([self.worker_size])
-        self.scoreque = deque(maxlen=10)
+    def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
+        obs, info = self.env.reset()
+        obs = [np.expand_dims(obs, axis=0)]
         self.lossque = deque(maxlen=10)
         for steps in pbar:
-            self.eplen += 1
-            actions = self.actions(state)
-            next_state, reward, terminated, truncated, info = self.env.step(self.conv_action(actions))
-            next_state = [np.expand_dims(next_state, axis=0)]
-            self.buffer.add(state, actions[0], reward, next_state, terminated, truncated)
-            if have_original_reward:
-                self.original_score[0] += info["original_reward"]
-            self.scores[0] += reward
-            state = next_state
+            actions = self.actions(obs)[0]
+            next_obs, reward, terminated, truncated, info = self.env.step(self.conv_action(actions)[0])
+            next_obs = [np.expand_dims(next_obs, axis=0)]
+            self.buffer.add(obs, actions, [reward], next_obs, [terminated], [truncated])
+            obs = next_obs
+
             if terminated or truncated:
-                self.scoreque.append(self.scores[0])
-                if self.logger_run:
-                    if have_original_reward:
-                        if have_lives:
-                            if info["lives"] == 0:
-                                self.logger_run.log_metric(
-                                    "env/original_reward", self.original_score[0], steps
-                                )
-                                self.original_score[0] = 0
-                        else:
-                            self.logger_run.log_metric(
-                                "env/original_reward", self.original_score[0], steps
-                            )
-                            self.original_score[0] = 0
-                    self.logger_run.log_metric("env/episode_reward", self.scores[0], steps)
-                    self.logger_run.log_metric("env/episode len", self.eplen[0], steps)
-                    self.logger_run.log_metric("env/time over", float(truncated), steps)
-                self.scores[0] = 0
-                self.eplen[0] = 0
-                state, info = self.env.reset()
-                state = [np.expand_dims(state, axis=0)]
+                obs, info = self.env.reset()
+                obs = [np.expand_dims(obs, axis=0)]
 
             if (steps + 1) % self.batch_size == 0:  # train in step the environments
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
 
-            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
-                pbar.set_description(self.discription())
-        return np.mean(self.scoreque)
+            if steps % self.eval_freq == 0:
+                eval_result = self.eval(steps)
 
-    def learn_gymMultiworker(self, pbar, callback=None, log_interval=1000):
-        state, _, _, _, info, _, _ = self.env.get_steps()
-        have_original_reward = "original_reward" in info[0].keys()
-        have_lives = "lives" in info[0].keys()
-        if have_original_reward:
-            self.original_score = np.zeros([self.worker_size])
-        self.scores = np.zeros([self.worker_size])
-        self.eplen = np.zeros([self.worker_size])
-        self.scoreque = deque(maxlen=10)
+            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+                pbar.set_description(self.discription(eval_result))
+
+    def learn_VectorizedEnv(self, pbar, callback=None, log_interval=1000):
         self.lossque = deque(maxlen=10)
+        eval_result = None
+
         for steps in pbar:
-            self.eplen += 1
-            actions = self.actions([state])
-            self.env.step(self.conv_action(actions))
+            obs = self.env.current_obs()
+            actions = self.actions([obs])
+            self.env.step(actions)
 
             (
-                real_nextstates,
+                next_obses,
                 rewards,
                 terminateds,
-                truncated,
+                truncateds,
                 infos,
-                end_states,
-                end_idx,
-            ) = self.env.get_steps()
-            self.scores += rewards
-            if have_original_reward:
-                self.original_score += np.asarray([info["original_reward"] for info in infos])
-            if end_states is not None:
-                nxtstates = np.copy(real_nextstates)
-                nxtstates[end_idx] = end_states
-                if self.logger_run:
-                    if have_original_reward:
-                        if have_lives:
-                            end_lives = np.asarray([infos[ei]["lives"] for ei in end_idx])
-                            done_lives = np.logical_not(end_lives)
-                            if np.sum(done_lives) > 0:
-                                self.logger_run.log_metric(
-                                    "env/original_reward",
-                                    np.mean(self.original_score[end_idx[done_lives]]),
-                                    steps,
-                                )
-                                self.original_score[end_idx[done_lives]] = 0
-                        else:
-                            self.logger_run.log_metric(
-                                "env/original_reward", self.original_score[end_idx], steps
-                            )
-                            self.original_score[end_idx] = 0
-                    self.logger_run.log_metric(
-                        "env/episode_reward", np.mean(self.scores[end_idx]), steps
-                    )
-                    self.logger_run.log_metric("env/episode len", np.mean(self.eplen[end_idx]), steps)
-                    self.logger_run.log_metric(
-                        "env/time over",
-                        np.mean(1 - terminateds[end_idx].astype(np.float32)),
-                        steps,
-                    )
-                self.scoreque.extend(self.scores[end_idx])
-                self.scores[end_idx] = 0
-                self.eplen[end_idx] = 0
-                self.buffer.add(
-                    [state],
-                    actions,
-                    np.expand_dims(rewards, axis=1),
-                    [nxtstates],
-                    np.expand_dims(terminateds, axis=1),
-                    np.expand_dims(truncated, axis=1),
-                )
-            else:
-                self.buffer.add(
-                    [state],
-                    actions,
-                    np.expand_dims(rewards, axis=1),
-                    [real_nextstates],
-                    np.expand_dims(terminateds, axis=1),
-                    np.expand_dims(truncated, axis=1),
-                )
-            state = real_nextstates
+            ) = self.env.get_result()
 
-            if (steps + 1) % self.batch_size == 0:  # train in step the environments
+            self.buffer.add(
+                [obs], actions, rewards, [next_obses], terminateds, truncateds
+            )
+
+            if (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0:  # train in step the environments
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
 
-            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
-                pbar.set_description(self.discription())
-        return np.mean(self.scoreque)
+            if steps % self.eval_freq == 0:
+                eval_result = self.eval(steps)
 
-    def test(self, episode=10, run_name=None):
-        if run_name is None:
-            run_name = self.save_path
+            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+                pbar.set_description(self.discription(eval_result))
+    
+    def eval(self, steps):
+        original_rewards = []
+        total_reward = np.zeros(self.eval_eps)
+        total_ep_len = np.zeros(self.eval_eps)
+        total_truncated = np.zeros(self.eval_eps)
 
-        directory = run_name
-        if self.env_type == "gym":
-            self.test_gym(episode, directory)
-        if self.env_type == "gymMultiworker":
-            self.test_gymMultiworker(episode, directory)
+        obs, info = self.eval_env.reset()
+        obs = [np.expand_dims(obs, axis=0)]
+        have_original_reward = "original_reward" in info.keys()
+        have_lives = "lives" in info.keys()
+        if have_original_reward:
+            original_reward = info["original_reward"]
+        terminated = False
+        truncated = False
+        eplen = 0
 
-    def test_unity(self, episode, directory):
-        pass
+        for ep in range(self.eval_eps):
+            while not terminated and not truncated:
+                actions = self.actions(obs)[0]
+                next_obs, reward, terminated, truncated, info = self.eval_env.step(self.conv_action(actions)[0])
+                next_obs = [np.expand_dims(next_obs, axis=0)]
+                if have_original_reward:
+                    original_reward += info["original_reward"]
+                total_reward[ep] += reward
+                obs = next_obs
+                eplen += 1
 
-    def test_gymMultiworker(self, episode, directory):
-        from gymnasium.wrappers import RecordVideo
+            total_ep_len[ep] = eplen
+            total_truncated[ep] = float(truncated)
+            if have_original_reward:
+                if have_lives:
+                    if info["lives"] == 0:
+                        original_rewards.append(original_reward)
+                        original_reward = 0
+                else:
+                    original_rewards.append(original_reward)
+                    original_reward = 0
 
-        env_id = self.env.env_id
-        from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
+            obs, info = self.eval_env.reset()
+            obs = [np.expand_dims(obs, axis=0)]
+            terminated = False
+            truncated = False
+            eplen = 0
 
-        env_type, env_id = get_env_type(env_id)
-        if env_type == "atari_env":
-            env = make_wrap_atari(env_id, clip_rewards=True)
+        if have_original_reward:
+            mean_original_score = np.mean(original_rewards)
+        mean_reward = np.mean(total_reward)
+        mean_ep_len = np.mean(total_ep_len)
+
+        if self.logger_run:
+            if have_original_reward:
+                self.logger_run.log_metric("env/original_reward", mean_original_score, steps)
+            self.logger_run.log_metric("env/episode_reward", mean_reward, steps)
+            self.logger_run.log_metric("env/episode len", mean_ep_len, steps)
+            self.logger_run.log_metric("env/time over", np.mean(total_truncated), steps)
+
+        if have_original_reward:
+            eval_result = {
+                "mean_reward": mean_reward,
+                "mean_ep_len": mean_ep_len,
+                "mean_original_score": mean_original_score,
+            }
         else:
-            env = gym.make(env_id, render_mode="rgb_array")
-        Render_env = RecordVideo(env, directory, episode_trigger=lambda x: True)
-        for i in range(episode):
-            state, info = Render_env.reset()
-            state = [np.expand_dims(state, axis=0)]
-            terminated = False
-            truncated = False
-            episode_rew = 0
-            while not (terminated or truncated):
-                actions = self.actions(state)
-                observation, reward, terminated, truncated, info = Render_env.step(
-                    actions[0][0] if self.action_type == "discrete" else actions[0]
-                )
-                state = [np.expand_dims(observation, axis=0)]
-                episode_rew += reward
-            print("episod reward :", episode_rew)
+            eval_result = {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
+        return eval_result
 
-    def test_gym(self, episode, directory):
+    def test(self, episode=10):
+        with self.logger as self.logger_run:
+            self.test_eval_env(episode)
+
+    def test_eval_env(self, episode):
         from gymnasium.wrappers import RecordVideo
+        directory = self.logger_run.get_local_path("video")
+        os.makedirs(directory, exist_ok=True)
 
-        Render_env = RecordVideo(self.env, directory, episode_trigger=lambda x: True)
+        Render_env = RecordVideo(self.eval_env, directory, episode_trigger=lambda x: True)
+        Render_env.start_video_recorder()
+        total_rewards = []
         for i in range(episode):
-            state, info = Render_env.reset()
-            state = [np.expand_dims(state, axis=0)]
+            obs, info = Render_env.reset()
+            obs = [np.expand_dims(obs, axis=0)]
             terminated = False
             truncated = False
             episode_rew = 0
             while not (terminated or truncated):
-                actions = self.actions(state)
-                observation, reward, terminated, truncated, info = Render_env.step(
-                    actions[0][0] if self.action_type == "discrete" else actions[0]
-                )
-                state = [np.expand_dims(observation, axis=0)]
+                actions = self.actions(obs)[0]
+                observation, reward, terminated, truncated, info = self.eval_env.step(self.conv_action(actions)[0])
+                obs = [np.expand_dims(observation, axis=0)]
                 episode_rew += reward
+            Render_env.close()
             print("episod reward :", episode_rew)
+            total_rewards.append(episode_rew)
+        avg_reward = np.mean(total_rewards)
+        std_reward = np.std(total_rewards)
+        print(f"reward : {avg_reward} +- {std_reward}(std)")

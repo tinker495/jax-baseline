@@ -10,8 +10,10 @@ from jax_baselines.common.utils import convert_jax, discount_with_terminated
 class A2C(Actor_Critic_Policy_Gradient_Family):
     def __init__(
         self,
-        env,
+        env_builder,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         learning_rate=3e-4,
         batch_size=32,
@@ -26,8 +28,10 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         optimizer="rmsprop",
     ):
         super().__init__(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers,
+            eval_eps,
             gamma,
             learning_rate,
             batch_size,
@@ -59,11 +63,6 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         self.opt_state = self.optimizer.init(self.params)
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
-
-    def discription(self):
-        return "score : {:.3f}, loss : {:.3f} |".format(
-            np.mean(self.scoreque), np.mean(self.lossque)
-        )
 
     def train_step(self, steps):
         # Sample a batch from the replay buffer
@@ -170,15 +169,13 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         total_timesteps,
         callback=None,
         log_interval=1000,
+        experiment_name="A2C",
         run_name="A2C",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
+            experiment_name,
             run_name,
-            reset_num_timesteps,
-            replay_wrapper,
         )

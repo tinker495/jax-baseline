@@ -26,8 +26,7 @@ pip install .
 | **Name**                | **Q-Net based**    | **Actor-Critic based** | **DPG based**      |
 | ----------------------- | ------------------ | ---------------------- | ------------------ |
 | Gymnasium               | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
-| MultiworkerGym with Ray | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
-| Unity-ML Environments   | :zzz:              | :zzz:                  | :zzz:              |
+| VectorizedGym with Ray  | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
 
 ### Implemented Algorithms
 

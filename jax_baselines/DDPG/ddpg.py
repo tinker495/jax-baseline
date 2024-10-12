@@ -121,9 +121,9 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
         return actions
 
-    def test_action(self, state):
+    def test_action(self, obs):
         return np.clip(
-            np.asarray(self._get_actions(self.policy_params, state, None))
+            np.asarray(self._get_actions(self.policy_params, obs, None))
             + self.noise() * self.exploration_final_eps,
             -1,
             1,

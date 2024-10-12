@@ -1,8 +1,6 @@
 --find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 requests
-mlflow
-protobuf==3.20
-mlagents_envs
+protobuf
 swig
 gymnasium==0.29.1
 gymnasium[atari,accept-rom-license,box2d,mujoco]

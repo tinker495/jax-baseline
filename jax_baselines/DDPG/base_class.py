@@ -3,7 +3,6 @@ import os
 
 import gymnasium as gym
 import numpy as np
-from mlagents_envs.environment import ActionTuple, UnityEnvironment
 from tqdm.auto import trange
 
 from jax_baselines.common.logger import TensorboardLogger
@@ -14,7 +13,7 @@ from jax_baselines.common.cpprb_buffers import (
     ReplayBuffer,
 )
 from jax_baselines.common.utils import key_gen, restore, save, select_optimizer
-from jax_baselines.common.env_builer import Multiworker
+from jax_baselines.common.env_builer import VectorizedEnv
 
 
 class Deteministic_Policy_Gradient_Family(object):
@@ -92,22 +91,23 @@ class Deteministic_Policy_Gradient_Family(object):
         self.env = self.env_builder(self.num_workers)
         self.eval_env = self.env_builder(1)
 
-        if isinstance(self.env, Multiworker):
-            print("multiworker environmet")
+        print("----------------------env------------------------")
+        if isinstance(self.env, VectorizedEnv):
+            print("Vectorized environmet")
             env_info = self.env.env_info
             self.observation_space = [list(env_info["observation_space"].shape)]
-            self.action_size = [env_info["action_space"].n]
+            self.action_size = [env_info["action_space"].shape[0]]
             self.worker_size = self.env.worker_num
-            self.env_type = "Multiworker"
+            self.env_type = "VectorizedEnv"
 
         elif isinstance(self.env, gym.Env) or isinstance(self.env, gym.Wrapper):
-            print("openai gym environmet")
+            print("Single environmet")
             action_space = self.env.action_space
             observation_space = self.env.observation_space
             self.observation_space = [list(observation_space.shape)]
             self.action_size = [action_space.shape[0]]
             self.worker_size = 1
-            self.env_type = "gym"
+            self.env_type = "SingleEnv"
 
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
@@ -165,6 +165,15 @@ class Deteministic_Policy_Gradient_Family(object):
     def actions(self, obs, steps):
         pass
 
+    def discription(self, eval_result=None):
+        discription = ""
+        if eval_result is not None:
+            for k, v in eval_result.items():
+                discription += f"{k} : {v:8.2f}, "
+
+        discription += f"loss : {np.mean(self.lossque):.3f}"
+        return discription
+
     def run_name_update(self, run_name):
         if self.n_step_method:
             run_name = "{}Step_".format(self.n_step) + run_name
@@ -181,61 +190,85 @@ class Deteministic_Policy_Gradient_Family(object):
         run_name="DPG_network"
     ):
         run_name = self.run_name_update(run_name)
-        self.eval_freq = total_timesteps // 100
+        self.eval_freq = ((total_timesteps // 100) // self.worker_size) * self.worker_size
 
-        pbar = trange(total_timesteps, miniters=log_interval)
+        pbar = trange(0, total_timesteps, self.worker_size, miniters=log_interval)
         self.logger = TensorboardLogger(run_name, experiment_name, self.log_dir, self)
         with self.logger as self.logger_run:
-            if self.env_type == "gym":
-                self.learn_gym(pbar, callback, log_interval)
-                self.eval_gym(total_timesteps)
-            if self.env_type == "Multiworker":
-                self.learn_Multiworker(pbar, callback, log_interval)
+            if self.env_type == "SingleEnv":
+                self.learn_SingleEnv(pbar, callback, log_interval)
+            if self.env_type == "VectorizedEnv":
+                self.learn_VectorizedEnv(pbar, callback, log_interval)
+
+            self.eval(total_timesteps)
             
             self.save_params(self.logger_run.get_local_path("params"))
 
-    def discription(self, eval_result=None):
-        discription = ""
-        if eval_result is not None:
-            for k, v in eval_result.items():
-                discription += f"{k} : {v:8.2f}, "
-
-        discription += f"loss : {np.mean(self.lossque):.3f}"
-        return discription
-
-    def learn_gym(self, pbar, callback=None, log_interval=1000):
-        state, info = self.env.reset()
-        state = [np.expand_dims(state, axis=0)]
+    def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
+        obs, info = self.env.reset()
+        obs = [np.expand_dims(obs, axis=0)]
         self.lossque = deque(maxlen=10)
         eval_result = None
 
         for steps in pbar:
-            actions = self.actions(state, steps)
-            next_state, reward, terminated, truncated, info = self.env.step(actions[0])
-            next_state = [np.expand_dims(next_state, axis=0)]
-            self.replay_buffer.add(state, actions[0], reward, next_state, terminated, truncated)
-            state = next_state
+            actions = self.actions(obs, steps)
+            next_obs, reward, terminated, truncated, info = self.env.step(actions[0])
+            next_obs = [np.expand_dims(next_obs, axis=0)]
+            self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
+            obs = next_obs
+
             if terminated or truncated:
-                state, info = self.env.reset()
-                state = [np.expand_dims(state, axis=0)]
+                obs, info = self.env.reset()
+                obs = [np.expand_dims(obs, axis=0)]
 
             if steps > self.learning_starts and steps % self.train_freq == 0:
                 loss = self.train_step(steps, self.gradient_steps)
                 self.lossque.append(loss)
 
             if steps % self.eval_freq == 0:
-                eval_result = self.eval_gym(steps)
+                eval_result = self.eval(steps)
 
             if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
                 pbar.set_description(self.discription(eval_result))
 
-    def eval_gym(self, steps):
+    def learn_VectorizedEnv(self, pbar, callback=None, log_interval=1000):
+        self.lossque = deque(maxlen=10)
+        eval_result = None
+
+        for steps in pbar:
+            obs = self.env.current_obs()
+            actions = self.actions([obs], steps)
+            self.env.step(actions)
+
+            if steps > self.learning_starts and steps % self.train_freq == 0:
+                for idx in range(self.worker_size):
+                    loss = self.train_step(steps + idx, self.gradient_steps)
+                    self.lossque.append(loss)
+
+            (
+                next_obses,
+                rewards,
+                terminateds,
+                truncateds,
+                infos,
+            ) = self.env.get_result()
+
+            self.replay_buffer.add(
+                [obs], actions, rewards, [next_obses], terminateds, truncateds
+            )
+            if steps % self.eval_freq == 0:
+                eval_result = self.eval(steps)
+
+            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+                pbar.set_description(self.discription(eval_result))
+
+    def eval(self, steps):
         total_reward = np.zeros(self.eval_eps)
         total_ep_len = np.zeros(self.eval_eps)
         total_truncated = np.zeros(self.eval_eps)
 
-        state, info = self.eval_env.reset()
-        state = [np.expand_dims(state, axis=0)]
+        obs, info = self.eval_env.reset()
+        obs = [np.expand_dims(obs, axis=0)]
         terminated = False
         truncated = False
         eplen = 0
@@ -243,19 +276,19 @@ class Deteministic_Policy_Gradient_Family(object):
         for ep in range(self.eval_eps):
             while not terminated and not truncated:
                 actions = self.actions(
-                    state, steps
+                    obs, steps
                 )
-                next_state, reward, terminated, truncated, info = self.eval_env.step(actions[0])
-                next_state = [np.expand_dims(next_state, axis=0)]
+                next_obs, reward, terminated, truncated, info = self.eval_env.step(actions[0])
+                next_obs = [np.expand_dims(next_obs, axis=0)]
                 total_reward[ep] += reward
-                state = next_state
+                obs = next_obs
                 eplen += 1
 
             total_ep_len[ep] = eplen
             total_truncated[ep] = float(truncated)
 
-            state, info = self.eval_env.reset()
-            state = [np.expand_dims(state, axis=0)]
+            obs, info = self.eval_env.reset()
+            obs = [np.expand_dims(obs, axis=0)]
             terminated = False
             truncated = False
             eplen = 0
@@ -269,65 +302,14 @@ class Deteministic_Policy_Gradient_Family(object):
             self.logger_run.log_metric("env/time over", np.mean(total_truncated), steps)
         return {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
 
-    def learn_Multiworker(self, pbar, callback=None, log_interval=1000):
-        state, _, _, _, _, _ = self.env.get_steps()
-        self.scores = np.zeros([self.worker_size])
-        self.eplen = np.zeros([self.worker_size])
-        self.scoreque = deque(maxlen=10)
-        self.lossque = deque(maxlen=10)
-        for steps in pbar:
-            self.eplen += 1
-            actions = self.actions([state], steps)
-            self.env.step(actions)
-
-            if steps > self.learning_starts and steps % self.train_freq == 0:
-                loss = self.train_step(steps, self.gradient_steps)
-                self.lossque.append(loss)
-
-            (
-                next_states,
-                rewards,
-                terminateds,
-                truncateds,
-                end_states,
-                end_idx,
-            ) = self.env.get_steps()
-            nxtstates = np.copy(next_states)
-            if end_states is not None:
-                nxtstates[end_idx] = end_states
-                if self.logger_run:
-                    self.logger_run.log_metric(
-                        "env/episode_reward", np.mean(self.scores[end_idx]), steps
-                    )
-                    self.logger_run.log_metric("env/episode len", np.mean(self.eplen[end_idx]), steps)
-                    self.logger_run.log_metric(
-                        "env/time over",
-                        np.mean(truncateds[end_idx].astype(np.float32)),
-                        steps,
-                    )
-                self.scoreque.extend(self.scores[end_idx])
-                self.scores[end_idx] = 0
-                self.eplen[end_idx] = 0
-            self.replay_buffer.add([state], actions, rewards, [nxtstates], terminateds, truncateds)
-            self.scores += rewards
-            state = next_states
-
-            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
-                pbar.set_description(self.discription())
-        return np.mean(self.scoreque)
-
     def test(self, episode=10, run_name=None):
         with self.logger as self.logger_run:
-            if self.env_type == "gym":
-                self.test_gym(episode)
+            self.test_eval_env(episode)
 
-    def test_unity(self, episode):
-        pass
+    def test_action(self, obs):
+        return self.actions(obs, np.inf)
 
-    def test_action(self, state):
-        return self.actions(state, np.inf)
-
-    def test_gym(self, episode):
+    def test_eval_env(self, episode):
         from gymnasium.wrappers import RecordVideo
         directory = self.logger_run.get_local_path("video")
         os.makedirs(directory, exist_ok=True)
@@ -335,14 +317,14 @@ class Deteministic_Policy_Gradient_Family(object):
 
         Render_env = RecordVideo(test_env, directory, episode_trigger=lambda x: True)
         for i in range(episode):
-            state, info = Render_env.reset()
-            state = [np.expand_dims(state, axis=0)]
+            obs, info = Render_env.reset()
+            obs = [np.expand_dims(obs, axis=0)]
             terminated = False
             truncated = False
             episode_rew = 0
             while not (terminated or truncated):
-                actions = self.test_action(state)
+                actions = self.test_action(obs)
                 observation, reward, terminated, truncated, info = Render_env.step(actions[0])
-                state = [np.expand_dims(observation, axis=0)]
+                obs = [np.expand_dims(observation, axis=0)]
                 episode_rew += reward
             print("episod reward :", episode_rew)

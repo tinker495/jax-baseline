@@ -422,53 +422,53 @@ class TD7(Deteministic_Policy_Gradient_Family):
             run_name,
         )
 
-    def learn_gym(self, pbar, callback=None, log_interval=1000):
-        state, info = self.env.reset()
-        state = [np.expand_dims(state, axis=0)]
+    def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
+        obs, info = self.env.reset()
+        obs = [np.expand_dims(obs, axis=0)]
         self.scores = np.zeros([self.worker_size])
         self.eplen = np.zeros([self.worker_size], dtype=np.int32)
         self.score_mean = None
         self.loss_mean = None
         for steps in pbar:
             self.eplen += 1
-            actions = self.actions(state, steps)
-            next_state, reward, terminated, truncated, info = self.env.step(actions[0])
-            next_state = [np.expand_dims(next_state, axis=0)]
-            self.replay_buffer.add(state, actions[0], reward, next_state, terminated, truncated)
+            actions = self.actions(obs, steps)
+            next_obs, reward, terminated, truncated, info = self.env.step(actions[0])
+            next_obs = [np.expand_dims(next_obs, axis=0)]
+            self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
             self.scores[0] += reward
-            state = next_state
+            obs = next_obs
             if terminated or truncated:
                 self.end_episode(steps, self.scores[0], self.eplen[0])
                 self.scores[0] = 0
                 self.eplen[0] = 0
-                state, info = self.env.reset()
-                state = [np.expand_dims(state, axis=0)]
+                obs, info = self.env.reset()
+                obs = [np.expand_dims(obs, axis=0)]
 
             if steps % self.eval_freq == 0:
-                eval_result = self.eval_gym(steps)
+                eval_result = self.eval(steps)
 
             if steps % log_interval == 0 and eval_result is not None and self.loss_mean is not None :
                 pbar.set_description(self.discription(eval_result))
 
-    def eval_gym(self, steps):
+    def eval(self, steps):
         total_reward = np.zeros(self.eval_eps)
         total_ep_len = np.zeros(self.eval_eps)
         total_truncated = np.zeros(self.eval_eps)
         for ep in range(self.eval_eps):
-            state, info = self.eval_env.reset()
-            state = [np.expand_dims(state, axis=0)]
+            obs, info = self.eval_env.reset()
+            obs = [np.expand_dims(obs, axis=0)]
             terminated = False
             truncated = False
             eplen = 0
             while not terminated and not truncated:
                 actions = self.actions(
-                    state, steps, use_checkpoint=True, exploration=False
+                    obs, steps, use_checkpoint=True, exploration=False
                 )
-                next_state, reward, terminated, truncated, info = self.eval_env.step(actions[0])
-                next_state = [np.expand_dims(next_state, axis=0)]
-                # self.replay_buffer.add(state, actions[0], reward, next_state, terminated, truncated)
+                next_obs, reward, terminated, truncated, info = self.eval_env.step(actions[0])
+                next_obs = [np.expand_dims(next_obs, axis=0)]
+                # self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
                 total_reward[ep] += reward
-                state = next_state
+                obs = next_obs
                 eplen += 1
             total_ep_len[ep] = eplen
             total_truncated[ep] = float(truncated)

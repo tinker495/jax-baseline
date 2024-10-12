@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
     workers = [Impala_Worker.remote(env_name) for i in range(args.worker)]
 
-    env_type = "gym"
+    env_type = "SingleEnv"
 
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
@@ -76,7 +76,7 @@ if __name__ == "__main__":
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
             rho_max=args.rho_max,
-            log_dir=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
         )
 
     elif args.algo == "PPO":
@@ -96,7 +96,7 @@ if __name__ == "__main__":
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
             rho_max=args.rho_max,
-            log_dir=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
         )
 
     elif args.algo == "TPPO":
@@ -116,7 +116,7 @@ if __name__ == "__main__":
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
             rho_max=args.rho_max,
-            log_dir=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
         )
 
     agent.learn(int(args.steps))

@@ -52,13 +52,13 @@ class Impala_Worker(object):
             actor = jax.jit(partial(actor, actor_model, preproc))
             get_action_prob = partial(get_action_prob, actor)
 
-            state, info = self.env.reset()
+            obs, info = self.env.reset()
             have_original_reward = "original_reward" in info.keys()
             have_lives = "lives" in info.keys()
             if have_original_reward:
                 original_score = 0
             score = 0
-            state = [np.expand_dims(state, axis=0)]
+            obs = [np.expand_dims(obs, axis=0)]
             eplen = 0
             episode = 0
             rw_label = "env/episode_reward"
@@ -73,24 +73,24 @@ class Impala_Worker(object):
                     update.clear()
                 for i in range(local_size):
                     eplen += 1
-                    actions, log_prob = get_action_prob(params, state)
-                    next_state, reward, terminated, truncated, info = self.env.step(
+                    actions, log_prob = get_action_prob(params, obs)
+                    next_obs, reward, terminated, truncated, info = self.env.step(
                         convert_action(actions)
                     )
-                    next_state = [np.expand_dims(next_state, axis=0)]
+                    next_obs = [np.expand_dims(next_obs, axis=0)]
                     local_buffer.add(
-                        state,
+                        obs,
                         actions,
                         log_prob,
                         reward,
-                        next_state,
+                        next_obs,
                         terminated or truncated,
                         truncated,
                     )
                     if have_original_reward:
                         original_score += info["original_reward"]
                     score += reward
-                    state = next_state
+                    obs = next_obs
 
                     if terminated or truncated:
                         if logger_server is not None:
@@ -111,8 +111,8 @@ class Impala_Worker(object):
                         score = 0
                         eplen = 0
                         episode += 1
-                        state, info = self.env.reset()
-                        state = [np.expand_dims(state, axis=0)]
+                        obs, info = self.env.reset()
+                        obs = [np.expand_dims(obs, axis=0)]
                 queue.put(local_buffer.get_buffer())
         except Exception as e:
             print(f"worker {mp.current_process().name} error : {e}")

@@ -89,7 +89,7 @@ class IMPALA_Family(object):
             pass
 
         elif isinstance(self.workers, list) or isinstance(self.env, gym.Wrapper):
-            print("openai gym environmet")
+            print("Single environmet")
             self.worker_num = len(self.workers)
             env_dict = ray.get(self.workers[0].get_info.remote())
             self.observation_space = [list(env_dict["observation_space"].shape)]
@@ -99,7 +99,7 @@ class IMPALA_Family(object):
             else:
                 self.action_size = [env_dict["action_space"].shape[0]]
                 self.action_type = "continuous"
-            self.env_type = "gym"
+            self.env_type = "SingleEnv"
 
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
@@ -225,8 +225,8 @@ class IMPALA_Family(object):
 
         if self.env_type == "unity":
             self.learn_unity(pbar, callback, log_interval)
-        if self.env_type == "gym":
-            self.learn_gym(pbar, callback, log_interval)
+        if self.env_type == "SingleEnv":
+            self.learn_SingleEnv(pbar, callback, log_interval)
 
         # add_hparams(self, self.logger_server, ["score", "loss"])
         self.save_params(ray.get(self.logger_server.get_log_dir.remote()))
@@ -234,7 +234,7 @@ class IMPALA_Family(object):
     def learn_unity(self, pbar, callback, log_interval):
         pass
 
-    def learn_gym(self, pbar, callback, log_interval):
+    def learn_SingleEnv(self, pbar, callback, log_interval):
         stop = self.m.Event()
         update = [self.m.Event() for i in range(self.worker_num)]
         stop.clear()

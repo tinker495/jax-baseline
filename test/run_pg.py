@@ -3,12 +3,14 @@ import os
 
 import gymnasium as gym
 
+from jax_baselines.common.env_builer import get_env_builder
 from jax_baselines.A2C.a2c import A2C
 from jax_baselines.PPO.ppo import PPO
 from jax_baselines.TPPO.tppo import TPPO
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--experiment_name", type=str, default="PG", help="experiment name")
     parser.add_argument("--env", type=str, default="Pendulum-v1", help="environment")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--worker_id", type=int, default=0, help="unlty ml agent's worker id")
@@ -37,48 +39,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
     env_name = args.env
     embedding_mode = "normal"
-    if os.path.exists(env_name):
-        from mlagents_envs.environment import UnityEnvironment
-        from mlagents_envs.side_channel.engine_configuration_channel import (
-            EngineConfigurationChannel,
-        )
-        from mlagents_envs.side_channel.environment_parameters_channel import (
-            EnvironmentParametersChannel,
-        )
-
-        engine_configuration_channel = EngineConfigurationChannel()
-        channel = EnvironmentParametersChannel()
-        engine_configuration_channel.set_configuration_parameters(
-            time_scale=args.time_scale, capture_frame_rate=args.capture_frame_rate
-        )
-        env = UnityEnvironment(
-            file_name=env_name,
-            worker_id=args.worker_id,
-            no_graphics=False,
-            side_channels=[engine_configuration_channel, channel],
-        )
-        env_name = env_name.split("/")[-1].split(".")[0]
-        env_type = "unity"
-    else:
-        # import mujoco_py
-        if args.worker > 1:
-            from jax_baselines.common.worker import gymMultiworker
-
-            env = gymMultiworker(env_name, worker_num=args.worker)
-        else:
-            from jax_baselines.common.atari_wrappers import (
-                get_env_type,
-                make_wrap_atari,
-            )
-
-            env_type, env_id = get_env_type(env_name)
-            if env_type == "atari_env":
-                env = make_wrap_atari(env_name)
-            else:
-                env = gym.make(env_name, render_mode="rgb_array")
-        env_type = "gym"
-
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
+    env_builder, env_info = get_env_builder(env_name, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate)
+    env_name = env_info["env_id"]
+    env_type = env_info["env_type"]
+    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n}
 
     if args.model_lib == "flax":
         from model_builder.flax.ac.ac_builder import model_builder_maker
@@ -87,20 +51,22 @@ if __name__ == "__main__":
 
     if args.algo == "A2C":
         agent = A2C(
-            env,
+            env_builder,
             model_builder_maker=model_builder_maker,
+            num_workers=args.worker,
             gamma=args.gamma,
             batch_size=args.batch,
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
-            log_dir=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
     if args.algo == "PPO":
         agent = PPO(
-            env,
+            env_builder,
             model_builder_maker=model_builder_maker,
+            num_workers=args.worker,
             gamma=args.gamma,
             lamda=args.lamda,
             gae_normalize=args.gae_normalize,
@@ -108,14 +74,15 @@ if __name__ == "__main__":
             minibatch_size=args.mini_batch,
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
-            log_dir=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
     if args.algo == "TPPO":
         agent = TPPO(
-            env,
+            env_builder,
             model_builder_maker=model_builder_maker,
+            num_workers=args.worker,
             gamma=args.gamma,
             lamda=args.lamda,
             gae_normalize=args.gae_normalize,
@@ -123,13 +90,11 @@ if __name__ == "__main__":
             minibatch_size=args.mini_batch,
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
-            log_dir=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
 
-    agent.learn(int(args.steps))
+    agent.learn(int(args.steps), experiment_name=args.experiment_name)
 
     agent.test()
-
-    env.close()

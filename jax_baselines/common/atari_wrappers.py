@@ -15,7 +15,7 @@ cv2.ocl.setUseOpenCL(False)
 
 class NoopResetEnv(gym.Wrapper):
     def __init__(self, env, noop_max=30):
-        """Sample initial states by taking random number of no-ops on reset. No-op is assumed to be action 0.
+        """Sample initial obses by taking random number of no-ops on reset. No-op is assumed to be action 0.
 
         :param env: (Gym Environment) the environment to wrap
         :param noop_max: (int) the maximum value of no-ops to run
@@ -100,7 +100,7 @@ class EpisodicLifeEnv(gym.Wrapper):
         return obs, reward, terminated, truncated, info
 
     def reset(self, **kwargs):
-        """Calls the Gym environment reset, only when lives are exhausted. This way all states are still reachable
+        """Calls the Gym environment reset, only when lives are exhausted. This way all obses are still reachable
         even though lives are episodic, and the learner need not know about any of this behind-the-scenes.
 
         :param kwargs: Extra keywords passed to env.reset() call
@@ -109,7 +109,7 @@ class EpisodicLifeEnv(gym.Wrapper):
         if self.was_real_done or self.kill_on_life_loss:
             obs, info = self.env.reset(**kwargs)
         else:
-            # no-op step to advance from terminated/lost life state
+            # no-op step to advance from terminated/lost life obs
             obs, _, _, _, info = self.env.step(0)
         self.lives = info["lives"]  # self.env.unwrapped.ale.lives()
         return obs, info
@@ -172,9 +172,9 @@ class ClipRewardEnv(gym.RewardWrapper):
         return obs, self._reward(reward), terminated, truncated, info
 
     def reset(self, **kwargs):
-        state, info = self.env.reset(**kwargs)
+        obs, info = self.env.reset(**kwargs)
         info["original_reward"] = 0
-        return state, info
+        return obs, info
 
     def _reward(self, reward):
         """Bin reward to {+1, 0, -1} by its sign.

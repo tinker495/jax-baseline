@@ -15,8 +15,10 @@ from jax_baselines.common.utils import (
 class TPPO(Actor_Critic_Policy_Gradient_Family):
     def __init__(
         self,
-        env,
+        env_builder,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         lamda=0.95,
         gae_normalize=False,
@@ -37,8 +39,10 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         optimizer="rmsprop",
     ):
         super().__init__(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers,
+            eval_eps,
             gamma,
             learning_rate,
             batch_size,
@@ -84,11 +88,6 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         self._get_actions = jax.jit(self._get_actions)
         self._preprocess = jax.jit(self._preprocess)
         self._train_step = jax.jit(self._train_step)
-
-    def discription(self):
-        return "score : {:.3f}, loss : {:.3f} |".format(
-            np.mean(self.scoreque), np.mean(self.lossque)
-        )
 
     def train_step(self, steps):
         # Sample a batch from the replay buffer
@@ -147,7 +146,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         targets = value + adv
         if self.gae_normalize:
             adv = (adv - jnp.mean(adv, keepdims=True)) / (jnp.std(adv, keepdims=True) + 1e-6)
-        return obses, actions, targets, prob, pi_prob, adv
+        return obses, actions, targets, value, prob, pi_prob, adv
 
     def _train_step(
         self,
@@ -159,10 +158,10 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         rewards,
         nxtobses,
         terminateds,
-        truncteds,
+        truncateds,
     ):
-        obses, actions, targets, old_prob, old_act_prob, adv = self._preprocess(
-            params, key, obses, actions, rewards, nxtobses, terminateds, truncteds
+        obses, actions, targets, old_value, old_prob, old_act_prob, adv = self._preprocess(
+            params, key, obses, actions, rewards, nxtobses, terminateds, truncateds
         )
 
         def i_f(idx, vals):
@@ -174,17 +173,18 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             obses_batch = [o[batch_idxes] for o in obses]
             actions_batch = actions[batch_idxes]
             targets_batch = targets[batch_idxes]
+            old_value_batch = old_value[batch_idxes]
             old_prob_batch = old_prob[batch_idxes]
             old_act_prob_batch = old_act_prob[batch_idxes]
             adv_batch = adv[batch_idxes]
 
             def f(updates, input):
                 params, opt_state, key = updates
-                obs, act, target, old_prob, old_act_prob, adv = input
+                obs, act, target, old_value, old_prob, old_act_prob, adv = input
                 use_key, key = jax.random.split(key)
                 (total_loss, (c_loss, a_loss, entropy_loss, kl),), grad = jax.value_and_grad(
                     self._loss, has_aux=True
-                )(params, obs, act, target, old_prob, old_act_prob, adv, use_key)
+                )(params, obs, act, target, old_value, old_prob, old_act_prob, adv, use_key)
                 updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
                 params = optax.apply_updates(params, updates)
                 return (params, opt_state, key), (c_loss, a_loss, entropy_loss, kl)
@@ -196,6 +196,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
                     obses_batch,
                     actions_batch,
                     targets_batch,
+                    old_value_batch,
                     old_prob_batch,
                     old_act_prob_batch,
                     adv_batch,
@@ -223,10 +224,13 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             jnp.mean(targets),
         )
 
-    def _loss_discrete(self, params, obses, actions, targets, old_prob, old_act_prob, adv, key):
+    def _loss_discrete(self, params, obses, actions, old_value, targets, old_prob, old_act_prob, adv, key):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
-        critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
+        vals_clip = old_value + jnp.clip(vals - old_value, -0.5, 0.5)
+        vf1 = jnp.square(vals - targets)
+        vf2 = jnp.square(vals_clip - targets)
+        critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
 
         prob, log_prob = self.get_logprob(
             self.actor(params, key, feature), actions, key, out_prob=True
@@ -273,14 +277,12 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         callback=None,
         log_interval=1000,
         run_name="TPPO",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        experiment_name="TPPO",
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
+            experiment_name,
             run_name,
-            reset_num_timesteps,
-            replay_wrapper,
         )

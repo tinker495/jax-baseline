@@ -89,5 +89,5 @@ class PreProcess(hk.Module):
             visual_embedding(embedding_mode) if len(st) == 3 else lambda x: x for st in state_size
         ]
 
-    def __call__(self, states: List[jnp.ndarray]) -> jnp.ndarray:
-        return jnp.concatenate([pre(x) for pre, x in zip(self.embedding, states)], axis=1)
+    def __call__(self, obses: List[jnp.ndarray]) -> jnp.ndarray:
+        return jnp.concatenate([pre(x) for pre, x in zip(self.embedding, obses)], axis=1)

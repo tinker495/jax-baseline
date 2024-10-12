@@ -14,13 +14,13 @@ gpu_jit = partial(jax.jit, backend="gpu")
 
 PyTree = Any
 
-def save(ckpt_dir: str, state) -> None:
+def save(ckpt_dir: str, obs) -> None:
     os.makedirs(ckpt_dir, exist_ok=True)
     with open(os.path.join(ckpt_dir, "arrays.npy"), "wb") as f:
-        for x in jax.tree_util.tree_leaves(state):
+        for x in jax.tree_util.tree_leaves(obs):
             np.save(f, x, allow_pickle=False)
 
-    tree_struct = jax.tree_map(lambda t: 0, state)
+    tree_struct = jax.tree_map(lambda t: 0, obs)
     with open(os.path.join(ckpt_dir, "tree.pkl"), "wb") as f:
         pickle.dump(tree_struct, f)
 
