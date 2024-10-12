@@ -185,16 +185,22 @@ def get_vtrace(rewards, rhos, c_ts, terminateds, truncateds, values, next_values
     v = A + values
     return v
 
-
-def kl_divergence_discrete(p, q, eps: float = 2**-17):
-    return p.dot(jnp.log(p + eps) - jnp.log(q + eps))
-
+def kl_divergence_discrete(p, q, eps: float = 1e-8):
+    # Add epsilon to prevent log(0)
+    p_safe = p + eps
+    q_safe = q + eps
+    # Compute log values
+    log_p = jnp.log(p_safe)
+    log_q = jnp.log(q_safe)
+    # Compute KL divergence with masking
+    return jnp.sum(p * (log_p - log_q))
 
 def kl_divergence_continuous(p, q):
     p_mu, p_std = p
     q_mu, q_std = q
-    return p_std - q_std + (q_std**2 + (q_mu - p_mu) ** 2) / (2.0 * p_std**2) - 0.5
-
+    term1 = jnp.log(q_std / p_std)
+    term2 = (p_std**2 + (p_mu - q_mu)**2) / (2 * q_std**2)
+    return term1 + term2 - 0.5
 
 def get_hyper_params(agent):
     return dict(
