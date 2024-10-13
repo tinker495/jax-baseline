@@ -343,12 +343,11 @@ class Q_Network_Family(object):
         for ep in range(self.eval_eps):
             while not terminated and not truncated:
                 actions = self.actions(obs, 0.001)
-                next_obs, reward, terminated, truncated, info = self.eval_env.step(actions[0][0])
-                next_obs = [np.expand_dims(next_obs, axis=0)]
+                observation, reward, terminated, truncated, info = self.eval_env.step(actions[0])
+                obs = [np.expand_dims(observation, axis=0)]
                 if have_original_reward:
                     original_reward += info["original_reward"]
                 total_reward[ep] += reward
-                obs = next_obs
                 eplen += 1
 
             total_ep_len[ep] = eplen
@@ -404,18 +403,20 @@ class Q_Network_Family(object):
         Render_env.start_video_recorder()
         total_rewards = []
         for i in range(episode):
-            obs, info = Render_env.reset()
-            obs = [np.expand_dims(obs, axis=0)]
-            terminated = False
-            truncated = False
-            episode_rew = 0
-            while not (terminated or truncated):
-                actions = self.actions(obs, 0.001)
-                observation, reward, terminated, truncated, info = Render_env.step(actions[0][0])
-                obs = [np.expand_dims(observation, axis=0)]
-                episode_rew += reward
-            Render_env.close()
-            print("episod reward :", episode_rew)
+            with Render_env:
+                obs, info = Render_env.reset()
+                obs = [np.expand_dims(obs, axis=0)]
+                terminated = False
+                truncated = False
+                episode_rew = 0
+                eplen = 0
+                while not terminated and not truncated:
+                    actions = self.actions(obs, 0.001)
+                    observation, reward, terminated, truncated, info = Render_env.step(actions[0][0])
+                    obs = [np.expand_dims(observation, axis=0)]
+                    episode_rew += reward
+                    eplen += 1
+            print("episod reward :", episode_rew, "episod len :", eplen)
             total_rewards.append(episode_rew)
         avg_reward = np.mean(total_rewards)
         std_reward = np.std(total_rewards)
