@@ -6,7 +6,7 @@ pip install -q ..
 EXPERIMENT_NAME="--experiment_name PG_Breakout"
 ENV="--env BreakoutNoFrameskip-v4 --worker 32"
 LR="--learning_rate 0.00003"
-TRAIN="--steps 3e7 --batch 128 --mini_batch 256 --gamma 0.995 --lamda 0.95"
+TRAIN="--steps 1e8 --batch 128 --mini_batch 256 --gamma 0.995 --lamda 0.95"
 MODEL="--node 512 --hidden_n 1"
 OPTIONS="--ent_coef 1e-6"
 OPTIMIZER="--optimizer rmsprop"
