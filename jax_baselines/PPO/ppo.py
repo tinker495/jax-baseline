@@ -10,8 +10,10 @@ from jax_baselines.common.utils import convert_jax, get_gaes
 class PPO(Actor_Critic_Policy_Gradient_Family):
     def __init__(
         self,
-        env,
+        env_builder,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         lamda=0.95,
         gae_normalize=False,
@@ -23,7 +25,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         ent_coef=0.001,
         ppo_eps=0.2,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -31,15 +33,17 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         optimizer="rmsprop",
     ):
         super().__init__(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers,
+            eval_eps,
             gamma,
             learning_rate,
             batch_size,
             val_coef,
             ent_coef,
             log_interval,
-            tensorboard_log,
+            log_dir,
             _init_setup_model,
             policy_kwargs,
             full_tensorboard_log,
@@ -78,11 +82,6 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         self._preprocess = jax.jit(self._preprocess)
         self._train_step = jax.jit(self._train_step)
 
-    def discription(self):
-        return "score : {:.3f}, loss : {:.3f} |".format(
-            np.mean(self.scoreque), np.mean(self.lossque)
-        )
-
     def train_step(self, steps):
         # Sample a batch from the replay buffer
         data = self.buffer.get_buffer()
@@ -96,11 +95,11 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             targets,
         ) = self._train_step(self.params, self.opt_state, next(self.key_seq), **data)
 
-        if self.summary:
-            self.summary.add_scalar("loss/critic_loss", critic_loss, steps)
-            self.summary.add_scalar("loss/actor_loss", actor_loss, steps)
-            self.summary.add_scalar("loss/entropy_loss", entropy_loss, steps)
-            self.summary.add_scalar("loss/mean_target", targets, steps)
+        if self.logger_run:
+            self.logger_run.log_metric("loss/critic_loss", critic_loss, steps)
+            self.logger_run.log_metric("loss/actor_loss", actor_loss, steps)
+            self.logger_run.log_metric("loss/entropy_loss", entropy_loss, steps)
+            self.logger_run.log_metric("loss/mean_target", targets, steps)
 
         return critic_loss
 
@@ -211,9 +210,9 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
     def _loss_discrete(self, params, obses, actions, old_value, targets, old_prob, adv, key):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
-        vals_clip = old_value + jnp.clip(vals - old_value, -self.ppo_eps, self.ppo_eps)
-        vf1 = jnp.square(jnp.squeeze(vals - targets))
-        vf2 = jnp.square(jnp.squeeze(vals_clip - targets))
+        vals_clip = old_value + jnp.clip(vals - old_value, -0.5, 0.5)
+        vf1 = jnp.square(vals - targets)
+        vf2 = jnp.square(vals_clip - targets)
         critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
 
         prob, log_prob = self.get_logprob(
@@ -251,16 +250,14 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         self,
         total_timesteps,
         callback=None,
-        log_interval=100,
-        tb_log_name="PPO",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        log_interval=1000,
+        experiment_name="PPO",
+        run_name="PPO",
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
-            tb_log_name,
-            reset_num_timesteps,
-            replay_wrapper,
+            experiment_name,
+            run_name,
         )

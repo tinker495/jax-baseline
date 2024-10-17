@@ -10,15 +10,17 @@ from jax_baselines.common.utils import convert_jax, discount_with_terminated
 class A2C(Actor_Critic_Policy_Gradient_Family):
     def __init__(
         self,
-        env,
+        env_builder,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         learning_rate=3e-4,
         batch_size=32,
         val_coef=0.2,
         ent_coef=0.5,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -26,15 +28,17 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         optimizer="rmsprop",
     ):
         super().__init__(
-            env,
+            env_builder,
             model_builder_maker,
+            num_workers,
+            eval_eps,
             gamma,
             learning_rate,
             batch_size,
             val_coef,
             ent_coef,
             log_interval,
-            tensorboard_log,
+            log_dir,
             _init_setup_model,
             policy_kwargs,
             full_tensorboard_log,
@@ -60,11 +64,6 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
 
-    def discription(self):
-        return "score : {:.3f}, loss : {:.3f} |".format(
-            np.mean(self.scoreque), np.mean(self.lossque)
-        )
-
     def train_step(self, steps):
         # Sample a batch from the replay buffer
         data = self.buffer.get_buffer()
@@ -78,11 +77,11 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             targets,
         ) = self._train_step(self.params, self.opt_state, None, **data)
 
-        if self.summary:
-            self.summary.add_scalar("loss/critic_loss", critic_loss, steps)
-            self.summary.add_scalar("loss/actor_loss", actor_loss, steps)
-            self.summary.add_scalar("loss/entropy_loss", entropy_loss, steps)
-            self.summary.add_scalar("loss/mean_target", targets, steps)
+        if self.logger_run:
+            self.logger_run.log_metric("loss/critic_loss", critic_loss, steps)
+            self.logger_run.log_metric("loss/actor_loss", actor_loss, steps)
+            self.logger_run.log_metric("loss/entropy_loss", entropy_loss, steps)
+            self.logger_run.log_metric("loss/mean_target", targets, steps)
 
         return critic_loss
 
@@ -169,16 +168,14 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         self,
         total_timesteps,
         callback=None,
-        log_interval=100,
-        tb_log_name="A2C",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        log_interval=1000,
+        experiment_name="A2C",
+        run_name="A2C",
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
-            tb_log_name,
-            reset_num_timesteps,
-            replay_wrapper,
+            experiment_name,
+            run_name,
         )

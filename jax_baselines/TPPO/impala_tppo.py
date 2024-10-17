@@ -32,7 +32,7 @@ class IMPALA_TPPO(IMPALA_Family):
         mu_ratio=0.0,
         epoch_num=3,
         log_interval=1,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -54,7 +54,7 @@ class IMPALA_TPPO(IMPALA_Family):
             ent_coef,
             rho_max,
             log_interval,
-            tensorboard_log,
+            log_dir,
             _init_setup_model,
             policy_kwargs,
             full_tensorboard_log,
@@ -344,17 +344,17 @@ class IMPALA_TPPO(IMPALA_Family):
         total_trainstep,
         callback=None,
         log_interval=10,
-        tb_log_name="IMPALA_TPPO",
+        run_name="IMPALA_TPPO",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
         if self.mu_ratio != 0.0:
-            tb_log_name += f"({self.mu_ratio:.2f})"
+            run_name += f"({self.mu_ratio:.2f})"
         super().learn(
             total_trainstep,
             callback,
             log_interval,
-            tb_log_name,
+            run_name,
             reset_num_timesteps,
             replay_wrapper,
         )

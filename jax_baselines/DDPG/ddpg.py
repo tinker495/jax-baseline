@@ -35,7 +35,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-3,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -61,7 +61,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             prioritized_replay_beta0,
             prioritized_replay_eps,
             log_interval,
-            tensorboard_log,
+            log_dir,
             _init_setup_model,
             policy_kwargs,
             full_tensorboard_log,
@@ -121,9 +121,9 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
         return actions
 
-    def test_action(self, state):
+    def test_action(self, obs):
         return np.clip(
-            np.asarray(self._get_actions(self.policy_params, state, None))
+            np.asarray(self._get_actions(self.policy_params, obs, None))
             + self.noise() * self.exploration_final_eps,
             -1,
             1,
@@ -158,9 +158,9 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.summary and steps % self.log_interval == 0:
-            self.summary.add_scalar("loss/qloss", loss, steps)
-            self.summary.add_scalar("loss/targets", t_mean, steps)
+        if self.logger_run and steps % self.log_interval == 0:
+            self.logger_run.log_metric("loss/qloss", loss, steps)
+            self.logger_run.log_metric("loss/targets", t_mean, steps)
 
         return loss
 
@@ -236,10 +236,9 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         self,
         total_timesteps,
         callback=None,
-        log_interval=100,
-        tb_log_name="DDPG",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        log_interval=1000,
+        experiment_name="DDPG",
+        run_name="DDPG",
     ):
         self.exploration = LinearSchedule(
             schedule_timesteps=int(self.exploration_fraction * total_timesteps),
@@ -251,7 +250,6 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             total_timesteps,
             callback,
             log_interval,
-            tb_log_name,
-            reset_num_timesteps,
-            replay_wrapper,
+            experiment_name,
+            run_name,
         )

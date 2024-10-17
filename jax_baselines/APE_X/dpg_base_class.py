@@ -39,7 +39,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-3,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -70,7 +70,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         self.gradient_steps = gradient_steps
         self.gamma = gamma
         self._gamma = np.power(gamma, n_step)  # n_step gamma
-        self.tensorboard_log = tensorboard_log
+        self.log_dir = log_dir
         self.full_tensorboard_log = full_tensorboard_log
         self.n_step_method = n_step > 1
         self.n_step = n_step
@@ -101,11 +101,11 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
             pass
 
         elif isinstance(self.workers, list) or isinstance(self.env, gym.Wrapper):
-            print("openai gym environmet")
+            print("Single environmet")
             env_dict = ray.get(self.workers[0].get_info.remote())
             self.observation_space = [list(env_dict["observation_space"].shape)]
             self.action_size = [env_dict["action_space"].shape[0]]
-            self.env_type = "gym"
+            self.env_type = "SingleEnv"
 
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
@@ -143,29 +143,29 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         total_trainstep,
         callback=None,
         log_interval=1000,
-        tb_log_name="APE_X_DPG",
+        run_name="APE_X_DPG",
         reset_num_timesteps=True,
         replay_wrapper=None,
     ):
         if self.n_step_method:
-            tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
+            run_name = "{}Step_".format(self.n_step) + run_name
         self.update_eps = 1.0
 
         pbar = trange(total_trainstep, miniters=log_interval)
 
-        self.logger_server = Logger_server.remote(self.tensorboard_log, tb_log_name)
+        self.logger_server = Logger_server.remote(self.log_dir, run_name)
 
         if self.env_type == "unity":
             self.learn_unity(pbar, callback, log_interval)
-        if self.env_type == "gym":
-            self.learn_gym(pbar, callback, log_interval)
+        if self.env_type == "SingleEnv":
+            self.learn_SingleEnv(pbar, callback, log_interval)
 
         self.save_params(ray.get(self.logger_server.get_log_dir.remote()))
 
     def learn_unity(self, pbar, callback, log_interval):
         pass
 
-    def learn_gym(self, pbar, callback, log_interval):
+    def learn_SingleEnv(self, pbar, callback, log_interval):
         stop = self.m.Event()
         worker_num = len(self.workers)
         update = [self.m.Event() for i in range(worker_num)]

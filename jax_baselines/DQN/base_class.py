@@ -1,24 +1,20 @@
 from collections import deque
+import os
 
 import gymnasium as gym
 import numpy as np
 from tqdm.auto import trange
 
-from jax_baselines.common.base_classes import (
-    TensorboardWriter,
-    restore,
-    save,
-    select_optimizer,
-)
+from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.cpprb_buffers import (
     NstepReplayBuffer,
     PrioritizedNstepReplayBuffer,
     PrioritizedReplayBuffer,
     ReplayBuffer,
 )
-from jax_baselines.common.env_builer import Multiworker
+from jax_baselines.common.env_builer import VectorizedEnv
 from jax_baselines.common.schedules import ConstantSchedule, LinearSchedule
-from jax_baselines.common.utils import add_hparams, key_gen
+from jax_baselines.common.utils import key_gen, restore, save, select_optimizer
 
 
 class Q_Network_Family(object):
@@ -49,7 +45,7 @@ class Q_Network_Family(object):
         param_noise=False,
         munchausen=False,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -86,7 +82,7 @@ class Q_Network_Family(object):
         self.learning_rate = learning_rate
         self.gamma = gamma
         self._gamma = np.power(gamma, n_step)  # n_step gamma
-        self.tensorboard_log = tensorboard_log
+        self.log_dir = log_dir
         self.full_tensorboard_log = full_tensorboard_log
         self.double_q = double_q
         self.dueling_model = dueling_model
@@ -118,22 +114,22 @@ class Q_Network_Family(object):
         self.eval_env = self.env_builder(1)
 
         print("----------------------env------------------------")
-        if isinstance(self.env, Multiworker):
-            print("multiworker environmet")
+        if isinstance(self.env, VectorizedEnv):
+            print("Vectorized environmet")
             env_info = self.env.env_info
             self.observation_space = [list(env_info["observation_space"].shape)]
             self.action_size = [env_info["action_space"].n]
             self.worker_size = self.env.worker_num
-            self.env_type = "Multiworker"
+            self.env_type = "VectorizedEnv"
 
         elif isinstance(self.env, gym.Env) or isinstance(self.env, gym.Wrapper):
-            print("openai gym environmet")
+            print("Single environmet")
             action_space = self.env.action_space
             observation_space = self.env.observation_space
             self.observation_space = [list(observation_space.shape)]
             self.action_size = [action_space.n]
             self.worker_size = 1
-            self.env_type = "gym"
+            self.env_type = "SingleEnv"
 
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
@@ -210,9 +206,9 @@ class Q_Network_Family(object):
         else:
             return discription + f", epsilon : {self.update_eps:.3f}"
 
-    def tb_log_name_update(self, tb_log_name):
+    def run_name_update(self, run_name):
         if self.munchausen:
-            tb_log_name = "M-" + tb_log_name
+            run_name = "M-" + run_name
         if (
             self.param_noise
             & self.dueling_model
@@ -220,30 +216,29 @@ class Q_Network_Family(object):
             & self.n_step_method
             & self.prioritized_replay
         ):
-            tb_log_name = f"Rainbow({self.n_step} step)_" + tb_log_name
+            run_name = f"Rainbow({self.n_step} step)_" + run_name
         else:
             if self.param_noise:
-                tb_log_name = "Noisy_" + tb_log_name
+                run_name = "Noisy_" + run_name
             if self.dueling_model:
-                tb_log_name = "Dueling_" + tb_log_name
+                run_name = "Dueling_" + run_name
             if self.double_q:
-                tb_log_name = "Double_" + tb_log_name
+                run_name = "Double_" + run_name
             if self.n_step_method:
-                tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
+                run_name = "{}Step_".format(self.n_step) + run_name
             if self.prioritized_replay:
-                tb_log_name = tb_log_name + "+PER"
-        return tb_log_name
+                run_name = run_name + "+PER"
+        return run_name
 
     def learn(
         self,
         total_timesteps,
         callback=None,
         log_interval=1000,
-        tb_log_name="Q_network",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        experiment_name="Q_network",
+        run_name="Q_network"
     ):
-        tb_log_name = self.tb_log_name_update(tb_log_name)
+        run_name = self.run_name_update(run_name)
 
         if self.param_noise:
             self.exploration = ConstantSchedule(0)
@@ -254,38 +249,36 @@ class Q_Network_Family(object):
                 final_p=self.exploration_final_eps,
             )
         self.update_eps = 1.0
-        self.eval_freq = total_timesteps // 100
+        self.eval_freq = ((total_timesteps // 100) // self.worker_size) * self.worker_size
 
-        pbar = trange(total_timesteps, miniters=log_interval)
-        with TensorboardWriter(self.tensorboard_log, tb_log_name) as (
-            self.summary,
-            self.save_path,
-        ):
-            if self.env_type == "gym":
-                self.learn_gym(pbar, callback, log_interval)
-                self.eval_gym(total_timesteps)
-            if self.env_type == "Multiworker":
-                self.learn_Multiworker(pbar, callback, log_interval)
+        pbar = trange(0, total_timesteps, self.worker_size, miniters=log_interval)
+        self.logger = TensorboardLogger(run_name, experiment_name, self.log_dir, self)
+        with self.logger as self.logger_run:
+            if self.env_type == "SingleEnv":
+                self.learn_SingleEnv(pbar, callback, log_interval)
+            if self.env_type == "VectorizedEnv":
+                self.learn_VectorizedEnv(pbar, callback, log_interval)
 
-            add_hparams(self, self.summary)
-            self.save_params(self.save_path)
+            self.eval(total_timesteps)
 
-    def learn_gym(self, pbar, callback=None, log_interval=100):
-        state, info = self.env.reset()
-        state = [np.expand_dims(state, axis=0)]
+            self.save_params(self.logger_run.get_local_path("params"))
+
+    def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
+        obs, info = self.env.reset()
+        obs = [np.expand_dims(obs, axis=0)]
         self.lossque = deque(maxlen=10)
         eval_result = None
 
         for steps in pbar:
-            actions = self.actions(state, self.update_eps)
-            next_state, reward, terminated, truncated, info = self.env.step(actions[0][0])
-            next_state = [np.expand_dims(next_state, axis=0)]
-            self.replay_buffer.add(state, actions[0], reward, next_state, terminated, truncated)
-            state = next_state
+            actions = self.actions(obs, self.update_eps)
+            next_obs, reward, terminated, truncated, info = self.env.step(actions[0][0])
+            next_obs = [np.expand_dims(next_obs, axis=0)]
+            self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
+            obs = next_obs
 
             if terminated or truncated:
-                state, info = self.env.reset()
-                state = [np.expand_dims(state, axis=0)]
+                obs, info = self.env.reset()
+                obs = [np.expand_dims(obs, axis=0)]
 
             if steps > self.learning_starts and steps % self.train_freq == 0:
                 self.update_eps = self.exploration.value(steps)
@@ -293,19 +286,52 @@ class Q_Network_Family(object):
                 self.lossque.append(loss)
 
             if steps % self.eval_freq == 0:
-                eval_result = self.eval_gym(steps)
+                eval_result = self.eval(steps)
 
             if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
                 pbar.set_description(self.discription(eval_result))
 
-    def eval_gym(self, steps):
+    def learn_VectorizedEnv(self, pbar, callback=None, log_interval=1000):
+        self.lossque = deque(maxlen=10)
+        eval_result = None
+
+        for steps in pbar:
+            self.update_eps = self.exploration.value(steps)
+            obs = self.env.current_obs()
+            actions = self.actions([obs], self.update_eps)
+            self.env.step(actions)
+
+            if steps > self.learning_starts and steps % self.train_freq == 0:
+                for idx in range(self.worker_size):
+                    loss = self.train_step(steps + idx, self.gradient_steps)
+                    self.lossque.append(loss)
+
+            (
+                next_obses,
+                rewards,
+                terminateds,
+                truncateds,
+                infos,
+            ) = self.env.get_result()
+
+            self.replay_buffer.add(
+                [obs], actions, rewards, [next_obses], terminateds, truncateds
+            )
+
+            if steps % self.eval_freq == 0:
+                eval_result = self.eval(steps)
+
+            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+                pbar.set_description(self.discription(eval_result))
+
+    def eval(self, steps):
         original_rewards = []
         total_reward = np.zeros(self.eval_eps)
         total_ep_len = np.zeros(self.eval_eps)
         total_truncated = np.zeros(self.eval_eps)
 
-        state, info = self.eval_env.reset()
-        state = [np.expand_dims(state, axis=0)]
+        obs, info = self.eval_env.reset()
+        obs = [np.expand_dims(obs, axis=0)]
         have_original_reward = "original_reward" in info.keys()
         have_lives = "lives" in info.keys()
         if have_original_reward:
@@ -316,13 +342,12 @@ class Q_Network_Family(object):
 
         for ep in range(self.eval_eps):
             while not terminated and not truncated:
-                actions = self.actions(state, 0.001)
-                next_state, reward, terminated, truncated, info = self.eval_env.step(actions[0][0])
-                next_state = [np.expand_dims(next_state, axis=0)]
+                actions = self.actions(obs, 0.001)
+                observation, reward, terminated, truncated, info = self.eval_env.step(actions[0])
+                obs = [np.expand_dims(observation, axis=0)]
                 if have_original_reward:
                     original_reward += info["original_reward"]
                 total_reward[ep] += reward
-                state = next_state
                 eplen += 1
 
             total_ep_len[ep] = eplen
@@ -336,8 +361,8 @@ class Q_Network_Family(object):
                     original_rewards.append(original_reward)
                     original_reward = 0
 
-            state, info = self.eval_env.reset()
-            state = [np.expand_dims(state, axis=0)]
+            obs, info = self.eval_env.reset()
+            obs = [np.expand_dims(obs, axis=0)]
             terminated = False
             truncated = False
             eplen = 0
@@ -347,12 +372,12 @@ class Q_Network_Family(object):
         mean_reward = np.mean(total_reward)
         mean_ep_len = np.mean(total_ep_len)
 
-        if self.summary:
+        if self.logger_run:
             if have_original_reward:
-                self.summary.add_scalar("env/original_reward", mean_original_score, steps)
-            self.summary.add_scalar("env/episode_reward", mean_reward, steps)
-            self.summary.add_scalar("env/episode len", mean_ep_len, steps)
-            self.summary.add_scalar("env/time over", np.mean(total_truncated), steps)
+                self.logger_run.log_metric("env/original_reward", mean_original_score, steps)
+            self.logger_run.log_metric("env/episode_reward", mean_reward, steps)
+            self.logger_run.log_metric("env/episode len", mean_ep_len, steps)
+            self.logger_run.log_metric("env/time over", np.mean(total_truncated), steps)
 
         if have_original_reward:
             eval_result = {
@@ -364,113 +389,34 @@ class Q_Network_Family(object):
             eval_result = {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
         return eval_result
 
-    def learn_Multiworker(self, pbar, callback=None, log_interval=100):
-        state, _, _, _, info, _, _ = self.env.get_steps()
-        have_original_reward = "original_reward" in info[0].keys()
-        have_lives = "lives" in info[0].keys()
-        if have_original_reward:
-            self.original_score = np.zeros([self.worker_size])
-        self.scores = np.zeros([self.worker_size])
-        self.eplen = np.zeros([self.worker_size])
-        self.scoreque = deque(maxlen=10)
-        self.lossque = deque(maxlen=10)
-        for steps in pbar:
-            self.eplen += 1
-            self.update_eps = self.exploration.value(steps)
-            actions = self.actions([state], self.update_eps)
-            self.env.step(actions)
+    def test(self, episode=10):
+        with self.logger as self.logger_run:
+            self.test_eval_env(episode)
 
-            if steps > self.learning_starts and steps % self.train_freq == 0:
-                self.update_eps = self.exploration.value(steps)
-                loss = self.train_step(steps, self.gradient_steps)
-                self.lossque.append(loss)
 
-            (
-                real_nextstates,
-                rewards,
-                terminateds,
-                truncateds,
-                infos,
-                end_states,
-                end_idx,
-            ) = self.env.get_steps()
-            self.scores += rewards
-            if have_original_reward:
-                self.original_score += np.asarray([info["original_reward"] for info in infos])
-            if end_states is not None:
-                nxtstates = np.copy(real_nextstates)
-                nxtstates[end_idx] = end_states
-                if self.summary:
-                    if have_original_reward:
-                        if have_lives:
-                            end_lives = np.asarray([infos[ei]["lives"] for ei in end_idx])
-                            done_lives = np.logical_not(end_lives)
-                            if np.sum(done_lives) > 0:
-                                self.summary.add_scalar(
-                                    "env/original_reward",
-                                    np.mean(self.original_score[end_idx[done_lives]]),
-                                    steps,
-                                )
-                                self.original_score[end_idx[done_lives]] = 0
-                        else:
-                            self.summary.add_scalar(
-                                "env/original_reward", self.original_score[end_idx], steps
-                            )
-                            self.original_score[end_idx] = 0
-                    self.summary.add_scalar(
-                        "env/episode_reward", np.mean(self.scores[end_idx]), steps
-                    )
-                    self.summary.add_scalar("env/episode_len", np.mean(self.eplen[end_idx]), steps)
-                    self.summary.add_scalar(
-                        "env/time_over",
-                        np.mean(truncateds[end_idx].astype(np.float32)),
-                        steps,
-                    )
-                self.scoreque.extend(self.scores[end_idx])
-                self.scores[end_idx] = 0
-                self.eplen[end_idx] = 0
-                self.replay_buffer.add(
-                    [state], actions, rewards, [nxtstates], terminateds, truncateds
-                )
-            else:
-                self.replay_buffer.add(
-                    [state], actions, rewards, [real_nextstates], terminateds, truncateds
-                )
-            state = real_nextstates
-            if steps % log_interval == 0 and len(self.scoreque) > 0 and len(self.lossque) > 0:
-                pbar.set_description(self.discription())
-        return np.mean(self.scoreque)
-
-    def test(self, episode=10, tb_log_name=None):
-        if tb_log_name is None:
-            tb_log_name = self.save_path
-
-        directory = tb_log_name
-        if self.env_type == "gym":
-            self.test_gym(episode, directory)
-
-    def test_unity(self, episode, directory):
-        pass
-
-    def test_gym(self, episode, directory):
+    def test_eval_env(self, episode):
         from gymnasium.wrappers import RecordVideo
+        directory = self.logger_run.get_local_path("video")
+        os.makedirs(directory, exist_ok=True)
 
-        Render_env = RecordVideo(self.env, directory, episode_trigger=lambda x: True)
+        Render_env = RecordVideo(self.eval_env, directory, episode_trigger=lambda x: True)
         Render_env.start_video_recorder()
         total_rewards = []
         for i in range(episode):
-            state, info = Render_env.reset()
-            state = [np.expand_dims(state, axis=0)]
-            terminated = False
-            truncated = False
-            episode_rew = 0
-            while not (terminated or truncated):
-                actions = self.actions(state, 0.001)
-                observation, reward, terminated, truncated, info = Render_env.step(actions[0][0])
-                state = [np.expand_dims(observation, axis=0)]
-                episode_rew += reward
-            Render_env.close()
-            print("episod reward :", episode_rew)
+            with Render_env:
+                obs, info = Render_env.reset()
+                obs = [np.expand_dims(obs, axis=0)]
+                terminated = False
+                truncated = False
+                episode_rew = 0
+                eplen = 0
+                while not terminated and not truncated:
+                    actions = self.actions(obs, 0.001)
+                    observation, reward, terminated, truncated, info = Render_env.step(actions[0][0])
+                    obs = [np.expand_dims(observation, axis=0)]
+                    episode_rew += reward
+                    eplen += 1
+            print("episod reward :", episode_rew, "episod len :", eplen)
             total_rewards.append(episode_rew)
         avg_reward = np.mean(total_rewards)
         std_reward = np.std(total_rewards)

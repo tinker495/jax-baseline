@@ -36,7 +36,7 @@ class DQN(Q_Network_Family):
         param_noise=False,
         munchausen=False,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -70,7 +70,7 @@ class DQN(Q_Network_Family):
             param_noise,
             munchausen,
             log_interval,
-            tensorboard_log,
+            log_dir,
             _init_setup_model,
             policy_kwargs,
             full_tensorboard_log,
@@ -139,9 +139,9 @@ class DQN(Q_Network_Family):
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.summary and steps % self.log_interval == 0:
-            self.summary.add_scalar("loss/qloss", loss, steps)
-            self.summary.add_scalar("loss/targets", t_mean, steps)
+        if self.logger_run and steps % self.log_interval == 0:
+            self.logger_run.log_metric("loss/qloss", loss, steps)
+            self.logger_run.log_metric("loss/targets", t_mean, steps)
 
         return loss
 
@@ -224,16 +224,14 @@ class DQN(Q_Network_Family):
         self,
         total_timesteps,
         callback=None,
-        log_interval=100,
-        tb_log_name="DQN",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        log_interval=1000,
+        experiment_name="DQN",
+        run_name="DQN"
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
-            tb_log_name,
-            reset_num_timesteps,
-            replay_wrapper,
+            experiment_name,
+            run_name
         )

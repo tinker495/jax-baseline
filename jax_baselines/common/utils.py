@@ -1,15 +1,39 @@
+import os
+import pickle
+
 from functools import partial
 from typing import Any, Callable
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optax
 
 cpu_jit = partial(jax.jit, backend="cpu")
 gpu_jit = partial(jax.jit, backend="gpu")
 
 PyTree = Any
 
+def save(ckpt_dir: str, obs) -> None:
+    os.makedirs(ckpt_dir, exist_ok=True)
+    with open(os.path.join(ckpt_dir, "arrays.npy"), "wb") as f:
+        for x in jax.tree_util.tree_leaves(obs):
+            np.save(f, x, allow_pickle=False)
+
+    tree_struct = jax.tree_map(lambda t: 0, obs)
+    with open(os.path.join(ckpt_dir, "tree.pkl"), "wb") as f:
+        pickle.dump(tree_struct, f)
+
+
+def restore(ckpt_dir):
+    with open(os.path.join(ckpt_dir, "tree.pkl"), "rb") as f:
+        tree_struct = pickle.load(f)
+
+    leaves, treedef = jax.tree_flatten(tree_struct)
+    with open(os.path.join(ckpt_dir, "arrays.npy"), "rb") as f:
+        flat_state = [np.load(f) for _ in leaves]
+
+    return jax.tree_unflatten(treedef, flat_state)
 
 def key_gen(seed):
     key = jax.random.PRNGKey(seed)
@@ -161,16 +185,22 @@ def get_vtrace(rewards, rhos, c_ts, terminateds, truncateds, values, next_values
     v = A + values
     return v
 
-
-def kl_divergence_discrete(p, q, eps: float = 2**-17):
-    return p.dot(jnp.log(p + eps) - jnp.log(q + eps))
-
+def kl_divergence_discrete(p, q, eps: float = 1e-8):
+    # Add epsilon to prevent log(0)
+    p_safe = p + eps
+    q_safe = q + eps
+    # Compute log values
+    log_p = jnp.log(p_safe)
+    log_q = jnp.log(q_safe)
+    # Compute KL divergence with masking
+    return jnp.sum(p * (log_p - log_q))
 
 def kl_divergence_continuous(p, q):
     p_mu, p_std = p
     q_mu, q_std = q
-    return p_std - q_std + (q_std**2 + (q_mu - p_mu) ** 2) / (2.0 * p_std**2) - 0.5
-
+    term1 = jnp.log(q_std / p_std)
+    term2 = (p_std**2 + (p_mu - q_mu)**2) / (2 * q_std**2)
+    return term1 + term2 - 0.5
 
 def get_hyper_params(agent):
     return dict(
@@ -184,14 +214,26 @@ def get_hyper_params(agent):
         ]
     )
 
-
-def add_hparams(agent, writer, metric_dict=dict()):
-    from tensorboardX.summary import hparams
-
+def add_hparams(agent, tensorboardrun):
     hparam_dict = get_hyper_params(agent)
-    # metric_dict = dict([m,None] for m in metric)
-    exp, ssi, sei = hparams(hparam_dict, metric_dict)
+    tensorboardrun.log_param(hparam_dict)
 
-    writer.file_writer.add_summary(exp)
-    writer.file_writer.add_summary(ssi)
-    writer.file_writer.add_summary(sei)
+def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
+    optim = None
+    if optim_str == "adam":
+        optim = optax.adam(lr, b1=0.9, b2=0.999, eps=eps)
+    elif optim_str == "adamw":
+        optim = optax.adamw(lr, b1=0.9, b2=0.999, eps=eps, weight_decay=1e-4)
+    elif optim_str == "rmsprop":
+        optim = optax.rmsprop(lr, eps=eps)
+    elif optim_str == "sgd":
+        optim = optax.sgd(lr)
+    elif optim_str == "adabelief":
+        optim = optax.adabelief(lr, eps=eps)
+    elif optim_str == "lion":
+        optim = optax.lion(lr, weight_decay=1e-5)
+
+    if grad_max is not None:
+        optim = optax.chain(optax.clip_by_global_norm(grad_max), optim)
+
+    return optim

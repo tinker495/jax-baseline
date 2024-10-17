@@ -12,6 +12,7 @@ from jax_baselines.TQC.tqc import TQC
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--experiment_name", type=str, default="DPG", help="experiment name")
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="Pendulum-v0", help="environment")
@@ -81,7 +82,7 @@ if __name__ == "__main__":
             train_freq=args.train_freq,
             seed=args.seed,
             gradient_steps=args.gradient_steps,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
@@ -106,7 +107,7 @@ if __name__ == "__main__":
             train_freq=args.train_freq,
             seed=args.seed,
             gradient_steps=args.gradient_steps,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
@@ -131,7 +132,7 @@ if __name__ == "__main__":
             ent_coef=args.ent_coef,
             seed=args.seed,
             gradient_steps=args.gradient_steps,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
@@ -160,7 +161,7 @@ if __name__ == "__main__":
             n_support=args.n_support,
             critic_num=args.critic_num,
             mixture_type=args.mixture,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
@@ -184,11 +185,11 @@ if __name__ == "__main__":
             train_freq=args.train_freq,
             seed=args.seed,
             gradient_steps=args.gradient_steps,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
         )
 
-    agent.learn(int(args.steps))
+    agent.learn(int(args.steps), experiment_name=args.experiment_name)
 
     agent.test()

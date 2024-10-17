@@ -17,6 +17,7 @@ from jax_baselines.SPR.spr import SPR
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--experiment_name", type=str, default="Q_network", help="experiment name")
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="Cartpole-v1", help="environment")
@@ -100,7 +101,7 @@ if __name__ == "__main__":
             train_freq=args.train_freq,
             learning_starts=args.learning_starts,
             exploration_fraction=args.exploration_fraction,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
             compress_memory=args.compress_memory,
@@ -134,7 +135,7 @@ if __name__ == "__main__":
                 categorial_max=args.max,
                 categorial_min=args.min,
                 exploration_fraction=args.exploration_fraction,
-                tensorboard_log=args.logdir + env_type + "/" + env_name,
+                log_dir=args.logdir,
                 policy_kwargs=policy_kwargs,
                 optimizer=args.optimizer,
                 compress_memory=args.compress_memory,
@@ -162,7 +163,7 @@ if __name__ == "__main__":
                 categorial_max=args.max,
                 categorial_min=args.min,
                 exploration_fraction=args.exploration_fraction,
-                tensorboard_log=args.logdir + env_type + "/" + env_name,
+                log_dir=args.logdir,
                 policy_kwargs=policy_kwargs,
                 optimizer=args.optimizer,
                 compress_memory=args.compress_memory,
@@ -194,7 +195,7 @@ if __name__ == "__main__":
             delta=args.delta,
             n_support=args.n_support,
             exploration_fraction=args.exploration_fraction,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
             compress_memory=args.compress_memory,
@@ -227,7 +228,7 @@ if __name__ == "__main__":
             n_support=args.n_support,
             exploration_fraction=args.exploration_fraction,
             CVaR=args.CVaR,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
             compress_memory=args.compress_memory,
@@ -259,7 +260,7 @@ if __name__ == "__main__":
             delta=args.delta,
             n_support=args.n_support,
             exploration_fraction=args.exploration_fraction,
-            tensorboard_log=args.logdir + env_type + "/" + env_name,
+            log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
             compress_memory=args.compress_memory,
@@ -286,7 +287,7 @@ if __name__ == "__main__":
                 learning_starts=args.learning_starts,
                 categorial_max=args.max,
                 categorial_min=args.min,
-                tensorboard_log=args.logdir + env_type + "/" + env_name,
+                log_dir=args.logdir,
                 policy_kwargs=policy_kwargs,
                 optimizer=args.optimizer,
                 compress_memory=args.compress_memory,
@@ -307,7 +308,7 @@ if __name__ == "__main__":
                 learning_starts=args.learning_starts,
                 categorial_max=args.max,
                 categorial_min=args.min,
-                tensorboard_log=args.logdir + env_type + "/" + env_name,
+                log_dir=args.logdir,
                 policy_kwargs=policy_kwargs,
                 optimizer=args.optimizer,
                 compress_memory=args.compress_memory,
@@ -338,7 +339,7 @@ if __name__ == "__main__":
                 categorial_max=args.max,
                 categorial_min=args.min,
                 exploration_fraction=args.exploration_fraction,
-                tensorboard_log=args.logdir + env_type + "/" + env_name,
+                log_dir=args.logdir,
                 policy_kwargs=policy_kwargs,
                 optimizer=args.optimizer,
                 compress_memory=args.compress_memory,
@@ -362,12 +363,12 @@ if __name__ == "__main__":
                 categorial_max=args.max,
                 categorial_min=args.min,
                 exploration_fraction=args.exploration_fraction,
-                tensorboard_log=args.logdir + env_type + "/" + env_name,
+                log_dir=args.logdir,
                 policy_kwargs=policy_kwargs,
                 optimizer=args.optimizer,
                 compress_memory=args.compress_memory,
             )
 
-    agent.learn(int(args.steps))
+    agent.learn(int(args.steps), experiment_name=args.experiment_name)
 
     agent.test()

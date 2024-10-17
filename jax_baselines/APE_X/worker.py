@@ -61,13 +61,13 @@ class Ape_X_Worker(object):
             _get_action = partial(get_action, actor)
             get_action = random_action
 
-            state, info = self.env.reset()
+            obs, info = self.env.reset()
             have_original_reward = "original_reward" in info.keys()
             have_lives = "lives" in info.keys()
             if have_original_reward:
                 original_score = 0
             score = 0
-            state = [np.expand_dims(state, axis=0)]
+            obs = [np.expand_dims(obs, axis=0)]
             params = ray.get(param_server.get_params.remote())
             eplen = 0
             episode = 0
@@ -91,16 +91,16 @@ class Ape_X_Worker(object):
                     get_action = _get_action
 
                 eplen += 1
-                actions = get_action(params, state, eps, next(key_seq))
-                next_state, reward, terminated, truncated, info = self.env.step(actions)
-                next_state = [np.expand_dims(next_state, axis=0)]
+                actions = get_action(params, obs, eps, next(key_seq))
+                next_obs, reward, terminated, truncated, info = self.env.step(actions)
+                next_obs = [np.expand_dims(next_obs, axis=0)]
                 local_buffer.add(
-                    state, actions, reward, next_state, terminated or truncated, truncated
+                    obs, actions, reward, next_obs, terminated or truncated, truncated
                 )
                 if have_original_reward:
                     original_score += info["original_reward"]
                 score += reward
-                state = next_state
+                obs = next_obs
 
                 if terminated or truncated:
                     local_buffer.episode_end()
@@ -122,8 +122,8 @@ class Ape_X_Worker(object):
                     score = 0
                     eplen = 0
                     episode += 1
-                    state, info = self.env.reset()
-                    state = [np.expand_dims(state, axis=0)]
+                    obs, info = self.env.reset()
+                    obs = [np.expand_dims(obs, axis=0)]
 
                 if len(local_buffer) >= local_size:
                     transition = local_buffer.get_buffer()

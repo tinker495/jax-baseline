@@ -19,15 +19,13 @@ pip install .
 - :heavy_check_mark: : Optional implemented
 - :white_check_mark: : Defualt implemented at papers
 - :x: : Not implemeted yet or can not implemented
-- :zzz: : Implemented but didn't update a while (can not guarantee working well now)
 
 ### Supported Environments
 
 | **Name**                | **Q-Net based**    | **Actor-Critic based** | **DPG based**      |
 | ----------------------- | ------------------ | ---------------------- | ------------------ |
 | Gymnasium               | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
-| MultiworkerGym with Ray | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
-| Unity-ML Environments   | :zzz:              | :zzz:                  | :zzz:              |
+| VectorizedGym with Ray  | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
 
 ### Implemented Algorithms
 

@@ -4,11 +4,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from tqdm.auto import trange
 
-from jax_baselines.common.base_classes import TensorboardWriter
 from jax_baselines.common.losses import hubberloss
-from jax_baselines.common.utils import add_hparams, convert_jax, hard_update
+from jax_baselines.common.utils import convert_jax, hard_update
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 
 
@@ -32,7 +30,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         target_network_update_freq=250,
         prioritized_replay_alpha=0.4,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -58,7 +56,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             0,
             0,
             log_interval,
-            tensorboard_log,
+            log_dir,
             _init_setup_model,
             policy_kwargs,
             full_tensorboard_log,
@@ -236,12 +234,12 @@ class TD7(Deteministic_Policy_Gradient_Family):
         mean_loss = jnp.mean(jnp.array(losses))
         mean_target = jnp.mean(jnp.array(targets))
 
-        if self.summary:
-            self.summary.add_scalar("loss/encoder_loss", mean_repr_loss, steps)
-            self.summary.add_scalar("loss/qloss", mean_loss, steps)
-            self.summary.add_scalar("loss/targets", mean_target, steps)
-            self.summary.add_scalar("loss/min_value", self.critic_params["values"]["min_value"], steps)
-            self.summary.add_scalar("loss/max_value", self.critic_params["values"]["max_value"], steps)
+        if self.logger_run:
+            self.logger_run.log_metric("loss/encoder_loss", mean_repr_loss, steps)
+            self.logger_run.log_metric("loss/qloss", mean_loss, steps)
+            self.logger_run.log_metric("loss/targets", mean_target, steps)
+            self.logger_run.log_metric("loss/min_value", self.critic_params["values"]["min_value"], steps)
+            self.logger_run.log_metric("loss/max_value", self.critic_params["values"]["max_value"], steps)
 
         return mean_loss
 
@@ -403,76 +401,74 @@ class TD7(Deteministic_Policy_Gradient_Family):
         discription += f"loss : {np.mean(self.loss_mean):.3f}"
         return discription
 
-    def tb_log_name_update(self, tb_log_name):
+    def run_name_update(self, run_name):
         if self.n_step_method:
-            tb_log_name = "{}Step_".format(self.n_step) + tb_log_name
-        return tb_log_name
+            run_name = "{}Step_".format(self.n_step) + run_name
+        return run_name
 
     def learn(
         self,
         total_timesteps,
         callback=None,
-        log_interval=100,
-        tb_log_name="TD7",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        log_interval=1000,
+        experiment_name="TD7",
+        run_name="TD7",
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
-            tb_log_name,
-            reset_num_timesteps,
-            replay_wrapper,
+            experiment_name,
+            run_name,
         )
 
-    def learn_gym(self, pbar, callback=None, log_interval=100):
-        state, info = self.env.reset()
-        state = [np.expand_dims(state, axis=0)]
+    def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
+        obs, info = self.env.reset()
+        obs = [np.expand_dims(obs, axis=0)]
         self.scores = np.zeros([self.worker_size])
         self.eplen = np.zeros([self.worker_size], dtype=np.int32)
         self.score_mean = None
         self.loss_mean = None
         for steps in pbar:
             self.eplen += 1
-            actions = self.actions(state, steps)
-            next_state, reward, terminated, truncated, info = self.env.step(actions[0])
-            next_state = [np.expand_dims(next_state, axis=0)]
-            self.replay_buffer.add(state, actions[0], reward, next_state, terminated, truncated)
+            actions = self.actions(obs, steps)
+            next_obs, reward, terminated, truncated, info = self.env.step(actions[0])
+            next_obs = [np.expand_dims(next_obs, axis=0)]
+            self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
             self.scores[0] += reward
-            state = next_state
+            obs = next_obs
             if terminated or truncated:
                 self.end_episode(steps, self.scores[0], self.eplen[0])
                 self.scores[0] = 0
                 self.eplen[0] = 0
-                state, info = self.env.reset()
-                state = [np.expand_dims(state, axis=0)]
+                obs, info = self.env.reset()
+                obs = [np.expand_dims(obs, axis=0)]
 
             if steps % self.eval_freq == 0:
-                eval_result = self.eval_gym(steps)
+                eval_result = self.eval(steps)
 
             if steps % log_interval == 0 and eval_result is not None and self.loss_mean is not None :
                 pbar.set_description(self.discription(eval_result))
 
-    def eval_gym(self, steps):
+    def eval(self, steps):
         total_reward = np.zeros(self.eval_eps)
         total_ep_len = np.zeros(self.eval_eps)
         total_truncated = np.zeros(self.eval_eps)
         for ep in range(self.eval_eps):
-            state, info = self.eval_env.reset()
-            state = [np.expand_dims(state, axis=0)]
+            obs, info = self.eval_env.reset()
+            obs = [np.expand_dims(obs, axis=0)]
             terminated = False
             truncated = False
             eplen = 0
             while not terminated and not truncated:
                 actions = self.actions(
-                    state, steps, use_checkpoint=True, exploration=False
+                    obs, steps, use_checkpoint=True, exploration=False
                 )
-                next_state, reward, terminated, truncated, info = self.eval_env.step(actions[0])
-                next_state = [np.expand_dims(next_state, axis=0)]
-                # self.replay_buffer.add(state, actions[0], reward, next_state, terminated, truncated)
+                next_obs, reward, terminated, truncated, info = self.eval_env.step(actions[0])
+                next_obs = [np.expand_dims(next_obs, axis=0)]
+                # self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
                 total_reward[ep] += reward
-                state = next_state
+                obs = next_obs
                 eplen += 1
             total_ep_len[ep] = eplen
             total_truncated[ep] = float(truncated)
@@ -480,8 +476,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
         mean_reward = np.mean(total_reward)
         mean_ep_len = np.mean(total_ep_len)
 
-        if self.summary:
-            self.summary.add_scalar("env/episode_reward", mean_reward, steps)
-            self.summary.add_scalar("env/episode len", mean_ep_len, steps)
-            self.summary.add_scalar("env/time over", np.mean(total_truncated), steps)
+        if self.logger_run:
+            self.logger_run.log_metric("env/episode_reward", mean_reward, steps)
+            self.logger_run.log_metric("env/episode len", mean_ep_len, steps)
+            self.logger_run.log_metric("env/time over", np.mean(total_truncated), steps)
         return {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}

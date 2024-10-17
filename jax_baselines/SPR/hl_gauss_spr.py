@@ -37,7 +37,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
         learning_starts=1000,
         munchausen=False,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         categorial_bar_n=51,
@@ -49,7 +49,6 @@ class HL_GAUSS_SPR(Q_Network_Family):
         compress_memory=False,
     ):
 
-        self.name = "HL_GAUSS_SPR"
         self.shift_size = 4
         self.prediction_depth = 5
         self.off_policy_fix = off_policy_fix
@@ -86,7 +85,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
             True,
             munchausen,
             log_interval,
-            tensorboard_log,
+            log_dir,
             _init_setup_model,
             policy_kwargs,
             full_tensorboard_log,
@@ -94,6 +93,8 @@ class HL_GAUSS_SPR(Q_Network_Family):
             optimizer,
             compress_memory,
         )
+
+        self.name = "HL_GAUSS_SPR"
 
         self._gamma = jnp.power(self.gamma, jnp.arange(self.n_step))
 
@@ -229,10 +230,10 @@ class HL_GAUSS_SPR(Q_Network_Family):
         if self.prioritized_replay:
             self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.summary and steps % self.log_interval == 0:
-            self.summary.add_scalar("loss/qloss", loss, steps)
-            self.summary.add_scalar("loss/rprloss", rprloss, steps)
-            self.summary.add_scalar("loss/targets", t_mean, steps)
+        if self.logger_run and steps % self.log_interval == 0:
+            self.logger_run.log_metric("loss/qloss", loss, steps)
+            self.logger_run.log_metric("loss/rprloss", rprloss, steps)
+            self.logger_run.log_metric("loss/targets", t_mean, steps)
 
         return loss
 
@@ -540,30 +541,28 @@ class HL_GAUSS_SPR(Q_Network_Family):
         target_distribution = self.to_probs(target_q)
         return target_distribution
 
-    def tb_log_name_update(self, tb_log_name):
+    def run_name_update(self, run_name):
         if self.scaled_by_reset:
-            tb_log_name = "SR-" + tb_log_name
+            run_name = "SR-" + run_name
         if self.munchausen:
-            tb_log_name = "M-" + tb_log_name
+            run_name = "M-" + run_name
         if self.off_policy_fix:
             n_step_str = f"OF_"
-            tb_log_name = n_step_str + tb_log_name
-        return tb_log_name
+            run_name = n_step_str + run_name
+        return run_name
 
     def learn(
         self,
         total_timesteps,
         callback=None,
-        log_interval=100,
-        tb_log_name="HL_GAUSS_SPR",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        log_interval=1000,
+        experiment_name="HL_GAUSS_SPR",
+        run_name="HL_GAUSS_SPR"
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
-            tb_log_name,
-            reset_num_timesteps,
-            replay_wrapper,
+            experiment_name,
+            run_name
         )

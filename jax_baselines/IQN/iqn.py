@@ -34,14 +34,14 @@ class IQN(Q_Network_Family):
         learning_starts=1000,
         target_network_update_freq=2000,
         prioritized_replay=False,
-        prioritized_replay_alpha=0.9,
+        prioritized_replay_alpha=0.6,
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-3,
         CVaR=1.0,
         param_noise=False,
         munchausen=False,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -75,7 +75,7 @@ class IQN(Q_Network_Family):
             param_noise,
             munchausen,
             log_interval,
-            tensorboard_log,
+            log_dir,
             _init_setup_model,
             policy_kwargs,
             full_tensorboard_log,
@@ -162,10 +162,10 @@ class IQN(Q_Network_Family):
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.summary and steps % self.log_interval == 0:
-            self.summary.add_scalar("loss/qloss", loss, steps)
-            self.summary.add_scalar("loss/targets", t_mean, steps)
-            self.summary.add_scalar("loss/target_stds", t_std, steps)
+        if self.logger_run and steps % self.log_interval == 0:
+            self.logger_run.log_metric("loss/qloss", loss, steps)
+            self.logger_run.log_metric("loss/targets", t_mean, steps)
+            self.logger_run.log_metric("loss/target_stds", t_std, steps)
 
         return loss
 
@@ -278,12 +278,11 @@ class IQN(Q_Network_Family):
         self,
         total_timesteps,
         callback=None,
-        log_interval=100,
-        tb_log_name="IQN",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        log_interval=1000,
+        experiment_name="IQN",
+        run_name="IQN"
     ):
-        tb_log_name = tb_log_name + (
+        run_name = run_name + (
             "({:d})_CVaR({:.2f})".format(self.n_support, self.CVaR)
             if self.risk_avoid
             else "({:d})".format(self.n_support)
@@ -292,7 +291,6 @@ class IQN(Q_Network_Family):
             total_timesteps,
             callback,
             log_interval,
-            tb_log_name,
-            reset_num_timesteps,
-            replay_wrapper,
+            experiment_name,
+            run_name
         )

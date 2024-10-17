@@ -159,8 +159,8 @@ class PreProcess(nn.Module):
         ]
 
     @nn.compact
-    def __call__(self, states: List[jnp.ndarray]) -> jnp.ndarray:
-        return jnp.concatenate([pre(x) for pre, x in zip(self.embedding, states)], axis=1)
+    def __call__(self, obses: List[jnp.ndarray]) -> jnp.ndarray:
+        return jnp.concatenate([pre(x) for pre, x in zip(self.embedding, obses)], axis=1)
 
     @property
     def output_size(self):

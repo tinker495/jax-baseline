@@ -39,7 +39,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         risk_avoidance=0.0,
         prioritized_replay_eps=1e-6,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -65,7 +65,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
             prioritized_replay_beta0,
             prioritized_replay_eps,
             log_interval,
-            tensorboard_log,
+            log_dir,
             _init_setup_model,
             policy_kwargs,
             full_tensorboard_log,
@@ -190,10 +190,10 @@ class TQC(Deteministic_Policy_Gradient_Family):
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.summary and steps % self.log_interval == 0:
-            self.summary.add_scalar("loss/qloss", loss, steps)
-            self.summary.add_scalar("loss/targets", t_mean, steps)
-            self.summary.add_scalar("loss/ent_coef", np.exp(self.log_ent_coef), steps)
+        if self.logger_run and steps % self.log_interval == 0:
+            self.logger_run.log_metric("loss/qloss", loss, steps)
+            self.logger_run.log_metric("loss/targets", t_mean, steps)
+            self.logger_run.log_metric("loss/ent_coef", np.exp(self.log_ent_coef), steps)
 
         return loss
 
@@ -306,23 +306,21 @@ class TQC(Deteministic_Policy_Gradient_Family):
         self,
         total_timesteps,
         callback=None,
-        log_interval=100,
-        tb_log_name="TQC",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        log_interval=1000,
+        experiment_name="TQC",
+        run_name="TQC",
     ):
-        tb_log_name = tb_log_name + "({:d})".format(self.n_support)
+        run_name = run_name + "({:d})".format(self.n_support)
         if self.mixture_type == "truncated":
-            tb_log_name = tb_log_name + "_truncated({:d})".format(self.quantile_drop)
+            run_name = run_name + "_truncated({:d})".format(self.quantile_drop)
         else:
-            tb_log_name = tb_log_name + "_min"
+            run_name = run_name + "_min"
         if self.risk_avoidance != 0.0:
-            tb_log_name = tb_log_name + "_riskavoid{:.2f}".format(self.risk_avoidance)
+            run_name = run_name + "_riskavoid{:.2f}".format(self.risk_avoidance)
         super().learn(
             total_timesteps,
             callback,
             log_interval,
-            tb_log_name,
-            reset_num_timesteps,
-            replay_wrapper,
+            experiment_name,
+            run_name,
         )

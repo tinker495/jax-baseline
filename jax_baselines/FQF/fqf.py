@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-from jax_baselines.common.base_classes import select_optimizer
+from jax_baselines.common.utils import select_optimizer
 from jax_baselines.common.losses import FQFQuantileLosses, QuantileHuberLosses
 from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
@@ -41,7 +41,7 @@ class FQF(Q_Network_Family):
         param_noise=False,
         munchausen=False,
         log_interval=200,
-        tensorboard_log=None,
+        log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
         full_tensorboard_log=False,
@@ -75,7 +75,7 @@ class FQF(Q_Network_Family):
             param_noise,
             munchausen,
             log_interval,
-            tensorboard_log,
+            log_dir,
             _init_setup_model,
             policy_kwargs,
             full_tensorboard_log,
@@ -188,12 +188,12 @@ class FQF(Q_Network_Family):
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.summary and steps % self.log_interval == 0:
-            self.summary.add_scalar("loss/qloss", loss, steps)
-            self.summary.add_scalar("loss/fqf_loss", fqf_loss, steps)
-            self.summary.add_scalar("loss/targets", t_mean, steps)
-            self.summary.add_scalar("loss/target_stds", t_std, steps)
-            self.summary.add_histogram("loss/tau", tau, steps)
+        if self.logger_run and steps % self.log_interval == 0:
+            self.logger_run.log_metric("loss/qloss", loss, steps)
+            self.logger_run.log_metric("loss/fqf_loss", fqf_loss, steps)
+            self.logger_run.log_metric("loss/targets", t_mean, steps)
+            self.logger_run.log_metric("loss/target_stds", t_std, steps)
+            self.logger_run.log_histogram("loss/tau", tau, steps)
 
         return loss
 
@@ -409,17 +409,15 @@ class FQF(Q_Network_Family):
         self,
         total_timesteps,
         callback=None,
-        log_interval=100,
-        tb_log_name="FQF",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        log_interval=1000,
+        experiment_name="FQF",
+        run_name="FQF"
     ):
-        tb_log_name = tb_log_name + "({:d})".format(self.n_support)
+        run_name = run_name + "({:d})".format(self.n_support)
         super().learn(
             total_timesteps,
             callback,
             log_interval,
-            tb_log_name,
-            reset_num_timesteps,
-            replay_wrapper,
+            experiment_name,
+            run_name
         )
