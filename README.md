@@ -19,7 +19,6 @@ pip install .
 - :heavy_check_mark: : Optional implemented
 - :white_check_mark: : Defualt implemented at papers
 - :x: : Not implemeted yet or can not implemented
-- :zzz: : Implemented but didn't update a while (can not guarantee working well now)
 
 ### Supported Environments
 
