@@ -32,6 +32,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         prioritized_replay_alpha=0.6,
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-3,
+        simba=False,
         log_interval=200,
         log_dir=None,
         _init_setup_model=True,
@@ -58,6 +59,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
             prioritized_replay_alpha,
             prioritized_replay_beta0,
             prioritized_replay_eps,
+            simba,
             log_interval,
             log_dir,
             _init_setup_model,
@@ -98,6 +100,12 @@ class TD3(Deteministic_Policy_Gradient_Family):
 
     def actions(self, obs, steps):
         if self.learning_starts < steps:
+
+            if self.simba:
+                obs = self.obs_rms.normalize(obs)
+                if steps != np.inf:
+                    self.obs_rms.update(obs)
+
             actions = np.clip(
                 np.asarray(self._get_actions(self.policy_params, obs, None))
                 + self.action_noise * np.random.normal(
@@ -117,6 +125,10 @@ class TD3(Deteministic_Policy_Gradient_Family):
                 data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
                 data = self.replay_buffer.sample(self.batch_size)
+
+            if self.simba:
+                data["obses"] = self.obs_rms.normalize(data["obses"])
+                data["nxtobses"] = self.obs_rms.normalize(data["nxtobses"])
 
             (
                 self.policy_params,

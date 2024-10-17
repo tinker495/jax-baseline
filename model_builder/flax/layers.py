@@ -1,19 +1,19 @@
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from model_builder.flax.initializers import clip_factorized_uniform
+from model_builder.flax.initializers import clip_uniform_initializers
 from typing import Callable
 from flax.linen.dtypes import promote_dtype
 SIGMA_INIT = 0.5
 
 class Dense(nn.Dense):
-    kernel_init: Callable = clip_factorized_uniform()
-    bias_init: Callable = clip_factorized_uniform()
+    kernel_init: Callable = clip_uniform_initializers()
+    bias_init: Callable = clip_uniform_initializers()
 
 class NoisyDense(nn.Dense):
     rng_collection: str = "params"
-    kernel_init: Callable = clip_factorized_uniform()
-    bias_init: Callable = clip_factorized_uniform()
+    kernel_init: Callable = clip_uniform_initializers()
+    bias_init: Callable = clip_uniform_initializers()
 
     @nn.compact
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
@@ -77,3 +77,17 @@ class NoisyDense(nn.Dense):
         key = self.make_rng(self.rng_collection)
         x = jax.random.normal(key, (n,), dtype=jnp.float32)
         return jnp.sign(x) * jnp.sqrt(jnp.abs(x))
+
+# Simba
+class ResidualBlock(nn.Module):
+    features: int
+    kernel_init: Callable = clip_uniform_initializers()
+    bias_init: Callable = clip_uniform_initializers()
+
+    @nn.compact
+    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
+        x = nn.LayerNorm()(inputs)
+        x = Dense(4 * self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
+        x = nn.relu(x)
+        x = Dense(self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
+        return x + inputs

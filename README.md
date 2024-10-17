@@ -43,21 +43,22 @@ pip install .
 
 #### Actor-Critic based
 
-| **Name**        | `Box`              | `Discrete`         | `IMPALA`[^IMPALA]    |
-| --------------- | ------------------ | ------------------ | ------------------ |
-| A2C[^A3C]       | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| PPO[^PPO]       | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:[^APPO] |
-| Truly PPO(TPPO)[^TPPO] | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| **Name**        | `Box`              | `Discrete`         | `IMPALA`[^IMPALA]    | `Simba`[^SIMBA]   |
+| --------------- | ------------------ | ------------------ | ------------------ |------------------ |
+| A2C[^A3C]       | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| PPO[^PPO]       | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:[^APPO] | :x:                |
+| Truly PPO(TPPO)[^TPPO] | :heavy_check_mark: | :heavy_check_mark: | :x:                | :x:                |
 
 #### DPG bases
 
-| **Name** | `Per`[^PER]             | `N-step`[^NSTEP][^RAINBOW]| `Ape-X`[^APEX]     |
-| -------- | ----------------------- | ------------------ | ------------------ |
-| DDPG[^DDPG]| :heavy_check_mark:      | :heavy_check_mark: | :heavy_check_mark: |
-| TD3[^TD3]  | :heavy_check_mark:      | :heavy_check_mark: | :heavy_check_mark: |
-| SAC[^SAC]  | :heavy_check_mark:      | :heavy_check_mark: | :x:                |
-| TQC[^TQC]  | :heavy_check_mark:      | :heavy_check_mark: | :x:                |
-| TD7[^TD7]  | :white_check_mark:(LAP[^LaP]) | :x:                | :x:                |
+| **Name** | `Per`[^PER]             | `N-step`[^NSTEP][^RAINBOW]| `Ape-X`[^APEX]     |  `Simba`[^SIMBA]   |
+| -------- | ----------------------- | ------------------ | ------------------ |------------------ |
+| DDPG[^DDPG]| :heavy_check_mark:      | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| TD3[^TD3]  | :heavy_check_mark:      | :heavy_check_mark: | :heavy_check_mark: | :x:                |
+| SAC[^SAC]  | :heavy_check_mark:      | :heavy_check_mark: | :x:                | :x:                |
+| TQC[^TQC]  | :heavy_check_mark:      | :heavy_check_mark: | :x:                | :x:                |
+| TD7[^TD7]  | :white_check_mark:(LAP[^LaP]) | :x:                | :x:                | :x:                |
+| BRO[^BRO]  |  :x:                | :x:                | :x:                | :x:                |
 
 ## Performance Compariton
 - [DQN 5M](docs/dqn_5m.md)
@@ -108,3 +109,5 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 [^TQC]: [TQC](https://arxiv.org/abs/2005.04269)
 [^TD7]: [TD7](https://arxiv.org/abs/2306.02451)
 [^LaP]: [LaP](https://arxiv.org/abs/2007.06049)
+[^BRO]: [BRO](https://arxiv.org/abs/2405.16158)
+[^SIMBA]: [SIMBA](https://arxiv.org/abs/2410.09754)

@@ -32,6 +32,7 @@ if __name__ == "__main__":
         default=1,
         help="n step setting when n > 1 is n step td method",
     )
+    parser.add_argument("--simba", action="store_true")
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
     parser.add_argument("--verbose", type=int, default=0, help="verbose")
     parser.add_argument("--logdir", type=str, default="log/dpg/", help="log file dir")
@@ -48,7 +49,6 @@ if __name__ == "__main__":
     parser.add_argument("--critic_num", type=int, default=2, help="tqc critic number")
     parser.add_argument("--ent_coef", type=str, default="auto", help="sac entropy coefficient")
     parser.add_argument("--learning_starts", type=int, default=5000, help="learning start")
-    parser.add_argument("--cvar", type=float, default=1.0, help="cvar")
     parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
@@ -64,7 +64,10 @@ if __name__ == "__main__":
 
     if args.algo == "DDPG":
         if args.model_lib == "flax":
-            from model_builder.flax.dpg.ddpg_builder import model_builder_maker
+            if args.simba:
+                from model_builder.flax.dpg.simba_ddpg_builder import model_builder_maker
+            else:
+                from model_builder.flax.dpg.ddpg_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.ddpg_builder import model_builder_maker
         agent = DDPG(
@@ -78,6 +81,7 @@ if __name__ == "__main__":
             target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
+            simba=args.simba,
             n_step=args.n_step,
             train_freq=args.train_freq,
             seed=args.seed,
@@ -88,7 +92,10 @@ if __name__ == "__main__":
         )
     if args.algo == "TD3":
         if args.model_lib == "flax":
-            from model_builder.flax.dpg.td3_builder import model_builder_maker
+            if args.simba:
+                from model_builder.flax.dpg.simba_td3_builder import model_builder_maker
+            else:
+                from model_builder.flax.dpg.td3_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.td3_builder import model_builder_maker
         agent = TD3(
@@ -102,6 +109,7 @@ if __name__ == "__main__":
             target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
+            simba=args.simba,
             action_noise=args.action_noise,
             n_step=args.n_step,
             train_freq=args.train_freq,
@@ -113,7 +121,10 @@ if __name__ == "__main__":
         )
     if args.algo == "SAC":
         if args.model_lib == "flax":
-            from model_builder.flax.dpg.sac_builder import model_builder_maker
+            if args.simba:
+                from model_builder.flax.dpg.simba_sac_builder import model_builder_maker
+            else:
+                from model_builder.flax.dpg.sac_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.sac_builder import model_builder_maker
         agent = SAC(
@@ -127,6 +138,7 @@ if __name__ == "__main__":
             target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
+            simba=args.simba,
             n_step=args.n_step,
             train_freq=args.train_freq,
             ent_coef=args.ent_coef,
@@ -138,7 +150,10 @@ if __name__ == "__main__":
         )
     if args.algo == "TQC":
         if args.model_lib == "flax":
-            from model_builder.flax.dpg.tqc_builder import model_builder_maker
+            if args.simba:
+                from model_builder.flax.dpg.simba_tqc_builder import model_builder_maker
+            else:
+                from model_builder.flax.dpg.tqc_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.tqc_builder import model_builder_maker
         agent = TQC(
@@ -153,6 +168,7 @@ if __name__ == "__main__":
             learning_starts=args.learning_starts,
             quantile_drop=args.quantile_drop,
             prioritized_replay=args.per,
+            simba=args.simba,
             n_step=args.n_step,
             train_freq=args.train_freq,
             ent_coef=args.ent_coef,
@@ -167,7 +183,10 @@ if __name__ == "__main__":
         )
     if args.algo == "TD7":
         if args.model_lib == "flax":
-            from model_builder.flax.dpg.td7_builder import model_builder_maker
+            if args.simba:
+                from model_builder.flax.dpg.simba_td7_builder import model_builder_maker
+            else:
+                from model_builder.flax.dpg.td7_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.td7_builder import model_builder_maker
         eval_env = gym.make(env_name)
@@ -183,6 +202,7 @@ if __name__ == "__main__":
             learning_starts=args.learning_starts,
             action_noise=args.action_noise,
             train_freq=args.train_freq,
+            simba=args.simba,
             seed=args.seed,
             gradient_steps=args.gradient_steps,
             log_dir=args.logdir,

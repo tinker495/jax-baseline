@@ -29,6 +29,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         learning_starts=1000,
         target_network_update_freq=250,
         prioritized_replay_alpha=0.4,
+        simba=False,
         log_interval=200,
         log_dir=None,
         _init_setup_model=True,
@@ -55,6 +56,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             prioritized_replay_alpha,
             0,
             0,
+            simba,
             log_interval,
             log_dir,
             _init_setup_model,
@@ -129,6 +131,12 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
     def actions(self, obs, steps, use_checkpoint=False, exploration=True):
         if self.learning_starts < steps:
+
+            if self.simba:
+                obs = self.obs_rms.normalize(obs)
+                if exploration:
+                    self.obs_rms.update(obs)
+
             if use_checkpoint:
                 actions = np.asarray(
                     self._get_actions(
@@ -192,6 +200,10 @@ class TD7(Deteministic_Policy_Gradient_Family):
                 data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
                 data = self.replay_buffer.sample(self.batch_size)
+
+            if self.simba:
+                data["obses"] = self.obs_rms.normalize(data["obses"])
+                data["nxtobses"] = self.obs_rms.normalize(data["nxtobses"])
 
             (
                 self.encoder_params,

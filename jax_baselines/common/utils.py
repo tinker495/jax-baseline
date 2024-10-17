@@ -237,3 +237,46 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
         optim = optax.chain(optax.clip_by_global_norm(grad_max), optim)
 
     return optim
+
+class RunningMeanStd:
+    """Tracks the mean, variance and count of values."""
+
+    def __init__(self, epsilon=1e-4, shapes: list =[()], dtype=np.float64):
+        """Tracks the mean, variance and count of values."""
+        self.means = [np.zeros(shape, dtype=dtype) for shape in shapes]
+        self.vars = [np.ones(shape, dtype=dtype) for shape in shapes]
+        self.count = epsilon
+
+    def normalize(self, xs):
+        """Normalizes the input using the running mean and variance."""
+        return [(x - mean) / np.sqrt(var + 1e-8) for x, mean, var in zip(xs, self.means, self.vars)]
+
+    def update(self, xs):
+        """Updates the mean, var and count from a batch of samples."""
+        means = []
+        vars = []
+        for x, mean, var in zip(xs, self.means, self.vars):
+            batch_mean = np.mean(x, axis=0)
+            batch_var = np.var(x, axis=0)
+            batch_count = x.shape[0]
+            mean, var = self.update_mean_var_count_from_moments(mean, var, batch_mean, batch_var, batch_count)
+            means.append(mean)
+            vars.append(var)
+        self.means = means
+        self.vars = vars
+        self.count += batch_count
+
+    def update_mean_var_count_from_moments(
+        self, mean, var, batch_mean, batch_var, batch_count
+    ):
+        """Updates the mean, var and count using the previous mean, var, count and batch values."""
+        delta = batch_mean - mean
+
+        tot_count = self.count + batch_count
+        new_mean = mean + delta * batch_count / tot_count
+        m_a = var * self.count
+        m_b = batch_var * batch_count
+        M2 = m_a + m_b + np.square(delta) * self.count * batch_count / tot_count
+        new_var = M2 / tot_count
+
+        return new_mean, new_var

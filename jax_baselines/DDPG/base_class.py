@@ -12,7 +12,7 @@ from jax_baselines.common.cpprb_buffers import (
     PrioritizedReplayBuffer,
     ReplayBuffer,
 )
-from jax_baselines.common.utils import key_gen, restore, save, select_optimizer
+from jax_baselines.common.utils import key_gen, restore, save, select_optimizer, RunningMeanStd
 from jax_baselines.common.env_builer import VectorizedEnv
 
 
@@ -36,6 +36,7 @@ class Deteministic_Policy_Gradient_Family(object):
         prioritized_replay_alpha=0.6,
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-3,
+        simba=False,
         log_interval=200,
         log_dir=None,
         _init_setup_model=True,
@@ -72,7 +73,7 @@ class Deteministic_Policy_Gradient_Family(object):
         self.full_tensorboard_log = full_tensorboard_log
         self.n_step_method = n_step > 1
         self.n_step = n_step
-
+        self.simba = simba
         self.params = None
         self.target_params = None
         self.save_path = None
@@ -80,6 +81,9 @@ class Deteministic_Policy_Gradient_Family(object):
 
         self.get_env_setup()
         self.get_memory_setup()
+
+        if self.simba == True:
+            self.obs_rms = RunningMeanStd(shapes=self.observation_space, dtype=np.float64)
 
     def save_params(self, path):
         save(path, self.params)
