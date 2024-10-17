@@ -414,6 +414,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
         return discription
 
     def run_name_update(self, run_name):
+        if self.simba:
+            run_name = "Simba_" + run_name
         if self.n_step_method:
             run_name = "{}Step_".format(self.n_step) + run_name
         return run_name
