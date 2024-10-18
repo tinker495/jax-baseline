@@ -13,7 +13,7 @@ from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 class TD7(Deteministic_Policy_Gradient_Family):
     def __init__(
         self,
-        env_builder : callable,
+        env_builder: callable,
         model_builder_maker,
         num_workers=1,
         eval_eps=20,
@@ -130,13 +130,12 @@ class TD7(Deteministic_Policy_Gradient_Family):
         return self.actor(policy_params, key, feature, zs)
 
     def actions(self, obs, steps, use_checkpoint=False, exploration=True):
+        if self.simba:
+            if exploration:
+                self.obs_rms.update(obs)
+            obs = self.obs_rms.normalize(obs)
+
         if self.learning_starts < steps:
-
-            if self.simba:
-                obs = self.obs_rms.normalize(obs)
-                if exploration:
-                    self.obs_rms.update(obs)
-
             if use_checkpoint:
                 actions = np.asarray(
                     self._get_actions(
@@ -150,9 +149,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
             if exploration:
                 actions = np.clip(
                     actions
-                    + self.action_noise * np.random.normal(
-                        0, 1, size=(self.worker_size, self.action_size[0])
-                    ),
+                    + self.action_noise
+                    * np.random.normal(0, 1, size=(self.worker_size, self.action_size[0])),
                     -1,
                     1,
                 )
@@ -250,8 +248,12 @@ class TD7(Deteministic_Policy_Gradient_Family):
             self.logger_run.log_metric("loss/encoder_loss", mean_repr_loss, steps)
             self.logger_run.log_metric("loss/qloss", mean_loss, steps)
             self.logger_run.log_metric("loss/targets", mean_target, steps)
-            self.logger_run.log_metric("loss/min_value", self.critic_params["values"]["min_value"], steps)
-            self.logger_run.log_metric("loss/max_value", self.critic_params["values"]["max_value"], steps)
+            self.logger_run.log_metric(
+                "loss/min_value", self.critic_params["values"]["min_value"], steps
+            )
+            self.logger_run.log_metric(
+                "loss/max_value", self.critic_params["values"]["max_value"], steps
+            )
 
         return mean_loss
 
@@ -290,22 +292,38 @@ class TD7(Deteministic_Policy_Gradient_Family):
         encoder_params = optax.apply_updates(encoder_params, updates)
 
         targets = self._target(
-            fixed_encoder_target_params, target_policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key
+            fixed_encoder_target_params,
+            target_policy_params,
+            target_critic_params,
+            rewards,
+            nxtobses,
+            not_terminateds,
+            key,
         )
-        critic_params["values"]["min_value"] = jnp.minimum(jnp.min(targets), critic_params["values"]["min_value"])
-        critic_params["values"]["max_value"] = jnp.maximum(jnp.max(targets), critic_params["values"]["max_value"])
+        critic_params["values"]["min_value"] = jnp.minimum(
+            jnp.min(targets), critic_params["values"]["min_value"]
+        )
+        critic_params["values"]["max_value"] = jnp.maximum(
+            jnp.max(targets), critic_params["values"]["max_value"]
+        )
 
         feature, zs = self.feature_and_zs(fixed_encoder_params, obses, key)
 
-        (critic_loss, priority), grad = jax.value_and_grad(
-            self._critic_loss, has_aux=True
-        )(critic_params, fixed_encoder_params, feature, zs, actions, targets, key)
-        updates, opt_critic_state = self.optimizer.update(grad, opt_critic_state, params=critic_params)
+        (critic_loss, priority), grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
+            critic_params, fixed_encoder_params, feature, zs, actions, targets, key
+        )
+        updates, opt_critic_state = self.optimizer.update(
+            grad, opt_critic_state, params=critic_params
+        )
         critic_params = optax.apply_updates(critic_params, updates)
 
         def _opt_actor(policy_params, opt_policy_state, key):
-            grad = jax.grad(self._actor_loss)(policy_params, critic_params, fixed_encoder_params, feature, zs, key)
-            updates, opt_policy_state = self.optimizer.update(grad, opt_policy_state, params=policy_params)
+            grad = jax.grad(self._actor_loss)(
+                policy_params, critic_params, fixed_encoder_params, feature, zs, key
+            )
+            updates, opt_policy_state = self.optimizer.update(
+                grad, opt_policy_state, params=policy_params
+            )
             policy_params = optax.apply_updates(policy_params, updates)
             return policy_params, opt_policy_state, key
 
@@ -316,8 +334,12 @@ class TD7(Deteministic_Policy_Gradient_Family):
             (policy_params, opt_policy_state, key),
         )
 
-        target_policy_params = hard_update(policy_params, target_policy_params, step, self.target_network_update_freq)
-        target_critic_params = hard_update(critic_params, target_critic_params, step, self.target_network_update_freq)
+        target_policy_params = hard_update(
+            policy_params, target_policy_params, step, self.target_network_update_freq
+        )
+        target_critic_params = hard_update(
+            critic_params, target_critic_params, step, self.target_network_update_freq
+        )
         fixed_encoder_target_params = hard_update(
             fixed_encoder_params, fixed_encoder_target_params, step, self.target_network_update_freq
         )
@@ -340,7 +362,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             jnp.mean(targets),
             priority,
         )
-    
+
     def feature_and_zs(self, encoder_params, obses, key):
         feature = self.preproc(encoder_params, key, convert_jax(obses))
         zs = self.encoder(encoder_params, key, feature)
@@ -354,7 +376,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         pred_zs = self.action_encoder(encoder_params, key, zs, actions)
         loss = jnp.mean(jnp.square(next_zs - pred_zs))
         return loss
-    
+
     def _actor_loss(self, policy_params, critic_params, fixed_encoder_params, feature, zs, key):
         actions = self.actor(policy_params, key, feature, zs)
         zsa = self.action_encoder(fixed_encoder_params, key, zs, actions)
@@ -373,7 +395,14 @@ class TD7(Deteministic_Policy_Gradient_Family):
         return critic_loss, priority
 
     def _target(
-        self, fixed_encoder_target_params, target_policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key
+        self,
+        fixed_encoder_target_params,
+        target_policy_params,
+        target_critic_params,
+        rewards,
+        nxtobses,
+        not_terminateds,
+        key,
     ):
         next_feature = self.preproc(fixed_encoder_target_params, key, nxtobses)
         fixed_target_zs = self.encoder(fixed_encoder_target_params, key, next_feature)
@@ -461,7 +490,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             if steps % self.eval_freq == 0:
                 eval_result = self.eval(steps)
 
-            if steps % log_interval == 0 and eval_result is not None and self.loss_mean is not None :
+            if steps % log_interval == 0 and eval_result is not None and self.loss_mean is not None:
                 pbar.set_description(self.discription(eval_result))
 
     def eval(self, steps):
@@ -475,9 +504,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             truncated = False
             eplen = 0
             while not terminated and not truncated:
-                actions = self.actions(
-                    obs, steps, use_checkpoint=True, exploration=False
-                )
+                actions = self.actions(obs, steps, use_checkpoint=True, exploration=False)
                 next_obs, reward, terminated, truncated, info = self.eval_env.step(actions[0])
                 next_obs = [np.expand_dims(next_obs, axis=0)]
                 # self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
