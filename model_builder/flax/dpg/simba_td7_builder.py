@@ -54,7 +54,7 @@ class Actor(nn.Module):
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray, zs: jnp.ndarray) -> jnp.ndarray:
-        a0 = avgl1norm(self.layer(self.node)(feature))
+        a0 = avgl1norm(Dense(self.node)(feature))
         embed_concat = jnp.concatenate([a0, zs], axis=1)
         action = nn.Sequential(
             [ Dense(self.node)] + 
@@ -78,7 +78,7 @@ class Critic(nn.Module):
     ) -> jnp.ndarray:
         concat = jnp.concatenate([feature, actions], axis=1)
         embedding = jnp.concatenate([zs, zsa], axis=1)
-        q0 = avgl1norm(self.layer(self.node)(concat))
+        q0 = avgl1norm(Dense(self.node)(concat))
         embed_concat = jnp.concatenate([q0, embedding], axis=1)
         q_net = nn.Sequential(
             [ Dense(self.node)] + 
