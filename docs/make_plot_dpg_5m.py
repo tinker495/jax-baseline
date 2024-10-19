@@ -9,14 +9,13 @@ plt.ioff()
 plt.figure(figsize=(15, 7))
 
 plt.subplot(1, 2, 1)
-div = 20
-
+min_y = 0
+max_y = 14000
 csvdict = {
-    'DQN': 'docs/csv/dqn_5m/DQN_signed.csv',
-    'C51': 'docs/csv/dqn_5m/C51_signed.csv',
-    'QRDQN': 'docs/csv/dqn_5m/QRDQN_signed.csv',
-    'IQN': 'docs/csv/dqn_5m/IQN_signed.csv',
-    'FQF': 'docs/csv/dqn_5m/FQF_signed.csv',
+    'TD3': 'docs/csv/dpg_humanoid_5m/TD3.csv',
+    'SAC': 'docs/csv/dpg_humanoid_5m/SAC.csv',
+    'TQC': 'docs/csv/dpg_humanoid_5m/TQC.csv',
+    'TD7': 'docs/csv/dpg_humanoid_5m/TD7.csv'
 }
 dfdict = {}
 average_dict = {}
@@ -26,7 +25,7 @@ for key in csvdict:
     df = df.astype(float)
     max_step = df["Step"].max()
     maximum_steps = max(maximum_steps, max_step)
-    split_size = (max_step/div)
+    split_size = (max_step/50)
     df["Split_Step"] = df["Step"].apply(lambda x: round(x/split_size))
     averagedf = df.groupby("Split_Step")["Value"].mean()
     averagedf = averagedf.reset_index()
@@ -38,22 +37,24 @@ for key in csvdict:
 for key in dfdict:
     sns.lineplot(data=average_dict[key], x='Step', y='Average_Reward', label=key)
 plt.xlabel('Step')
-plt.ylabel('Average Return')
+plt.ylabel('Average Reward')
 plt.xlim(0, maximum_steps)
-plt.title('Signed Reward')
+plt.ylim(min_y, max_y)
+plt.title('Average Reward')
 plt.legend()
 
 #get all max average rewards
 for key in average_dict:
     print(f"{key}, {average_dict[key]['Average_Reward'].max():.2f}")
 
+plt.subplot(1, 2, 2)
 csvdict = {
-    'DQN': 'docs/csv/dqn_5m/DQN_original.csv',
-    'C51': 'docs/csv/dqn_5m/C51_original.csv',
-    'QRDQN': 'docs/csv/dqn_5m/QRDQN_original.csv',
-    'IQN': 'docs/csv/dqn_5m/IQN_original.csv',
-    'FQF': 'docs/csv/dqn_5m/FQF_original.csv',
+    'Simba + TD3': 'docs/csv/dpg_humanoid_5m/Simba_TD3.csv',
+    'Simba + SAC': 'docs/csv/dpg_humanoid_5m/Simba_SAC.csv',
+    'Simba + TQC': 'docs/csv/dpg_humanoid_5m/Simba_TQC.csv',
+    'Simba + TD7': 'docs/csv/dpg_humanoid_5m/Simba_TD7.csv'
 }
+
 dfdict = {}
 average_dict = {}
 maximum_steps = 0
@@ -62,7 +63,7 @@ for key in csvdict:
     df = df.astype(float)
     max_step = df["Step"].max()
     maximum_steps = max(maximum_steps, max_step)
-    split_size = (max_step/div)
+    split_size = (max_step/50)
     df["Split_Step"] = df["Step"].apply(lambda x: round(x/split_size))
     averagedf = df.groupby("Split_Step")["Value"].mean()
     averagedf = averagedf.reset_index()
@@ -71,19 +72,15 @@ for key in csvdict:
     average_dict[key] = averagedf
     dfdict[key] = df
 
-plt.subplot(1, 2, 2)
-
 for key in dfdict:
     sns.lineplot(data=average_dict[key], x='Step', y='Average_Reward', label=key)
 plt.xlabel('Step')
-plt.ylabel('Average Return')
+plt.ylabel('Average Reward')
 plt.xlim(0, maximum_steps)
-plt.title('Original Reward')
+plt.ylim(min_y, max_y)
+plt.title('Average Reward')
 plt.legend()
-
-
-
-plt.savefig('docs/figures/dqn_breakout_5m.png')
+plt.savefig('docs/figures/dpg_Humanoid-v4-5m.png')
 
 #get all max average rewards
 for key in average_dict:

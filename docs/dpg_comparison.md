@@ -1,12 +1,12 @@
 
 # Humanoid-v4 in 5M step
 
-![Humanoid-v4](figures/dpg_Humanoid-v4.png)
+![Humanoid-v4](figures/dpg_Humanoid-v4-5m.png)
 
 ## Max Reward
-| **Algorithm** | Reward |
-| -------- | ----- |
-| TD3  | 4429.95 |
-| SAC  | 4790.06 |
-| TQC  | 7073.01 |
-| TD7  | 9241.61 |
+| **Algorithm** | Reward | Reward with Simba |
+| -------- | ----- | ------- |
+| TD3  | 4510.06 | 7545.79   |
+| SAC  | 5101.77 | 8430.89   |
+| TQC  | 7106.66 | **13810.30**  |
+| TD7  | **10023.46** | 11658.22 |
