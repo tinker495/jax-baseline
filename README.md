@@ -84,6 +84,7 @@ Performance measured on Nvidia RTX3080 and AMD Ryzen 9 5950X in a single process
 score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 500000/500000 [15:24<00:00, 540.88it/s]
 ```
 
+\[^DQN\]: [DQN](https://arxiv.org/abs/1312.5602v1)
 \[^DOUBLE\]: [Double DQN paper](https://arxiv.org/abs/1509.06461)
 \[^DUELING\]: [Dueling DQN paper](https://arxiv.org/abs/1511.06581)
 \[^PER\]: [PER](https://arxiv.org/abs/1511.05952)
@@ -112,5 +113,3 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 \[^LaP\]: [LaP](https://arxiv.org/abs/2007.06049)
 \[^BRO\]: [BRO](https://arxiv.org/abs/2405.16158)
 \[^SIMBA\]: [SIMBA](https://arxiv.org/abs/2410.09754)
-
-[^dqn]: %5BDQN%5D(https://arxiv.org/abs/1312.5602v1)
