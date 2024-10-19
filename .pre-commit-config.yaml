@@ -42,12 +42,6 @@ repos:
       - id: mdformat
         additional_dependencies:
           - mdformat-gfm
-          #- mdformat-black
+          - mdformat-black
           - mdformat-footnote
           - mdformat_frontmatter
-        exclude: |
-            (?x)^(
-                src/pytorch_lightning/CHANGELOG.md|
-                src/lightning_app/CHANGELOG.md|
-                src/lightning_lite/CHANGELOG.md
-            )$
