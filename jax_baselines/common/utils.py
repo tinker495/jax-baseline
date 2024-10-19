@@ -1,6 +1,5 @@
 import os
 import pickle
-
 from functools import partial
 from typing import Any, Callable
 
@@ -13,6 +12,7 @@ cpu_jit = partial(jax.jit, backend="cpu")
 gpu_jit = partial(jax.jit, backend="gpu")
 
 PyTree = Any
+
 
 def save(ckpt_dir: str, obs) -> None:
     os.makedirs(ckpt_dir, exist_ok=True)
@@ -34,6 +34,7 @@ def restore(ckpt_dir):
         flat_state = [np.load(f) for _ in leaves]
 
     return jax.tree_unflatten(treedef, flat_state)
+
 
 def key_gen(seed):
     key = jax.random.PRNGKey(seed)
@@ -185,6 +186,7 @@ def get_vtrace(rewards, rhos, c_ts, terminateds, truncateds, values, next_values
     v = A + values
     return v
 
+
 def kl_divergence_discrete(p, q, eps: float = 1e-8):
     # Add epsilon to prevent log(0)
     p_safe = p + eps
@@ -195,12 +197,14 @@ def kl_divergence_discrete(p, q, eps: float = 1e-8):
     # Compute KL divergence with masking
     return jnp.sum(p * (log_p - log_q))
 
+
 def kl_divergence_continuous(p, q):
     p_mu, p_std = p
     q_mu, q_std = q
     term1 = jnp.log(q_std / p_std)
-    term2 = (p_std**2 + (p_mu - q_mu)**2) / (2 * q_std**2)
+    term2 = (p_std**2 + (p_mu - q_mu) ** 2) / (2 * q_std**2)
     return term1 + term2 - 0.5
+
 
 def get_hyper_params(agent):
     return dict(
@@ -214,9 +218,11 @@ def get_hyper_params(agent):
         ]
     )
 
+
 def add_hparams(agent, tensorboardrun):
     hparam_dict = get_hyper_params(agent)
     tensorboardrun.log_param(hparam_dict)
+
 
 def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
     optim = None
@@ -238,10 +244,11 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
 
     return optim
 
+
 class RunningMeanStd:
     """Tracks the mean, variance and count of values."""
 
-    def __init__(self, epsilon=1e-4, shapes: list =[()], dtype=np.float64):
+    def __init__(self, epsilon=1e-4, shapes: list = [()], dtype=np.float64):
         """Tracks the mean, variance and count of values."""
         self.means = [np.zeros(shape, dtype=dtype) for shape in shapes]
         self.vars = [np.ones(shape, dtype=dtype) for shape in shapes]
@@ -259,16 +266,16 @@ class RunningMeanStd:
             batch_mean = np.mean(x, axis=0)
             batch_var = np.var(x, axis=0)
             batch_count = x.shape[0]
-            mean, var = self.update_mean_var_count_from_moments(mean, var, batch_mean, batch_var, batch_count)
+            mean, var = self.update_mean_var_count_from_moments(
+                mean, var, batch_mean, batch_var, batch_count
+            )
             means.append(mean)
             vars.append(var)
         self.means = means
         self.vars = vars
         self.count += batch_count
 
-    def update_mean_var_count_from_moments(
-        self, mean, var, batch_mean, batch_var, batch_count
-    ):
+    def update_mean_var_count_from_moments(self, mean, var, batch_mean, batch_var, batch_count):
         """Updates the mean, var and count using the previous mean, var, count and batch values."""
         delta = batch_mean - mean
 

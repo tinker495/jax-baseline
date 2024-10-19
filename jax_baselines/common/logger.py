@@ -1,8 +1,10 @@
 import glob
 import os
-from jax_baselines.common.utils import add_hparams
+
 from tensorboardX import SummaryWriter
 from tensorboardX.summary import hparams
+
+from jax_baselines.common.utils import add_hparams
 
 
 def _get_latest_run_id(local_dir, experiment_name, run_name):
@@ -23,12 +25,13 @@ def _get_latest_run_id(local_dir, experiment_name, run_name):
             max_run_id = int(ext)
     return max_run_id
 
+
 class TensorboardRun:
     def __init__(self, dir: str):
         self.dir = dir
         self.writer = SummaryWriter(dir)
 
-    def log_param(self, hparam_dict):  
+    def log_param(self, hparam_dict):
         exp, ssi, sei = hparams(hparam_dict, {})
 
         self.writer.file_writer.add_summary(exp)
@@ -44,12 +47,9 @@ class TensorboardRun:
     def get_local_path(self, path):
         return os.path.join(self.dir, path)
 
+
 class TensorboardLogger:
-    def __init__(self, 
-                 run_name: str,
-                 experiment_name: str,
-                 local_dir: str,
-                 agent: any):
+    def __init__(self, run_name: str, experiment_name: str, local_dir: str, agent: any):
         """
         Create an MLflow logger for a code segment, and saves it to the MLflow server as its own run.
 
@@ -58,13 +58,12 @@ class TensorboardLogger:
         """
         self.run_name = run_name
         self.local_dir = os.path.join(
-                local_dir,
-                experiment_name,
-                f"{run_name}_{_get_latest_run_id(local_dir, experiment_name, run_name)+1:02d}",
-            )
+            local_dir,
+            experiment_name,
+            f"{run_name}_{_get_latest_run_id(local_dir, experiment_name, run_name)+1:02d}",
+        )
         self.run = TensorboardRun(self.local_dir)
         add_hparams(agent, self.run)
-        
 
     def __enter__(self) -> TensorboardRun:
         return self.run

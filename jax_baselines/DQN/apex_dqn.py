@@ -214,7 +214,14 @@ class APE_X_DQN(Ape_X_Family):
             obses, actions, rewards, nxtobses, not_terminateds, weights = data
             key, *subkeys = jax.random.split(key, 3)
             targets = self._target(
-                params, target_params, obses, actions, rewards, nxtobses, not_terminateds, subkeys[0]
+                params,
+                target_params,
+                obses,
+                actions,
+                rewards,
+                nxtobses,
+                not_terminateds,
+                subkeys[0],
             )
             (loss, abs_error), grad = jax.value_and_grad(self._loss, has_aux=True)(
                 params, obses, actions, targets, weights, subkeys[1]
@@ -248,7 +255,9 @@ class APE_X_DQN(Ape_X_Family):
             error
         )  # remove weight multiply cpprb weight is something wrong
 
-    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key):
+    def _target(
+        self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
+    ):
         next_q = self.get_q(target_params, nxtobses, key)
 
         if self.munchausen:
@@ -260,7 +269,8 @@ class APE_X_DQN(Ape_X_Family):
                 next_sub_q, tau_log_pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
             next_vals = (
-                jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True) * not_terminateds
+                jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True)
+                * not_terminateds
             )
 
             q_k_targets = self.get_q(target_params, obses, key)

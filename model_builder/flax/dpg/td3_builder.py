@@ -68,7 +68,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
 
             def actor(self, x):
                 return self.act(x)
-            
+
         class Merged_Critics(nn.Module):
             def setup(self):
                 self.crit1 = Critic(**policy_kwargs)
@@ -91,7 +91,11 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
             )
             critic_params = model_critic.init(
                 key,
-                preproc_fn(policy_params, key, [np.zeros((1, *o), dtype=np.float32) for o in observation_space]),
+                preproc_fn(
+                    policy_params,
+                    key,
+                    [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
+                ),
                 np.zeros((1, *action_size), dtype=np.float32),
             )
             if print_model:

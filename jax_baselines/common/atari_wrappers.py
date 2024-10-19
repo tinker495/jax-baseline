@@ -10,6 +10,7 @@ from gymnasium import spaces
 os.environ.setdefault("PATH", "")
 cv2.ocl.setUseOpenCL(False)
 
+
 class NoopResetEnv(gym.Wrapper):
     def __init__(self, env, noop_max=30):
         """Sample initial obses by taking random number of no-ops on reset. No-op is assumed to be action 0.

@@ -23,13 +23,11 @@ class Actor(nn.Module):
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         linear = nn.Sequential(
-            [ Dense(self.node)] + 
-            [ResidualBlock(self.node) for _ in range(self.hidden_n)]
+            [Dense(self.node)]
+            + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
             + [
                 nn.LayerNorm(),
-                Dense(
-                    self.action_size[0] * 2, kernel_init=clip_uniform_initializers(-0.03, 0.03)
-                ),
+                Dense(self.action_size[0] * 2, kernel_init=clip_uniform_initializers(-0.03, 0.03)),
             ]
         )(feature)
         mu, log_std = jnp.split(linear, 2, axis=-1)
@@ -48,12 +46,15 @@ class Critic(nn.Module):
     def __call__(self, feature: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
         concat = jnp.concatenate([feature, actions], axis=1)
         q_net = nn.Sequential(
-            [ Dense(self.node)] + 
-            [ResidualBlock(self.node) for _ in range(self.hidden_n)]
+            [Dense(self.node)]
+            + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
             + [
                 nn.LayerNorm(),
                 Dense(
-                    self.support_n, kernel_init=clip_uniform_initializers(-0.03 / self.support_n, 0.03 / self.support_n)
+                    self.support_n,
+                    kernel_init=clip_uniform_initializers(
+                        -0.03 / self.support_n, 0.03 / self.support_n
+                    ),
                 ),
             ]
         )(concat)
@@ -78,11 +79,11 @@ def model_builder_maker(observation_space, action_size, support_n, policy_kwargs
                 feature = self.preprocess(x)
                 mu, log_std = self.actor(feature)
                 return mu, log_std
-            
+
             def preprocess(self, x):
                 x = self.preproc(x)
                 return x
-            
+
             def actor(self, x):
                 return self.act(x)
 
@@ -106,7 +107,11 @@ def model_builder_maker(observation_space, action_size, support_n, policy_kwargs
             )
             critic_params = model_critic.init(
                 key,
-                preproc_fn(policy_params, key, [np.zeros((1, *o), dtype=np.float32) for o in observation_space]),
+                preproc_fn(
+                    policy_params,
+                    key,
+                    [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
+                ),
                 np.zeros((1, *action_size), dtype=np.float32),
             )
             if print_model:

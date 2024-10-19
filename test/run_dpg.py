@@ -1,5 +1,4 @@
 import argparse
-import os
 
 import gymnasium as gym
 
@@ -56,7 +55,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
     env_name = args.env
     embedding_mode = "normal"
-    env_builder, env_info = get_env_builder(env_name, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate)
+    env_builder, env_info = get_env_builder(
+        env_name, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
+    )
     env_name = env_info["env_id"]
     env_type = env_info["env_type"]
 
@@ -65,7 +66,9 @@ if __name__ == "__main__":
     if args.algo == "DDPG":
         if args.model_lib == "flax":
             if args.simba:
-                from model_builder.flax.dpg.simba_ddpg_builder import model_builder_maker
+                from model_builder.flax.dpg.simba_ddpg_builder import (
+                    model_builder_maker,
+                )
             else:
                 from model_builder.flax.dpg.ddpg_builder import model_builder_maker
         elif args.model_lib == "haiku":

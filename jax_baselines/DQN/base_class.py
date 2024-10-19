@@ -1,11 +1,10 @@
-from collections import deque
 import os
+from collections import deque
 
 import gymnasium as gym
 import numpy as np
 from tqdm.auto import trange
 
-from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.cpprb_buffers import (
     NstepReplayBuffer,
     PrioritizedNstepReplayBuffer,
@@ -13,6 +12,7 @@ from jax_baselines.common.cpprb_buffers import (
     ReplayBuffer,
 )
 from jax_baselines.common.env_builer import VectorizedEnv
+from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.schedules import ConstantSchedule, LinearSchedule
 from jax_baselines.common.utils import key_gen, restore, save, select_optimizer
 
@@ -236,7 +236,7 @@ class Q_Network_Family(object):
         callback=None,
         log_interval=1000,
         experiment_name="Q_network",
-        run_name="Q_network"
+        run_name="Q_network",
     ):
         run_name = self.run_name_update(run_name)
 
@@ -314,9 +314,7 @@ class Q_Network_Family(object):
                 infos,
             ) = self.env.get_result()
 
-            self.replay_buffer.add(
-                [obs], actions, rewards, [next_obses], terminateds, truncateds
-            )
+            self.replay_buffer.add([obs], actions, rewards, [next_obses], terminateds, truncateds)
 
             if steps % self.eval_freq == 0:
                 eval_result = self.eval(steps)
@@ -393,9 +391,9 @@ class Q_Network_Family(object):
         with self.logger as self.logger_run:
             self.test_eval_env(episode)
 
-
     def test_eval_env(self, episode):
         from gymnasium.wrappers import RecordVideo
+
         directory = self.logger_run.get_local_path("video")
         os.makedirs(directory, exist_ok=True)
 
@@ -412,7 +410,9 @@ class Q_Network_Family(object):
                 eplen = 0
                 while not terminated and not truncated:
                     actions = self.actions(obs, 0.001)
-                    observation, reward, terminated, truncated, info = Render_env.step(actions[0][0])
+                    observation, reward, terminated, truncated, info = Render_env.step(
+                        actions[0][0]
+                    )
                     obs = [np.expand_dims(observation, axis=0)]
                     episode_rew += reward
                     eplen += 1

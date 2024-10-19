@@ -1,25 +1,31 @@
-from collections import deque
 import os
+from collections import deque
 
 import gymnasium as gym
 import numpy as np
 from tqdm.auto import trange
 
-from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.cpprb_buffers import (
     NstepReplayBuffer,
     PrioritizedNstepReplayBuffer,
     PrioritizedReplayBuffer,
     ReplayBuffer,
 )
-from jax_baselines.common.utils import key_gen, restore, save, select_optimizer, RunningMeanStd
 from jax_baselines.common.env_builer import VectorizedEnv
+from jax_baselines.common.logger import TensorboardLogger
+from jax_baselines.common.utils import (
+    RunningMeanStd,
+    key_gen,
+    restore,
+    save,
+    select_optimizer,
+)
 
 
 class Deteministic_Policy_Gradient_Family(object):
     def __init__(
         self,
-        env_builder : callable,
+        env_builder: callable,
         model_builder_maker,
         num_workers=1,
         eval_eps=20,
@@ -82,7 +88,7 @@ class Deteministic_Policy_Gradient_Family(object):
         self.get_env_setup()
         self.get_memory_setup()
 
-        if self.simba == True:
+        if self.simba:
             self.obs_rms = RunningMeanStd(shapes=self.observation_space, dtype=np.float64)
 
     def save_params(self, path):
@@ -193,7 +199,7 @@ class Deteministic_Policy_Gradient_Family(object):
         callback=None,
         log_interval=1000,
         experiment_name="DPG_network",
-        run_name="DPG_network"
+        run_name="DPG_network",
     ):
         run_name = self.run_name_update(run_name)
         self.eval_freq = ((total_timesteps // 100) // self.worker_size) * self.worker_size
@@ -207,7 +213,7 @@ class Deteministic_Policy_Gradient_Family(object):
                 self.learn_VectorizedEnv(pbar, callback, log_interval)
 
             self.eval(total_timesteps)
-            
+
             self.save_params(self.logger_run.get_local_path("params"))
 
     def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
@@ -259,9 +265,7 @@ class Deteministic_Policy_Gradient_Family(object):
                 infos,
             ) = self.env.get_result()
 
-            self.replay_buffer.add(
-                [obs], actions, rewards, [next_obses], terminateds, truncateds
-            )
+            self.replay_buffer.add([obs], actions, rewards, [next_obses], terminateds, truncateds)
             if steps % self.eval_freq == 0:
                 eval_result = self.eval(steps)
 
@@ -278,12 +282,10 @@ class Deteministic_Policy_Gradient_Family(object):
         terminated = False
         truncated = False
         eplen = 0
-        
+
         for ep in range(self.eval_eps):
             while not terminated and not truncated:
-                actions = self.actions(
-                    obs, steps
-                )
+                actions = self.actions(obs, steps)
                 observation, reward, terminated, truncated, info = self.eval_env.step(actions[0])
                 obs = [np.expand_dims(observation, axis=0)]
                 total_reward[ep] += reward
@@ -316,6 +318,7 @@ class Deteministic_Policy_Gradient_Family(object):
 
     def test_eval_env(self, episode):
         from gymnasium.wrappers import RecordVideo
+
         directory = self.logger_run.get_local_path("video")
         os.makedirs(directory, exist_ok=True)
         test_env = self.env_builder(1, render_mode="rgb_array")

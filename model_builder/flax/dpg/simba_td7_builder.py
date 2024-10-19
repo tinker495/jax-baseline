@@ -57,8 +57,8 @@ class Actor(nn.Module):
         a0 = avgl1norm(Dense(self.node)(feature))
         embed_concat = jnp.concatenate([a0, zs], axis=1)
         action = nn.Sequential(
-            [ Dense(self.node)] + 
-            [ResidualBlock(self.node) for _ in range(self.hidden_n)]
+            [Dense(self.node)]
+            + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
             + [
                 nn.LayerNorm(),
                 Dense(self.action_size[0], kernel_init=clip_uniform_initializers(-0.03, 0.03)),
@@ -81,12 +81,9 @@ class Critic(nn.Module):
         q0 = avgl1norm(Dense(self.node)(concat))
         embed_concat = jnp.concatenate([q0, embedding], axis=1)
         q_net = nn.Sequential(
-            [ Dense(self.node)] + 
-            [ResidualBlock(self.node) for _ in range(self.hidden_n)]
-            + [
-                nn.LayerNorm(),
-                Dense(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))
-            ]
+            [Dense(self.node)]
+            + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
+            + [nn.LayerNorm(), Dense(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))]
         )(embed_concat)
         return q_net
 
@@ -120,7 +117,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
 
             def action_encoder(self, zs, a):
                 return self.act_enc(zs, a)
-            
+
             def feature_and_zs(self, x):
                 feature = self.preprocess(x)
                 zs = self.encoder(feature)
@@ -157,7 +154,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 *encoder_model.apply(
                     encoder_params,
                     [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                    method=encoder_model.feature_and_zs
+                    method=encoder_model.feature_and_zs,
                 )
             )
 
@@ -166,7 +163,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 *encoder_model.apply(
                     encoder_params,
                     [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                    np.zeros((1, *action_size), dtype=np.float32)
+                    np.zeros((1, *action_size), dtype=np.float32),
                 ),
                 np.zeros((1, *action_size), dtype=np.float32)
             )
@@ -186,7 +183,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 critic_fn,
                 encoder_params,
                 policy_params,
-                critic_params
+                critic_params,
             )
         else:
             return preproc_fn, encoder_fn, action_encoder_fn, actor_fn, critic_fn

@@ -243,7 +243,9 @@ class APE_X_IQN(Ape_X_Family):
         )
         return jnp.mean(loss * weights), loss
 
-    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key):
+    def _target(
+        self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
+    ):
         target_tau = jax.random.uniform(key, (self.batch_size, self.n_support))
         next_q = self.get_q(target_params, nxtobses, target_tau, key)
 
