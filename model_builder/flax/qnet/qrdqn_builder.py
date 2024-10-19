@@ -35,7 +35,9 @@ class Model(nn.Module):
                 + [
                     self.layer(
                         self.action_size[0] * self.support_n,
-                        kernel_init=clip_uniform_initializers(-0.03 / self.support_n, 0.03 / self.support_n),
+                        kernel_init=clip_uniform_initializers(
+                            -0.03 / self.support_n, 0.03 / self.support_n
+                        ),
                     ),
                     lambda x: jnp.reshape(x, (x.shape[0], self.action_size[0], self.support_n)),
                 ]
@@ -48,7 +50,12 @@ class Model(nn.Module):
                     for i in range(2 * self.hidden_n)
                 ]
                 + [
-                    self.layer(self.support_n, kernel_init=clip_uniform_initializers(-0.03 / self.support_n, 0.03 / self.support_n)),
+                    self.layer(
+                        self.support_n,
+                        kernel_init=clip_uniform_initializers(
+                            -0.03 / self.support_n, 0.03 / self.support_n
+                        ),
+                    ),
                     lambda x: jnp.reshape(x, (x.shape[0], 1, self.support_n)),
                 ]
             )(feature)
@@ -60,7 +67,9 @@ class Model(nn.Module):
                 + [
                     self.layer(
                         self.action_size[0] * self.support_n,
-                        kernel_init=clip_uniform_initializers(-0.03 / self.support_n, 0.03 / self.support_n),
+                        kernel_init=clip_uniform_initializers(
+                            -0.03 / self.support_n, 0.03 / self.support_n
+                        ),
                     ),
                     lambda x: jnp.reshape(x, (x.shape[0], self.action_size[0], self.support_n)),
                 ]

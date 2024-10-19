@@ -48,7 +48,14 @@ class Critic(nn.Module):
         concat = jnp.concatenate([feature, actions], axis=1)
         q_net = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [self.layer(self.support_n, kernel_init=clip_uniform_initializers(-0.03 / self.support_n, 0.03 / self.support_n))]
+            + [
+                self.layer(
+                    self.support_n,
+                    kernel_init=clip_uniform_initializers(
+                        -0.03 / self.support_n, 0.03 / self.support_n
+                    ),
+                )
+            ]
         )(concat)
         return q_net
 
@@ -71,11 +78,11 @@ def model_builder_maker(observation_space, action_size, support_n, policy_kwargs
                 feature = self.preprocess(x)
                 mu, log_std = self.actor(feature)
                 return mu, log_std
-            
+
             def preprocess(self, x):
                 x = self.preproc(x)
                 return x
-            
+
             def actor(self, x):
                 return self.act(x)
 
@@ -99,7 +106,11 @@ def model_builder_maker(observation_space, action_size, support_n, policy_kwargs
             )
             critic_params = model_critic.init(
                 key,
-                preproc_fn(policy_params, key, [np.zeros((1, *o), dtype=np.float32) for o in observation_space]),
+                preproc_fn(
+                    policy_params,
+                    key,
+                    [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
+                ),
                 np.zeros((1, *action_size), dtype=np.float32),
             )
             if print_model:

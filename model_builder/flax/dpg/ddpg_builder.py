@@ -81,7 +81,11 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
             )
             critic_params = critic_model.init(
                 key,
-                preproc_fn(policy_params, key, [np.zeros((1, *o), dtype=np.float32) for o in observation_space]),
+                preproc_fn(
+                    policy_params,
+                    key,
+                    [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
+                ),
                 np.zeros((1, *action_size), dtype=np.float32),
             )
             if print_model:

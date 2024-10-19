@@ -235,7 +235,14 @@ class APE_X_QRDQN(Ape_X_Family):
             obses, actions, rewards, nxtobses, not_terminateds, weights = data
             key, *subkeys = jax.random.split(key, 3)
             targets = self._target(
-                params, target_params, obses, actions, rewards, nxtobses, not_terminateds, subkeys[0]
+                params,
+                target_params,
+                obses,
+                actions,
+                rewards,
+                nxtobses,
+                not_terminateds,
+                subkeys[0],
             )
             (loss, abs_error), grad = jax.value_and_grad(self._loss, has_aux=True)(
                 params, obses, actions, targets, weights, subkeys[1]
@@ -271,7 +278,9 @@ class APE_X_QRDQN(Ape_X_Family):
             loss,
         )  # remove weight multiply cpprb weight is something wrong
 
-    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key):
+    def _target(
+        self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
+    ):
         next_q = self.get_q(target_params, nxtobses, key)
 
         if self.munchausen:

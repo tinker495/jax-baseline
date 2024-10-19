@@ -11,7 +11,7 @@ from jax_baselines.DQN.base_class import Q_Network_Family
 class DQN(Q_Network_Family):
     def __init__(
         self,
-        env_builder : callable,
+        env_builder: callable,
         model_builder_maker,
         num_workers=1,
         eval_eps=20,
@@ -187,7 +187,9 @@ class DQN(Q_Network_Family):
             error
         )  # remove weight multiply cpprb weight is something wrong
 
-    def _target(self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key):
+    def _target(
+        self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
+    ):
         next_q = self.get_q(target_params, nxtobses, key)
 
         if self.munchausen:
@@ -199,7 +201,8 @@ class DQN(Q_Network_Family):
                 next_sub_q, tau_log_pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
             next_vals = (
-                jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True) * not_terminateds
+                jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True)
+                * not_terminateds
             )
 
             if self.double_q:
@@ -226,12 +229,6 @@ class DQN(Q_Network_Family):
         callback=None,
         log_interval=1000,
         experiment_name="DQN",
-        run_name="DQN"
+        run_name="DQN",
     ):
-        super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            experiment_name,
-            run_name
-        )
+        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name)

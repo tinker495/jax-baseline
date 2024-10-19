@@ -1,5 +1,5 @@
-from collections import deque
 import os
+from collections import deque
 
 import gymnasium as gym
 import jax
@@ -8,10 +8,16 @@ import numpy as np
 from gymnasium import spaces
 from tqdm.auto import trange
 
-from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.cpprb_buffers import EpochBuffer
-from jax_baselines.common.utils import convert_jax, key_gen, restore, save, select_optimizer
 from jax_baselines.common.env_builer import VectorizedEnv
+from jax_baselines.common.logger import TensorboardLogger
+from jax_baselines.common.utils import (
+    convert_jax,
+    key_gen,
+    restore,
+    save,
+    select_optimizer,
+)
 
 
 class Actor_Critic_Policy_Gradient_Family(object):
@@ -200,7 +206,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         callback=None,
         log_interval=1000,
         experiment_name="A2C",
-        run_name="A2C"
+        run_name="A2C",
     ):
         self.update_eps = 1.0
         self.eval_freq = ((total_timesteps // 100) // self.worker_size) * self.worker_size
@@ -223,7 +229,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.lossque = deque(maxlen=10)
         for steps in pbar:
             actions = self.actions(obs)[0]
-            next_obs, reward, terminated, truncated, info = self.env.step(self.conv_action(actions)[0])
+            next_obs, reward, terminated, truncated, info = self.env.step(
+                self.conv_action(actions)[0]
+            )
             next_obs = [np.expand_dims(next_obs, axis=0)]
             self.buffer.add(obs, actions, [reward], next_obs, [terminated], [truncated])
             obs = next_obs
@@ -259,11 +267,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 infos,
             ) = self.env.get_result()
 
-            self.buffer.add(
-                [obs], actions, rewards, [next_obses], terminateds, truncateds
-            )
+            self.buffer.add([obs], actions, rewards, [next_obses], terminateds, truncateds)
 
-            if (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0:  # train in step the environments
+            if (steps + self.worker_size) % (
+                self.batch_size * self.worker_size
+            ) == 0:  # train in step the environments
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
 
@@ -272,7 +280,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
 
             if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
                 pbar.set_description(self.discription(eval_result))
-    
+
     def eval(self, steps):
         original_rewards = []
         total_reward = np.zeros(self.eval_eps)
@@ -292,7 +300,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
         for ep in range(self.eval_eps):
             while not terminated and not truncated:
                 actions = self.actions(obs)[0]
-                observation, reward, terminated, truncated, info = self.eval_env.step(self.conv_action(actions))
+                observation, reward, terminated, truncated, info = self.eval_env.step(
+                    self.conv_action(actions)
+                )
                 obs = [np.expand_dims(observation, axis=0)]
                 if have_original_reward:
                     original_reward += info["original_reward"]
@@ -344,6 +354,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
 
     def test_eval_env(self, episode):
         from gymnasium.wrappers import RecordVideo
+
         directory = self.logger_run.get_local_path("video")
         os.makedirs(directory, exist_ok=True)
 
@@ -360,7 +371,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 eplen = 0
                 while not terminated and not truncated:
                     actions = self.actions(obs)[0]
-                    observation, reward, terminated, truncated, info = self.eval_env.step(self.conv_action(actions))
+                    observation, reward, terminated, truncated, info = self.eval_env.step(
+                        self.conv_action(actions)
+                    )
                     obs = [np.expand_dims(observation, axis=0)]
                     episode_rew += reward
                     eplen += 1

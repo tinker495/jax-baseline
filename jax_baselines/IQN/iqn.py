@@ -13,7 +13,7 @@ from jax_baselines.DQN.base_class import Q_Network_Family
 class IQN(Q_Network_Family):
     def __init__(
         self,
-        env_builder : callable,
+        env_builder: callable,
         model_builder_maker,
         num_workers=1,
         eval_eps=20,
@@ -280,17 +280,11 @@ class IQN(Q_Network_Family):
         callback=None,
         log_interval=1000,
         experiment_name="IQN",
-        run_name="IQN"
+        run_name="IQN",
     ):
         run_name = run_name + (
             "({:d})_CVaR({:.2f})".format(self.n_support, self.CVaR)
             if self.risk_avoid
             else "({:d})".format(self.n_support)
         )
-        super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            experiment_name,
-            run_name
-        )
+        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name)

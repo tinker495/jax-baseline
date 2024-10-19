@@ -12,7 +12,7 @@ from jax_baselines.DQN.base_class import Q_Network_Family
 class QRDQN(Q_Network_Family):
     def __init__(
         self,
-        env_builder : callable,
+        env_builder: callable,
         model_builder_maker,
         num_workers=1,
         eval_eps=20,
@@ -269,13 +269,7 @@ class QRDQN(Q_Network_Family):
         callback=None,
         log_interval=1000,
         experiment_name="QRDQN",
-        run_name="QRDQN"
+        run_name="QRDQN",
     ):
         run_name = run_name + "({:d})".format(self.n_support)
-        super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            experiment_name,
-            run_name
-        )
+        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name)

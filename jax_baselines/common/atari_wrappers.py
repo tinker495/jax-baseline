@@ -7,8 +7,6 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-from .wrappers import TimeLimit
-
 os.environ.setdefault("PATH", "")
 cv2.ocl.setUseOpenCL(False)
 
@@ -326,7 +324,7 @@ def wrap_deepmind(
 def make_wrap_atari(env_id="Breakout-v0", clip_rewards=False):
     # env = gym.make(env_id)
     env = make_atari(env_id)
-    env = TimeLimit(env, max_episode_steps=10000)
+    env = gym.wrappers.TimeLimit(env, max_episode_steps=10000)
     env = wrap_deepmind(env, clip_rewards=clip_rewards, frame_stack=True)
     return env
 

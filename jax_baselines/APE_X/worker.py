@@ -94,9 +94,7 @@ class Ape_X_Worker(object):
                 actions = get_action(params, obs, eps, next(key_seq))
                 next_obs, reward, terminated, truncated, info = self.env.step(actions)
                 next_obs = [np.expand_dims(next_obs, axis=0)]
-                local_buffer.add(
-                    obs, actions, reward, next_obs, terminated or truncated, truncated
-                )
+                local_buffer.add(obs, actions, reward, next_obs, terminated or truncated, truncated)
                 if have_original_reward:
                     original_score += info["original_reward"]
                 score += reward

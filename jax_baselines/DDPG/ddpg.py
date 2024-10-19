@@ -14,7 +14,7 @@ from jax_baselines.DDPG.ou_noise import OUNoise
 class DDPG(Deteministic_Policy_Gradient_Family):
     def __init__(
         self,
-        env_builder : callable,
+        env_builder: callable,
         model_builder_maker,
         num_workers=1,
         eval_eps=20,
@@ -34,6 +34,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         prioritized_replay_alpha=0.6,
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-3,
+        simba=False,
         log_interval=200,
         log_dir=None,
         _init_setup_model=True,
@@ -60,6 +61,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             prioritized_replay_alpha,
             prioritized_replay_beta0,
             prioritized_replay_eps,
+            simba,
             log_interval,
             log_dir,
             _init_setup_model,
@@ -85,9 +87,13 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             self.action_size,
             self.policy_kwargs,
         )
-        self.preproc, self.actor, self.critic, self.policy_params, self.critic_params = model_builder(
-            next(self.key_seq), print_model=True
-        )
+        (
+            self.preproc,
+            self.actor,
+            self.critic,
+            self.policy_params,
+            self.critic_params,
+        ) = model_builder(next(self.key_seq), print_model=True)
         self.target_policy_params = deepcopy(self.policy_params)
         self.target_critic_params = deepcopy(self.critic_params)
 
@@ -97,7 +103,9 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         self._train_step = jax.jit(self._train_step)
 
     def _get_actions(self, policy_params, obses, key=None) -> jnp.ndarray:
-        return self.actor(policy_params, key, self.preproc(policy_params, key, convert_jax(obses)))  #
+        return self.actor(
+            policy_params, key, self.preproc(policy_params, key, convert_jax(obses))
+        )  #
 
     def discription(self, eval_result=None):
         discription = ""
@@ -108,12 +116,18 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         discription += f"loss : {np.mean(self.lossque):.3f}"
         discription += f"epsilon : {self.epsilon:.3f}"
         return discription
-    
+
     def actions(self, obs, steps):
+        if self.simba:
+            if steps != np.inf:
+                self.obs_rms.update(obs)
+            obs = self.obs_rms.normalize(obs)
+
         if self.learning_starts < steps:
             self.epsilon = self.exploration.value(steps)
             actions = np.clip(
-                np.asarray(self._get_actions(self.policy_params, obs, None)) + self.noise() * self.epsilon,
+                np.asarray(self._get_actions(self.policy_params, obs, None))
+                + self.noise() * self.epsilon,
                 -1,
                 1,
             )
@@ -137,6 +151,10 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             else:
                 data = self.replay_buffer.sample(self.batch_size)
 
+            if self.simba:
+                data["obses"] = self.obs_rms.normalize(data["obses"])
+                data["nxtobses"] = self.obs_rms.normalize(data["nxtobses"])
+
             (
                 self.policy_params,
                 self.critic_params,
@@ -153,7 +171,10 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                 self.target_policy_params,
                 self.target_critic_params,
                 self.opt_policy_state,
-                self.opt_critic_state, None, **data)
+                self.opt_critic_state,
+                None,
+                **data,
+            )
 
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
@@ -185,19 +206,29 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         nxtobses = convert_jax(nxtobses)
         not_terminateds = 1.0 - terminateds
 
-        targets = self._target(target_policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key)
-        (critic_loss, abs_error), grad = jax.value_and_grad(
-            self._critic_loss, has_aux=True
-        )(critic_params, policy_params, obses, actions, targets, weights, key)
-        updates, opt_critic_state = self.optimizer.update(grad, opt_critic_state, params=critic_params)
+        targets = self._target(
+            target_policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key
+        )
+        (critic_loss, abs_error), grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
+            critic_params, policy_params, obses, actions, targets, weights, key
+        )
+        updates, opt_critic_state = self.optimizer.update(
+            grad, opt_critic_state, params=critic_params
+        )
         critic_params = optax.apply_updates(critic_params, updates)
 
         grad = jax.grad(self._actor_loss)(policy_params, critic_params, obses, key)
-        updates, opt_policy_state = self.optimizer.update(grad, opt_policy_state, params=policy_params)
+        updates, opt_policy_state = self.optimizer.update(
+            grad, opt_policy_state, params=policy_params
+        )
         policy_params = optax.apply_updates(policy_params, updates)
 
-        target_critic_params = soft_update(critic_params, target_critic_params, self.target_network_update_tau)
-        target_policy_params = soft_update(policy_params, target_policy_params, self.target_network_update_tau)
+        target_critic_params = soft_update(
+            critic_params, target_critic_params, self.target_network_update_tau
+        )
+        target_policy_params = soft_update(
+            policy_params, target_policy_params, self.target_network_update_tau
+        )
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
@@ -226,7 +257,9 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         q = self.critic(critic_params, key, feature, actions)
         return -jnp.mean(q)
 
-    def _target(self, target_policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key):
+    def _target(
+        self, target_policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key
+    ):
         next_feature = self.preproc(target_policy_params, key, nxtobses)
         next_action = self.actor(target_policy_params, key, next_feature)
         next_q = self.critic(target_critic_params, key, next_feature, next_action)

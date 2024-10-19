@@ -5,16 +5,20 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-from jax_baselines.common.utils import select_optimizer
 from jax_baselines.common.losses import FQFQuantileLosses, QuantileHuberLosses
-from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
+from jax_baselines.common.utils import (
+    convert_jax,
+    hard_update,
+    q_log_pi,
+    select_optimizer,
+)
 from jax_baselines.DQN.base_class import Q_Network_Family
 
 
 class FQF(Q_Network_Family):
     def __init__(
         self,
-        env_builder : callable,
+        env_builder: callable,
         model_builder_maker,
         num_workers=1,
         eval_eps=20,
@@ -411,13 +415,7 @@ class FQF(Q_Network_Family):
         callback=None,
         log_interval=1000,
         experiment_name="FQF",
-        run_name="FQF"
+        run_name="FQF",
     ):
         run_name = run_name + "({:d})".format(self.n_support)
-        super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            experiment_name,
-            run_name
-        )
+        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name)

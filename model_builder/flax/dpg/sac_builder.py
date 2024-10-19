@@ -70,11 +70,11 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 feature = self.preprocess(x)
                 mu, log_std = self.actor(feature)
                 return mu, log_std
-            
+
             def preprocess(self, x):
                 x = self.preproc(x)
                 return x
-            
+
             def actor(self, x):
                 return self.act(x)
 
@@ -98,7 +98,11 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
             )
             critic_params = model_critic.init(
                 key,
-                preproc_fn(policy_params, key, [np.zeros((1, *o), dtype=np.float32) for o in observation_space]),
+                preproc_fn(
+                    policy_params,
+                    key,
+                    [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
+                ),
                 np.zeros((1, *action_size), dtype=np.float32),
             )
             if print_model:

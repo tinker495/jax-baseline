@@ -224,7 +224,9 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             jnp.mean(targets),
         )
 
-    def _loss_discrete(self, params, obses, actions, old_value, targets, old_prob, old_act_prob, adv, key):
+    def _loss_discrete(
+        self, params, obses, actions, old_value, targets, old_prob, old_act_prob, adv, key
+    ):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
         vals_clip = old_value + jnp.clip(vals - old_value, -0.5, 0.5)
@@ -237,7 +239,10 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         )
         ratio = jnp.exp(log_prob - old_act_prob)
         kl = jax.vmap(kl_divergence_discrete)(old_prob, prob)
-        actor_loss = - jnp.mean(adv * ratio - self.kl_coef * jnp.where(
+        actor_loss = -jnp.mean(
+            adv * ratio
+            - self.kl_coef
+            * jnp.where(
                 (kl >= self.kl_range) & (ratio > 1.0),
                 kl,
                 self.kl_range,
@@ -257,7 +262,10 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         )
         ratio = jnp.exp(log_prob - old_act_prob)
         kl = jax.vmap(kl_divergence_continuous)(old_prob, prob)
-        actor_loss = - jnp.mean(adv * ratio - self.kl_coef * jnp.where(
+        actor_loss = -jnp.mean(
+            adv * ratio
+            - self.kl_coef
+            * jnp.where(
                 (kl >= self.kl_range) & (ratio > 1.0),
                 kl,
                 self.kl_range,

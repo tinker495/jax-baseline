@@ -12,7 +12,7 @@ from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 class SAC(Deteministic_Policy_Gradient_Family):
     def __init__(
         self,
-        env_builder : callable,
+        env_builder: callable,
         model_builder_maker,
         num_workers=1,
         eval_eps=20,
@@ -30,6 +30,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
         prioritized_replay_alpha=0.6,
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-6,
+        simba=False,
         log_interval=200,
         log_dir=None,
         _init_setup_model=True,
@@ -56,6 +57,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
             prioritized_replay_alpha,
             prioritized_replay_beta0,
             prioritized_replay_eps,
+            simba,
             log_interval,
             log_dir,
             _init_setup_model,
@@ -81,9 +83,13 @@ class SAC(Deteministic_Policy_Gradient_Family):
             self.action_size,
             self.policy_kwargs,
         )
-        self.preproc, self.actor, self.critic, self.policy_params, self.critic_params = model_builder(
-            next(self.key_seq), print_model=True
-        )
+        (
+            self.preproc,
+            self.actor,
+            self.critic,
+            self.policy_params,
+            self.critic_params,
+        ) = model_builder(next(self.key_seq), print_model=True)
         self.target_critic_params = deepcopy(self.critic_params)
         self.opt_policy_state = self.optimizer.init(self.policy_params)
         self.opt_critic_state = self.optimizer.init(self.critic_params)
@@ -126,6 +132,11 @@ class SAC(Deteministic_Policy_Gradient_Family):
         return pi
 
     def actions(self, obs, steps):
+        if self.simba:
+            if steps != np.inf:
+                self.obs_rms.update(obs)
+            obs = self.obs_rms.normalize(obs)
+
         if self.learning_starts < steps:
             actions = np.asarray(self._get_actions(self.policy_params, obs, next(self.key_seq)))
         else:
@@ -139,6 +150,10 @@ class SAC(Deteministic_Policy_Gradient_Family):
                 data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
                 data = self.replay_buffer.sample(self.batch_size)
+
+            if self.simba:
+                data["obses"] = self.obs_rms.normalize(data["obses"])
+                data["nxtobses"] = self.obs_rms.normalize(data["nxtobses"])
 
             (
                 self.policy_params,
@@ -195,19 +210,29 @@ class SAC(Deteministic_Policy_Gradient_Family):
         not_terminateds = 1.0 - terminateds
         ent_coef = jnp.exp(log_ent_coef)
         key1, key2 = jax.random.split(key, 2)
-        targets = self._target(policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key1, ent_coef)
+        targets = self._target(
+            policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key1, ent_coef
+        )
 
-        (critic_loss, abs_error), grad = jax.value_and_grad(
-            self._critic_loss, has_aux=True
-        )(critic_params, policy_params, obses, actions, targets, weights, key2)
-        updates, opt_critic_state = self.optimizer.update(grad, opt_critic_state, params=critic_params)
+        (critic_loss, abs_error), grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
+            critic_params, policy_params, obses, actions, targets, weights, key2
+        )
+        updates, opt_critic_state = self.optimizer.update(
+            grad, opt_critic_state, params=critic_params
+        )
         critic_params = optax.apply_updates(critic_params, updates)
 
-        (actor_loss, log_prob), grad = jax.value_and_grad(self._actor_loss, has_aux=True)(policy_params, critic_params, obses, key, ent_coef)
-        updates, opt_policy_state = self.optimizer.update(grad, opt_policy_state, params=policy_params)
+        (actor_loss, log_prob), grad = jax.value_and_grad(self._actor_loss, has_aux=True)(
+            policy_params, critic_params, obses, key, ent_coef
+        )
+        updates, opt_policy_state = self.optimizer.update(
+            grad, opt_policy_state, params=policy_params
+        )
         policy_params = optax.apply_updates(policy_params, updates)
 
-        target_critic_params = soft_update(critic_params, target_critic_params, self.target_network_update_tau)
+        target_critic_params = soft_update(
+            critic_params, target_critic_params, self.target_network_update_tau
+        )
 
         if self.auto_entropy:
             log_ent_coef = self._train_ent_coef(log_ent_coef, log_prob)
@@ -240,18 +265,24 @@ class SAC(Deteministic_Policy_Gradient_Family):
         q1, q2 = self.critic(critic_params, key, feature, actions)
         error1 = jnp.squeeze(q1 - targets)
         error2 = jnp.squeeze(q2 - targets)
-        critic_loss = jnp.mean(weights * jnp.square(error1)) + jnp.mean(weights * jnp.square(error2))
+        critic_loss = jnp.mean(weights * jnp.square(error1)) + jnp.mean(
+            weights * jnp.square(error2)
+        )
         return critic_loss, jnp.abs(error1)
 
     def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
         feature = self.preproc(policy_params, key, obses)
         policy, log_prob = self._get_pi_log_prob(policy_params, feature, key)
         q1_pi, q2_pi = self.critic(critic_params, key, feature, policy)
-        actor_loss = jnp.mean(ent_coef * log_prob - (q1_pi + q2_pi)/2.0)
+        actor_loss = jnp.mean(ent_coef * log_prob - (q1_pi + q2_pi) / 2.0)
         return actor_loss, log_prob
 
-    def _target(self, policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key, ent_coef):
-        policy, log_prob = self._get_pi_log_prob(policy_params, self.preproc(policy_params, key, nxtobses), key)
+    def _target(
+        self, policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key, ent_coef
+    ):
+        policy, log_prob = self._get_pi_log_prob(
+            policy_params, self.preproc(policy_params, key, nxtobses), key
+        )
         q1_pi, q2_pi = self.critic(
             target_critic_params, key, self.preproc(policy_params, key, nxtobses), policy
         )
