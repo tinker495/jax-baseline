@@ -259,7 +259,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
         nxtobses = convert_jax(nxtobses)
         not_terminateds = 1.0 - terminateds
         ent_coef = jnp.exp(log_ent_coef)
-        key1, key2 = jax.random.split(key, 2)
+        key1, key2, key3, key4 = jax.random.split(key, 4)
         targets = self._target(
             pessimistic_policy_params,
             target_critic_params,
@@ -280,7 +280,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
 
         (actor_loss, log_prob), grad = jax.value_and_grad(
             self._pessimistic_actor_loss, has_aux=True
-        )(pessimistic_policy_params, critic_params, obses, key, ent_coef)
+        )(pessimistic_policy_params, critic_params, obses, key3, ent_coef)
         updates, opt_pessimistic_policy_state = self.optimizer.update(
             grad, opt_pessimistic_policy_state, params=pessimistic_policy_params
         )
@@ -293,7 +293,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
             pessimistic_policy_params,
             critic_params,
             obses,
-            key,
+            key4,
             optimism_coef,
             kl_weight,
         )

@@ -234,7 +234,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         nxtobses = convert_jax(nxtobses)
         not_terminateds = 1.0 - terminateds
         ent_coef = jnp.exp(log_ent_coef)
-        key1, key2 = jax.random.split(key, 2)
+        key1, key2, key3 = jax.random.split(key, 3)
         targets = self._target(
             policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key1, ent_coef
         )
@@ -248,7 +248,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         critic_params = optax.apply_updates(critic_params, updates)
 
         (actor_loss, log_prob), grad = jax.value_and_grad(self._actor_loss, has_aux=True)(
-            policy_params, critic_params, obses, key, ent_coef
+            policy_params, critic_params, obses, key3, ent_coef
         )
         updates, opt_policy_state = self.optimizer.update(
             grad, opt_policy_state, params=policy_params
