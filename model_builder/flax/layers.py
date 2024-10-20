@@ -87,6 +87,22 @@ class NoisyDense(nn.Dense):
         return jnp.sign(x) * jnp.sqrt(jnp.abs(x))
 
 
+# BRO
+class BRONet(nn.Module):
+    features: int
+    kernel_init: Callable = clip_factorized_uniform()
+    bias_init: Callable = clip_factorized_uniform()
+
+    @nn.compact
+    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
+        x = Dense(self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(inputs)
+        x = nn.LayerNorm()(x)
+        x = nn.relu(x)
+        x = Dense(self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
+        x = nn.LayerNorm()(x)
+        return x + inputs
+
+
 # Simba
 class ResidualBlock(nn.Module):
     features: int
