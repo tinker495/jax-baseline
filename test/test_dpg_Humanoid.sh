@@ -13,6 +13,8 @@ OPTIMIZER="--optimizer adam"
 
 python  run_dpg.py --algo DAC $EXPERIMENT $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 python  run_dpg.py --algo DAC $EXPERIMENT $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS --simba
+python  run_dpg.py --algo SAC $EXPERIMENT $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
+python  run_dpg.py --algo SAC $EXPERIMENT $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS --simba
 #python  run_dpg.py --algo TD3 $EXPERIMENT $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS --simba
 #python  run_dpg.py --algo TD3 $EXPERIMENT $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 #python  run_dpg.py --algo SAC $EXPERIMENT $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS --simba
