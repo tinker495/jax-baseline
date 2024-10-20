@@ -69,7 +69,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
             optimizer,
         )
 
-        self.name = "BRO"
+        self.name = "DAC"
         self._ent_coef = ent_coef
         self.target_entropy = -1.0 * np.prod(self.action_size).astype(
             np.float32
@@ -438,8 +438,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
         total_timesteps,
         callback=None,
         log_interval=1000,
-        experiment_name="BRO",
-        run_name="BRO",
+        experiment_name="DAC",
+        run_name="DAC",
     ):
         super().learn(
             total_timesteps,

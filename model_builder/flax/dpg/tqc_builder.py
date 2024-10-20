@@ -25,13 +25,17 @@ class Actor(nn.Module):
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         linear = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [
-                self.layer(
-                    self.action_size[0] * 2, kernel_init=clip_uniform_initializers(-0.03, 0.03)
-                ),
-            ]
         )(feature)
-        mu, log_std = jnp.split(linear, 2, axis=-1)
+        mu = self.layer(self.action_size[0], kernel_init=clip_uniform_initializers(-0.03, 0.03))(
+            linear
+        )
+        log_std = self.layer(
+            self.action_size[0],
+            kernel_init=clip_uniform_initializers(-0.03, 0.03),
+            bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
+        )(
+            linear
+        )  # initialize std with high values
         return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(
             log_std / LOG_STD_SCALE
         )  # jnp.clip(log_std,LOG_STD_MIN,LOG_STD_MAX)

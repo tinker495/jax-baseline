@@ -27,10 +27,18 @@ class Actor(nn.Module):
             + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
             + [
                 nn.LayerNorm(),
-                Dense(self.action_size[0] * 2, kernel_init=clip_uniform_initializers(-0.03, 0.03)),
             ]
         )(feature)
-        mu, log_std = jnp.split(linear, 2, axis=-1)
+        mu = self.layer(self.action_size[0], kernel_init=clip_uniform_initializers(-0.03, 0.03))(
+            linear
+        )
+        log_std = self.layer(
+            self.action_size[0],
+            kernel_init=clip_uniform_initializers(-0.03, 0.03),
+            bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
+        )(
+            linear
+        )  # initialize std with high values
         return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(
             log_std / LOG_STD_SCALE
         )  # jnp.clip(log_std,LOG_STD_MIN,LOG_STD_MAX)
