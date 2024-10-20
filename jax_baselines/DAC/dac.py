@@ -74,7 +74,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
         self.target_entropy = -1.0 * np.prod(self.action_size).astype(
             np.float32
         )  # -np.sqrt(np.prod(self.action_size).astype(np.float32))
-        self.pessimism_coef = -0.2
+        self.pessimism_coef = -1.0  # -0.2
         self.kl_target = 0.25
         self.ent_coef_learning_rate = 1e-4
         self.optimism_coef_learning_rate = 3e-5
@@ -140,8 +140,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
     ):
         mu_p, log_std_p = self.actor(pessimistic_policy_params, None, feature)
         mu_o, log_std_o = self.actor(optimistic_policy_params, None, feature)
-        std_p = jnp.exp(log_std_p)
-        std_o = jnp.exp(log_std_o)
+        std_p = jnp.exp(log_std_p) + 1e-6
+        std_o = jnp.exp(log_std_o) + 1e-6
         std_o_bar = std_o / (1.25 * 1.25)
         kl_divergence = jnp.sum(
             log_std_p / 2
