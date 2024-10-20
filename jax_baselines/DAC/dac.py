@@ -8,7 +8,7 @@ import optax
 from jax_baselines.common.utils import convert_jax, soft_update
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 
-DAC_COEF_GRAD_CLIP = 1e5
+DAC_COEF_GRAD_CLIP = 1e3
 
 
 class DAC(Deteministic_Policy_Gradient_Family):
