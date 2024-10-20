@@ -322,10 +322,10 @@ class TQC(Deteministic_Policy_Gradient_Family):
         policy, log_prob = self._get_pi_log_prob(params, self.preproc(params, key, nxtobses), key)
         qnets_pi = self.critic(target_params, key, next_feature, policy)
         if self.mixture_type == "min":
-            next_q = jnp.min(jnp.stack(qnets_pi, axis=-1), axis=-1) - ent_coef * log_prob
+            next_q = jnp.min(jnp.stack(qnets_pi, axis=-1), axis=-1)
         elif self.mixture_type == "truncated":
-            next_q = truncated_mixture(qnets_pi, self.quantile_drop) - ent_coef * log_prob
-        return (not_terminateds * next_q * self._gamma) + rewards
+            next_q = truncated_mixture(qnets_pi, self.quantile_drop)
+        return (not_terminateds * next_q * self._gamma) + rewards - ent_coef * log_prob
 
     def learn(
         self,

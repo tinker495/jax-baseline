@@ -430,8 +430,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
         )
         mean_q = (q1_pi + q2_pi) / 2.0
         std_q = jnp.abs(q1_pi - q2_pi) / 2.0
-        next_q = mean_q + self.pessimism_coef * std_q - ent_coef * log_prob
-        return (not_terminateds * next_q * self._gamma) + rewards
+        next_q = mean_q + self.pessimism_coef * std_q
+        return (not_terminateds * next_q * self._gamma) + rewards - ent_coef * log_prob
 
     def learn(
         self,
