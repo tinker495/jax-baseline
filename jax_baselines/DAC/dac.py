@@ -92,11 +92,12 @@ class DAC(Deteministic_Policy_Gradient_Family):
         (
             self.preproc,
             self.actor,
+            self.optimistic_actor,
             self.critic,
             self.pessimistic_policy_params,
+            self.optimistic_policy_params,
             self.critic_params,
         ) = model_builder(next(self.key_seq), print_model=True)
-        self.optimistic_policy_params = deepcopy(self.pessimistic_policy_params)
         self.target_critic_params = deepcopy(self.critic_params)
         self.opt_pessimistic_policy_state = self.optimizer.init(self.pessimistic_policy_params)
         self.opt_optimistic_policy_state = self.optimizer.init(self.optimistic_policy_params)
@@ -139,7 +140,9 @@ class DAC(Deteministic_Policy_Gradient_Family):
         self, pessimistic_policy_params, optimistic_policy_params, feature, key=None
     ):
         mu_p, log_std_p = self.actor(pessimistic_policy_params, None, feature)
-        mu_o, log_std_o = self.actor(optimistic_policy_params, None, feature)
+        mu_o, log_std_o = self.optimistic_actor(
+            optimistic_policy_params, None, mu_p, log_std_p, feature
+        )
         std_p = jnp.exp(log_std_p)
         std_o = jnp.exp(log_std_o)
         std_o_bar = std_o / 1.25
@@ -157,10 +160,17 @@ class DAC(Deteministic_Policy_Gradient_Family):
         pi_o = jax.nn.tanh(x_t)
         return pi_o, kl_divergence
 
-    def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
+    def _get_actions(self, params, optimistic_params, obses, key=None) -> jnp.ndarray:
         mu, log_std = self.actor(params, None, self.preproc(params, None, convert_jax(obses)))
-        std = jnp.exp(log_std)
-        x_t = mu + std * jax.random.normal(key, std.shape)
+        mu_optimistic, log_std_optimistic = self.optimistic_actor(
+            optimistic_params,
+            None,
+            mu,
+            log_std,
+            self.preproc(optimistic_params, None, convert_jax(obses)),
+        )
+        std = jnp.exp(log_std_optimistic)
+        x_t = mu_optimistic + std * jax.random.normal(key, std.shape)
         pi = jax.nn.tanh(x_t)
         return pi
 
@@ -172,7 +182,12 @@ class DAC(Deteministic_Policy_Gradient_Family):
 
         if self.learning_starts < steps:
             actions = np.asarray(
-                self._get_actions(self.optimistic_policy_params, obs, next(self.key_seq))
+                self._get_actions(
+                    self.pessimistic_policy_params,
+                    self.optimistic_policy_params,
+                    obs,
+                    next(self.key_seq),
+                )
             )
         else:
             actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
@@ -387,7 +402,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
         q1_pi, q2_pi = self.critic(critic_params, key, feature, policy)
         mean_q = (q1_pi + q2_pi) / 2.0
         std_q = jnp.abs(q1_pi - q2_pi) / 2.0
-        actor_loss = jnp.mean(ent_coef * log_prob - mean_q - self.pessimism_coef * std_q)
+        actor_loss = jnp.mean(ent_coef * log_prob - (mean_q + self.pessimism_coef * std_q))
         return actor_loss, log_prob
 
     def _optimistic_actor_loss(
@@ -407,7 +422,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
         q1_pi, q2_pi = self.critic(critic_params, key, feature, policy)
         mean_q = (q1_pi + q2_pi) / 2.0
         std_q = jnp.abs(q1_pi - q2_pi) / 2.0
-        actor_loss = jnp.mean(kl_weight * kl_divergence - mean_q - optimism_coef * std_q)
+        actor_loss = jnp.mean(kl_weight * kl_divergence - (mean_q + optimism_coef * std_q))
         return actor_loss, kl_divergence
 
     def _target(
@@ -431,8 +446,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
         )
         mean_q = (q1_pi + q2_pi) / 2.0
         std_q = jnp.abs(q1_pi - q2_pi) / 2.0
-        next_q = mean_q + self.pessimism_coef * std_q
-        return (not_terminateds * next_q * self._gamma) + rewards - ent_coef * log_prob
+        next_q = mean_q + self.pessimism_coef * std_q - ent_coef * log_prob
+        return (not_terminateds * next_q * self._gamma) + rewards
 
     def learn(
         self,

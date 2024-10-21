@@ -41,6 +41,29 @@ class Actor(nn.Module):
         )  # jnp.clip(log_std,LOG_STD_MIN,LOG_STD_MAX)
 
 
+class Optimistic_Actor(nn.Module):
+    action_size: tuple
+    node: int = 256
+    hidden_n: int = 2
+    layer: nn.Module = Dense
+
+    @nn.compact
+    def __call__(self, mu: jnp.ndarray, log_std: jnp.ndarray, feature: jnp.ndarray) -> jnp.ndarray:
+        linear = nn.Sequential(
+            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+        )(feature)
+        mu_additional = self.layer(
+            self.action_size[0], kernel_init=clip_uniform_initializers(-0.03, 0.03)
+        )(linear)
+        std_multiplier = self.layer(
+            self.action_size[0],
+            kernel_init=clip_uniform_initializers(-0.03, 0.03),
+        )(
+            linear
+        )  # initialize std with high values
+        return mu + mu_additional, log_std + jnp.log(nn.softplus(std_multiplier + 1.0))
+
+
 class Critic(nn.Module):
     node: int = 256
     hidden_n: int = 2
@@ -93,6 +116,8 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         model_actor = Merged_Actor()
         preproc_fn = get_apply_fn_flax_module(model_actor, model_actor.preprocess)
         actor_fn = get_apply_fn_flax_module(model_actor, model_actor.actor)
+        model_optimistic_actor = Optimistic_Actor(action_size, **policy_kwargs)
+        optimistic_actor_fn = get_apply_fn_flax_module(model_optimistic_actor)
         model_critic = Merged_Critic()
         critic_fn = get_apply_fn_flax_module(model_critic)
         if key is not None:
@@ -100,22 +125,38 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 key,
                 [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
             )
+            feature = preproc_fn(
+                policy_params,
+                key,
+                [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
+            )
+            optimistic_actor_params = model_optimistic_actor.init(
+                key,
+                np.zeros((1, *action_size), dtype=np.float32),
+                np.zeros((1, *action_size), dtype=np.float32),
+                feature,
+            )
             critic_params = model_critic.init(
                 key,
-                preproc_fn(
-                    policy_params,
-                    key,
-                    [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                ),
+                feature,
                 np.zeros((1, *action_size), dtype=np.float32),
             )
             if print_model:
                 print("------------------build-flax-model--------------------")
                 print_param("", policy_params)
+                print_param("", optimistic_actor_params)
                 print_param("", critic_params)
                 print("------------------------------------------------------")
-            return preproc_fn, actor_fn, critic_fn, policy_params, critic_params
+            return (
+                preproc_fn,
+                actor_fn,
+                optimistic_actor_fn,
+                critic_fn,
+                policy_params,
+                optimistic_actor_params,
+                critic_params,
+            )
         else:
-            return preproc_fn, actor_fn, critic_fn
+            return preproc_fn, actor_fn, optimistic_actor_fn, critic_fn
 
     return model_builder
