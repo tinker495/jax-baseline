@@ -172,7 +172,7 @@ class Deteministic_Policy_Gradient_Family(object):
     def _get_actions(self, params, obses) -> np.ndarray:
         pass
 
-    def actions(self, obs, steps):
+    def actions(self, obs, steps, eval=False):
         pass
 
     def discription(self, eval_result=None):
@@ -285,7 +285,7 @@ class Deteministic_Policy_Gradient_Family(object):
 
         for ep in range(self.eval_eps):
             while not terminated and not truncated:
-                actions = self.actions(obs, steps)
+                actions = self.actions(obs, steps, eval=True)
                 observation, reward, terminated, truncated, info = self.eval_env.step(actions[0])
                 obs = [np.expand_dims(observation, axis=0)]
                 total_reward[ep] += reward

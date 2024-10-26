@@ -104,7 +104,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
             policy_params, key, self.preproc(policy_params, key, convert_jax(obses))
         )  #
 
-    def actions(self, obs, steps):
+    def actions(self, obs, steps, eval=False):
         if self.simba:
             if steps != np.inf:
                 self.obs_rms.update(obs)

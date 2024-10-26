@@ -61,7 +61,7 @@ class Optimistic_Actor(nn.Module):
         )(
             linear
         )  # initialize std with high values
-        return mu + mu_additional, log_std + jnp.log(nn.softplus(std_multiplier + 1.0))
+        return mu + mu_additional, log_std + jnp.log(nn.softplus(std_multiplier + 1.25))
 
 
 class Critic(nn.Module):

@@ -71,7 +71,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
 
         self.name = "DAC"
         self._ent_coef = ent_coef
-        self.target_entropy = -1.0 * np.prod(self.action_size).astype(
+        self.target_entropy = 0.5 * np.prod(self.action_size).astype(
             np.float32
         )  # -np.sqrt(np.prod(self.action_size).astype(np.float32))
         self.pessimism_coef = -0.2  # -0.2
@@ -110,8 +110,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
                 assert init_value > 0.0, "The initial value of ent_coef must be greater than 0"
             self.log_ent_coef = jax.device_put(init_value)
             self.auto_entropy = True
-            self.optimism_coef = jax.device_put(np.array(1.0))
-            self.kl_weight = jax.device_put(np.array(0.25))
+            self.log_optimism_coef = jax.device_put(np.array(np.log(1.0)))
+            self.log_kl_weight = jax.device_put(np.array(np.log(0.25)))
         else:
             try:
                 self.log_ent_coef = jnp.log(float(self._ent_coef))
@@ -120,6 +120,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
             self.auto_entropy = False
 
         self._get_actions = jax.jit(self._get_actions)
+        self._get_actions_o = jax.jit(self._get_actions_o)
         self._train_step = jax.jit(self._train_step)
         self._train_ent_coef = jax.jit(self._train_ent_coef)
 
@@ -147,11 +148,9 @@ class DAC(Deteministic_Policy_Gradient_Family):
         std_o = jnp.exp(log_std_o)
         std_o_bar = std_o / 1.25
         kl_divergence = jnp.sum(
-            log_std_p
-            - log_std_o
-            + jnp.log(1.25)
-            + (std_o_bar * std_o_bar + jnp.square(mu_o - mu_p))
-            / (2 * std_p * std_p)  # log(variance_p/variance_o)
+            jnp.log(std_p / std_o_bar)
+            + (jnp.square(std_o_bar) + jnp.square(mu_o - mu_p))
+            / (2 * jnp.square(std_p))  # log(variance_p/variance_o)
             - 0.5,
             axis=1,
             keepdims=True,
@@ -160,7 +159,14 @@ class DAC(Deteministic_Policy_Gradient_Family):
         pi_o = jax.nn.tanh(x_t)
         return pi_o, kl_divergence
 
-    def _get_actions(self, params, optimistic_params, obses, key=None) -> jnp.ndarray:
+    def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
+        mu, log_std = self.actor(params, None, self.preproc(params, None, convert_jax(obses)))
+        std = jnp.exp(log_std)
+        x_t = mu + std * jax.random.normal(key, std.shape)
+        pi = jax.nn.tanh(x_t)
+        return pi
+
+    def _get_actions_o(self, params, optimistic_params, obses, key=None) -> jnp.ndarray:
         mu, log_std = self.actor(params, None, self.preproc(params, None, convert_jax(obses)))
         mu_optimistic, log_std_optimistic = self.optimistic_actor(
             optimistic_params,
@@ -174,21 +180,26 @@ class DAC(Deteministic_Policy_Gradient_Family):
         pi = jax.nn.tanh(x_t)
         return pi
 
-    def actions(self, obs, steps):
+    def actions(self, obs, steps, eval=False):
         if self.simba:
             if steps != np.inf:
                 self.obs_rms.update(obs)
             obs = self.obs_rms.normalize(obs)
 
         if self.learning_starts < steps:
-            actions = np.asarray(
-                self._get_actions(
-                    self.pessimistic_policy_params,
-                    self.optimistic_policy_params,
-                    obs,
-                    next(self.key_seq),
+            if eval:
+                actions = np.asarray(
+                    self._get_actions(self.pessimistic_policy_params, obs, next(self.key_seq))
                 )
-            )
+            else:
+                actions = np.asarray(
+                    self._get_actions_o(
+                        self.pessimistic_policy_params,
+                        self.optimistic_policy_params,
+                        obs,
+                        next(self.key_seq),
+                    )
+                )
         else:
             actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
         return actions
@@ -217,8 +228,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
                 t_mean,
                 kl_divergence,
                 self.log_ent_coef,
-                self.optimism_coef,
-                self.kl_weight,
+                self.log_optimism_coef,
+                self.log_kl_weight,
                 new_priorities,
             ) = self._train_step(
                 self.pessimistic_policy_params,
@@ -231,8 +242,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
                 next(self.key_seq),
                 steps,
                 self.log_ent_coef,
-                self.optimism_coef,
-                self.kl_weight,
+                self.log_optimism_coef,
+                self.log_kl_weight,
                 **data
             )
 
@@ -244,8 +255,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
             self.logger_run.log_metric("loss/targets", t_mean, steps)
             self.logger_run.log_metric("loss/kl_divergence", kl_divergence, steps)
             self.logger_run.log_metric("loss/ent_coef", np.exp(self.log_ent_coef), steps)
-            self.logger_run.log_metric("loss/optimism_coef", self.optimism_coef, steps)
-            self.logger_run.log_metric("loss/kl_weight", self.kl_weight, steps)
+            self.logger_run.log_metric("loss/optimism_coef", np.exp(self.log_optimism_coef), steps)
+            self.logger_run.log_metric("loss/kl_weight", np.exp(self.log_kl_weight), steps)
 
         return loss
 
@@ -261,8 +272,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
         key,
         step,
         log_ent_coef,
-        optimism_coef,
-        kl_weight,
+        log_optimism_coef,
+        log_kl_weight,
         obses,
         actions,
         rewards,
@@ -275,6 +286,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
         nxtobses = convert_jax(nxtobses)
         not_terminateds = 1.0 - terminateds
         ent_coef = jnp.exp(log_ent_coef)
+        optimism_coef = jnp.exp(log_optimism_coef)
+        kl_weight = jnp.exp(log_kl_weight)
         key1, key2, key3, key4 = jax.random.split(key, 4)
         targets = self._target(
             pessimistic_policy_params,
@@ -320,8 +333,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
 
         if self.auto_entropy:
             log_ent_coef = self._train_ent_coef(log_ent_coef, log_prob)
-            optimism_coef = self._train_optimism_coef(optimism_coef, kl_divergence)
-            kl_weight = self._train_kl_weight(kl_weight, kl_divergence)
+            # log_optimism_coef = self._train_optimism_coef(log_optimism_coef, kl_divergence)
+            # log_kl_weight = self._train_kl_weight(log_kl_weight, kl_divergence)
 
         target_critic_params = soft_update(
             critic_params, target_critic_params, self.target_network_update_tau
@@ -342,45 +355,49 @@ class DAC(Deteministic_Policy_Gradient_Family):
             jnp.mean(targets),
             jnp.mean(kl_divergence),
             log_ent_coef,
-            optimism_coef,
-            kl_weight,
+            log_optimism_coef,
+            log_kl_weight,
             new_priorities,
         )
 
     def _train_ent_coef(self, log_coef, log_prob):
-        def ent_loss(log_ent_coef, log_prob):
-            return -jnp.mean(log_ent_coef * (log_prob + self.target_entropy))
+        def loss(log_ent_coef, log_prob):
+            ent_coef = jnp.exp(log_ent_coef)
+            return jnp.mean(ent_coef * (self.target_entropy - log_prob))
 
-        grad = jax.grad(ent_loss)(log_coef, log_prob)
+        grad = jax.grad(loss)(log_coef, log_prob)
         log_coef = log_coef - self.ent_coef_learning_rate * grad
         return log_coef
 
-    def _train_optimism_coef(self, optimism_coef, kl_divergence):
-        def optimism_loss(optimism_coef, kl_divergence):
+    def _train_optimism_coef(self, log_optimism_coef, kl_divergence):
+        def optimism_loss(log_optimism_coef, kl_divergence):
+            optimism_coef = jnp.exp(log_optimism_coef)
             return jnp.mean(
-                (optimism_coef - self.pessimism_coef)
+                (optimism_coef + self.pessimism_coef)
                 * (kl_divergence / self.action_size[0] - self.kl_target)
             )
 
         grad = jnp.clip(
-            jax.grad(optimism_loss)(optimism_coef, kl_divergence),
+            jax.grad(optimism_loss)(log_optimism_coef, kl_divergence),
             -DAC_COEF_GRAD_CLIP,
             DAC_COEF_GRAD_CLIP,
         )
-        optimism_coef = jnp.clip(
-            optimism_coef - self.optimism_coef_learning_rate * grad, self.pessimism_coef, jnp.inf
+        log_optimism_coef = jnp.maximum(
+            log_optimism_coef - self.optimism_coef_learning_rate * grad,
+            jnp.log(self.pessimism_coef),
         )
-        return optimism_coef
+        return log_optimism_coef
 
-    def _train_kl_weight(self, kl_weight, kl_divergence):
-        def kl_loss(kl_weight, kl_divergence):
+    def _train_kl_weight(self, log_kl_weight, kl_divergence):
+        def kl_loss(log_kl_weight, kl_divergence):
+            kl_weight = jnp.exp(log_kl_weight)
             return -jnp.mean(kl_weight * (kl_divergence / self.action_size[0] - self.kl_target))
 
         grad = jnp.clip(
-            jax.grad(kl_loss)(kl_weight, kl_divergence), -DAC_COEF_GRAD_CLIP, DAC_COEF_GRAD_CLIP
+            jax.grad(kl_loss)(log_kl_weight, kl_divergence), -DAC_COEF_GRAD_CLIP, DAC_COEF_GRAD_CLIP
         )
-        kl_weight = jnp.maximum(0.0, kl_weight - self.kl_weight_learning_rate * grad)
-        return kl_weight
+        log_kl_weight = log_kl_weight - self.kl_weight_learning_rate * grad
+        return log_kl_weight
 
     def _critic_loss(
         self, critic_params, pessimistic_policy_params, obses, actions, targets, weights, key
@@ -415,7 +432,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
         optimism_coef,
         kl_weight,
     ):
-        feature = self.preproc(optimistic_policy_params, key, obses)
+        feature = self.preproc(pessimistic_policy_params, key, obses)
         policy, kl_divergence = self._get_pi_kl_divergence(
             pessimistic_policy_params, optimistic_policy_params, feature, key
         )

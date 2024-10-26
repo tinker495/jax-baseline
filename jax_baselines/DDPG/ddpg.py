@@ -117,7 +117,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         discription += f"epsilon : {self.epsilon:.3f}"
         return discription
 
-    def actions(self, obs, steps):
+    def actions(self, obs, steps, eval=False):
         if self.simba:
             if steps != np.inf:
                 self.obs_rms.update(obs)

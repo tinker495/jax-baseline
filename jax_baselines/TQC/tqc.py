@@ -78,7 +78,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         self.name = "TQC"
         self.policy_delay = policy_delay
         self._ent_coef = ent_coef
-        self.target_entropy = -1.0 * np.prod(self.action_size).astype(
+        self.target_entropy = 0.5 * np.prod(self.action_size).astype(
             np.float32
         )  # -np.sqrt(np.prod(self.action_size).astype(np.float32))
         self.ent_coef_learning_rate = 1e-4
@@ -156,7 +156,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         pi = jax.nn.tanh(mu + std * jax.random.normal(key, std.shape))
         return pi
 
-    def actions(self, obs, steps):
+    def actions(self, obs, steps, eval=False):
         if self.simba:
             if steps != np.inf:
                 self.obs_rms.update(obs)
@@ -279,7 +279,8 @@ class TQC(Deteministic_Policy_Gradient_Family):
 
     def _train_ent_coef(self, log_coef, log_prob):
         def loss(log_ent_coef, log_prob):
-            return -jnp.mean(log_ent_coef * (log_prob + self.target_entropy))
+            ent_coef = jnp.exp(log_ent_coef)
+            return jnp.mean(ent_coef * (self.target_entropy - log_prob))
 
         grad = jax.grad(loss)(log_coef, log_prob)
         log_coef = log_coef - self.ent_coef_learning_rate * grad

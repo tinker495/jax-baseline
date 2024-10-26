@@ -163,7 +163,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
         pi = jax.nn.tanh(x_t)
         return pi
 
-    def actions(self, obs, steps):
+    def actions(self, obs, steps, eval=False):
         if self.simba:
             if steps != np.inf:
                 self.obs_rms.update(obs)
