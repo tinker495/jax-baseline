@@ -6,7 +6,7 @@ import numpy as np
 import optax
 
 from jax_baselines.common.losses import hubberloss
-from jax_baselines.common.utils import convert_jax, hard_update
+from jax_baselines.common.utils import convert_jax, hard_update, scaled_by_reset
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 
 
@@ -56,6 +56,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             prioritized_replay_alpha,
             0,
             0,
+            scaled_by_reset,
             simba,
             log_interval,
             log_dir,
@@ -346,6 +347,21 @@ class TD7(Deteministic_Policy_Gradient_Family):
         fixed_encoder_params = hard_update(
             encoder_params, fixed_encoder_params, step, self.target_network_update_freq
         )
+        if self.scaled_by_reset:
+            policy_params = scaled_by_reset(
+                policy_params,
+                key,
+                step,
+                self.reset_freq,
+                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
+            )
+            critic_params = scaled_by_reset(
+                critic_params,
+                key,
+                step,
+                self.reset_freq,
+                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
+            )
         return (
             encoder_params,
             policy_params,

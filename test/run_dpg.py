@@ -32,6 +32,7 @@ if __name__ == "__main__":
         default=1,
         help="n step setting when n > 1 is n step td method",
     )
+    parser.add_argument("--scaled_by_reset", action="store_true")
     parser.add_argument("--simba", action="store_true")
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
     parser.add_argument("--verbose", type=int, default=0, help="verbose")
@@ -85,6 +86,7 @@ if __name__ == "__main__":
             target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
+            scaled_by_reset=args.scaled_by_reset,
             simba=args.simba,
             n_step=args.n_step,
             train_freq=args.train_freq,
@@ -113,6 +115,7 @@ if __name__ == "__main__":
             target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
+            scaled_by_reset=args.scaled_by_reset,
             simba=args.simba,
             action_noise=args.action_noise,
             n_step=args.n_step,
@@ -142,6 +145,7 @@ if __name__ == "__main__":
             target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
+            scaled_by_reset=args.scaled_by_reset,
             simba=args.simba,
             n_step=args.n_step,
             train_freq=args.train_freq,
@@ -171,6 +175,7 @@ if __name__ == "__main__":
             target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
+            scaled_by_reset=args.scaled_by_reset,
             simba=args.simba,
             n_step=args.n_step,
             train_freq=args.train_freq,
@@ -201,6 +206,7 @@ if __name__ == "__main__":
             learning_starts=args.learning_starts,
             quantile_drop=args.quantile_drop,
             prioritized_replay=args.per,
+            scaled_by_reset=args.scaled_by_reset,
             simba=args.simba,
             n_step=args.n_step,
             train_freq=args.train_freq,
@@ -235,6 +241,7 @@ if __name__ == "__main__":
             learning_starts=args.learning_starts,
             action_noise=args.action_noise,
             train_freq=args.train_freq,
+            scaled_by_reset=args.scaled_by_reset,
             simba=args.simba,
             seed=args.seed,
             gradient_steps=args.gradient_steps,

@@ -55,13 +55,8 @@ class Optimistic_Actor(nn.Module):
         mu_additional = self.layer(
             self.action_size[0], kernel_init=clip_uniform_initializers(-0.03, 0.03)
         )(linear)
-        std_multiplier = self.layer(
-            self.action_size[0],
-            kernel_init=clip_uniform_initializers(-0.03, 0.03),
-        )(
-            linear
-        )  # initialize std with high values
-        return mu + mu_additional, log_std + jnp.log(nn.softplus(std_multiplier + 1.25))
+        std_multiplier = jnp.log(0.75)
+        return mu + mu_additional, log_std + std_multiplier
 
 
 class Critic(nn.Module):

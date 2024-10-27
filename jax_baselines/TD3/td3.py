@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-from jax_baselines.common.utils import convert_jax, soft_update
+from jax_baselines.common.utils import convert_jax, scaled_by_reset, soft_update
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 
 
@@ -32,6 +32,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         prioritized_replay_alpha=0.6,
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-3,
+        scaled_by_reset=False,
         simba=False,
         log_interval=200,
         log_dir=None,
@@ -59,6 +60,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
             prioritized_replay_alpha,
             prioritized_replay_beta0,
             prioritized_replay_eps,
+            scaled_by_reset,
             simba,
             log_interval,
             log_dir,
@@ -125,6 +127,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
+            self.train_steps_count += 1
             if self.prioritized_replay:
                 data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
@@ -249,6 +252,21 @@ class TD3(Deteministic_Policy_Gradient_Family):
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
+        if self.scaled_by_reset:
+            policy_params = scaled_by_reset(
+                policy_params,
+                key,
+                step,
+                self.reset_freq,
+                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
+            )
+            critic_params = scaled_by_reset(
+                critic_params,
+                key,
+                step,
+                self.reset_freq,
+                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
+            )
         return (
             policy_params,
             critic_params,

@@ -32,6 +32,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
         prioritized_replay_alpha=0.6,
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-6,
+        scaled_by_reset=False,
         simba=False,
         log_interval=200,
         log_dir=None,
@@ -59,6 +60,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
             prioritized_replay_alpha,
             prioritized_replay_beta0,
             prioritized_replay_eps,
+            scaled_by_reset,
             simba,
             log_interval,
             log_dir,
@@ -180,6 +182,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
+            self.train_steps_count += 1
             if self.prioritized_replay:
                 data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:

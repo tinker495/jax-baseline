@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-from jax_baselines.common.utils import convert_jax, soft_update
+from jax_baselines.common.utils import convert_jax, scaled_by_reset, soft_update
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 
 DAC_COEF_GRAD_CLIP = 1e3
@@ -32,6 +32,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
         prioritized_replay_alpha=0.6,
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-6,
+        scaled_by_reset=False,
         simba=False,
         log_interval=200,
         log_dir=None,
@@ -59,6 +60,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
             prioritized_replay_alpha,
             prioritized_replay_beta0,
             prioritized_replay_eps,
+            scaled_by_reset,
             simba,
             log_interval,
             log_dir,
@@ -207,6 +209,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
+            self.train_steps_count += 1
             if self.prioritized_replay:
                 data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
             else:
@@ -240,7 +243,7 @@ class DAC(Deteministic_Policy_Gradient_Family):
                 self.opt_optimistic_policy_state,
                 self.opt_critic_state,
                 next(self.key_seq),
-                steps,
+                self.train_steps_count,
                 self.log_ent_coef,
                 self.log_optimism_coef,
                 self.log_kl_weight,
@@ -343,6 +346,28 @@ class DAC(Deteministic_Policy_Gradient_Family):
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
+        if self.scaled_by_reset:
+            pessimistic_policy_params = scaled_by_reset(
+                pessimistic_policy_params,
+                key,
+                step,
+                self.reset_freq,
+                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
+            )
+            optimistic_policy_params = scaled_by_reset(
+                optimistic_policy_params,
+                key,
+                step,
+                self.reset_freq,
+                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
+            )
+            critic_params = scaled_by_reset(
+                critic_params,
+                key,
+                step,
+                self.reset_freq,
+                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
+            )
         return (
             pessimistic_policy_params,
             optimistic_policy_params,
@@ -370,18 +395,14 @@ class DAC(Deteministic_Policy_Gradient_Family):
         return log_coef
 
     def _train_optimism_coef(self, log_optimism_coef, kl_divergence):
-        def optimism_loss(log_optimism_coef, kl_divergence):
+        def loss(log_optimism_coef, kl_divergence):
             optimism_coef = jnp.exp(log_optimism_coef)
             return jnp.mean(
                 (optimism_coef + self.pessimism_coef)
-                * (kl_divergence / self.action_size[0] - self.kl_target)
+                * (jnp.mean(kl_divergence) / self.action_size[0] - self.kl_target)
             )
 
-        grad = jnp.clip(
-            jax.grad(optimism_loss)(log_optimism_coef, kl_divergence),
-            -DAC_COEF_GRAD_CLIP,
-            DAC_COEF_GRAD_CLIP,
-        )
+        grad = jax.grad(loss)(log_optimism_coef, kl_divergence)
         log_optimism_coef = jnp.maximum(
             log_optimism_coef - self.optimism_coef_learning_rate * grad,
             jnp.log(self.pessimism_coef),
@@ -389,13 +410,13 @@ class DAC(Deteministic_Policy_Gradient_Family):
         return log_optimism_coef
 
     def _train_kl_weight(self, log_kl_weight, kl_divergence):
-        def kl_loss(log_kl_weight, kl_divergence):
+        def loss(log_kl_weight, kl_divergence):
             kl_weight = jnp.exp(log_kl_weight)
-            return -jnp.mean(kl_weight * (kl_divergence / self.action_size[0] - self.kl_target))
+            return -jnp.mean(
+                kl_weight * (jnp.mean(kl_divergence) / self.action_size[0] - self.kl_target)
+            )
 
-        grad = jnp.clip(
-            jax.grad(kl_loss)(log_kl_weight, kl_divergence), -DAC_COEF_GRAD_CLIP, DAC_COEF_GRAD_CLIP
-        )
+        grad = jax.grad(loss)(log_kl_weight, kl_divergence)
         log_kl_weight = log_kl_weight - self.kl_weight_learning_rate * grad
         return log_kl_weight
 
