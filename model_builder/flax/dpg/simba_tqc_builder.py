@@ -29,10 +29,11 @@ class Actor(nn.Module):
                 nn.LayerNorm(),
             ]
         )(feature)
-        mu = self.layer(self.action_size[0], kernel_init=clip_uniform_initializers(-0.03, 0.03))(
-            linear
-        )
-        log_std = self.layer(
+        mu = Dense(
+            self.action_size[0],
+            kernel_init=clip_uniform_initializers(-0.03, 0.03),
+        )(linear)
+        log_std = Dense(
             self.action_size[0],
             kernel_init=clip_uniform_initializers(-0.03, 0.03),
             bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
