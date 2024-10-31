@@ -238,6 +238,8 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
         optim = optax.adabelief(lr, eps=eps)
     elif optim_str == "lion":
         optim = optax.lion(lr, weight_decay=1e-5)
+    elif optim_str == "prodigy":
+        optim = optax.contrib.prodigy(1.0, eps=eps, weight_decay=1e-4)
 
     if grad_max is not None:
         optim = optax.chain(optax.clip_by_global_norm(grad_max), optim)
