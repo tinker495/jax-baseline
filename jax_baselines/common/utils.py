@@ -126,6 +126,17 @@ def soft_update(new_tensors: PyTree, old_tensors: PyTree, tau: float):
 
 
 def truncated_mixture(quantiles, cut):
+    """Concatenates and sorts quantile values, then truncates the highest values.
+
+    Used in TQC and CrossQ_TQC algorithms to implement truncated quantile critics.
+
+    Args:
+        quantiles: List of quantile values from multiple critics to be mixed
+        cut: Number of highest quantile values to remove
+
+    Returns:
+        Sorted and truncated quantile values with the highest 'cut' values removed
+    """
     quantiles = jnp.concatenate(quantiles, axis=1)
     sorted = jnp.sort(quantiles, axis=1)
     return sorted[:, :-cut]

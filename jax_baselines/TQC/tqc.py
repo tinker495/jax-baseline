@@ -322,8 +322,8 @@ class TQC(Deteministic_Policy_Gradient_Family):
             critic_loss += jnp.mean(
                 weights
                 * QuantileHuberLosses(
-                    jnp.expand_dims(q, axis=1),
                     logit_valid_tile,
+                    jnp.expand_dims(q, axis=1),
                     self.quantile,
                     self.delta,
                 )
