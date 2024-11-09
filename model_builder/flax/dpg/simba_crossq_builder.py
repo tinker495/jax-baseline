@@ -5,7 +5,7 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_uniform_initializers
-from model_builder.flax.layers import Dense
+from model_builder.flax.layers import Dense, ResidualBlock, ResidualBlockBRN
 from model_builder.flax.Module import BatchReNorm, PreProcess
 from model_builder.utils import print_param
 
@@ -19,17 +19,21 @@ class Actor(nn.Module):
     action_size: tuple
     node: int = 256
     hidden_n: int = 2
-    layer: nn.Module = Dense
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         linear = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.tanh for i in range(2 * self.hidden_n)]
+            [Dense(self.node)]
+            + [ResidualBlock(self.node, activation=jax.nn.tanh) for _ in range(self.hidden_n)]
+            + [
+                nn.LayerNorm(),
+            ]
         )(feature)
-        mu = self.layer(self.action_size[0], kernel_init=clip_uniform_initializers(-0.03, 0.03))(
-            linear
-        )
-        log_std = self.layer(
+        mu = Dense(
+            self.action_size[0],
+            kernel_init=clip_uniform_initializers(-0.03, 0.03),
+        )(linear)
+        log_std = Dense(
             self.action_size[0],
             kernel_init=clip_uniform_initializers(-0.03, 0.03),
             bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
@@ -44,19 +48,17 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     node: int = 256
     hidden_n: int = 2
-    layer: nn.Module = Dense
 
     @nn.compact
     def __call__(
         self, feature: jnp.ndarray, actions: jnp.ndarray, training: bool = True
     ) -> jnp.ndarray:
         concat = jnp.concatenate([feature, actions], axis=1)
-        feature = BatchReNorm(use_running_average=not training)(concat)
+        feature = Dense(self.node)(concat)
         for i in range(self.hidden_n):
-            feature = self.layer(self.node)(feature)
-            feature = BatchReNorm(use_running_average=not training)(feature)
-            feature = jax.nn.tanh(feature)
-        q_net = self.layer(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))(feature)
+            feature = ResidualBlockBRN(self.node, activation=jax.nn.tanh)(feature, training)
+        feature = BatchReNorm(use_running_average=not training)(feature)
+        q_net = Dense(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))(feature)
         return q_net
 
 

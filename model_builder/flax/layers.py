@@ -6,6 +6,7 @@ import jax.numpy as jnp
 from flax.linen.dtypes import promote_dtype
 
 from model_builder.flax.initializers import clip_factorized_uniform
+from model_builder.flax.Module import BatchReNorm
 
 SIGMA_INIT = 0.5
 
@@ -108,11 +109,44 @@ class ResidualBlock(nn.Module):
     features: int
     kernel_init: Callable = clip_factorized_uniform()
     bias_init: Callable = clip_factorized_uniform()
+    activation: Callable = nn.relu
 
     @nn.compact
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
         x = nn.LayerNorm()(inputs)
         x = Dense(4 * self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
-        x = nn.relu(x)
+        x = self.activation(x)
+        x = Dense(self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
+        return x + inputs
+
+
+# Simba + BatchNorm
+class ResidualBlockBN(nn.Module):
+    features: int
+    kernel_init: Callable = clip_factorized_uniform()
+    bias_init: Callable = clip_factorized_uniform()
+    activation: Callable = nn.relu
+
+    @nn.compact
+    def __call__(self, inputs: jnp.ndarray, training: bool = True) -> jnp.ndarray:
+        x = nn.BatchNorm(use_running_average=not training)(inputs)
+        x = Dense(4 * self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
+        x = self.activation(x)
+        x = Dense(self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
+        return x + inputs
+
+
+# Simba + BatchRenorm
+class ResidualBlockBRN(nn.Module):
+    features: int
+    kernel_init: Callable = clip_factorized_uniform()
+    bias_init: Callable = clip_factorized_uniform()
+    activation: Callable = nn.relu
+
+    @nn.compact
+    def __call__(self, inputs: jnp.ndarray, training: bool = True) -> jnp.ndarray:
+        x = BatchReNorm(use_running_average=not training)(inputs)
+        x = Dense(4 * self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
+        x = self.activation(x)
         x = Dense(self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
         return x + inputs
