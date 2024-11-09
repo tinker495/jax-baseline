@@ -6,7 +6,7 @@ import numpy as np
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_uniform_initializers
 from model_builder.flax.layers import Dense
-from model_builder.flax.Module import PreProcess
+from model_builder.flax.Module import BatchReNorm, PreProcess
 from model_builder.utils import print_param
 
 LOG_STD_MAX = 2
@@ -24,7 +24,7 @@ class Actor(nn.Module):
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         linear = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            [self.layer(self.node) if i % 2 == 0 else jax.nn.tanh for i in range(2 * self.hidden_n)]
         )(feature)
         mu = self.layer(self.action_size[0], kernel_init=clip_uniform_initializers(-0.03, 0.03))(
             linear
@@ -48,19 +48,19 @@ class Critic(nn.Module):
     layer: nn.Module = Dense
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+    def __call__(
+        self, feature: jnp.ndarray, actions: jnp.ndarray, training: bool = True
+    ) -> jnp.ndarray:
         concat = jnp.concatenate([feature, actions], axis=1)
-        q_net = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [
-                self.layer(
-                    self.support_n,
-                    kernel_init=clip_uniform_initializers(
-                        -0.03 / self.support_n, 0.03 / self.support_n
-                    ),
-                )
-            ]
-        )(concat)
+        feature = BatchReNorm(use_running_average=not training)(concat)
+        for i in range(self.hidden_n):
+            feature = self.layer(self.node)(feature)
+            feature = BatchReNorm(use_running_average=not training)(feature)
+            feature = jax.nn.tanh(feature)
+        q_net = self.layer(
+            self.support_n,
+            kernel_init=clip_uniform_initializers(-0.03 / self.support_n, 0.03 / self.support_n),
+        )(feature)
         return q_net
 
 
@@ -95,14 +95,14 @@ def model_builder_maker(observation_space, action_size, support_n, policy_kwargs
                 self.crit1 = Critic(support_n=support_n, **policy_kwargs)
                 self.crit2 = Critic(support_n=support_n, **policy_kwargs)
 
-            def __call__(self, x, a):
-                return (self.crit1(x, a), self.crit2(x, a))
+            def __call__(self, x, a, training: bool = True):
+                return (self.crit1(x, a, training), self.crit2(x, a, training))
 
         model_actor = Merged_Actor()
         preproc_fn = get_apply_fn_flax_module(model_actor, model_actor.preprocess)
         actor_fn = get_apply_fn_flax_module(model_actor, model_actor.actor)
         model_critic = Merged_Critic()
-        critic_fn = get_apply_fn_flax_module(model_critic)
+        critic_fn = get_apply_fn_flax_module(model_critic, mutable=["batch_stats"])
         if key is not None:
             policy_params = model_actor.init(
                 key,
@@ -116,6 +116,7 @@ def model_builder_maker(observation_space, action_size, support_n, policy_kwargs
                     [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
                 ),
                 np.zeros((1, *action_size), dtype=np.float32),
+                True,
             )
             if print_model:
                 print("------------------build-flax-model--------------------")

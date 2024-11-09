@@ -11,6 +11,8 @@ MODEL="--node 256 --hidden_n 2"
 OPTIONS="--logdir log/"
 OPTIMIZER="--optimizer adam"
 
+python  run_dpg.py --algo CrossQ_TQC $EXPERIMENT $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS --simba
+python  run_dpg.py --algo CrossQ_TQC $EXPERIMENT $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 python  run_dpg.py --algo CrossQ $EXPERIMENT $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS --simba
 python  run_dpg.py --algo CrossQ $EXPERIMENT $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 #python  run_dpg.py --algo SAC $EXPERIMENT $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS

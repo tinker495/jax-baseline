@@ -4,6 +4,7 @@ import gymnasium as gym
 
 from jax_baselines.common.env_builer import get_env_builder
 from jax_baselines.CrossQ.crossq import CrossQ
+from jax_baselines.CrossQ.crossq_tqc import CrossQ_TQC
 from jax_baselines.DAC.dac import DAC
 from jax_baselines.DDPG.ddpg import DDPG
 from jax_baselines.SAC.sac import SAC
@@ -185,6 +186,43 @@ if __name__ == "__main__":
             ent_coef=args.ent_coef,
             seed=args.seed,
             gradient_steps=args.gradient_steps,
+            log_dir=args.logdir,
+            policy_kwargs=policy_kwargs,
+            optimizer=args.optimizer,
+        )
+    if args.algo == "CrossQ_TQC":
+        if args.model_lib == "flax":
+            if args.simba:
+                from model_builder.flax.dpg.simba_crossq_tqc_builder import (
+                    model_builder_maker,
+                )
+            else:
+                from model_builder.flax.dpg.crossq_tqc_builder import (
+                    model_builder_maker,
+                )
+        elif args.model_lib == "haiku":
+            pass
+            # from model_builder.haiku.dpg.crossq_tqc_builder import model_builder_maker
+        agent = CrossQ_TQC(
+            env_builder,
+            model_builder_maker,
+            num_workers=args.worker,
+            gamma=args.gamma,
+            learning_rate=args.learning_rate,
+            batch_size=args.batch,
+            buffer_size=int(args.buffer_size),
+            learning_starts=args.learning_starts,
+            prioritized_replay=args.per,
+            scaled_by_reset=args.scaled_by_reset,
+            simba=args.simba,
+            n_step=args.n_step,
+            train_freq=args.train_freq,
+            ent_coef=args.ent_coef,
+            seed=args.seed,
+            gradient_steps=args.gradient_steps,
+            n_support=args.n_support,
+            critic_num=args.critic_num,
+            mixture_type=args.mixture,
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,

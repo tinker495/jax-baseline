@@ -1,21 +1,14 @@
-from copy import deepcopy
-
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 
 from jax_baselines.common.losses import QuantileHuberLosses
-from jax_baselines.common.utils import (
-    convert_jax,
-    scaled_by_reset,
-    soft_update,
-    truncated_mixture,
-)
+from jax_baselines.common.utils import convert_jax, scaled_by_reset, truncated_mixture
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 
 
-class TQC(Deteministic_Policy_Gradient_Family):
+class CrossQ_TQC(Deteministic_Policy_Gradient_Family):
     def __init__(
         self,
         env_builder: callable,
@@ -35,7 +28,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
         batch_size=32,
         n_step=1,
         learning_starts=1000,
-        target_network_update_tau=5e-4,
         prioritized_replay=False,
         prioritized_replay_alpha=0.6,
         prioritized_replay_beta0=0.4,
@@ -65,7 +57,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
             batch_size,
             n_step,
             learning_starts,
-            target_network_update_tau,
+            0,  # target_network_update_tau
             prioritized_replay,
             prioritized_replay_alpha,
             prioritized_replay_beta0,
@@ -81,7 +73,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
             optimizer,
         )
 
-        self.name = "TQC"
+        self.name = "CrossQ_TQC"
         self._ent_coef = ent_coef
         self.target_entropy = 0.5 * np.prod(self.action_size).astype(
             np.float32
@@ -112,7 +104,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
             self.policy_params,
             self.critic_params,
         ) = model_builder(next(self.key_seq), print_model=True)
-        self.target_critic_params = deepcopy(self.critic_params)
         self.opt_policy_state = self.optimizer.init(self.policy_params)
         self.opt_critic_state = self.optimizer.init(self.critic_params)
 
@@ -189,7 +180,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
             (
                 self.policy_params,
                 self.critic_params,
-                self.target_critic_params,
                 self.opt_policy_state,
                 self.opt_critic_state,
                 loss,
@@ -199,7 +189,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
             ) = self._train_step(
                 self.policy_params,
                 self.critic_params,
-                self.target_critic_params,
                 self.opt_policy_state,
                 self.opt_critic_state,
                 next(self.key_seq),
@@ -222,7 +211,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
         self,
         policy_params,
         critic_params,
-        target_critic_params,
         opt_policy_state,
         opt_critic_state,
         key,
@@ -240,13 +228,21 @@ class TQC(Deteministic_Policy_Gradient_Family):
         nxtobses = convert_jax(nxtobses)
         not_terminateds = 1.0 - terminateds
         ent_coef = jnp.exp(log_ent_coef)
-        key1, key2, key3 = jax.random.split(key, 3)
-        targets = self._target(
-            policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key1, ent_coef
-        )
+        key1, key2 = jax.random.split(key, 2)
 
-        (critic_loss, abs_error), grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
-            critic_params, policy_params, obses, actions, targets, weights, key2
+        (critic_loss, (abs_error, critic_params)), grad = jax.value_and_grad(
+            self._critic_loss, has_aux=True
+        )(
+            critic_params,
+            policy_params,
+            obses,
+            actions,
+            rewards,
+            nxtobses,
+            not_terminateds,
+            ent_coef,
+            weights,
+            key1,
         )
         updates, opt_critic_state = self.optimizer.update(
             grad, opt_critic_state, params=critic_params
@@ -254,16 +250,12 @@ class TQC(Deteministic_Policy_Gradient_Family):
         critic_params = optax.apply_updates(critic_params, updates)
 
         (actor_loss, log_prob), grad = jax.value_and_grad(self._actor_loss, has_aux=True)(
-            policy_params, critic_params, obses, key3, ent_coef
+            policy_params, critic_params, obses, key2, ent_coef
         )
         updates, opt_policy_state = self.optimizer.update(
             grad, opt_policy_state, params=policy_params
         )
         policy_params = optax.apply_updates(policy_params, updates)
-
-        target_critic_params = soft_update(
-            critic_params, target_critic_params, self.target_network_update_tau
-        )
 
         if self.auto_entropy:
             log_ent_coef = self._train_ent_coef(log_ent_coef, log_prob)
@@ -289,7 +281,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
         return (
             policy_params,
             critic_params,
-            target_critic_params,
             opt_policy_state,
             opt_critic_state,
             critic_loss,
@@ -307,63 +298,68 @@ class TQC(Deteministic_Policy_Gradient_Family):
         log_coef = log_coef - self.ent_coef_learning_rate * grad
         return log_coef
 
-    def _critic_loss(self, critic_params, policy_params, obses, actions, targets, weights, key):
-        feature = self.preproc(policy_params, key, obses)
-        qnets = self.critic(critic_params, key, feature, actions)
-        logit_valid_tile = jnp.expand_dims(targets, axis=2)  # batch x support x 1
+    def _critic_loss(
+        self,
+        critic_params,
+        policy_params,
+        obses,
+        actions,
+        rewards,
+        nxtobses,
+        not_terminateds,
+        ent_coef,
+        weights,
+        key,
+    ):
+        concated_obses = [jnp.concatenate([o, n]) for o, n in zip(obses, nxtobses)]
+        concated_preproc = self.preproc(policy_params, key, concated_obses)
+        next_preproc = jnp.split(concated_preproc, 2, axis=0)[1]
+        next_policy, log_prob = self._get_pi_log_prob(policy_params, next_preproc, key)
+        concated_actions = jnp.concatenate([actions, next_policy])
+        (q1, q2), variable_updates = self.critic(
+            critic_params, key, concated_preproc, concated_actions, True
+        )
+        critic_params["batch_stats"] = variable_updates["batch_stats"]
+        q1, next_q1 = jnp.split(q1, 2, axis=0)
+        q2, next_q2 = jnp.split(q2, 2, axis=0)
+        if self.mixture_type == "min":
+            next_q = jnp.min(jnp.stack((next_q1, next_q2), axis=-1), axis=-1) - ent_coef * log_prob
+        elif self.mixture_type == "truncated":
+            next_q = truncated_mixture((q1, q2), self.quantile_drop) - ent_coef * log_prob
+        logit_valid_tile = jax.lax.stop_gradient((not_terminateds * next_q * self._gamma) + rewards)
+        logit_valid_tile = jnp.expand_dims(logit_valid_tile, axis=2)  # batch x support x 1
         huber0 = QuantileHuberLosses(
             logit_valid_tile,
-            jnp.expand_dims(qnets[0], axis=1),
+            jnp.expand_dims(q1, axis=1),
             self.quantile,
             self.delta,
         )
-        critic_loss = jnp.mean(weights * huber0)
-        for q in qnets[1:]:
-            critic_loss += jnp.mean(
-                weights
-                * QuantileHuberLosses(
-                    jnp.expand_dims(q, axis=1),
-                    logit_valid_tile,
-                    self.quantile,
-                    self.delta,
-                )
-            )
-        return critic_loss, huber0
+        huber1 = QuantileHuberLosses(
+            logit_valid_tile,
+            jnp.expand_dims(q2, axis=1),
+            self.quantile,
+            self.delta,
+        )
+        critic_loss = jnp.mean(weights * huber0) + jnp.mean(weights * huber1)
+        return critic_loss, (huber0, critic_params)
 
     def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
         feature = self.preproc(policy_params, key, obses)
         policy, log_prob = self._get_pi_log_prob(policy_params, feature, key)
-        qnets_pi = self.critic(critic_params, key, feature, policy)
+        q_pis, _ = self.critic(critic_params, key, feature, policy, False)
         actor_loss = jnp.mean(
-            ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi, axis=1), axis=1)
+            ent_coef * log_prob - jnp.mean(jnp.concatenate(q_pis, axis=1), axis=1)
         )
         return actor_loss, log_prob
-
-    def _target(self, params, target_params, rewards, nxtobses, not_terminateds, key, ent_coef):
-        next_feature = self.preproc(target_params, key, nxtobses)
-        policy, log_prob = self._get_pi_log_prob(params, self.preproc(params, key, nxtobses), key)
-        qnets_pi = self.critic(target_params, key, next_feature, policy)
-        if self.mixture_type == "min":
-            next_q = jnp.min(jnp.stack(qnets_pi, axis=-1), axis=-1) - ent_coef * log_prob
-        elif self.mixture_type == "truncated":
-            next_q = truncated_mixture(qnets_pi, self.quantile_drop) - ent_coef * log_prob
-        return (not_terminateds * next_q * self._gamma) + rewards
 
     def learn(
         self,
         total_timesteps,
         callback=None,
         log_interval=1000,
-        experiment_name="TQC",
-        run_name="TQC",
+        experiment_name="CrossQ_TQC",
+        run_name="CrossQ_TQC",
     ):
-        run_name = run_name + "({:d})".format(self.n_support)
-        if self.mixture_type == "truncated":
-            run_name = run_name + "_truncated({:d})".format(self.quantile_drop)
-        else:
-            run_name = run_name + "_min"
-        if self.risk_avoidance != 0.0:
-            run_name = run_name + "_riskavoid{:.2f}".format(self.risk_avoidance)
         super().learn(
             total_timesteps,
             callback,
