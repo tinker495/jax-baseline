@@ -52,15 +52,16 @@ pip install .
 
 #### DPG bases
 
-| **Name**     | `Per`[^PER]                   | `N-step`[^NSTEP][^RAINBOW] | `Ape-X`[^APEX]     | `Simba`[^SIMBA]    |
-| ------------ | ----------------------------- | -------------------------- | ------------------ | ------------------ |
-| DDPG[^DDPG]  | :heavy_check_mark:            | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark: |
-| TD3[^TD3]    | :heavy_check_mark:            | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark: |
-| SAC[^SAC]    | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: |
-| DAC[^DAC]:x: | :x:                           | :x:                        | :x:                | :x:                |
-| TQC[^TQC]    | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: |
-| TD7[^TD7]    | :white_check_mark:(LAP[^LaP]) | :x:                        | :x:                | :heavy_check_mark: |
-| BRO[^BRO]:x: | :x:                           | :x:                        | :x:                | :x:                |
+| **Name**        | `Per`[^PER]                   | `N-step`[^NSTEP][^RAINBOW] | `Ape-X`[^APEX]     | `Simba`[^SIMBA]    |
+| --------------- | ----------------------------- | -------------------------- | ------------------ | ------------------ |
+| DDPG[^DDPG]     | :heavy_check_mark:            | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark: |
+| TD3[^TD3]       | :heavy_check_mark:            | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark: |
+| SAC[^SAC]       | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: |
+| DAC[^DAC]:x:    | :x:                           | :x:                        | :x:                | :x:                |
+| TQC[^TQC]       | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: |
+| TD7[^TD7]       | :white_check_mark:(LAP[^LaP]) | :x:                        | :x:                | :heavy_check_mark: |
+| CrossQ[^CrossQ] | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: |
+| BRO[^BRO]:x:    | :x:                           | :x:                        | :x:                | :x:                |
 
 ## Performance Compariton
 
@@ -142,5 +143,7 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 [^TD7]: [TD7](https://arxiv.org/abs/2306.02451)
 
 [^LaP]: [LaP](https://arxiv.org/abs/2007.06049)
+
+[^CrossQ]: [CrossQ](https://arxiv.org/abs/1902.05605)
 
 [^BRO]: [BRO](https://arxiv.org/abs/2405.16158)
