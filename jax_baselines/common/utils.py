@@ -241,23 +241,82 @@ def add_hparams(agent, tensorboardrun):
     tensorboardrun.log_param(hparam_dict)
 
 
+def optimizer_reset_by_period(
+    optimizer: optax.GradientTransformation, reset_steps: int
+) -> optax.GradientTransformation:
+    """Creates an optimizer that periodically resets its parameters.
+
+    Args:
+        optimizer: Base optimizer to wrap
+        reset_steps: Number of steps between parameter resets
+
+    Returns:
+        An optax.GradientTransformation that wraps the base optimizer with periodic resets
+    """
+
+    def init_fn(params):
+        opt_state = optimizer.init(params)
+        return (opt_state, jnp.zeros((), dtype=jnp.int32))
+
+    def update_fn(updates, state, params=None):
+        opt_state, step_count = state
+        updates, opt_state = optimizer.update(updates, opt_state, params)
+
+        def reset():
+            return optimizer.init(params)
+
+        def keep():
+            return opt_state
+
+        opt_state = jax.lax.cond((step_count + 1) % reset_steps == 0, reset, keep)
+
+        return updates, (opt_state, step_count + 1)
+
+    return optax.GradientTransformation(init_fn, update_fn)
+
+
 def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
+    """
+    Selects an optimizer based on the optimizer string.
+    If reset_steps is not None, it wraps the optimizer with periodic parameter resets.
+
+    Args:
+        optim_str: Name of the optimizer input_example "adam", "adam_reset_2000"
+            "_" is used to separate the optimizer name and the reset steps
+        lr: Learning rate
+        eps: Epsilon for Adam and Prodigy
+        grad_max: Gradient clipping value
+    """
+
     optim = None
-    if optim_str == "adam":
-        optim = optax.adam(lr, b1=0.9, b2=0.999, eps=eps)
-    elif optim_str == "adamw":
-        optim = optax.adamw(lr, b1=0.9, b2=0.999, eps=eps, weight_decay=1e-4)
-    elif optim_str == "rmsprop":
-        optim = optax.rmsprop(lr, eps=eps)
-    elif optim_str == "sgd":
-        optim = optax.sgd(lr)
-    elif optim_str == "adabelief":
-        optim = optax.adabelief(lr, eps=eps)
-    elif optim_str == "lion":
-        optim = optax.lion(lr, weight_decay=1e-5)
+    reset_steps = None
+    if "_reset_" in optim_str:
+        optim_str, reset_steps = optim_str.split("_reset_")
+        reset_steps = int(reset_steps)
+
+    match optim_str:
+        case "adam":
+            optim = optax.adam(lr, b1=0.9, b2=0.999, eps=eps)
+        case "adamw":
+            optim = optax.adamw(lr, b1=0.9, b2=0.999, eps=eps, weight_decay=1e-4)
+        case "rmsprop":
+            optim = optax.rmsprop(lr, eps=eps)
+        case "sgd":
+            optim = optax.sgd(lr)
+        case "adabelief":
+            optim = optax.adabelief(lr, eps=eps)
+        case "lion":
+            optim = optax.lion(lr, weight_decay=1e-5)
+        case "prodigy":
+            optim = optax.contrib.prodigy(0.5, eps=eps, weight_decay=1e-4)
+        case _:
+            raise ValueError(f"Unknown optimizer: {optim_str}")
 
     if grad_max is not None:
         optim = optax.chain(optax.clip_by_global_norm(grad_max), optim)
+
+    if reset_steps is not None:
+        optim = optimizer_reset_by_period(optim, reset_steps)
 
     return optim
 

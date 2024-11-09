@@ -341,7 +341,7 @@ class Q_Network_Family(object):
         for ep in range(self.eval_eps):
             while not terminated and not truncated:
                 actions = self.actions(obs, 0.001)
-                observation, reward, terminated, truncated, info = self.eval_env.step(actions[0])
+                observation, reward, terminated, truncated, info = self.eval_env.step(actions[0][0])
                 obs = [np.expand_dims(observation, axis=0)]
                 if have_original_reward:
                     original_reward += info["original_reward"]

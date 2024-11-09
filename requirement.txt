@@ -20,6 +20,7 @@ numpy==1.26.4
 ray[default]
 cpprb @ git+https://github.com/tinker495/cpprb.git
 imageio-ffmpeg
+ffmpeg
 moviepy
 decorator==4.0.2
 opencv-python
