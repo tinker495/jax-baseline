@@ -22,10 +22,12 @@ class Actor(nn.Module):
     layer: nn.Module = Dense
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
-        linear = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.tanh for i in range(2 * self.hidden_n)]
-        )(feature)
+    def __call__(self, feature: jnp.ndarray, training: bool = True) -> jnp.ndarray:
+        linear = BatchReNorm(use_running_average=not training)(feature)
+        for i in range(self.hidden_n):
+            linear = self.layer(self.node)(linear)
+            linear = BatchReNorm(use_running_average=not training)(linear)
+            linear = jax.nn.tanh(linear)
         mu = self.layer(self.action_size[0], kernel_init=clip_uniform_initializers(-0.03, 0.03))(
             linear
         )
@@ -74,17 +76,17 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
                 self.act = Actor(action_size, **policy_kwargs)
 
-            def __call__(self, x):
+            def __call__(self, x, training: bool = True):
                 feature = self.preprocess(x)
-                mu, log_std = self.actor(feature)
+                mu, log_std = self.actor(feature, training)
                 return mu, log_std
 
             def preprocess(self, x):
                 x = self.preproc(x)
                 return x
 
-            def actor(self, x):
-                return self.act(x)
+            def actor(self, x, training: bool = True):
+                return self.act(x, training)
 
         class Merged_Critic(nn.Module):
             def setup(self):
@@ -96,13 +98,14 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
 
         model_actor = Merged_Actor()
         preproc_fn = get_apply_fn_flax_module(model_actor, model_actor.preprocess)
-        actor_fn = get_apply_fn_flax_module(model_actor, model_actor.actor)
+        actor_fn = get_apply_fn_flax_module(model_actor, model_actor.actor, mutable=["batch_stats"])
         model_critic = Merged_Critic()
         critic_fn = get_apply_fn_flax_module(model_critic, mutable=["batch_stats"])
         if key is not None:
             policy_params = model_actor.init(
                 key,
                 [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
+                True,
             )
             critic_params = model_critic.init(
                 key,

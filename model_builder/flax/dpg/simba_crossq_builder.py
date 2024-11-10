@@ -5,7 +5,7 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_uniform_initializers
-from model_builder.flax.layers import Dense, ResidualBlock, ResidualBlockBRN
+from model_builder.flax.layers import Dense, ResidualBlockBRN
 from model_builder.flax.Module import BatchReNorm, PreProcess
 from model_builder.utils import print_param
 
@@ -24,9 +24,9 @@ class Actor(nn.Module):
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         linear = nn.Sequential(
             [Dense(self.node)]
-            + [ResidualBlock(self.node, activation=jax.nn.tanh) for _ in range(self.hidden_n)]
+            + [ResidualBlockBRN(self.node, activation=jax.nn.tanh) for _ in range(self.hidden_n)]
             + [
-                nn.LayerNorm(),
+                BatchReNorm(),
             ]
         )(feature)
         mu = Dense(
