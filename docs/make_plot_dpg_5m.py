@@ -10,7 +10,7 @@ plt.figure(figsize=(15, 7))
 
 plt.subplot(1, 2, 1)
 min_y = 0
-max_y = 14000
+max_y = 15000
 csvdict = {
     "TD3": "docs/csv/dpg_humanoid_5m/TD3.csv",
     "SAC": "docs/csv/dpg_humanoid_5m/SAC.csv",
