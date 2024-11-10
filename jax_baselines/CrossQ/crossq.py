@@ -21,6 +21,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         gradient_steps=1,
         ent_coef="auto",
         batch_size=32,
+        policy_delay=3,
         n_step=1,
         learning_starts=1000,
         prioritized_replay=False,
@@ -72,6 +73,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             np.float32
         )  # -np.sqrt(np.prod(self.action_size).astype(np.float32))
         self.ent_coef_learning_rate = 1e-4
+        self.policy_delay = policy_delay
 
         if _init_setup_model:
             self.setup_model()
@@ -210,7 +212,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         ent_coef = jnp.exp(log_ent_coef)
         key1, key2 = jax.random.split(key, 2)
 
-        (critic_loss, (abs_error, critic_params)), grad = jax.value_and_grad(
+        (critic_loss, (abs_error, targets, critic_params)), grad = jax.value_and_grad(
             self._critic_loss, has_aux=True
         )(
             critic_params,
@@ -229,16 +231,43 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         )
         critic_params = optax.apply_updates(critic_params, updates)
 
-        (actor_loss, (log_prob, policy_params)), grad = jax.value_and_grad(
-            self._actor_loss, has_aux=True
-        )(policy_params, critic_params, obses, key2, ent_coef)
-        updates, opt_policy_state = self.optimizer.update(
-            grad, opt_policy_state, params=policy_params
-        )
-        policy_params = optax.apply_updates(policy_params, updates)
+        def _opt_actor(
+            policy_params,
+            critic_params,
+            log_ent_coef,
+            opt_policy_state,
+            key,
+        ):
+            (_, (log_prob, policy_params)), grad = jax.value_and_grad(
+                self._actor_loss, has_aux=True
+            )(policy_params, critic_params, obses, key2, ent_coef)
+            updates, opt_policy_state = self.optimizer.update(
+                grad, opt_policy_state, params=policy_params
+            )
+            policy_params = optax.apply_updates(policy_params, updates)
 
-        if self.auto_entropy:
-            log_ent_coef = self._train_ent_coef(log_ent_coef, log_prob)
+            if self.auto_entropy:
+                log_ent_coef = self._train_ent_coef(log_ent_coef, log_prob)
+            return (
+                policy_params,
+                critic_params,
+                log_ent_coef,
+                opt_policy_state,
+                key,
+            )
+
+        (policy_params, critic_params, log_ent_coef, opt_policy_state, key,) = jax.lax.cond(
+            step % self.policy_delay == 0,
+            lambda x: _opt_actor(*x),
+            lambda x: x,
+            (
+                policy_params,
+                critic_params,
+                log_ent_coef,
+                opt_policy_state,
+                key,
+            ),
+        )
 
         new_priorities = None
         if self.prioritized_replay:
@@ -264,7 +293,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             opt_policy_state,
             opt_critic_state,
             critic_loss,
-            -actor_loss,
+            jnp.mean(targets),
             log_ent_coef,
             new_priorities,
         )
@@ -309,7 +338,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         critic_loss = jnp.mean(weights * jnp.square(error1)) + jnp.mean(
             weights * jnp.square(error2)
         )
-        return critic_loss, (jnp.abs(error1), critic_params)
+        return critic_loss, (jnp.abs(error1), targets, critic_params)
 
     def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
         feature = self.preproc(policy_params, key, obses)
