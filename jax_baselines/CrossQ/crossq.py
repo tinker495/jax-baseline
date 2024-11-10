@@ -110,8 +110,8 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         self._train_step = jax.jit(self._train_step)
         self._train_ent_coef = jax.jit(self._train_ent_coef)
 
-    def _get_pi_log_prob(self, params, feature, key=None) -> jnp.ndarray:
-        (mu, log_std), updates = self.actor(params, None, feature, True)
+    def _get_pi_log_prob(self, params, feature, key=None, training: bool = True) -> jnp.ndarray:
+        (mu, log_std), updates = self.actor(params, None, feature, training)
         params["batch_stats"] = updates["batch_stats"]
         std = jnp.exp(log_std)
         x_t = mu + std * jax.random.normal(key, std.shape)
@@ -294,7 +294,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         concated_obses = [jnp.concatenate([o, n]) for o, n in zip(obses, nxtobses)]
         concated_preproc = self.preproc(policy_params, key, concated_obses)
         next_preproc = jnp.split(concated_preproc, 2, axis=0)[1]
-        next_policy, log_prob, _ = self._get_pi_log_prob(policy_params, next_preproc, key)
+        next_policy, log_prob, _ = self._get_pi_log_prob(policy_params, next_preproc, key, False)
         concated_actions = jnp.concatenate([actions, next_policy])
         (q1, q2), variable_updates = self.critic(
             critic_params, key, concated_preproc, concated_actions, True
