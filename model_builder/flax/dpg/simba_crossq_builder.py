@@ -24,7 +24,7 @@ class Actor(nn.Module):
     def __call__(self, feature: jnp.ndarray, training: bool = True) -> jnp.ndarray:
         feature = Dense(self.node)(feature)
         for i in range(self.hidden_n):
-            feature = ResidualBlockBRN(self.node, activation=jax.nn.tanh)(feature, training)
+            feature = ResidualBlockBRN(self.node, activation=jax.nn.relu)(feature, training)
         feature = BatchReNorm(use_running_average=not training)(feature)
         mu = Dense(
             self.action_size[0],
