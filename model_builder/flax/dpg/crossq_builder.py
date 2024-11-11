@@ -55,7 +55,7 @@ class Critic(nn.Module):
         concat = jnp.concatenate([feature, actions], axis=1)
         feature = BatchReNorm(use_running_average=not training)(concat)
         for i in range(self.hidden_n):
-            feature = self.layer(self.node)(feature)
+            feature = self.layer(self.node * 8)(feature)  # 256 * 8 = 2048
             feature = BatchReNorm(use_running_average=not training)(feature)
             feature = jax.nn.tanh(feature)
         q_net = self.layer(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))(feature)
