@@ -9,7 +9,7 @@ LR="--learning_rate 0.0003"
 TRAIN="--steps 5e6 --buffer_size 1e6 --batch 256 --target_update_tau 5e-3 --learning_starts 50000"
 MODEL="--node 2048 --hidden_n 2"
 OPTIONS="--logdir log/"
-OPTIMIZER="--optimizer adam"
+OPTIMIZER="--optimizer adam_low_b1"
 
 python  run_dpg.py --algo CrossQ $EXPERIMENT $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 python  run_dpg.py --algo CrossQ $EXPERIMENT $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS --simba
