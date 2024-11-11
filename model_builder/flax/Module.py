@@ -221,7 +221,7 @@ class BatchReNorm(Module):
 
     use_running_average: Optional[bool] = None
     axis: int = -1
-    momentum: float = 0.999
+    momentum: float = 0.99
     epsilon: float = 0.001
     dtype: Optional[Dtype] = None
     param_dtype: Dtype = jnp.float32

@@ -26,8 +26,8 @@ class Actor(nn.Module):
         linear = BatchReNorm(use_running_average=not training)(feature)
         for i in range(self.hidden_n):
             linear = self.layer(self.node)(linear)
-            linear = jax.nn.relu(linear)
             linear = BatchReNorm(use_running_average=not training)(linear)
+            linear = jax.nn.relu(linear)
         mu = self.layer(self.action_size[0], kernel_init=clip_uniform_initializers(-0.03, 0.03))(
             linear
         )
@@ -56,8 +56,8 @@ class Critic(nn.Module):
         feature = BatchReNorm(use_running_average=not training)(concat)
         for i in range(self.hidden_n):
             feature = self.layer(self.node)(feature)
-            feature = jax.nn.tanh(feature)
             feature = BatchReNorm(use_running_average=not training)(feature)
+            feature = jax.nn.tanh(feature)
         q_net = self.layer(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))(feature)
         return q_net
 
