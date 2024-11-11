@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
-from model_builder.flax.initializers import clip_uniform_initializers
+from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense, ResidualBlock
 from model_builder.flax.Module import PreProcess
 from model_builder.utils import print_param
@@ -31,11 +31,11 @@ class Actor(nn.Module):
         )(feature)
         mu = Dense(
             self.action_size[0],
-            kernel_init=clip_uniform_initializers(-0.03, 0.03),
+            kernel_init=clip_factorized_uniform(0.03),
         )(linear)
         log_std = Dense(
             self.action_size[0],
-            kernel_init=clip_uniform_initializers(-0.03, 0.03),
+            kernel_init=clip_factorized_uniform(0.03),
             bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
         )(
             linear
@@ -61,9 +61,7 @@ class Critic(nn.Module):
                 nn.LayerNorm(),
                 Dense(
                     self.support_n,
-                    kernel_init=clip_uniform_initializers(
-                        -0.03 / self.support_n, 0.03 / self.support_n
-                    ),
+                    kernel_init=clip_factorized_uniform(0.03 / self.support_n),
                 ),
             ]
         )(concat)

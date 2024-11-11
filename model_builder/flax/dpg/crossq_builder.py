@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
-from model_builder.flax.initializers import clip_uniform_initializers
+from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense
 from model_builder.flax.Module import BatchReNorm, PreProcess
 from model_builder.utils import print_param
@@ -28,12 +28,10 @@ class Actor(nn.Module):
             linear = self.layer(self.node)(linear)
             linear = BatchReNorm(use_running_average=not training)(linear)
             linear = jax.nn.relu(linear)
-        mu = self.layer(self.action_size[0], kernel_init=clip_uniform_initializers(-0.03, 0.03))(
-            linear
-        )
+        mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.03))(linear)
         log_std = self.layer(
             self.action_size[0],
-            kernel_init=clip_uniform_initializers(-0.03, 0.03),
+            kernel_init=clip_factorized_uniform(0.03),
             bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
         )(
             linear
@@ -55,10 +53,10 @@ class Critic(nn.Module):
         concat = jnp.concatenate([feature, actions], axis=1)
         feature = BatchReNorm(use_running_average=not training)(concat)
         for i in range(self.hidden_n):
-            feature = self.layer(self.node * 8)(feature)  # 256 * 8 = 2048
+            feature = self.layer(self.node)(feature)
             feature = BatchReNorm(use_running_average=not training)(feature)
             feature = jax.nn.tanh(feature)
-        q_net = self.layer(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))(feature)
+        q_net = self.layer(1, kernel_init=clip_factorized_uniform(0.03))(feature)
         return q_net
 
 

@@ -109,12 +109,17 @@ class ResidualBlock(nn.Module):
     features: int
     kernel_init: Callable = clip_factorized_uniform()
     bias_init: Callable = clip_factorized_uniform()
+    middle_feature_multiplier: int = 4
     activation: Callable = nn.relu
 
     @nn.compact
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
         x = nn.LayerNorm()(inputs)
-        x = Dense(4 * self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
+        x = Dense(
+            self.middle_feature_multiplier * self.features,
+            kernel_init=self.kernel_init,
+            bias_init=self.bias_init,
+        )(x)
         x = self.activation(x)
         x = Dense(self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
         return x + inputs
@@ -125,12 +130,17 @@ class ResidualBlockBN(nn.Module):
     features: int
     kernel_init: Callable = clip_factorized_uniform()
     bias_init: Callable = clip_factorized_uniform()
+    middle_feature_multiplier: int = 4
     activation: Callable = nn.relu
 
     @nn.compact
     def __call__(self, inputs: jnp.ndarray, training: bool = True) -> jnp.ndarray:
         x = nn.BatchNorm(use_running_average=not training)(inputs)
-        x = Dense(4 * self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
+        x = Dense(
+            self.middle_feature_multiplier * self.features,
+            kernel_init=self.kernel_init,
+            bias_init=self.bias_init,
+        )(x)
         x = self.activation(x)
         x = Dense(self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
         return x + inputs
@@ -141,12 +151,17 @@ class ResidualBlockBRN(nn.Module):
     features: int
     kernel_init: Callable = clip_factorized_uniform()
     bias_init: Callable = clip_factorized_uniform()
+    middle_feature_multiplier: int = 4
     activation: Callable = nn.relu
 
     @nn.compact
     def __call__(self, inputs: jnp.ndarray, training: bool = True) -> jnp.ndarray:
         x = BatchReNorm(use_running_average=not training)(inputs)
-        x = Dense(4 * self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
+        x = Dense(
+            self.middle_feature_multiplier * self.features,
+            kernel_init=self.kernel_init,
+            bias_init=self.bias_init,
+        )(x)
         x = self.activation(x)
         x = Dense(self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
         return x + inputs

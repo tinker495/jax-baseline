@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
-from model_builder.flax.initializers import clip_uniform_initializers
+from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense, ResidualBlockBRN
 from model_builder.flax.Module import BatchReNorm, PreProcess
 from model_builder.utils import print_param
@@ -28,11 +28,11 @@ class Actor(nn.Module):
         feature = BatchReNorm(use_running_average=not training)(feature)
         mu = Dense(
             self.action_size[0],
-            kernel_init=clip_uniform_initializers(-0.03, 0.03),
+            kernel_init=clip_factorized_uniform(0.03),
         )(feature)
         log_std = Dense(
             self.action_size[0],
-            kernel_init=clip_uniform_initializers(-0.03, 0.03),
+            kernel_init=clip_factorized_uniform(0.03),
             bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
         )(
             feature
@@ -51,11 +51,15 @@ class Critic(nn.Module):
         self, feature: jnp.ndarray, actions: jnp.ndarray, training: bool = True
     ) -> jnp.ndarray:
         concat = jnp.concatenate([feature, actions], axis=1)
-        feature = Dense(self.node)(concat)
+        feature = Dense(self.node * 8)(concat)  # 256 * 8 = 2048
         for i in range(self.hidden_n):
-            feature = ResidualBlockBRN(self.node, activation=jax.nn.tanh)(feature, training)
+            feature = ResidualBlockBRN(
+                self.node * 8, activation=jax.nn.tanh, middle_feature_multiplier=1
+            )(
+                feature, training
+            )  # 256 * 8 = 2048
         feature = BatchReNorm(use_running_average=not training)(feature)
-        q_net = Dense(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))(feature)
+        q_net = Dense(1, kernel_init=clip_factorized_uniform(0.03))(feature)
         return q_net
 
 

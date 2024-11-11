@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
-from model_builder.flax.initializers import clip_uniform_initializers
+from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense, NoisyDense
 from model_builder.flax.Module import PreProcess
 from model_builder.utils import print_param
@@ -35,9 +35,7 @@ class Model(nn.Module):
                 + [
                     self.layer(
                         self.action_size[0] * self.support_n,
-                        kernel_init=clip_uniform_initializers(
-                            -0.03 / self.support_n, 0.03 / self.support_n
-                        ),
+                        kernel_init=clip_factorized_uniform(0.03 / self.support_n),
                     ),
                     lambda x: jnp.reshape(x, (x.shape[0], self.action_size[0], self.support_n)),
                 ]
@@ -52,9 +50,7 @@ class Model(nn.Module):
                 + [
                     self.layer(
                         self.support_n,
-                        kernel_init=clip_uniform_initializers(
-                            -0.03 / self.support_n, 0.03 / self.support_n
-                        ),
+                        kernel_init=clip_factorized_uniform(0.03 / self.support_n),
                     ),
                     lambda x: jnp.reshape(x, (x.shape[0], 1, self.support_n)),
                 ]
@@ -67,9 +63,7 @@ class Model(nn.Module):
                 + [
                     self.layer(
                         self.action_size[0] * self.support_n,
-                        kernel_init=clip_uniform_initializers(
-                            -0.03 / self.support_n, 0.03 / self.support_n
-                        ),
+                        kernel_init=clip_factorized_uniform(0.03 / self.support_n),
                     ),
                     lambda x: jnp.reshape(x, (x.shape[0], self.action_size[0], self.support_n)),
                 ]

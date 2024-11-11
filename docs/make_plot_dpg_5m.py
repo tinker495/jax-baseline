@@ -16,6 +16,7 @@ csvdict = {
     "SAC": "docs/csv/dpg_humanoid_5m/SAC.csv",
     "TQC": "docs/csv/dpg_humanoid_5m/TQC.csv",
     "TD7": "docs/csv/dpg_humanoid_5m/TD7.csv",
+    "CrossQ": "docs/csv/dpg_humanoid_5m/CrossQ.csv",
 }
 dfdict = {}
 average_dict = {}

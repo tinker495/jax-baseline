@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
-from model_builder.flax.initializers import clip_uniform_initializers
+from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense
 from model_builder.flax.Module import PreProcess
 from model_builder.utils import print_param
@@ -26,12 +26,10 @@ class Actor(nn.Module):
         linear = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
         )(feature)
-        mu = self.layer(self.action_size[0], kernel_init=clip_uniform_initializers(-0.03, 0.03))(
-            linear
-        )
+        mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.03))(linear)
         log_std = self.layer(
             self.action_size[0],
-            kernel_init=clip_uniform_initializers(-0.03, 0.03),
+            kernel_init=clip_factorized_uniform(0.03),
             bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
         )(
             linear
@@ -51,7 +49,7 @@ class Critic(nn.Module):
         concat = jnp.concatenate([feature, actions], axis=1)
         q_net = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [self.layer(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))]
+            + [self.layer(1, kernel_init=clip_factorized_uniform(0.03))]
         )(concat)
         return q_net
 

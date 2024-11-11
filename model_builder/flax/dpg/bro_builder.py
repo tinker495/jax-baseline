@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
-from model_builder.flax.initializers import clip_uniform_initializers
+from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import BRONet, Dense
 from model_builder.flax.Module import PreProcess
 from model_builder.utils import print_param
@@ -28,7 +28,7 @@ class Actor(nn.Module):
         linear = nn.Sequential(
             [BRONet(self.node) for _ in range(self.hidden_n)]
             + [
-                Dense(self.action_size[0] * 2, kernel_init=clip_uniform_initializers(-0.03, 0.03)),
+                Dense(self.action_size[0] * 2, kernel_init=clip_factorized_uniform(0.03)),
             ]
         )(x)
         mu, log_std = jnp.split(linear, 2, axis=-1)
@@ -50,7 +50,7 @@ class Critic(nn.Module):
         x = jax.nn.relu(x)
         q_net = nn.Sequential(
             [BRONet(self.node) for _ in range(self.hidden_n)]
-            + [Dense(self.support_n, kernel_init=clip_uniform_initializers(-0.03, 0.03))]
+            + [Dense(self.support_n, kernel_init=clip_factorized_uniform(0.03))]
         )(x)
         return q_net
 
