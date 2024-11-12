@@ -54,7 +54,7 @@ csvdict = {
     "Simba + SAC": "docs/csv/dpg_humanoid_5m/Simba_SAC.csv",
     "Simba + TQC": "docs/csv/dpg_humanoid_5m/Simba_TQC.csv",
     "Simba + TD7": "docs/csv/dpg_humanoid_5m/Simba_TD7.csv",
-    "Simba + CrossQ": "docs/csv/dpg_humanoid_5m/Simba_CrossQ.csv",
+    "RSNorm + CrossQ": "docs/csv/dpg_humanoid_5m/Simba_CrossQ.csv",
 }
 
 dfdict = {}
