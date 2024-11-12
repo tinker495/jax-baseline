@@ -26,10 +26,10 @@ class Actor(nn.Module):
         linear = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
         )(feature)
-        mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.03))(linear)
+        mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(linear)
         log_std = self.layer(
             self.action_size[0],
-            kernel_init=clip_factorized_uniform(0.03),
+            kernel_init=clip_factorized_uniform(3),
             bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
         )(
             linear
@@ -50,7 +50,7 @@ class Optimistic_Actor(nn.Module):
         linear = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
         )(feature)
-        mu_additional = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.03))(
+        mu_additional = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(
             linear
         )
         std_multiplier = jnp.log(0.75)
@@ -67,7 +67,7 @@ class Critic(nn.Module):
         concat = jnp.concatenate([feature, actions], axis=1)
         q_net = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [self.layer(1, kernel_init=clip_factorized_uniform(0.03))]
+            + [self.layer(1, kernel_init=clip_factorized_uniform(3))]
         )(concat)
         return q_net
 

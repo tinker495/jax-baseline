@@ -31,11 +31,11 @@ class Actor(nn.Module):
         )(feature)
         mu = Dense(
             self.action_size[0],
-            kernel_init=clip_factorized_uniform(0.03),
+            kernel_init=clip_factorized_uniform(3),
         )(linear)
         log_std = Dense(
             self.action_size[0],
-            kernel_init=clip_factorized_uniform(0.03),
+            kernel_init=clip_factorized_uniform(3),
             bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
         )(
             linear
@@ -55,7 +55,7 @@ class Critic(nn.Module):
         q_net = nn.Sequential(
             [Dense(self.node)]
             + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
-            + [nn.LayerNorm(), Dense(1, kernel_init=clip_factorized_uniform(0.03))]
+            + [nn.LayerNorm(), Dense(1, kernel_init=clip_factorized_uniform(3))]
         )(concat)
         return q_net
 

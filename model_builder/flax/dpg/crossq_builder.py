@@ -23,18 +23,18 @@ class Actor(nn.Module):
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray, training: bool = True) -> jnp.ndarray:
-        linear = BatchReNorm(use_running_average=not training)(feature)
+        feature = BatchReNorm(use_running_average=not training)(feature)
         for i in range(self.hidden_n):
-            linear = self.layer(self.node)(linear)
-            linear = BatchReNorm(use_running_average=not training)(linear)
-            linear = jax.nn.relu(linear)
-        mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.03))(linear)
+            feature = self.layer(self.node)(feature)
+            feature = BatchReNorm(use_running_average=not training)(feature)
+            feature = jax.nn.relu(feature)
+        mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(feature)
         log_std = self.layer(
             self.action_size[0],
-            kernel_init=clip_factorized_uniform(0.03),
+            kernel_init=clip_factorized_uniform(3),
             bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
         )(
-            linear
+            feature
         )  # initialize std with high values
         return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(
             log_std / LOG_STD_SCALE
@@ -53,10 +53,10 @@ class Critic(nn.Module):
         concat = jnp.concatenate([feature, actions], axis=1)
         feature = BatchReNorm(use_running_average=not training)(concat)
         for i in range(self.hidden_n):
-            feature = self.layer(self.node)(feature)
+            feature = self.layer(self.node * 8)(feature)
             feature = BatchReNorm(use_running_average=not training)(feature)
             feature = jax.nn.tanh(feature)
-        q_net = self.layer(1, kernel_init=clip_factorized_uniform(0.03))(feature)
+        q_net = self.layer(1, kernel_init=clip_factorized_uniform(3))(feature)
         return q_net
 
 

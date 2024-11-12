@@ -31,7 +31,7 @@ class Model(nn.Module):
                     self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n)
                 ]
-                + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.03))]
+                + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))]
             )(feature)
             return q_net
         else:
@@ -40,14 +40,14 @@ class Model(nn.Module):
                     self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n)
                 ]
-                + [self.layer(1, kernel_init=clip_factorized_uniform(0.03))]
+                + [self.layer(1, kernel_init=clip_factorized_uniform(3))]
             )(feature)
             a = nn.Sequential(
                 [
                     self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n)
                 ]
-                + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.03))]
+                + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))]
             )(feature)
             return v + a - jnp.max(a, axis=1, keepdims=True)
 

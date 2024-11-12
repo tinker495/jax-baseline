@@ -35,7 +35,7 @@ class Model(nn.Module):
                 + [
                     self.layer(
                         self.action_size[0] * self.support_n,
-                        kernel_init=clip_factorized_uniform(0.03 / self.support_n),
+                        kernel_init=clip_factorized_uniform(3 / self.support_n),
                     ),
                     lambda x: jnp.reshape(x, (x.shape[0], self.action_size[0], self.support_n)),
                 ]
@@ -50,7 +50,7 @@ class Model(nn.Module):
                 + [
                     self.layer(
                         self.support_n,
-                        kernel_init=clip_factorized_uniform(0.03 / self.support_n),
+                        kernel_init=clip_factorized_uniform(3 / self.support_n),
                     ),
                     lambda x: jnp.reshape(x, (x.shape[0], 1, self.support_n)),
                 ]
@@ -63,7 +63,7 @@ class Model(nn.Module):
                 + [
                     self.layer(
                         self.action_size[0] * self.support_n,
-                        kernel_init=clip_factorized_uniform(0.03 / self.support_n),
+                        kernel_init=clip_factorized_uniform(3 / self.support_n),
                     ),
                     lambda x: jnp.reshape(x, (x.shape[0], self.action_size[0], self.support_n)),
                 ]

@@ -21,7 +21,7 @@ class Actor(nn.Module):
         action = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [
-                self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.03)),
+                self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3)),
                 jax.nn.tanh,
             ]
         )(feature)
@@ -38,7 +38,7 @@ class Critic(nn.Module):
         concat = jnp.concatenate([feature, actions], axis=1)
         q_net = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [self.layer(1, kernel_init=clip_factorized_uniform(0.03))]
+            + [self.layer(1, kernel_init=clip_factorized_uniform(3))]
         )(concat)
         return q_net
 

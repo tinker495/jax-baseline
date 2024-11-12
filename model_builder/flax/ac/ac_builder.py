@@ -23,12 +23,12 @@ class Actor(nn.Module):
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
         )(feature)
         if self.action_type == "discrete":
-            action_probs = self.layer(
-                self.action_size[0], kernel_init=clip_factorized_uniform(0.03)
-            )(mlp)
+            action_probs = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(
+                mlp
+            )
             return action_probs
         elif self.action_type == "continuous":
-            mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.03))(mlp)
+            mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(mlp)
             log_std = self.param("log_std", jnp.zeros, (1, self.action_size[0]))
             return mu, log_std
 
@@ -42,7 +42,7 @@ class Critic(nn.Module):
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         net = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [self.layer(1, kernel_init=clip_factorized_uniform(0.03))]
+            + [self.layer(1, kernel_init=clip_factorized_uniform(3))]
         )(feature)
         return net
 

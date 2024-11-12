@@ -26,10 +26,10 @@ class Actor(nn.Module):
         linear = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
         )(feature)
-        mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.03))(linear)
+        mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(linear)
         log_std = self.layer(
             self.action_size[0],
-            kernel_init=clip_factorized_uniform(0.03),
+            kernel_init=clip_factorized_uniform(3),
             bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
         )(
             linear
@@ -53,7 +53,7 @@ class Critic(nn.Module):
             + [
                 self.layer(
                     self.support_n,
-                    kernel_init=clip_factorized_uniform(0.03 / self.support_n),
+                    kernel_init=clip_factorized_uniform(3 / self.support_n),
                 )
             ]
         )(concat)

@@ -97,7 +97,7 @@ class Model(nn.Module):
                 + [
                     self.layer(
                         self.action_size[0] * self.categorial_bar_n,
-                        kernel_init=clip_factorized_uniform(0.03),
+                        kernel_init=clip_factorized_uniform(3),
                     ),
                     lambda x: jnp.reshape(x, (-1, self.action_size[0], self.categorial_bar_n)),
                 ]
@@ -110,7 +110,7 @@ class Model(nn.Module):
                     for i in range(2 * self.hidden_n)
                 ]
                 + [
-                    self.layer(self.categorial_bar_n, kernel_init=clip_factorized_uniform(0.03)),
+                    self.layer(self.categorial_bar_n, kernel_init=clip_factorized_uniform(3)),
                     lambda x: jnp.reshape(x, (-1, 1, self.categorial_bar_n)),
                 ]
             )(feature)
@@ -122,7 +122,7 @@ class Model(nn.Module):
                 + [
                     self.layer(
                         self.action_size[0] * self.categorial_bar_n,
-                        kernel_init=clip_factorized_uniform(0.03),
+                        kernel_init=clip_factorized_uniform(3),
                     ),
                     lambda x: jnp.reshape(x, (-1, self.action_size[0], self.categorial_bar_n)),
                 ]

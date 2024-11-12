@@ -28,7 +28,7 @@ class Actor(nn.Module):
         linear = nn.Sequential(
             [BRONet(self.node) for _ in range(self.hidden_n)]
             + [
-                Dense(self.action_size[0] * 2, kernel_init=clip_factorized_uniform(0.03)),
+                Dense(self.action_size[0] * 2, kernel_init=clip_factorized_uniform(3)),
             ]
         )(x)
         mu, log_std = jnp.split(linear, 2, axis=-1)
@@ -50,7 +50,7 @@ class Critic(nn.Module):
         x = jax.nn.relu(x)
         q_net = nn.Sequential(
             [BRONet(self.node) for _ in range(self.hidden_n)]
-            + [Dense(self.support_n, kernel_init=clip_factorized_uniform(0.03))]
+            + [Dense(self.support_n, kernel_init=clip_factorized_uniform(3))]
         )(x)
         return q_net
 

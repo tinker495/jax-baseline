@@ -61,7 +61,7 @@ class Actor(nn.Module):
             + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
             + [
                 nn.LayerNorm(),
-                Dense(self.action_size[0], kernel_init=clip_factorized_uniform(0.03)),
+                Dense(self.action_size[0], kernel_init=clip_factorized_uniform(3)),
                 jax.nn.tanh,
             ]
         )(embed_concat)
@@ -83,7 +83,7 @@ class Critic(nn.Module):
         q_net = nn.Sequential(
             [Dense(self.node)]
             + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
-            + [nn.LayerNorm(), Dense(1, kernel_init=clip_factorized_uniform(0.03))]
+            + [nn.LayerNorm(), Dense(1, kernel_init=clip_factorized_uniform(3))]
         )(embed_concat)
         return q_net
 
