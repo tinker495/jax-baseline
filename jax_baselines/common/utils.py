@@ -60,6 +60,23 @@ def tree_random_normal_like(rng_key: jax.random.PRNGKey, target: PyTree):
 
 
 def scaled_by_reset(
+    tensors: PyTree, key: jax.random.PRNGKey, steps: int, update_period: int, tau: float
+):
+    update = steps % update_period == 0
+
+    def _soft_reset(old_tensors, key):
+        new_tensors = tree_random_normal_like(key, tensors)
+        soft_reseted = jax.tree_map(
+            lambda new, old: tau * new + (1.0 - tau) * old, new_tensors, old_tensors
+        )
+        # name dense is hardreset
+        return soft_reseted
+
+    tensors = jax.lax.cond(update, _soft_reset, lambda x, k: x, tensors, key)
+    return tensors
+
+
+def scaled_by_reset_with_filter(
     tensors: PyTree, key: jax.random.PRNGKey, steps: int, update_period: int, taus: PyTree
 ):
     update = steps % update_period == 0
@@ -109,6 +126,17 @@ def soft_update(new_tensors: PyTree, old_tensors: PyTree, tau: float):
 
 
 def truncated_mixture(quantiles, cut):
+    """Concatenates and sorts quantile values, then truncates the highest values.
+
+    Used in TQC and CrossQ_TQC algorithms to implement truncated quantile critics.
+
+    Args:
+        quantiles: List of quantile values from multiple critics to be mixed
+        cut: Number of highest quantile values to remove
+
+    Returns:
+        Sorted and truncated quantile values with the highest 'cut' values removed
+    """
     quantiles = jnp.concatenate(quantiles, axis=1)
     sorted = jnp.sort(quantiles, axis=1)
     return sorted[:, :-cut]
@@ -280,6 +308,8 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
     match optim_str:
         case "adam":
             optim = optax.adam(lr, b1=0.9, b2=0.999, eps=eps)
+        case "adam_low_b1":
+            optim = optax.adam(lr, b1=0.5, b2=0.999, eps=eps)
         case "adamw":
             optim = optax.adamw(lr, b1=0.9, b2=0.999, eps=eps, weight_decay=1e-4)
         case "rmsprop":

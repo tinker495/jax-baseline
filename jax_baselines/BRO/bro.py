@@ -5,11 +5,13 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-from jax_baselines.common.utils import convert_jax, scaled_by_reset, soft_update
+from jax_baselines.common.utils import convert_jax, soft_update
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 
+DAC_COEF_GRAD_CLIP = 1e5
 
-class SAC(Deteministic_Policy_Gradient_Family):
+
+class DAC(Deteministic_Policy_Gradient_Family):
     def __init__(
         self,
         env_builder: callable,
@@ -69,12 +71,16 @@ class SAC(Deteministic_Policy_Gradient_Family):
             optimizer,
         )
 
-        self.name = "SAC"
+        self.name = "BRO"
         self._ent_coef = ent_coef
-        self.target_entropy = 0.5 * np.prod(self.action_size).astype(
+        self.target_entropy = -1.0 * np.prod(self.action_size).astype(
             np.float32
         )  # -np.sqrt(np.prod(self.action_size).astype(np.float32))
+        self.pessimism_coef = -0.2
+        self.kl_target = 0.25
         self.ent_coef_learning_rate = 1e-4
+        self.optimism_coef_learning_rate = 3e-5
+        self.kl_weight_learning_rate = 3e-5
 
         if _init_setup_model:
             self.setup_model()
@@ -89,11 +95,13 @@ class SAC(Deteministic_Policy_Gradient_Family):
             self.preproc,
             self.actor,
             self.critic,
-            self.policy_params,
+            self.pessimistic_policy_params,
             self.critic_params,
         ) = model_builder(next(self.key_seq), print_model=True)
+        self.optimistic_policy_params = deepcopy(self.pessimistic_policy_params)
         self.target_critic_params = deepcopy(self.critic_params)
-        self.opt_policy_state = self.optimizer.init(self.policy_params)
+        self.opt_pessimistic_policy_state = self.optimizer.init(self.pessimistic_policy_params)
+        self.opt_optimistic_policy_state = self.optimizer.init(self.optimistic_policy_params)
         self.opt_critic_state = self.optimizer.init(self.critic_params)
 
         if isinstance(self._ent_coef, str) and self._ent_coef.startswith("auto"):
@@ -103,6 +111,8 @@ class SAC(Deteministic_Policy_Gradient_Family):
                 assert init_value > 0.0, "The initial value of ent_coef must be greater than 0"
             self.log_ent_coef = jax.device_put(init_value)
             self.auto_entropy = True
+            self.optimism_coef = jax.device_put(np.array(1.0))
+            self.kl_weight = jax.device_put(np.array(0.25))
         else:
             try:
                 self.log_ent_coef = jnp.log(float(self._ent_coef))
@@ -127,10 +137,32 @@ class SAC(Deteministic_Policy_Gradient_Family):
         )
         return pi, log_prob
 
+    def _get_pi_kl_divergence(
+        self, pessimistic_policy_params, optimistic_policy_params, feature, key=None
+    ):
+        mu_p, log_std_p = self.actor(pessimistic_policy_params, None, feature)
+        mu_o, log_std_o = self.actor(optimistic_policy_params, None, feature)
+        std_p = jnp.exp(log_std_p)
+        std_o = jnp.exp(log_std_o)
+        std_o_bar = std_o / (1.25 * 1.25)
+        kl_divergence = jnp.sum(
+            log_std_p / 2
+            - log_std_o / 2
+            + jnp.log(1.25)
+            + (std_o_bar + jnp.square(mu_o - mu_p)) / (2 * std_p)  # log(variance_p/variance_o)
+            - 0.5,
+            axis=1,
+            keepdims=True,
+        )
+        x_t = mu_o + std_o * jax.random.normal(key, mu_o.shape)
+        pi_o = jax.nn.tanh(x_t)
+        return pi_o, kl_divergence
+
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         mu, log_std = self.actor(params, None, self.preproc(params, None, convert_jax(obses)))
         std = jnp.exp(log_std)
-        pi = jax.nn.tanh(mu + std * jax.random.normal(key, std.shape))
+        x_t = mu + std * jax.random.normal(key, std.shape)
+        pi = jax.nn.tanh(x_t)
         return pi
 
     def actions(self, obs, steps, eval=False):
@@ -140,7 +172,9 @@ class SAC(Deteministic_Policy_Gradient_Family):
             obs = self.obs_rms.normalize(obs)
 
         if self.learning_starts < steps:
-            actions = np.asarray(self._get_actions(self.policy_params, obs, next(self.key_seq)))
+            actions = np.asarray(
+                self._get_actions(self.optimistic_policy_params, obs, next(self.key_seq))
+            )
         else:
             actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
         return actions
@@ -159,24 +193,33 @@ class SAC(Deteministic_Policy_Gradient_Family):
                 data["nxtobses"] = self.obs_rms.normalize(data["nxtobses"])
 
             (
-                self.policy_params,
+                self.pessimistic_policy_params,
+                self.optimistic_policy_params,
                 self.critic_params,
                 self.target_critic_params,
-                self.opt_policy_state,
+                self.opt_pessimistic_policy_state,
+                self.opt_optimistic_policy_state,
                 self.opt_critic_state,
                 loss,
                 t_mean,
+                kl_divergence,
                 self.log_ent_coef,
+                self.optimism_coef,
+                self.kl_weight,
                 new_priorities,
             ) = self._train_step(
-                self.policy_params,
+                self.pessimistic_policy_params,
+                self.optimistic_policy_params,
                 self.critic_params,
                 self.target_critic_params,
-                self.opt_policy_state,
+                self.opt_pessimistic_policy_state,
+                self.opt_optimistic_policy_state,
                 self.opt_critic_state,
                 next(self.key_seq),
-                self.train_steps_count,
+                steps,
                 self.log_ent_coef,
+                self.optimism_coef,
+                self.kl_weight,
                 **data
             )
 
@@ -186,20 +229,27 @@ class SAC(Deteministic_Policy_Gradient_Family):
         if self.logger_run and steps % self.log_interval == 0:
             self.logger_run.log_metric("loss/qloss", loss, steps)
             self.logger_run.log_metric("loss/targets", t_mean, steps)
+            self.logger_run.log_metric("loss/kl_divergence", kl_divergence, steps)
             self.logger_run.log_metric("loss/ent_coef", np.exp(self.log_ent_coef), steps)
+            self.logger_run.log_metric("loss/optimism_coef", self.optimism_coef, steps)
+            self.logger_run.log_metric("loss/kl_weight", self.kl_weight, steps)
 
         return loss
 
     def _train_step(
         self,
-        policy_params,
+        pessimistic_policy_params,
+        optimistic_policy_params,
         critic_params,
         target_critic_params,
-        opt_policy_state,
+        opt_pessimistic_policy_state,
+        opt_optimistic_policy_state,
         opt_critic_state,
         key,
         step,
         log_ent_coef,
+        optimism_coef,
+        kl_weight,
         obses,
         actions,
         rewards,
@@ -212,75 +262,117 @@ class SAC(Deteministic_Policy_Gradient_Family):
         nxtobses = convert_jax(nxtobses)
         not_terminateds = 1.0 - terminateds
         ent_coef = jnp.exp(log_ent_coef)
-        key1, key2, key3 = jax.random.split(key, 3)
+        key1, key2 = jax.random.split(key, 2)
         targets = self._target(
-            policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key1, ent_coef
+            pessimistic_policy_params,
+            target_critic_params,
+            rewards,
+            nxtobses,
+            not_terminateds,
+            key1,
+            ent_coef,
         )
 
         (critic_loss, abs_error), grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
-            critic_params, policy_params, obses, actions, targets, weights, key2
+            critic_params, pessimistic_policy_params, obses, actions, targets, weights, key2
         )
         updates, opt_critic_state = self.optimizer.update(
             grad, opt_critic_state, params=critic_params
         )
         critic_params = optax.apply_updates(critic_params, updates)
 
-        (actor_loss, log_prob), grad = jax.value_and_grad(self._actor_loss, has_aux=True)(
-            policy_params, critic_params, obses, key3, ent_coef
+        (actor_loss, log_prob), grad = jax.value_and_grad(
+            self._pessimistic_actor_loss, has_aux=True
+        )(pessimistic_policy_params, critic_params, obses, key, ent_coef)
+        updates, opt_pessimistic_policy_state = self.optimizer.update(
+            grad, opt_pessimistic_policy_state, params=pessimistic_policy_params
         )
-        updates, opt_policy_state = self.optimizer.update(
-            grad, opt_policy_state, params=policy_params
+        pessimistic_policy_params = optax.apply_updates(pessimistic_policy_params, updates)
+
+        (actor_loss, kl_divergence), grad = jax.value_and_grad(
+            self._optimistic_actor_loss, has_aux=True
+        )(
+            optimistic_policy_params,
+            pessimistic_policy_params,
+            critic_params,
+            obses,
+            key,
+            optimism_coef,
+            kl_weight,
         )
-        policy_params = optax.apply_updates(policy_params, updates)
+        updates, opt_optimistic_policy_state = self.optimizer.update(
+            grad, opt_optimistic_policy_state, params=optimistic_policy_params
+        )
+        optimistic_policy_params = optax.apply_updates(optimistic_policy_params, updates)
+
+        if self.auto_entropy:
+            log_ent_coef = self._train_ent_coef(log_ent_coef, log_prob)
+            optimism_coef = self._train_optimism_coef(optimism_coef, kl_divergence)
+            kl_weight = self._train_kl_weight(kl_weight, kl_divergence)
 
         target_critic_params = soft_update(
             critic_params, target_critic_params, self.target_network_update_tau
         )
 
-        if self.auto_entropy:
-            log_ent_coef = self._train_ent_coef(log_ent_coef, log_prob)
-
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
-        if self.scaled_by_reset:
-            policy_params = scaled_by_reset(
-                policy_params,
-                key,
-                step,
-                self.reset_freq,
-                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
-            )
-            critic_params = scaled_by_reset(
-                critic_params,
-                key,
-                step,
-                self.reset_freq,
-                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
-            )
         return (
-            policy_params,
+            pessimistic_policy_params,
+            optimistic_policy_params,
             critic_params,
             target_critic_params,
-            opt_policy_state,
+            opt_pessimistic_policy_state,
+            opt_optimistic_policy_state,
             opt_critic_state,
             critic_loss,
-            -actor_loss,
+            jnp.mean(targets),
+            jnp.mean(kl_divergence),
             log_ent_coef,
+            optimism_coef,
+            kl_weight,
             new_priorities,
         )
 
     def _train_ent_coef(self, log_coef, log_prob):
-        def loss(log_ent_coef, log_prob):
-            ent_coef = jnp.exp(log_ent_coef)
-            return jnp.mean(ent_coef * (self.target_entropy - log_prob))
+        def ent_loss(log_ent_coef, log_prob):
+            return -jnp.mean(log_ent_coef * (log_prob + self.target_entropy))
 
-        grad = jax.grad(loss)(log_coef, log_prob)
+        grad = jax.grad(ent_loss)(log_coef, log_prob)
         log_coef = log_coef - self.ent_coef_learning_rate * grad
         return log_coef
 
-    def _critic_loss(self, critic_params, policy_params, obses, actions, targets, weights, key):
-        feature = self.preproc(policy_params, key, obses)
+    def _train_optimism_coef(self, optimism_coef, kl_divergence):
+        def optimism_loss(optimism_coef, kl_divergence):
+            return jnp.mean(
+                (optimism_coef - self.pessimism_coef)
+                * (kl_divergence / self.action_size[0] - self.kl_target)
+            )
+
+        grad = jnp.clip(
+            jax.grad(optimism_loss)(optimism_coef, kl_divergence),
+            -DAC_COEF_GRAD_CLIP,
+            DAC_COEF_GRAD_CLIP,
+        )
+        optimism_coef = jnp.clip(
+            optimism_coef - self.optimism_coef_learning_rate * grad, self.pessimism_coef, jnp.inf
+        )
+        return optimism_coef
+
+    def _train_kl_weight(self, kl_weight, kl_divergence):
+        def kl_loss(kl_weight, kl_divergence):
+            return -jnp.mean(kl_weight * (kl_divergence / self.action_size[0] - self.kl_target))
+
+        grad = jnp.clip(
+            jax.grad(kl_loss)(kl_weight, kl_divergence), -DAC_COEF_GRAD_CLIP, DAC_COEF_GRAD_CLIP
+        )
+        kl_weight = jnp.maximum(0.0, kl_weight - self.kl_weight_learning_rate * grad)
+        return kl_weight
+
+    def _critic_loss(
+        self, critic_params, pessimistic_policy_params, obses, actions, targets, weights, key
+    ):
+        feature = self.preproc(pessimistic_policy_params, key, obses)
         q1, q2 = self.critic(critic_params, key, feature, actions)
         error1 = jnp.squeeze(q1 - targets)
         error2 = jnp.squeeze(q2 - targets)
@@ -289,23 +381,59 @@ class SAC(Deteministic_Policy_Gradient_Family):
         )
         return critic_loss, jnp.abs(error1)
 
-    def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
-        feature = self.preproc(policy_params, key, obses)
-        policy, log_prob = self._get_pi_log_prob(policy_params, feature, key)
+    def _pessimistic_actor_loss(
+        self, pessimistic_policy_params, critic_params, obses, key, ent_coef
+    ):
+        feature = self.preproc(pessimistic_policy_params, key, obses)
+        policy, log_prob = self._get_pi_log_prob(pessimistic_policy_params, feature, key)
         q1_pi, q2_pi = self.critic(critic_params, key, feature, policy)
-        actor_loss = jnp.mean(ent_coef * log_prob - (q1_pi + q2_pi) / 2.0)
+        mean_q = (q1_pi + q2_pi) / 2.0
+        std_q = jnp.abs(q1_pi - q2_pi) / 2.0
+        actor_loss = jnp.mean(ent_coef * log_prob - mean_q - self.pessimism_coef * std_q)
         return actor_loss, log_prob
 
+    def _optimistic_actor_loss(
+        self,
+        optimistic_policy_params,
+        pessimistic_policy_params,
+        critic_params,
+        obses,
+        key,
+        optimism_coef,
+        kl_weight,
+    ):
+        feature = self.preproc(optimistic_policy_params, key, obses)
+        policy, kl_divergence = self._get_pi_kl_divergence(
+            pessimistic_policy_params, optimistic_policy_params, feature, key
+        )
+        q1_pi, q2_pi = self.critic(critic_params, key, feature, policy)
+        mean_q = (q1_pi + q2_pi) / 2.0
+        std_q = jnp.abs(q1_pi - q2_pi) / 2.0
+        actor_loss = jnp.mean(kl_weight * kl_divergence - mean_q - optimism_coef * std_q)
+        return actor_loss, kl_divergence
+
     def _target(
-        self, policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key, ent_coef
+        self,
+        pessimistic_policy_params,
+        target_critic_params,
+        rewards,
+        nxtobses,
+        not_terminateds,
+        key,
+        ent_coef,
     ):
         policy, log_prob = self._get_pi_log_prob(
-            policy_params, self.preproc(policy_params, key, nxtobses), key
+            pessimistic_policy_params, self.preproc(pessimistic_policy_params, key, nxtobses), key
         )
         q1_pi, q2_pi = self.critic(
-            target_critic_params, key, self.preproc(policy_params, key, nxtobses), policy
+            target_critic_params,
+            key,
+            self.preproc(pessimistic_policy_params, key, nxtobses),
+            policy,
         )
-        next_q = jnp.minimum(q1_pi, q2_pi) - ent_coef * log_prob
+        mean_q = (q1_pi + q2_pi) / 2.0
+        std_q = jnp.abs(q1_pi - q2_pi) / 2.0
+        next_q = mean_q + self.pessimism_coef * std_q - ent_coef * log_prob
         return (not_terminateds * next_q * self._gamma) + rewards
 
     def learn(
@@ -313,8 +441,8 @@ class SAC(Deteministic_Policy_Gradient_Family):
         total_timesteps,
         callback=None,
         log_interval=1000,
-        experiment_name="SAC",
-        run_name="SAC",
+        experiment_name="BRO",
+        run_name="BRO",
     ):
         super().learn(
             total_timesteps,

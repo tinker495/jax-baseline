@@ -3,6 +3,8 @@ import argparse
 import gymnasium as gym
 
 from jax_baselines.common.env_builer import get_env_builder
+from jax_baselines.CrossQ.crossq import CrossQ
+from jax_baselines.DAC.dac import DAC
 from jax_baselines.DDPG.ddpg import DDPG
 from jax_baselines.SAC.sac import SAC
 from jax_baselines.TD3.td3 import TD3
@@ -31,6 +33,7 @@ if __name__ == "__main__":
         default=1,
         help="n step setting when n > 1 is n step td method",
     )
+    parser.add_argument("--scaled_by_reset", action="store_true")
     parser.add_argument("--simba", action="store_true")
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
     parser.add_argument("--verbose", type=int, default=0, help="verbose")
@@ -84,6 +87,7 @@ if __name__ == "__main__":
             target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
+            scaled_by_reset=args.scaled_by_reset,
             simba=args.simba,
             n_step=args.n_step,
             train_freq=args.train_freq,
@@ -112,6 +116,7 @@ if __name__ == "__main__":
             target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
+            scaled_by_reset=args.scaled_by_reset,
             simba=args.simba,
             action_noise=args.action_noise,
             n_step=args.n_step,
@@ -141,6 +146,69 @@ if __name__ == "__main__":
             target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
+            scaled_by_reset=args.scaled_by_reset,
+            simba=args.simba,
+            n_step=args.n_step,
+            train_freq=args.train_freq,
+            ent_coef=args.ent_coef,
+            seed=args.seed,
+            gradient_steps=args.gradient_steps,
+            log_dir=args.logdir,
+            policy_kwargs=policy_kwargs,
+            optimizer=args.optimizer,
+        )
+    if args.algo == "CrossQ":
+        if args.model_lib == "flax":
+            if args.simba:
+                from model_builder.flax.dpg.simba_crossq_builder import (
+                    model_builder_maker,
+                )
+            else:
+                from model_builder.flax.dpg.crossq_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            pass
+            # from model_builder.haiku.dpg.crossq_builder import model_builder_maker
+        agent = CrossQ(
+            env_builder,
+            model_builder_maker,
+            num_workers=args.worker,
+            gamma=args.gamma,
+            learning_rate=args.learning_rate,
+            batch_size=args.batch,
+            buffer_size=int(args.buffer_size),
+            learning_starts=args.learning_starts,
+            prioritized_replay=args.per,
+            scaled_by_reset=args.scaled_by_reset,
+            simba=args.simba,
+            n_step=args.n_step,
+            train_freq=args.train_freq,
+            ent_coef=args.ent_coef,
+            seed=args.seed,
+            gradient_steps=args.gradient_steps,
+            log_dir=args.logdir,
+            policy_kwargs=policy_kwargs,
+            optimizer=args.optimizer,
+        )
+    if args.algo == "DAC":
+        if args.model_lib == "flax":
+            if args.simba:
+                from model_builder.flax.dpg.simba_dac_builder import model_builder_maker
+            else:
+                from model_builder.flax.dpg.dac_builder import model_builder_maker
+        elif args.model_lib == "haiku":
+            from model_builder.haiku.dpg.dac_builder import model_builder_maker
+        agent = DAC(
+            env_builder,
+            model_builder_maker,
+            num_workers=args.worker,
+            gamma=args.gamma,
+            learning_rate=args.learning_rate,
+            batch_size=args.batch,
+            buffer_size=int(args.buffer_size),
+            target_network_update_tau=args.target_update_tau,
+            learning_starts=args.learning_starts,
+            prioritized_replay=args.per,
+            scaled_by_reset=args.scaled_by_reset,
             simba=args.simba,
             n_step=args.n_step,
             train_freq=args.train_freq,
@@ -171,6 +239,7 @@ if __name__ == "__main__":
             learning_starts=args.learning_starts,
             quantile_drop=args.quantile_drop,
             prioritized_replay=args.per,
+            scaled_by_reset=args.scaled_by_reset,
             simba=args.simba,
             n_step=args.n_step,
             train_freq=args.train_freq,
@@ -205,6 +274,7 @@ if __name__ == "__main__":
             learning_starts=args.learning_starts,
             action_noise=args.action_noise,
             train_freq=args.train_freq,
+            scaled_by_reset=args.scaled_by_reset,
             simba=args.simba,
             seed=args.seed,
             gradient_steps=args.gradient_steps,

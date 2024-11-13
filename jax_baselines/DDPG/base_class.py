@@ -42,6 +42,7 @@ class Deteministic_Policy_Gradient_Family(object):
         prioritized_replay_alpha=0.6,
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-3,
+        scaled_by_reset=False,
         simba=False,
         log_interval=200,
         log_dir=None,
@@ -79,6 +80,8 @@ class Deteministic_Policy_Gradient_Family(object):
         self.full_tensorboard_log = full_tensorboard_log
         self.n_step_method = n_step > 1
         self.n_step = n_step
+        self.scaled_by_reset = scaled_by_reset
+        self.reset_freq = 500000
         self.simba = simba
         self.params = None
         self.target_params = None
@@ -172,7 +175,7 @@ class Deteministic_Policy_Gradient_Family(object):
     def _get_actions(self, params, obses) -> np.ndarray:
         pass
 
-    def actions(self, obs, steps):
+    def actions(self, obs, steps, eval=False):
         pass
 
     def discription(self, eval_result=None):
@@ -285,7 +288,7 @@ class Deteministic_Policy_Gradient_Family(object):
 
         for ep in range(self.eval_eps):
             while not terminated and not truncated:
-                actions = self.actions(obs, steps)
+                actions = self.actions(obs, steps, eval=True)
                 observation, reward, terminated, truncated, info = self.eval_env.step(actions[0])
                 obs = [np.expand_dims(observation, axis=0)]
                 total_reward[ep] += reward

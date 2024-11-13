@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
-from model_builder.flax.initializers import clip_uniform_initializers
+from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense, ResidualBlock
 from model_builder.flax.Module import PreProcess
 from model_builder.utils import print_param
@@ -27,10 +27,19 @@ class Actor(nn.Module):
             + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
             + [
                 nn.LayerNorm(),
-                Dense(self.action_size[0] * 2, kernel_init=clip_uniform_initializers(-0.03, 0.03)),
             ]
         )(feature)
-        mu, log_std = jnp.split(linear, 2, axis=-1)
+        mu = Dense(
+            self.action_size[0],
+            kernel_init=clip_factorized_uniform(3),
+        )(linear)
+        log_std = Dense(
+            self.action_size[0],
+            kernel_init=clip_factorized_uniform(3),
+            bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
+        )(
+            linear
+        )  # initialize std with high values
         return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(
             log_std / LOG_STD_SCALE
         )  # jnp.clip(log_std,LOG_STD_MIN,LOG_STD_MAX)
@@ -46,7 +55,7 @@ class Critic(nn.Module):
         q_net = nn.Sequential(
             [Dense(self.node)]
             + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
-            + [nn.LayerNorm(), Dense(1, kernel_init=clip_uniform_initializers(-0.03, 0.03))]
+            + [nn.LayerNorm(), Dense(1, kernel_init=clip_factorized_uniform(3))]
         )(concat)
         return q_net
 

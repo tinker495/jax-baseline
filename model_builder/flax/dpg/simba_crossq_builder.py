@@ -5,9 +5,14 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
-from model_builder.flax.layers import Dense, ResidualBlock
-from model_builder.flax.Module import PreProcess
+from model_builder.flax.layers import Dense
+from model_builder.flax.Module import BatchReNorm, PreProcess
 from model_builder.utils import print_param
+
+LOG_STD_MAX = 2
+LOG_STD_MIN = -20
+LOG_STD_SCALE = (LOG_STD_MAX - LOG_STD_MIN) / 2.0
+LOG_STD_MEAN = (LOG_STD_MAX + LOG_STD_MIN) / 2.0
 
 
 class Actor(nn.Module):
@@ -16,17 +21,25 @@ class Actor(nn.Module):
     hidden_n: int = 2
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
-        action = nn.Sequential(
-            [Dense(self.node)]
-            + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
-            + [
-                nn.LayerNorm(),
-                Dense(self.action_size[0], kernel_init=clip_factorized_uniform(3)),
-                jax.nn.tanh,
-            ]
+    def __call__(self, feature: jnp.ndarray, training: bool = True) -> jnp.ndarray:
+        for i in range(self.hidden_n):
+            feature = Dense(self.node)(feature)
+            feature = BatchReNorm(use_running_average=not training)(feature)
+            feature = jax.nn.relu(feature)
+        mu = Dense(
+            self.action_size[0],
+            kernel_init=clip_factorized_uniform(3),
         )(feature)
-        return action
+        log_std = Dense(
+            self.action_size[0],
+            kernel_init=clip_factorized_uniform(3),
+            bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
+        )(
+            feature
+        )  # initialize std with high values
+        return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(
+            log_std / LOG_STD_SCALE
+        )  # jnp.clip(log_std,LOG_STD_MIN,LOG_STD_MAX)
 
 
 class Critic(nn.Module):
@@ -34,13 +47,16 @@ class Critic(nn.Module):
     hidden_n: int = 2
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([feature, actions], axis=1)
-        q_net = nn.Sequential(
-            [Dense(self.node)]
-            + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
-            + [nn.LayerNorm(), Dense(1, kernel_init=clip_factorized_uniform(3))]
-        )(concat)
+    def __call__(
+        self, feature: jnp.ndarray, actions: jnp.ndarray, training: bool = True
+    ) -> jnp.ndarray:
+        actions_norm = BatchReNorm(use_running_average=not training)(actions)
+        feature = jnp.concatenate([feature, actions_norm], axis=1)
+        for i in range(self.hidden_n):
+            feature = Dense(self.node * 8)(feature)
+            feature = BatchReNorm(use_running_average=not training)(feature)
+            feature = jax.nn.tanh(feature)
+        q_net = Dense(1, kernel_init=clip_factorized_uniform(3))(feature)
         return q_net
 
 
@@ -58,37 +74,36 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
                 self.act = Actor(action_size, **policy_kwargs)
 
-            def __call__(self, x):
+            def __call__(self, x, training: bool = True):
                 feature = self.preprocess(x)
-                action = self.actor(feature)
-                return action
+                mu, log_std = self.actor(feature, training)
+                return mu, log_std
 
             def preprocess(self, x):
                 x = self.preproc(x)
                 return x
 
-            def actor(self, x):
-                return self.act(x)
+            def actor(self, x, training: bool = True):
+                return self.act(x, training)
 
-        class Merged_Critics(nn.Module):
+        class Merged_Critic(nn.Module):
             def setup(self):
                 self.crit1 = Critic(**policy_kwargs)
                 self.crit2 = Critic(**policy_kwargs)
 
-            def __call__(self, x, a):
-                q1 = self.crit1(x, a)
-                q2 = self.crit2(x, a)
-                return q1, q2
+            def __call__(self, x, a, training: bool = True):
+                return (self.crit1(x, a, training), self.crit2(x, a, training))
 
         model_actor = Merged_Actor()
         preproc_fn = get_apply_fn_flax_module(model_actor, model_actor.preprocess)
-        actor_fn = get_apply_fn_flax_module(model_actor, model_actor.actor)
-        model_critic = Merged_Critics()
-        critic_fn = get_apply_fn_flax_module(model_critic)
+        actor_fn = get_apply_fn_flax_module(model_actor, model_actor.actor, mutable=["batch_stats"])
+        model_critic = Merged_Critic()
+        critic_fn = get_apply_fn_flax_module(model_critic, mutable=["batch_stats"])
         if key is not None:
             policy_params = model_actor.init(
                 key,
                 [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
+                True,
             )
             critic_params = model_critic.init(
                 key,
@@ -98,6 +113,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                     [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
                 ),
                 np.zeros((1, *action_size), dtype=np.float32),
+                True,
             )
             if print_model:
                 print("------------------build-flax-model--------------------")

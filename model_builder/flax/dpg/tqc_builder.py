@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
-from model_builder.flax.initializers import clip_uniform_initializers
+from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense
 from model_builder.flax.Module import PreProcess
 from model_builder.utils import print_param
@@ -25,13 +25,15 @@ class Actor(nn.Module):
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         linear = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [
-                self.layer(
-                    self.action_size[0] * 2, kernel_init=clip_uniform_initializers(-0.03, 0.03)
-                ),
-            ]
         )(feature)
-        mu, log_std = jnp.split(linear, 2, axis=-1)
+        mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(linear)
+        log_std = self.layer(
+            self.action_size[0],
+            kernel_init=clip_factorized_uniform(3),
+            bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
+        )(
+            linear
+        )  # initialize std with high values
         return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(
             log_std / LOG_STD_SCALE
         )  # jnp.clip(log_std,LOG_STD_MIN,LOG_STD_MAX)
@@ -40,7 +42,7 @@ class Actor(nn.Module):
 class Critic(nn.Module):
     node: int = 256
     hidden_n: int = 2
-    support_n: int = 200
+    support_n: int = 25
     layer: nn.Module = Dense
 
     @nn.compact
@@ -51,9 +53,7 @@ class Critic(nn.Module):
             + [
                 self.layer(
                     self.support_n,
-                    kernel_init=clip_uniform_initializers(
-                        -0.03 / self.support_n, 0.03 / self.support_n
-                    ),
+                    kernel_init=clip_factorized_uniform(3 / self.support_n),
                 )
             ]
         )(concat)

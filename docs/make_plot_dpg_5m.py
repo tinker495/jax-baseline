@@ -10,12 +10,13 @@ plt.figure(figsize=(15, 7))
 
 plt.subplot(1, 2, 1)
 min_y = 0
-max_y = 14000
+max_y = 15000
 csvdict = {
     "TD3": "docs/csv/dpg_humanoid_5m/TD3.csv",
     "SAC": "docs/csv/dpg_humanoid_5m/SAC.csv",
     "TQC": "docs/csv/dpg_humanoid_5m/TQC.csv",
     "TD7": "docs/csv/dpg_humanoid_5m/TD7.csv",
+    "CrossQ": "docs/csv/dpg_humanoid_5m/CrossQ.csv",
 }
 dfdict = {}
 average_dict = {}
@@ -53,6 +54,7 @@ csvdict = {
     "Simba + SAC": "docs/csv/dpg_humanoid_5m/Simba_SAC.csv",
     "Simba + TQC": "docs/csv/dpg_humanoid_5m/Simba_TQC.csv",
     "Simba + TD7": "docs/csv/dpg_humanoid_5m/Simba_TD7.csv",
+    "RSNorm + CrossQ": "docs/csv/dpg_humanoid_5m/Simba_CrossQ.csv",
 }
 
 dfdict = {}

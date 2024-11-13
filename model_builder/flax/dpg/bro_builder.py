@@ -5,9 +5,14 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
-from model_builder.flax.layers import Dense, ResidualBlock
+from model_builder.flax.layers import BRONet, Dense
 from model_builder.flax.Module import PreProcess
 from model_builder.utils import print_param
+
+LOG_STD_MAX = 2
+LOG_STD_MIN = -20
+LOG_STD_SCALE = (LOG_STD_MAX - LOG_STD_MIN) / 2.0
+LOG_STD_MEAN = (LOG_STD_MAX + LOG_STD_MIN) / 2.0
 
 
 class Actor(nn.Module):
@@ -17,30 +22,36 @@ class Actor(nn.Module):
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
-        action = nn.Sequential(
-            [Dense(self.node)]
-            + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
+        x = Dense(self.node)(feature)
+        x = nn.LayerNorm()(x)
+        x = jax.nn.relu(x)
+        linear = nn.Sequential(
+            [BRONet(self.node) for _ in range(self.hidden_n)]
             + [
-                nn.LayerNorm(),
-                Dense(self.action_size[0], kernel_init=clip_factorized_uniform(3)),
-                jax.nn.tanh,
+                Dense(self.action_size[0] * 2, kernel_init=clip_factorized_uniform(3)),
             ]
-        )(feature)
-        return action
+        )(x)
+        mu, log_std = jnp.split(linear, 2, axis=-1)
+        return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(
+            log_std / LOG_STD_SCALE
+        )  # jnp.clip(log_std,LOG_STD_MIN,LOG_STD_MAX)
 
 
 class Critic(nn.Module):
     node: int = 256
     hidden_n: int = 2
+    support_n: int = 25
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
         concat = jnp.concatenate([feature, actions], axis=1)
+        x = Dense(self.node)(concat)
+        x = nn.LayerNorm()(x)
+        x = jax.nn.relu(x)
         q_net = nn.Sequential(
-            [Dense(self.node)]
-            + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
-            + [nn.LayerNorm(), Dense(1, kernel_init=clip_factorized_uniform(3))]
-        )(concat)
+            [BRONet(self.node) for _ in range(self.hidden_n)]
+            + [Dense(self.support_n, kernel_init=clip_factorized_uniform(3))]
+        )(x)
         return q_net
 
 
@@ -60,8 +71,8 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
 
             def __call__(self, x):
                 feature = self.preprocess(x)
-                action = self.actor(feature)
-                return action
+                mu, log_std = self.actor(feature)
+                return mu, log_std
 
             def preprocess(self, x):
                 x = self.preproc(x)
@@ -70,20 +81,18 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
             def actor(self, x):
                 return self.act(x)
 
-        class Merged_Critics(nn.Module):
+        class Merged_Critic(nn.Module):
             def setup(self):
                 self.crit1 = Critic(**policy_kwargs)
                 self.crit2 = Critic(**policy_kwargs)
 
             def __call__(self, x, a):
-                q1 = self.crit1(x, a)
-                q2 = self.crit2(x, a)
-                return q1, q2
+                return (self.crit1(x, a), self.crit2(x, a))
 
         model_actor = Merged_Actor()
         preproc_fn = get_apply_fn_flax_module(model_actor, model_actor.preprocess)
         actor_fn = get_apply_fn_flax_module(model_actor, model_actor.actor)
-        model_critic = Merged_Critics()
+        model_critic = Merged_Critic()
         critic_fn = get_apply_fn_flax_module(model_critic)
         if key is not None:
             policy_params = model_actor.init(

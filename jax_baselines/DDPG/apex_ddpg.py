@@ -135,6 +135,7 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
+            self.train_steps_count += 1
             data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
 
             (
