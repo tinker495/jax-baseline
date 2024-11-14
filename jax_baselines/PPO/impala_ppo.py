@@ -127,7 +127,7 @@ class IMPALA_PPO(IMPALA_Family):
         rewards,
         nxtobses,
         terminateds,
-        truncteds,
+        truncateds,
     ):
         # ((b x h x w x c), (b x n)) x worker -> (worker x b x h x w x c), (worker x b x n)
         obses = [jnp.stack(zo) for zo in zip(*obses)]
@@ -136,7 +136,7 @@ class IMPALA_PPO(IMPALA_Family):
         mu_log_prob = jnp.stack(mu_log_prob)
         rewards = jnp.stack(rewards)
         terminateds = jnp.stack(terminateds)
-        truncteds = jnp.stack(truncteds)
+        truncateds = jnp.stack(truncateds)
         obses = convert_jax(obses)
         nxtobses = convert_jax(nxtobses)
         feature = jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, obses)
@@ -155,15 +155,9 @@ class IMPALA_PPO(IMPALA_Family):
         rho = jnp.minimum(rho_raw, self.rho_max)
         c_t = self.lamda * jnp.minimum(rho, self.cut_max)
         vs = jax.vmap(get_vtrace, in_axes=(0, 0, 0, 0, 0, 0, 0, None))(
-            rewards, rho, c_t, terminateds, truncteds, value, next_value, self.gamma
+            rewards, rho, c_t, terminateds, truncateds, value, next_value, self.gamma
         )
-        vs_t_plus_1 = jax.vmap(
-            lambda v, nv, t: jnp.where(
-                t == 1, nv, jnp.concatenate([v[1:], jnp.expand_dims(nv[-1], axis=-1)])
-            ),
-            in_axes=(0, 0, 0),
-        )(vs, next_value, truncteds)
-        adv = rewards + self.gamma * (1.0 - terminateds) * vs_t_plus_1 - value
+        adv = rewards + self.gamma * (1.0 - terminateds) * vs - value
         # adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
         adv = rho * adv
         obses = [jnp.vstack(o) for o in obses]
@@ -261,15 +255,14 @@ class IMPALA_PPO(IMPALA_Family):
     def _loss_discrete(self, params, obses, actions, old_value, vs, mu_prob, pi_prob, adv, key):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
-        # vals_clip = old_value + jnp.clip(vals - old_value, -self.ppo_eps, self.ppo_eps)
-        # vf1 = jnp.square(jnp.squeeze(vals - vs))
-        # vf2 = jnp.square(jnp.squeeze(vals_clip - vs))
-        # critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
-        critic_loss = jnp.mean(jnp.square(jnp.squeeze(vals - vs)))
+        vals_clip = old_value + jnp.clip(vals - old_value, -0.5, 0.5)
+        vf1 = jnp.square(vals - vs)
+        vf2 = jnp.square(vals_clip - vs)
+        critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
 
         logit = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(logit, actions, key, out_prob=True)
-        is_ratio = jnp.clip(jnp.exp(mu_prob - pi_prob), 0.0, 2.0)
+        is_ratio = jnp.clip(jnp.exp(mu_prob - pi_prob), 0.0, 1.0 + self.ppo_eps / 2.0)
         ratio = is_ratio * jnp.exp(log_prob - mu_prob)
         cross_entropy1 = -adv * ratio
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
@@ -279,18 +272,18 @@ class IMPALA_PPO(IMPALA_Family):
         total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
-    def _loss_continuous(self, params, obses, actions, old_value, vs, mu_prob, adv, key):
+    def _loss_continuous(self, params, obses, actions, old_value, vs, mu_prob, pi_prob, adv, key):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
-        # vals_clip = old_value + jnp.clip(vals - old_value, -self.ppo_eps, self.ppo_eps)
-        # vf1 = jnp.square(jnp.squeeze(vals - vs))
-        # vf2 = jnp.square(jnp.squeeze(vals_clip - vs))
-        # critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
-        critic_loss = jnp.mean(jnp.square(jnp.squeeze(vals - vs)))
+        vals_clip = old_value + jnp.clip(vals - old_value, -0.5, 0.5)
+        vf1 = jnp.square(vals - vs)
+        vf2 = jnp.square(vals_clip - vs)
+        critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
 
         prob = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(prob, actions, key, out_prob=True)
-        ratio = jnp.exp(log_prob - mu_prob)
+        is_ratio = jnp.clip(jnp.exp(mu_prob - pi_prob), 0.0, 1.0 + self.ppo_eps / 2.0)
+        ratio = is_ratio * jnp.exp(log_prob - mu_prob)
         cross_entropy1 = -adv * ratio
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
@@ -304,15 +297,13 @@ class IMPALA_PPO(IMPALA_Family):
         total_trainstep,
         callback=None,
         log_interval=10,
+        experiment_name="IMPALA",
         run_name="IMPALA_PPO",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
     ):
         super().learn(
             total_trainstep,
             callback,
             log_interval,
+            experiment_name,
             run_name,
-            reset_num_timesteps,
-            replay_wrapper,
         )

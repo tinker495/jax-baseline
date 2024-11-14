@@ -1,5 +1,6 @@
 import base64
 import multiprocessing as mp
+import traceback
 from functools import partial
 
 import gymnasium as gym
@@ -10,7 +11,7 @@ import ray
 from jax_baselines.IMPALA.cpprb_buffers import EpochBuffer
 
 
-@ray.remote(num_cpus=1)
+@ray.remote(num_cpus=1, num_gpus=0, runtime_env={"env_vars": {"JAX_PLATFORMS": "cpu"}})
 class Impala_Worker(object):
     encoded = base64.b64encode(mp.current_process().authkey)
 
@@ -115,7 +116,8 @@ class Impala_Worker(object):
                         obs = [np.expand_dims(obs, axis=0)]
                 queue.put(local_buffer.get_buffer())
         except Exception as e:
-            print(f"worker {mp.current_process().name} error : {e}")
+            print(f"Error in worker {mp.current_process().name}: {e}")
+            print(f"Error traceback: {traceback.format_exc()}")
         finally:
             if stop.is_set():
                 print("worker stoped")

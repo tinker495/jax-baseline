@@ -47,6 +47,9 @@ class TensorboardRun:
     def get_local_path(self, path):
         return os.path.join(self.dir, path)
 
+    def log_custom_scalars(self, layout):
+        self.writer.add_custom_scalars(layout)
+
 
 class TensorboardLogger:
     def __init__(self, run_name: str, experiment_name: str, local_dir: str, agent: any):
@@ -64,6 +67,9 @@ class TensorboardLogger:
         )
         self.run = TensorboardRun(self.local_dir)
         add_hparams(agent, self.run)
+
+    def get_run(self):
+        return self.run
 
     def __enter__(self) -> TensorboardRun:
         return self.run

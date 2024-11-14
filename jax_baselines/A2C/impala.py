@@ -152,13 +152,7 @@ class IMPALA(IMPALA_Family):
         vs = jax.vmap(get_vtrace, in_axes=(0, 0, 0, 0, 0, 0, 0, None))(
             rewards, rho, c_t, terminateds, truncateds, value, next_value, self.gamma
         )
-        vs_t_plus_1 = jax.vmap(
-            lambda v, nv, t: jnp.where(
-                t == 1, nv, jnp.concatenate([v[1:], jnp.expand_dims(nv[-1], axis=-1)])
-            ),
-            in_axes=(0, 0, 0),
-        )(vs, next_value, truncateds)
-        adv = rewards + self.gamma * (1.0 - terminateds) * vs_t_plus_1 - value
+        adv = rewards + self.gamma * (1.0 - terminateds) * vs - value
         # adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
         adv = rho * adv
         obses = [jnp.vstack(o) for o in obses]
@@ -238,15 +232,13 @@ class IMPALA(IMPALA_Family):
         total_trainstep,
         callback=None,
         log_interval=10,
-        run_name="IMPALA_AC",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        experiment_name="IMPALA",
+        run_name="IMPALA",
     ):
         super().learn(
             total_trainstep,
             callback,
             log_interval,
+            experiment_name,
             run_name,
-            reset_num_timesteps,
-            replay_wrapper,
         )
