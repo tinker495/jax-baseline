@@ -205,7 +205,6 @@ def get_vtrace(rewards, rhos, c_ts, terminateds, truncateds, values, next_values
         last_v = delta + gamma * c_t * (1.0 - term) * (1.0 - trunc) * last_v
         return last_v, last_v
 
-    truncateds = truncateds.at[-1].set(jnp.where(terminateds[-1], 0.0, 1.0))
     _, A = jax.lax.scan(
         f,
         jnp.zeros((1,), dtype=jnp.float32),
@@ -316,7 +315,7 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
         case "rmsprop":
             optim = optax.rmsprop(lr, eps=eps)
         case "sgd":
-            optim = optax.sgd(lr)
+            optim = optax.sgd(lr, momentum=0.9)
         case "adabelief":
             optim = optax.adabelief(lr, eps=eps)
         case "lion":
