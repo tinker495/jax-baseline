@@ -205,6 +205,7 @@ def get_vtrace(rewards, rhos, c_ts, terminateds, truncateds, values, next_values
         last_v = delta + gamma * c_t * (1.0 - term) * (1.0 - trunc) * last_v
         return last_v, last_v
 
+    truncateds = truncateds.at[-1].set(jnp.where(terminateds[-1], 0.0, 1.0))
     _, A = jax.lax.scan(
         f,
         jnp.zeros((1,), dtype=jnp.float32),
