@@ -157,7 +157,9 @@ class IMPALA_PPO(IMPALA_Family):
         vs = jax.vmap(get_vtrace, in_axes=(0, 0, 0, 0, 0, 0, 0, None))(
             rewards, rho, c_t, terminateds, truncateds, value, next_value, self.gamma
         )
-        vs_p1 = jnp.concatenate([vs[:, 1:], next_value[:, -1:]], axis=1)  # vs_t+1
+        vs_p1 = jnp.concatenate(
+            [vs[:, 1:], next_value[:, -1:] * (1.0 - terminateds[:, -1:])], axis=1
+        )  # vs_t+1
         adv = rho * (rewards + self.gamma * vs_p1 - value)
         obses = [jnp.vstack(o) for o in obses]
         actions = jnp.vstack(actions)
@@ -255,8 +257,8 @@ class IMPALA_PPO(IMPALA_Family):
 
         logit = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(logit, actions, key, out_prob=True)
-        pi_ratio = jnp.clip(jnp.exp(pi_prob - mu_prob), 0.0, 1.0)
-        ratio = pi_ratio * jnp.exp(log_prob - pi_prob)
+        pi_ratio = jnp.clip(jnp.exp(mu_prob - pi_prob), 0.0, 10.0)
+        ratio = pi_ratio * jnp.exp(log_prob - mu_prob)
         cross_entropy1 = -adv * ratio
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
@@ -272,8 +274,8 @@ class IMPALA_PPO(IMPALA_Family):
 
         prob = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(prob, actions, key, out_prob=True)
-        pi_ratio = jnp.clip(jnp.exp(pi_prob - mu_prob), 0.0, 1.0)
-        ratio = pi_ratio * jnp.exp(log_prob - pi_prob)
+        pi_ratio = jnp.clip(jnp.exp(mu_prob - pi_prob), 0.0, 10.0)
+        ratio = pi_ratio * jnp.exp(log_prob - mu_prob)
         cross_entropy1 = -adv * ratio
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))

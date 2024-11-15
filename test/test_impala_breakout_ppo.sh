@@ -10,5 +10,5 @@ MODEL="--node 512 --hidden_n 1"
 OPTIONS="--sample_size 32 --update_freq 100 --val_coef 0.6 --buffer_size 1024" # --buffer_size 256
 OPTIMIZER="--optimizer rmsprop"
 
-python run_impala.py --algo PPO $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 python run_impala.py --algo A2C $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
+python run_impala.py --algo PPO $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
