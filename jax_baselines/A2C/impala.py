@@ -153,6 +153,7 @@ class IMPALA(IMPALA_Family):
             rewards, rho, c_t, terminateds, truncateds, value, next_value, self.gamma
         )
         vs_p1 = jnp.concatenate([vs[:, 1:], next_value[:, -1:]], axis=1)  # vs_t+1
+        vs_p1 = jnp.where(truncateds, next_value, vs_p1)
         adv = rho * (rewards + self.gamma * (1.0 - terminateds) * vs_p1 - value)
         adv = adv / (1.0 + jnp.mean(jnp.abs(adv)))  # normalize adv
         obses = [jnp.vstack(o) for o in obses]
