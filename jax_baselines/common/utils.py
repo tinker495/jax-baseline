@@ -200,10 +200,10 @@ def get_gaes(rewards, terminateds, truncateds, values, next_values, gamma, lamda
 def get_vtrace(rewards, rhos, c_ts, terminateds, truncateds, values, next_values, gamma):
     deltas = rhos * (rewards + gamma * (1.0 - terminateds) * next_values - values)
 
-    def f(last_v, info):
+    def f(A_p1, info):
         delta, c_t, term, trunc = info
-        last_v = delta + gamma * c_t * (1.0 - term) * (1.0 - trunc) * last_v
-        return last_v, last_v
+        A = delta + gamma * c_t * (1.0 - term) * (1.0 - trunc) * A_p1
+        return A, A
 
     _, A = jax.lax.scan(
         f,
@@ -313,7 +313,7 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
         case "adamw":
             optim = optax.adamw(lr, b1=0.9, b2=0.999, eps=eps, weight_decay=1e-4)
         case "rmsprop":
-            optim = optax.rmsprop(lr, eps=eps)
+            optim = optax.rmsprop(lr, eps=eps, momentum=0.0)
         case "sgd":
             optim = optax.sgd(lr, momentum=0.9)
         case "adabelief":

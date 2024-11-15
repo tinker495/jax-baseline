@@ -154,6 +154,7 @@ class IMPALA(IMPALA_Family):
         )
         vs_p1 = jnp.concatenate([vs[:, 1:], next_value[:, -1:]], axis=1)  # vs_t+1
         adv = rho * (rewards + self.gamma * (1.0 - terminateds) * vs_p1 - value)
+        adv = adv / (1.0 + jnp.mean(jnp.abs(adv)))  # normalize adv
         obses = [jnp.vstack(o) for o in obses]
         actions = jnp.vstack(actions)
         vs = jnp.vstack(vs)
