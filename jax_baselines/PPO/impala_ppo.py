@@ -255,7 +255,7 @@ class IMPALA_PPO(IMPALA_Family):
 
         logit = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(logit, actions, key, out_prob=True)
-        pi_ratio = jnp.clip(jnp.exp(mu_prob - pi_prob), 0.0, 10.0)
+        pi_ratio = jnp.clip(jnp.exp(mu_prob - pi_prob), 0.0, 2.0)
         ratio = pi_ratio * jnp.exp(log_prob - mu_prob)
         cross_entropy1 = -adv * ratio
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
@@ -272,7 +272,7 @@ class IMPALA_PPO(IMPALA_Family):
 
         prob = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(prob, actions, key, out_prob=True)
-        pi_ratio = jnp.clip(jnp.exp(mu_prob - pi_prob), 0.0, 10.0)
+        pi_ratio = jnp.clip(jnp.exp(mu_prob - pi_prob), 0.0, 2.0)
         ratio = pi_ratio * jnp.exp(log_prob - mu_prob)
         cross_entropy1 = -adv * ratio
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
