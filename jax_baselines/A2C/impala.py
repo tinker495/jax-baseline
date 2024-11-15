@@ -152,10 +152,8 @@ class IMPALA(IMPALA_Family):
         vs = jax.vmap(get_vtrace, in_axes=(0, 0, 0, 0, 0, 0, 0, None))(
             rewards, rho, c_t, terminateds, truncateds, value, next_value, self.gamma
         )
-        vs_p1 = jnp.concatenate(
-            [vs[:, 1:], next_value[:, -1:] * (1.0 - terminateds[:, -1:])], axis=1
-        )  # vs_t+1
-        adv = rho * (rewards + self.gamma * vs_p1 - value)
+        vs_p1 = jnp.concatenate([vs[:, 1:], next_value[:, -1:]], axis=1)  # vs_t+1
+        adv = rho * (rewards + self.gamma * (1.0 - terminateds[:, -1:]) * vs_p1 - value)
         obses = [jnp.vstack(o) for o in obses]
         actions = jnp.vstack(actions)
         vs = jnp.vstack(vs)
