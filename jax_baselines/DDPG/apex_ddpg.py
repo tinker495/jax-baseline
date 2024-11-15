@@ -238,15 +238,13 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
         total_timesteps,
         callback=None,
         log_interval=1000,
-        run_name="Ape_X_DDPG",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
+        experiment_name="APE_X_DDPG",
+        run_name="APE_X_DDPG",
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
+            experiment_name,
             run_name,
-            reset_num_timesteps,
-            replay_wrapper,
         )

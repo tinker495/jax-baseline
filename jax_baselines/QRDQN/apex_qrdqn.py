@@ -120,11 +120,8 @@ class APE_X_QRDQN(Ape_X_Family):
         return self.model(params, key, self.preproc(params, key, obses))
 
     def get_actor_builder(self):
-        gamma = self._gamma
         action_size = self.action_size[0]
         param_noise = self.param_noise
-        quantile = self.quantile
-        delta = self.delta
 
         def builder():
             if param_noise:
@@ -132,27 +129,6 @@ class APE_X_QRDQN(Ape_X_Family):
             else:
                 # make repeat None
                 key_seq = repeat(None)
-
-            def get_abs_td_error(
-                model, preproc, params, obses, actions, rewards, nxtobses, terminateds, key
-            ):
-                q_values = jnp.take_along_axis(
-                    model(params, key, preproc(params, key, convert_jax(obses))),
-                    jnp.expand_dims(actions.astype(jnp.int32), axis=2),
-                    axis=1,
-                )
-                next_q = model(params, key, preproc(params, key, convert_jax(nxtobses)))
-                next_actions = jnp.expand_dims(
-                    jnp.argmax(jnp.mean(next_q, axis=2), axis=1), axis=(1, 2)
-                )
-                next_vals = jnp.squeeze(
-                    jnp.take_along_axis(next_q, next_actions, axis=1)
-                )  # batch x support
-                target = rewards + gamma * (1.0 - terminateds) * next_vals
-                loss = QuantileHuberLosses(
-                    q_values, jnp.expand_dims(target, axis=2), quantile, delta
-                )
-                return jnp.squeeze(loss)
 
             def actor(model, preproc, params, obses, key):
                 q_values = model(params, key, preproc(params, key, convert_jax(obses)))
@@ -172,10 +148,7 @@ class APE_X_QRDQN(Ape_X_Family):
                         actions = np.random.choice(action_size)
                     return actions
 
-            def random_action(params, obs, epsilon, key):
-                return np.random.choice(action_size)
-
-            return get_abs_td_error, actor, get_action, random_action, key_seq
+            return actor, get_action, key_seq
 
         return builder
 
@@ -273,11 +246,8 @@ class APE_X_QRDQN(Ape_X_Family):
             self.get_q(params, obses, key), actions, axis=1
         )  # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets, axis=2)  # batch x support x 1
-        loss = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, self.quantile, self.delta)
-        return (
-            jnp.mean(loss * weights),
-            loss,
-        )  # remove weight multiply cpprb weight is something wrong
+        loss = QuantileHuberLosses(logit_valid_tile, theta_loss_tile, self.quantile, self.delta)
+        return jnp.mean(loss * weights), loss
 
     def _target(
         self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
@@ -290,40 +260,40 @@ class APE_X_QRDQN(Ape_X_Family):
             else:
                 next_q_mean = jnp.mean(next_q, axis=2)
             next_sub_q, tau_log_pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
-            pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau, axis=1)
-            p_cuml = jnp.expand_dims(jnp.cumsum(pi_next, axis=1), axis=2).tile(32)
-            r = jax.random.uniform(key, (32, 1, 32), dtype=p_cuml.dtype)
-            ind = jnp.swapaxes(
-                jax.vmap(jax.vmap(lambda p, r: jnp.searchsorted(p, r), in_axes=(1, 1)))(p_cuml, r),
-                1,
-                2,
-            )
-            sampled_q = jnp.take_along_axis(
-                next_q - jnp.expand_dims(tau_log_pi_next, axis=2), ind, axis=1
-            ).squeeze()
-            next_vals = sampled_q * not_terminateds
+            pi_next = jnp.expand_dims(
+                jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau), axis=2
+            )  # batch x actions x 1
+            next_vals = next_q - jnp.expand_dims(
+                tau_log_pi_next, axis=2
+            )  # batch x actions x support
+            sample_pi = jax.random.categorical(
+                key, jnp.tile(pi_next, (1, 1, self.n_support)), 1
+            )  # batch x 1 x support
+            next_vals = jnp.take_along_axis(
+                next_vals, jnp.expand_dims(sample_pi, axis=1), axis=1
+            )  # batch x 1 x support
+            next_vals = not_terminateds * jnp.squeeze(next_vals, axis=1)
 
             if self.double_q:
                 q_k_targets = jnp.mean(self.get_q(params, obses, key), axis=2)
             else:
                 q_k_targets = jnp.mean(self.get_q(target_params, obses, key), axis=2)
-            q_k_targets = jnp.mean(self.get_q(target_params, obses, key), axis=2)
-            q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
-            log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
-            munchausen_addon = jnp.take_along_axis(log_pi, jnp.squeeze(actions, axis=2), axis=1)
+            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0
             )
         else:
             if self.double_q:
-                next_actions = jnp.expand_dims(
-                    jnp.argmax(jnp.mean(self.get_q(params, nxtobses, key), axis=2), axis=1),
-                    axis=(1, 2),
+                next_actions = jnp.argmax(
+                    jnp.mean(self.get_q(params, nxtobses, key), axis=2, keepdims=True),
+                    axis=1,
+                    keepdims=True,
                 )
             else:
-                next_actions = jnp.expand_dims(
-                    jnp.argmax(jnp.mean(next_q, axis=2), axis=1), axis=(1, 2)
+                next_actions = jnp.argmax(
+                    jnp.mean(next_q, axis=2, keepdims=True), axis=1, keepdims=True
                 )
             next_vals = not_terminateds * jnp.squeeze(
                 jnp.take_along_axis(next_q, next_actions, axis=1)
@@ -335,15 +305,13 @@ class APE_X_QRDQN(Ape_X_Family):
         total_timesteps,
         callback=None,
         log_interval=1000,
+        experiment_name="APE_X",
         run_name="Ape_X_QRDQN",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
+            experiment_name,
             run_name,
-            reset_num_timesteps,
-            replay_wrapper,
         )

@@ -40,8 +40,8 @@ class C51(Q_Network_Family):
         _init_setup_model=True,
         policy_kwargs=None,
         categorial_bar_n=51,
-        categorial_max=250,
-        categorial_min=-250,
+        categorial_max=10,
+        categorial_min=-10,
         full_tensorboard_log=False,
         seed=None,
         optimizer="adamw",
@@ -223,7 +223,7 @@ class C51(Q_Network_Family):
             jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         )
         cross_entropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
-        return jnp.mean(cross_entropy), cross_entropy
+        return jnp.mean(cross_entropy * weights), cross_entropy
 
     def _target(
         self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
@@ -272,10 +272,10 @@ class C51(Q_Network_Family):
             )  # [32, action_size, 51]
 
             if self.double_q:
-                q_k_targets = jnp.sum(self.get_q(params, obses, key) * self.categorial_bar, axis=2)
+                q_k_targets = jnp.sum(self.get_q(params, obses, key) * self._categorial_bar, axis=2)
             else:
                 q_k_targets = jnp.sum(
-                    self.get_q(target_params, obses, key) * self.categorial_bar, axis=2
+                    self.get_q(target_params, obses, key) * self._categorial_bar, axis=2
                 )
             _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)

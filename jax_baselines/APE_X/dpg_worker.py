@@ -11,15 +11,16 @@ import ray
 from jax_baselines.common.cpprb_buffers import ReplayBuffer
 
 
-@ray.remote(num_cpus=1)
+@ray.remote(num_cpus=1, num_gpus=0, runtime_env={"env_vars": {"JAX_PLATFORMS": "cpu"}})
 class Ape_X_Worker(object):
     encoded = base64.b64encode(mp.current_process().authkey)
 
-    def __init__(self, env_name_) -> None:
+    def __init__(self, env_builder) -> None:
         mp.current_process().authkey = base64.b64decode(self.encoded)
+
+        self.env: gym.Env = env_builder(1)
         self.env_type = "SingleEnv"
-        self.env_id = env_name_
-        self.env = gym.make(env_name_)
+        self.env_id = self.env.spec.id
 
     def get_info(self):
         return {

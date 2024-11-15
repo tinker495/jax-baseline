@@ -4,6 +4,7 @@ import multiprocessing as mp
 import ray
 
 from jax_baselines.A2C.impala import IMPALA
+from jax_baselines.common.env_builer import get_env_builder
 from jax_baselines.IMPALA.worker import Impala_Worker
 from jax_baselines.PPO.impala_ppo import IMPALA_PPO
 from jax_baselines.TPPO.impala_tppo import IMPALA_TPPO
@@ -48,7 +49,8 @@ if __name__ == "__main__":
 
     ray.init(num_cpus=args.worker + 4, num_gpus=0)
 
-    workers = [Impala_Worker.remote(env_name) for i in range(args.worker)]
+    env_builder, env_info = get_env_builder(env_name)
+    workers = [Impala_Worker.remote(env_builder) for i in range(args.worker)]
 
     env_type = "SingleEnv"
 

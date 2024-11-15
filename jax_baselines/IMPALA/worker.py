@@ -15,15 +15,12 @@ from jax_baselines.IMPALA.cpprb_buffers import EpochBuffer
 class Impala_Worker(object):
     encoded = base64.b64encode(mp.current_process().authkey)
 
-    def __init__(self, env_name_) -> None:
+    def __init__(self, env_builder) -> None:
         mp.current_process().authkey = base64.b64decode(self.encoded)
-        from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
 
-        self.env_type, self.env_id = get_env_type(env_name_)
-        if self.env_type == "atari_env" and "MinAtar" not in env_name_:
-            self.env = make_wrap_atari(env_name_, clip_rewards=True)
-        else:
-            self.env = gym.make(env_name_)
+        self.env: gym.Env = env_builder(1)
+        self.env_type = "SingleEnv"
+        self.env_id = self.env.spec.id
 
     def get_info(self):
         return {

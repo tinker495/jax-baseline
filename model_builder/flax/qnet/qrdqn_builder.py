@@ -24,6 +24,10 @@ class Model(nn.Module):
         else:
             self.layer = NoisyDense
 
+        if self.dueling:
+            self.value_support_n = self.support_n // 2
+            self.advantage_support_n = self.support_n - self.value_support_n
+
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         if not self.dueling:
@@ -49,12 +53,13 @@ class Model(nn.Module):
                 ]
                 + [
                     self.layer(
-                        self.support_n,
+                        self.value_support_n,
                         kernel_init=clip_factorized_uniform(3 / self.support_n),
                     ),
-                    lambda x: jnp.reshape(x, (x.shape[0], 1, self.support_n)),
+                    lambda x: jnp.reshape(x, (x.shape[0], 1, self.value_support_n)),
                 ]
             )(feature)
+            v = jnp.tile(v, (1, self.action_size[0], 1))
             a = nn.Sequential(
                 [
                     self.layer(self.node) if i % 2 == 0 else jax.nn.relu
@@ -62,13 +67,22 @@ class Model(nn.Module):
                 ]
                 + [
                     self.layer(
-                        self.action_size[0] * self.support_n,
+                        self.action_size[0] * self.advantage_support_n,
                         kernel_init=clip_factorized_uniform(3 / self.support_n),
                     ),
-                    lambda x: jnp.reshape(x, (x.shape[0], self.action_size[0], self.support_n)),
+                    lambda x: jnp.reshape(
+                        x, (x.shape[0], self.action_size[0], self.advantage_support_n)
+                    ),
                 ]
             )(feature)
-            q = v + a - jnp.max(a, axis=1, keepdims=True)
+            # q = batch x action x support / support = [v1, a1, v2, a2, ...]
+            # Reshape v and a to interleave them along support axis
+            v_reshaped = jnp.reshape(v, (v.shape[0], v.shape[1], -1, 1))  # [B, A, S/2, 1]
+            a_reshaped = jnp.reshape(a, (a.shape[0], a.shape[1], -1, 1))  # [B, A, S/2, 1]
+            q = jnp.reshape(
+                jnp.concatenate([v_reshaped, a_reshaped], axis=3),  # [B, A, S/2, 2]
+                (v.shape[0], v.shape[1], -1),  # [B, A, S]
+            )
             return q
 
 

@@ -3,21 +3,19 @@ export DISPLAY=:0
 
 pip install -q ..
 
-#ENV="--env CartPole-v1"
-#ENV="--env LunarLander-v2"
-#ENV="--env PongNoFrameskip-v4" AsterixNoFrameskip-v4
-ENV="--env SpaceInvadersNoFrameskip-v4"
+ENV="--env BreakoutNoFrameskip-v4"
 LR="--learning_rate 0.00005"
-TRAIN="--steps 2e5 --batch_num 16 --batch_size 512 --target_update 20 --learning_starts 50000 --gamma 0.99 --buffer_size 2e6 --worker 32"
-MODEL="--node 512 --hidden_n 0"
+TRAIN="--steps 5e4 --batch_num 16 --batch_size 512 --target_update 1 --learning_starts 50000 --gamma 0.99 --buffer_size 1e5 --worker 8"
+MODEL="--node 512 --hidden_n 1"
 OPTIONS="--double --dueling --n_step 3 --initial_eps 0.4 --eps_decay 7"
-OPTIMIZER="--optimizer rmsprop"
+OPTIMIZER="--optimizer adam"
 
-#python run_apex_qnet.py --algo DQN $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 
-OPTIONS="--double --n_step 3 --initial_eps 0.4 --eps_decay 7 --max 10 --min -10"
-export CUDA_VISIBLE_DEVICES=1
+#OPTIONS="--double --dueling --n_step 3 --initial_eps 0.4 --eps_decay 7 --max 10 --min -10"
 #python run_apex_qnet.py --algo C51 $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 
-#export CUDA_VISIBLE_DEVICES=2
+OPTIONS="--double --dueling --n_step 3 --initial_eps 0.4 --eps_decay 7 --n_support 64"
 python run_apex_qnet.py --algo QRDQN $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
+
+OPTIONS="--double --n_step 3 --initial_eps 0.4 --eps_decay 7"
+python run_apex_qnet.py --algo DQN $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS

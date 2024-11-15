@@ -104,10 +104,8 @@ class APE_X_DQN(Ape_X_Family):
         return self.model(params, key, self.preproc(params, key, obses))
 
     def get_actor_builder(self):
-        gamma = self._gamma
         action_size = self.action_size[0]
         param_noise = self.param_noise
-        prioritized_replay_eps = self.prioritized_replay_eps
 
         def builder():
             if param_noise:
@@ -115,23 +113,6 @@ class APE_X_DQN(Ape_X_Family):
             else:
                 # make repeat None
                 key_seq = repeat(None)
-
-            def get_abs_td_error(
-                model, preproc, params, obses, actions, rewards, nxtobses, terminateds, key
-            ):
-                q_values = jnp.take_along_axis(
-                    model(params, key, preproc(params, key, convert_jax(obses))),
-                    actions.astype(jnp.int32),
-                    axis=1,
-                )
-                next_q_values = jnp.max(
-                    model(params, key, preproc(params, key, convert_jax(nxtobses))),
-                    axis=1,
-                    keepdims=True,
-                )
-                target = rewards + gamma * (1.0 - terminateds) * next_q_values
-                td_error = q_values - target
-                return jnp.squeeze(jnp.abs(td_error)) + prioritized_replay_eps
 
             def actor(model, preproc, params, obses, key):
                 q_values = model(params, key, preproc(params, key, convert_jax(obses)))
@@ -151,10 +132,7 @@ class APE_X_DQN(Ape_X_Family):
                         actions = np.random.choice(action_size)
                     return actions
 
-            def random_action(params, obs, epsilon, key):
-                return np.random.choice(action_size)
-
-            return get_abs_td_error, actor, get_action, random_action, key_seq
+            return actor, get_action, key_seq
 
         return builder
 
@@ -172,7 +150,12 @@ class APE_X_DQN(Ape_X_Family):
                 t_mean,
                 new_priorities,
             ) = self._train_step(
-                self.params, self.target_params, self.opt_state, steps, next(self.key_seq), **data
+                self.params,
+                self.target_params,
+                self.opt_state,
+                self.train_steps_count,
+                next(self.key_seq),
+                **data
             )
 
             self.replay_buffer.update_priorities(data["indexes"], new_priorities)
@@ -251,10 +234,7 @@ class APE_X_DQN(Ape_X_Family):
         vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         error = jnp.squeeze(vals - targets)
         loss = jnp.square(error)
-        # loss = hubberloss(error, delta=1.0)
-        return jnp.mean(loss * jnp.squeeze(weights)), jnp.abs(
-            error
-        )  # remove weight multiply cpprb weight is something wrong
+        return jnp.mean(loss * weights), jnp.abs(error)
 
     def _target(
         self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
@@ -274,10 +254,12 @@ class APE_X_DQN(Ape_X_Family):
                 * not_terminateds
             )
 
-            q_k_targets = self.get_q(target_params, obses, key)
-            q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
-            log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
-            munchausen_addon = jnp.take_along_axis(log_pi, actions, axis=1)
+            if self.double_q:
+                q_k_targets = self.get_q(params, obses, key)
+            else:
+                q_k_targets = self.get_q(target_params, obses, key)
+            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            munchausen_addon = jnp.take_along_axis(tau_log_pi, actions, axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0
@@ -295,15 +277,13 @@ class APE_X_DQN(Ape_X_Family):
         total_timesteps,
         callback=None,
         log_interval=1000,
+        experiment_name="APE_X",
         run_name="Ape_X_DQN",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
+            experiment_name,
             run_name,
-            reset_num_timesteps,
-            replay_wrapper,
         )

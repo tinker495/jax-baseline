@@ -5,17 +5,11 @@ import gymnasium as gym
 import jax
 import numpy as np
 import ray
-from mlagents_envs.environment import UnityEnvironment
 from tqdm.auto import trange
 
-from jax_baselines.common.base_classes import (
-    TensorboardWriter,
-    restore,
-    save,
-    select_optimizer,
-)
 from jax_baselines.common.cpprb_buffers import MultiPrioritizedReplayBuffer
-from jax_baselines.common.utils import key_gen
+from jax_baselines.common.logger import TensorboardLogger
+from jax_baselines.common.utils import key_gen, restore, save, select_optimizer
 
 
 class Ape_X_Deteministic_Policy_Gradient_Family(object):
@@ -99,10 +93,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
 
     def get_env_setup(self):
         print("----------------------env------------------------")
-        if isinstance(self.workers, UnityEnvironment):
-            pass
-
-        elif isinstance(self.workers, list) or isinstance(self.env, gym.Wrapper):
+        if isinstance(self.workers, list) or isinstance(self.env, gym.Wrapper):
             print("Single environmet")
             env_dict = ray.get(self.workers[0].get_info.remote())
             self.observation_space = [list(env_dict["observation_space"].shape)]
@@ -140,22 +131,25 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
             len(self.replay_buffer), np.mean(self.lossque)
         )
 
+    def run_name_update(self, run_name):
+        if self.n_step_method:
+            run_name = "{}Step_".format(self.n_step) + run_name
+        return run_name
+
     def learn(
         self,
         total_trainstep,
         callback=None,
         log_interval=1000,
+        experiment_name="APE_X_DPG",
         run_name="APE_X_DPG",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
     ):
-        if self.n_step_method:
-            run_name = "{}Step_".format(self.n_step) + run_name
+        run_name = self.run_name_update(run_name)
         self.update_eps = 1.0
 
         pbar = trange(total_trainstep, miniters=log_interval)
 
-        self.logger_server = Logger_server.remote(self.log_dir, run_name)
+        self.logger_server = Logger_server.remote(run_name, experiment_name, self.log_dir, {})
 
         if self.env_type == "unity":
             self.learn_unity(pbar, callback, log_interval)
@@ -236,7 +230,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         self.m.shutdown()
 
 
-@ray.remote
+@ray.remote(num_cpus=1, num_gpus=0, runtime_env={"env_vars": {"JAX_PLATFORMS": "cpu"}})
 class Param_server(object):
     def __init__(self, params) -> None:
         self.params = params
@@ -248,50 +242,53 @@ class Param_server(object):
         self.params = params
 
 
-@ray.remote
+@ray.remote(num_cpus=1, num_gpus=0)
 class Logger_server(object):
-    def __init__(self, log_dir, log_name) -> None:
-        self.writer = TensorboardWriter(log_dir, log_name)
+    def __init__(self, run_name, experiment_name, local_dir, agent) -> None:
+        self.logger = TensorboardLogger(run_name, experiment_name, local_dir, agent)
         self.step = 0
         self.old_step = 0
         self.save_dict = dict()
-        with self.writer as (summary, save_path):
-            self.save_path = save_path
 
     def get_log_dir(self):
-        return self.save_path
+        with self.logger as logger_run:
+            return logger_run.get_local_path("params")
 
     def add_multiline(self, eps):
-        with self.writer as (summary, _):
+        with self.logger as logger_run:
             layout = {
                 "env": {
                     "episode_reward": [
                         "Multiline",
-                        [f"env/episode_reward/eps{e:.2f}" for e in eps] + ["env/episode_reward"],
+                        ["env/episode_reward"],
+                    ],
+                    "original_reward": [
+                        "Multiline",
+                        ["env/original_reward"],
                     ],
                     "episode_len": [
                         "Multiline",
-                        [f"env/episode_len/eps{e:.2f}" for e in eps] + ["env/episode_len"],
+                        ["env/episode_len"],
                     ],
                     "time_over": [
                         "Multiline",
-                        [f"env/time_over/eps{e:.2f}" for e in eps] + ["env/time_over"],
+                        ["env/time_over"],
                     ],
                 },
             }
-            summary.add_custom_scalars(layout)
+            logger_run.log_custom_scalars(layout)
 
     def log_trainer(self, step, log_dict):
         self.step = step
-        with self.writer as (summary, _):
+        with self.logger as logger_run:
             for key, value in log_dict.items():
-                summary.add_scalar(key, value, self.step)
+                logger_run.log_metric(key, value, self.step)
 
     def log_worker(self, log_dict, episode):
         if self.old_step != self.step:
-            with self.writer as (summary, _):
+            with self.logger as logger_run:
                 for key, value in self.save_dict.items():
-                    summary.add_scalar(key, np.mean(value), self.step)
+                    logger_run.log_metric(key, np.mean(value), self.step)
                 self.save_dict = dict()
                 self.old_step = self.step
         for key, value in log_dict.items():
@@ -301,6 +298,6 @@ class Logger_server(object):
                 self.save_dict[key] = [value]
 
     def last_update(self):
-        with self.writer as (summary, _):
+        with self.logger as logger_run:
             for key, value in self.save_dict.items():
-                summary.add_scalar(key, np.mean(value), self.step)
+                logger_run.log_metric(key, np.mean(value), self.step)

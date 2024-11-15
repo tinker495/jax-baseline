@@ -39,8 +39,8 @@ class APE_X_C51(Ape_X_Family):
         _init_setup_model=True,
         policy_kwargs=None,
         categorial_bar_n=51,
-        categorial_max=250,
-        categorial_min=-250,
+        categorial_max=10,
+        categorial_min=-10,
         full_tensorboard_log=False,
         seed=None,
         optimizer="adamw",
@@ -110,6 +110,7 @@ class APE_X_C51(Ape_X_Family):
         self.delta_bar = jax.device_put(
             (self.categorial_max - self.categorial_min) / (self.categorial_bar_n - 1)
         )
+
         self.actor_builder = self.get_actor_builder()
 
         self.get_q = jax.jit(self.get_q)
@@ -121,14 +122,9 @@ class APE_X_C51(Ape_X_Family):
         return self.model(params, key, self.preproc(params, key, obses))
 
     def get_actor_builder(self):
-        gamma = self.gamma
         action_size = self.action_size[0]
         param_noise = self.param_noise
-        categorial_bar_n = self.categorial_bar_n
-        categorial_min = self.categorial_min
-        categorial_max = self.categorial_max
-        categorial_bar = self.categorial_bar
-        delta_bar = self.delta_bar
+        categorial_bar = np.asarray(self._categorial_bar)
 
         def builder():
             if param_noise:
@@ -136,59 +132,6 @@ class APE_X_C51(Ape_X_Family):
             else:
                 # make repeat None
                 key_seq = repeat(None)
-
-            def get_abs_td_error(
-                model, preproc, params, obses, actions, rewards, nxtobses, terminateds, key
-            ):
-                distribution = jnp.squeeze(
-                    jnp.take_along_axis(
-                        model(
-                            params,
-                            key,
-                            preproc(params, key, convert_jax(obses)),
-                        ),
-                        jnp.expand_dims(actions.astype(jnp.int32), axis=2),
-                        axis=1,
-                    )
-                )
-
-                next_q = model(params, key, preproc(params, key, convert_jax(nxtobses)))
-                next_actions = jnp.expand_dims(
-                    jnp.argmax(jnp.sum(next_q * categorial_bar, axis=2), axis=1),
-                    axis=(1, 2),
-                )
-                next_distribution = jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))
-                next_categorial = (1.0 - terminateds) * categorial_bar
-                target_categorial = (next_categorial * gamma) + rewards
-
-                Tz = jnp.clip(target_categorial, categorial_min, categorial_max)
-                C51_B = ((Tz - categorial_min) / delta_bar).astype(jnp.float32)
-                C51_L = jnp.floor(C51_B).astype(jnp.int32)
-                C51_H = jnp.ceil(C51_B).astype(jnp.int32)
-                C51_L = jnp.where(
-                    (C51_H > 0) * (C51_L == C51_H), C51_L - 1, C51_L
-                )  # C51_L.at[].add(-1)
-                C51_H = jnp.where(
-                    (C51_L < (categorial_bar_n - 1)) * (C51_L == C51_H),
-                    C51_H + 1,
-                    C51_H,
-                )  # C51_H.at[].add(1)
-
-                def tdist(next_distribution, C51_L, C51_H, C51_B):
-                    target_distribution = jnp.zeros((self.categorial_bar_n))
-                    target_distribution = target_distribution.at[C51_L].add(
-                        next_distribution * (C51_H.astype(jnp.float32) - C51_B)
-                    )
-                    target_distribution = target_distribution.at[C51_H].add(
-                        next_distribution * (C51_B - C51_L.astype(jnp.float32))
-                    )
-                    return target_distribution
-
-                target_distribution = jax.vmap(tdist, in_axes=(0, 0, 0, 0))(
-                    next_distribution, C51_L, C51_H, C51_B
-                )
-                loss = jnp.mean(target_distribution * (-jnp.log(distribution + 1e-5)), axis=1)
-                return jnp.squeeze(loss)
 
             def actor(model, preproc, params, obses, key):
                 q_values = jnp.sum(
@@ -200,21 +143,18 @@ class APE_X_C51(Ape_X_Family):
             if param_noise:
 
                 def get_action(actor, params, obs, epsilon, key):
-                    return np.asarray(actor(params, obs, key))[0]
+                    return int(np.asarray(actor(params, obs, key))[0])
 
             else:
 
                 def get_action(actor, params, obs, epsilon, key):
                     if epsilon <= np.random.uniform(0, 1):
-                        actions = np.asarray(actor(params, obs, key))[0]
+                        actions = int(np.asarray(actor(params, obs, key))[0])
                     else:
                         actions = np.random.choice(action_size)
                     return actions
 
-            def random_action(params, obs, epsilon, key):
-                return np.random.choice(action_size)
-
-            return get_abs_td_error, actor, get_action, random_action, key_seq
+            return actor, get_action, key_seq
 
         return builder
 
@@ -232,7 +172,12 @@ class APE_X_C51(Ape_X_Family):
                 t_mean,
                 new_priorities,
             ) = self._train_step(
-                self.params, self.target_params, self.opt_state, steps, next(self.key_seq), **data
+                self.params,
+                self.target_params,
+                self.opt_state,
+                self.train_steps_count,
+                next(self.key_seq),
+                **data
             )
 
             self.replay_buffer.update_priorities(data["indexes"], new_priorities)
@@ -312,9 +257,8 @@ class APE_X_C51(Ape_X_Family):
             jnp.mean(loss),
             jnp.mean(
                 jnp.sum(
-                    jnp.reshape(target_distribution, (-1, self.categorial_bar_n))
-                    * self.categorial_bar,
-                    axis=1,
+                    target_distribution * self._categorial_bar,
+                    axis=2,
                 )
             ),
             new_priorities,
@@ -324,74 +268,88 @@ class APE_X_C51(Ape_X_Family):
         distribution = jnp.squeeze(
             jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         )
-        loss = jnp.mean(target_distribution * (-jnp.log(distribution + 1e-5)), axis=1)
-        return jnp.mean(loss * weights), loss
+        cross_entropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
+        return jnp.mean(cross_entropy * weights), cross_entropy
 
     def _target(
         self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
     ):
-        next_q = self.get_q(target_params, nxtobses, key)
+        next_distributions = self.get_q(target_params, nxtobses, key)
         if self.double_q:
-            next_actions = jnp.expand_dims(
-                jnp.argmax(
-                    jnp.sum(self.get_q(params, nxtobses, key) * self._categorial_bar, axis=2),
-                    axis=1,
-                ),
-                axis=(1, 2),
+            next_action_q = jnp.sum(
+                self.get_q(params, nxtobses, key) * self._categorial_bar, axis=2
             )
         else:
-            next_actions = jnp.expand_dims(
-                jnp.argmax(jnp.sum(next_q * self._categorial_bar, axis=2), axis=1),
-                axis=(1, 2),
-            )
-        next_distribution = jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))
+            next_action_q = jnp.sum(next_distributions * self._categorial_bar, axis=2)
+
+        def tdist(next_distribution, target_categorial):
+            Tz = jnp.clip(
+                target_categorial, self.categorial_min, self.categorial_max
+            )  # clip to range of bar
+            C51_B = ((Tz - self.categorial_min) / self.delta_bar).astype(
+                jnp.float32
+            )  # bar index as float
+            C51_L = jnp.floor(C51_B).astype(jnp.int32)  # bar lower index as int
+            C51_H = jnp.ceil(C51_B).astype(jnp.int32)  # bar higher index as int
+            C51_L = jnp.where(
+                (C51_L > 0) * (C51_L == C51_H), C51_L - 1, C51_L
+            )  # C51_L.at[].add(-1)
+            C51_H = jnp.where(
+                (C51_H < (self.categorial_bar_n - 1)) * (C51_L == C51_H), C51_H + 1, C51_H
+            )  # C51_H.at[].add(1)
+
+            def tdist(next_distribution, C51_L, C51_H, C51_b):
+                target_distribution = jnp.zeros((self.categorial_bar_n))
+                target_distribution = target_distribution.at[C51_L].add(
+                    next_distribution * (C51_H.astype(jnp.float32) - C51_b)
+                )
+                target_distribution = target_distribution.at[C51_H].add(
+                    next_distribution * (C51_b - C51_L.astype(jnp.float32))
+                )
+                return target_distribution
+
+            return jax.vmap(tdist, in_axes=(0, 0, 0, 0))(next_distribution, C51_L, C51_H, C51_B)
 
         if self.munchausen:
-            next_q_mean = jnp.sum(next_q * self.categorial_bar, axis=2)
-            _, tau_log_pi_next, pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
-            next_categorial = (
-                self.categorial_bar - jnp.sum(pi_next * tau_log_pi_next, axis=1, keepdims=True)
-            ) * not_terminateds
+            next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
+            pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)  # [32, action_size]
+            next_categorials = self._categorial_bar - jnp.expand_dims(
+                tau_log_pi_next, axis=2
+            )  # [32, action_size, 51]
 
-            q_k_targets = jnp.sum(
-                self.get_q(target_params, obses, key) * self.categorial_bar, axis=2
-            )
-            q_sub_targets, tau_log_pi, _ = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
-            log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
-            munchausen_addon = jnp.take_along_axis(log_pi, jnp.squeeze(actions, axis=2), axis=1)
+            if self.double_q:
+                q_k_targets = jnp.sum(self.get_q(params, obses, key) * self._categorial_bar, axis=2)
+            else:
+                q_k_targets = jnp.sum(
+                    self.get_q(target_params, obses, key) * self._categorial_bar, axis=2
+                )
+            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
                 munchausen_addon, a_min=-1, a_max=0
+            )  # [32, 1]
+            target_categorials = jnp.expand_dims(
+                self._gamma * not_terminateds, axis=2
+            ) * next_categorials + jnp.expand_dims(
+                rewards, axis=2
+            )  # [32, action_size, 51]
+            target_distributions = jax.vmap(tdist, in_axes=(1, 1), out_axes=1)(
+                next_distributions, target_categorials
+            )
+            target_distribution = jnp.sum(
+                jnp.expand_dims(pi_next, axis=2) * target_distributions, axis=1
             )
         else:
-            next_categorial = not_terminateds * self.categorial_bar
-        target_categorial = (next_categorial * self._gamma) + rewards  # [32, 51]
-        Tz = jnp.clip(
-            target_categorial, self.categorial_min, self.categorial_max
-        )  # clip to range of bar
-        C51_B = ((Tz - self.categorial_min) / self.delta_bar).astype(
-            jnp.float32
-        )  # bar index as float
-        C51_L = jnp.floor(C51_B).astype(jnp.int32)  # bar lower index as int
-        C51_H = jnp.ceil(C51_B).astype(jnp.int32)  # bar higher index as int
-        C51_L = jnp.where((C51_H > 0) * (C51_L == C51_H), C51_L - 1, C51_L)  # C51_L.at[].add(-1)
-        C51_H = jnp.where(
-            (C51_L < (self.categorial_bar_n - 1)) * (C51_L == C51_H), C51_H + 1, C51_H
-        )  # C51_H.at[].add(1)
-
-        def tdist(next_distribution, C51_L, C51_H, C51_b):
-            target_distribution = jnp.zeros((self.categorial_bar_n))
-            target_distribution = target_distribution.at[C51_L].add(
-                next_distribution * (C51_H.astype(jnp.float32) - C51_b)
+            next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
+            next_distribution = jnp.squeeze(
+                jnp.take_along_axis(next_distributions, next_actions, axis=1)
             )
-            target_distribution = target_distribution.at[C51_H].add(
-                next_distribution * (C51_b - C51_L.astype(jnp.float32))
-            )
-            return target_distribution
+            target_categorial = (
+                self._gamma * not_terminateds * self.categorial_bar + rewards
+            )  # [32, 51]
+            target_distribution = tdist(next_distribution, target_categorial)
 
-        target_distribution = jax.vmap(tdist, in_axes=(0, 0, 0, 0))(
-            next_distribution, C51_L, C51_H, C51_B
-        )
         return target_distribution
 
     def learn(
@@ -399,15 +357,13 @@ class APE_X_C51(Ape_X_Family):
         total_timesteps,
         callback=None,
         log_interval=1000,
+        experiment_name="APE_X",
         run_name="Ape_X_C51",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
+            experiment_name,
             run_name,
-            reset_num_timesteps,
-            replay_wrapper,
         )
