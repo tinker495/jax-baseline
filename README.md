@@ -6,7 +6,6 @@ Jax-Baseline is a Reinforcement Learning implementation using JAX and Flax/Haiku
 
 - 2-3 times faster than previous Torch and Tensorflow implementations
 - Optimized using JAX's Just-In-Time (JIT) compilation
-- Flexible solution for Gym and Unity ML environments
 
 ## Installation
 
