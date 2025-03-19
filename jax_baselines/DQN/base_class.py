@@ -398,6 +398,7 @@ class Q_Network_Family(object):
         os.makedirs(directory, exist_ok=True)
 
         Render_env = RecordVideo(self.eval_env, directory, episode_trigger=lambda x: True)
+        Render_env.reset()
         Render_env.start_video_recorder()
         total_rewards = []
         for i in range(episode):
