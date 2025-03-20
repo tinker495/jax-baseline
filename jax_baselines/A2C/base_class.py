@@ -353,17 +353,16 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.test_eval_env(episode)
 
     def test_eval_env(self, episode):
-        from gymnasium.wrappers import RecordVideo
+        from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
 
         directory = self.logger_run.get_local_path("video")
         os.makedirs(directory, exist_ok=True)
 
         Render_env = RecordVideo(self.eval_env, directory, episode_trigger=lambda x: True)
-        Render_env.reset()
-        Render_env.start_video_recorder()
+        Render_env = RecordEpisodeStatistics(Render_env, buffer_length=episode)
         total_rewards = []
-        for i in range(episode):
-            with Render_env:
+        with Render_env:
+            for i in range(episode):
                 obs, info = Render_env.reset()
                 obs = [np.expand_dims(obs, axis=0)]
                 terminated = False
@@ -378,8 +377,8 @@ class Actor_Critic_Policy_Gradient_Family(object):
                     obs = [np.expand_dims(observation, axis=0)]
                     episode_rew += reward
                     eplen += 1
-            print("episod reward :", episode_rew, "episod len :", eplen)
-            total_rewards.append(episode_rew)
+                print("episod reward :", episode_rew, "episod len :", eplen)
+                total_rewards.append(episode_rew)
         avg_reward = np.mean(total_rewards)
         std_reward = np.std(total_rewards)
         print(f"reward : {avg_reward} +- {std_reward}(std)")
