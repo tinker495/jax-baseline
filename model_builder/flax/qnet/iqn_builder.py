@@ -83,7 +83,9 @@ def model_builder_maker(observation_space, action_space, dueling_model, param_no
     def model_builder(key=None, print_model=False):
         class Merged(nn.Module):
             def setup(self):
-                self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
+                self.preproc = PreProcess(
+                    observation_space, embedding_mode=embedding_mode, pre_postprocess=nn.Dense(512)
+                )
                 self.qnet = Model(
                     action_space, dueling=dueling_model, noisy=param_noise, **policy_kwargs
                 )

@@ -159,6 +159,7 @@ class PreProcess(nn.Module):
     states_size: List[Tuple[int, ...]]
     embedding_mode: str = "normal"
     flatten: bool = True
+    pre_postprocess: Callable = lambda x: x  # Identity function
 
     def setup(self):
         self.embedding = [
@@ -168,7 +169,9 @@ class PreProcess(nn.Module):
 
     @nn.compact
     def __call__(self, obses: List[jnp.ndarray]) -> jnp.ndarray:
-        return jnp.concatenate([pre(x) for pre, x in zip(self.embedding, obses)], axis=1)
+        return self.pre_postprocess(
+            jnp.concatenate([pre(x) for pre, x in zip(self.embedding, obses)], axis=1)
+        )
 
     @property
     def output_size(self):
