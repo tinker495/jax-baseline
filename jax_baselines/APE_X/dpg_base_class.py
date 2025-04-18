@@ -5,18 +5,16 @@ import gymnasium as gym
 import jax
 import numpy as np
 import ray
-from mlagents_envs.environment import UnityEnvironment
 from tqdm.auto import trange
 
 from jax_baselines.common.base_classes import (
     TensorboardWriter,
     restore,
     save,
-    select_optimizer,
 )
 from jax_baselines.common.cpprb_buffers import MultiPrioritizedReplayBuffer
 from jax_baselines.common.utils import key_gen
-
+from jax_baselines.common.optimizer import select_optimizer
 
 class Ape_X_Deteministic_Policy_Gradient_Family(object):
     def __init__(
@@ -99,15 +97,14 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
 
     def get_env_setup(self):
         print("----------------------env------------------------")
-        if isinstance(self.workers, UnityEnvironment):
-            pass
-
-        elif isinstance(self.workers, list) or isinstance(self.env, gym.Wrapper):
+        if isinstance(self.workers, list) or isinstance(self.env, gym.Wrapper):
             print("Single environmet")
             env_dict = ray.get(self.workers[0].get_info.remote())
             self.observation_space = [list(env_dict["observation_space"].shape)]
             self.action_size = [env_dict["action_space"].shape[0]]
             self.env_type = "SingleEnv"
+        else:
+            raise ValueError("Invalid environment type")
 
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)

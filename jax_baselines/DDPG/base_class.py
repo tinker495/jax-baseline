@@ -18,8 +18,8 @@ from jax_baselines.common.utils import (
     key_gen,
     restore,
     save,
-    select_optimizer,
 )
+from jax_baselines.common.optimizer import select_optimizer
 
 
 class Deteministic_Policy_Gradient_Family(object):

@@ -14,7 +14,8 @@ from jax_baselines.common.cpprb_buffers import (
 from jax_baselines.common.env_builer import VectorizedEnv
 from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.schedules import ConstantSchedule, LinearSchedule
-from jax_baselines.common.utils import key_gen, restore, save, select_optimizer
+from jax_baselines.common.utils import key_gen, restore, save
+from jax_baselines.common.optimizer import select_optimizer
 
 
 class Q_Network_Family(object):

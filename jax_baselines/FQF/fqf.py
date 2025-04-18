@@ -10,9 +10,9 @@ from jax_baselines.common.utils import (
     convert_jax,
     hard_update,
     q_log_pi,
-    select_optimizer,
 )
 from jax_baselines.DQN.base_class import Q_Network_Family
+from jax_baselines.common.optimizer import select_optimizer
 
 
 class FQF(Q_Network_Family):

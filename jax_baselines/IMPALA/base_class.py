@@ -8,16 +8,15 @@ import jax.numpy as jnp
 import numpy as np
 import ray
 from gymnasium import spaces
-from mlagents_envs.environment import UnityEnvironment
 from tqdm.auto import trange
 
 from jax_baselines.common.base_classes import (
     TensorboardWriter,
     restore,
     save,
-    select_optimizer,
 )
 from jax_baselines.common.utils import convert_jax, key_gen
+from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.IMPALA.cpprb_buffers import ImpalaBuffer
 
 
@@ -85,10 +84,7 @@ class IMPALA_Family(object):
 
     def get_env_setup(self):
         print("----------------------env------------------------")
-        if isinstance(self.workers, UnityEnvironment):
-            pass
-
-        elif isinstance(self.workers, list) or isinstance(self.env, gym.Wrapper):
+        if isinstance(self.workers, list) or isinstance(self.env, gym.Wrapper):
             print("Single environmet")
             self.worker_num = len(self.workers)
             env_dict = ray.get(self.workers[0].get_info.remote())
@@ -100,6 +96,8 @@ class IMPALA_Family(object):
                 self.action_size = [env_dict["action_space"].shape[0]]
                 self.action_type = "continuous"
             self.env_type = "SingleEnv"
+        else:
+            raise ValueError("Invalid environment type")
 
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
