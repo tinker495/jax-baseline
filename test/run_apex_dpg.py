@@ -39,7 +39,7 @@ if __name__ == "__main__":
     parser.add_argument("--node", type=int, default=256, help="network node number")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
     parser.add_argument("--action_noise", type=float, default=0.1, help="action_noise")
-    parser.add_argument("--optimizer", type=str, default="adam", help="optimaizer")
+    parser.add_argument("--optimizer", type=str, default="adopt", help="optimaizer")
     parser.add_argument("--gradient_steps", type=int, default=1, help="gradient_steps")
     parser.add_argument("--critic_num", type=int, default=2, help="tqc critic number")
     parser.add_argument("--ent_coef", type=str, default="auto", help="sac entropy coefficient")

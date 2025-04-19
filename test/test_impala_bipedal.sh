@@ -15,5 +15,5 @@ OPTIMIZER="--optimizer rmsprop"
 OPTIMIZER="--optimizer rmsprop"
 python run_impala.py --algo PPO $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 
-OPTIMIZER="--optimizer adam"
+OPTIMIZER="--optimizer adopt"
 python run_impala.py --algo PPO $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
