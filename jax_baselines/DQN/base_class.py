@@ -13,9 +13,9 @@ from jax_baselines.common.cpprb_buffers import (
 )
 from jax_baselines.common.env_builer import VectorizedEnv
 from jax_baselines.common.logger import TensorboardLogger
+from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.schedules import ConstantSchedule, LinearSchedule
 from jax_baselines.common.utils import key_gen, restore, save
-from jax_baselines.common.optimizer import select_optimizer
 
 
 class Q_Network_Family(object):
@@ -398,7 +398,8 @@ class Q_Network_Family(object):
         directory = self.logger_run.get_local_path("video")
         os.makedirs(directory, exist_ok=True)
 
-        Render_env = RecordVideo(self.eval_env, directory, episode_trigger=lambda x: True)
+        test_env = self.env_builder(1, render_mode="rgb_array")
+        Render_env = RecordVideo(test_env, directory, episode_trigger=lambda x: True)
         Render_env = RecordEpisodeStatistics(Render_env, buffer_length=episode)
         Render_env.reset()
         Render_env.start_video_recorder()
