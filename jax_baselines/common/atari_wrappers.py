@@ -2,11 +2,13 @@ import os
 import re
 from collections import defaultdict, deque
 
+import ale_py
 import cv2
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
+gym.register_envs(ale_py)
 os.environ.setdefault("PATH", "")
 cv2.ocl.setUseOpenCL(False)
 
@@ -340,6 +342,8 @@ def get_env_type(env_id):
                 env_type = env.entry_point.split(".")[2].split(":")[0]
             elif "shimmy" in env.entry_point:
                 env_type = env.entry_point.split(".")[1].split(":")[0]
+            elif "ale_py" in env.entry_point:
+                env_type = "atari_env"
             _game_envs[env_type].add(env.id)  # This is a set so add is idempotent
         except Exception:
             pass

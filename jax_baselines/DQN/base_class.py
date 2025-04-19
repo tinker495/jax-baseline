@@ -401,8 +401,6 @@ class Q_Network_Family(object):
         test_env = self.env_builder(1, render_mode="rgb_array")
         Render_env = RecordVideo(test_env, directory, episode_trigger=lambda x: True)
         Render_env = RecordEpisodeStatistics(Render_env, buffer_length=episode)
-        Render_env.reset()
-        Render_env.start_video_recorder()
         total_rewards = []
         with Render_env:
             for i in range(episode):
