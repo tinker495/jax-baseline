@@ -14,6 +14,6 @@ def formatData(t, s):
 def print_param(name, params):
     if name:
         print(name, end="")
-    param_tree_map = jax.tree_map(lambda x: x.shape, params)
+    param_tree_map = jax.tree_util.tree_map(lambda x: x.shape, params)
     formatData(param_tree_map, 1 if name else 0)
     print()

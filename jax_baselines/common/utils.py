@@ -6,7 +6,6 @@ from typing import Any, Callable
 import jax
 import jax.numpy as jnp
 import numpy as np
-import optax
 
 cpu_jit = partial(jax.jit, backend="cpu")
 gpu_jit = partial(jax.jit, backend="gpu")
@@ -20,7 +19,7 @@ def save(ckpt_dir: str, obs) -> None:
         for x in jax.tree_util.tree_leaves(obs):
             np.save(f, x, allow_pickle=False)
 
-    tree_struct = jax.tree_map(lambda t: 0, obs)
+    tree_struct = jax.tree_util.tree_map(lambda t: 0, obs)
     with open(os.path.join(ckpt_dir, "tree.pkl"), "wb") as f:
         pickle.dump(tree_struct, f)
 
@@ -52,7 +51,7 @@ def random_split_like_tree(rng_key: jax.random.PRNGKey, target: PyTree = None, t
 
 def tree_random_normal_like(rng_key: jax.random.PRNGKey, target: PyTree):
     keys_tree = random_split_like_tree(rng_key, target)
-    return jax.tree_map(
+    return jax.tree_util.tree_map(
         lambda t, k: jax.random.normal(k, t.shape, t.dtype) * jnp.std(t),
         target,
         keys_tree,
@@ -66,7 +65,7 @@ def scaled_by_reset(
 
     def _soft_reset(old_tensors, key):
         new_tensors = tree_random_normal_like(key, tensors)
-        soft_reseted = jax.tree_map(
+        soft_reseted = jax.tree_util.tree_map(
             lambda new, old: tau * new + (1.0 - tau) * old, new_tensors, old_tensors
         )
         # name dense is hardreset
@@ -83,7 +82,7 @@ def scaled_by_reset_with_filter(
 
     def _soft_reset(old_tensors, key):
         new_tensors = tree_random_normal_like(key, tensors)
-        soft_reseted = jax.tree_map(
+        soft_reseted = jax.tree_util.tree_map(
             lambda new, old, tau: tau * new + (1.0 - tau) * old, new_tensors, old_tensors, taus
         )
         # name dense is hardreset
@@ -103,7 +102,7 @@ def filter_like_tree(tensors: PyTree, name_filter: str, filter_fn: Callable):
         return jnp.zeros_like(x) if sigma else x
 
     # noisynet's sigma is 0.0 for did not reset noisynet noise
-    tensors = jax.tree_map(lambda x: x, tensors)
+    tensors = jax.tree_util.tree_map(lambda x: x, tensors)
 
     def _filter_like_tree(tensors, filtered: bool):
         for name, value in tensors.items():
@@ -118,11 +117,15 @@ def filter_like_tree(tensors: PyTree, name_filter: str, filter_fn: Callable):
 
 def hard_update(new_tensors: PyTree, old_tensors: PyTree, steps: int, update_period: int):
     update = steps % update_period == 0
-    return jax.tree_map(lambda new, old: jax.lax.select(update, new, old), new_tensors, old_tensors)
+    return jax.tree_util.tree_map(
+        lambda new, old: jax.lax.select(update, new, old), new_tensors, old_tensors
+    )
 
 
 def soft_update(new_tensors: PyTree, old_tensors: PyTree, tau: float):
-    return jax.tree_map(lambda new, old: tau * new + (1.0 - tau) * old, new_tensors, old_tensors)
+    return jax.tree_util.tree_map(
+        lambda new, old: tau * new + (1.0 - tau) * old, new_tensors, old_tensors
+    )
 
 
 def truncated_mixture(quantiles, cut):
