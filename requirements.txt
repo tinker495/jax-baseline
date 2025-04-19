@@ -2,7 +2,7 @@
 requests
 protobuf
 swig
-gymnasium==0.29.1
+gymnasium
 gymnasium[atari,accept-rom-license,box2d,mujoco]
 mujoco
 box2d
