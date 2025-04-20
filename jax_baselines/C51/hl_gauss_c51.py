@@ -13,6 +13,8 @@ class HL_GAUSS_C51(Q_Network_Family):
         self,
         env,
         model_builder_maker,
+        num_workers=1,
+        eval_eps=20,
         gamma=0.995,
         learning_rate=3e-4,
         buffer_size=100000,
@@ -48,6 +50,8 @@ class HL_GAUSS_C51(Q_Network_Family):
         super().__init__(
             env,
             model_builder_maker,
+            num_workers,
+            eval_eps,
             gamma,
             learning_rate,
             buffer_size,
@@ -272,15 +276,13 @@ class HL_GAUSS_C51(Q_Network_Family):
         total_timesteps,
         callback=None,
         log_interval=1000,
+        experiment_name="HL_GAUSS_C51",
         run_name="HL_GAUSS_C51",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
     ):
         super().learn(
             total_timesteps,
             callback,
             log_interval,
+            experiment_name,
             run_name,
-            reset_num_timesteps,
-            replay_wrapper,
         )
