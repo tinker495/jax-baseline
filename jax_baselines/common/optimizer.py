@@ -14,7 +14,7 @@ def adopt(
     mu_dtype: Optional[Any] = None,
     *,
     nesterov: bool = False,
-    use_clipping: bool = True,
+    use_clipping: bool = False,
 ) -> optax.GradientTransformationExtraArgs:
     return optax.chain(
         scale_by_adopt(
