@@ -1,4 +1,4 @@
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import jax
 import jax.numpy as jnp
@@ -37,29 +37,31 @@ def scale_by_adopt(
     *,
     nesterov: bool = False,
     use_clipping: bool = True,
+    clip_value_fn: Callable[[jnp.ndarray], jnp.ndarray] = lambda x: x**0.25,
 ) -> optax.GradientTransformation:
     r"""Rescale updates according to the ADOPT algorithm.
 
-    ADOPT (Modified Adam Can Converge with Any β2 with the Optimal Rate) is a variant
-    of Adam that can converge with any β2 value while maintaining the optimal rate.
+    ADOPT (Modified Adam Can Converge with Any beta2 with the Optimal Rate) is a variant
+    of Adam that can converge with any beta2 value while maintaining the optimal rate.
 
     This implementation includes a clipping operation to improve stability, especially
     in the early stages of training. The clipping helps avoid near-zero divisions when
     some elements of the parameter gradient are near zero at initialization.
 
     Args:
-      b1: Decay rate for the exponentially weighted average of grads.
-      b2: Decay rate for the exponentially weighted average of squared grads.
-      eps: Term added to the denominator to improve numerical stability.
-      mu_dtype: Optional `dtype` to be used for the first order accumulator; if
+    b1: Decay rate for the exponentially weighted average of grads.
+    b2: Decay rate for the exponentially weighted average of squared grads.
+    eps: Term added to the denominator to improve numerical stability.
+    mu_dtype: Optional `dtype` to be used for the first order accumulator; if
         `None` then the `dtype` is inferred from `params` and `updates`.
-      nesterov: Whether to use Nesterov momentum.
-      use_clipping: Whether to use gradient clipping to improve stability.
-        When enabled, the clipping value is set to step**0.25, which aligns
-        with the theory to ensure convergence.
+    nesterov: Whether to use Nesterov momentum.
+    use_clipping: Whether to use gradient clipping to improve stability.
+        When enabled, the clipping value is determined by the clip_value_fn.
+    clip_value_fn: A function that takes a step index and returns a clipping value.
+        Default is :math:`x^{0.25}`
 
     Returns:
-      A :class:`optax.GradientTransformation` object.
+    A :class:`optax.GradientTransformation` object.
     """
 
     mu_dtype = optax._src.utils.canonicalize_dtype(mu_dtype)
@@ -72,9 +74,10 @@ def scale_by_adopt(
     def update_fn(updates, state, params=None):
         del params
         b2_ = jnp.where(state.count > 0, b2, 0)
+        b1_ = jnp.where(state.count > 0, b1, 1)
         nu = otu.tree_update_moment_per_elem_norm(updates, state.nu, b2_, 2)
         if use_clipping:
-            clip_value = state.count**0.25
+            clip_value = clip_value_fn(state.count)
             mu_updates = jax.tree.map(
                 lambda ud, nu: jnp.clip(
                     ud / jnp.maximum(jnp.sqrt(nu), eps), -clip_value, clip_value
@@ -82,20 +85,14 @@ def scale_by_adopt(
                 updates,
                 state.nu,
             )
-            b1_ = b1
         else:
             mu_updates = jax.tree.map(
-                lambda ud, nu: ud / jnp.maximum(jnp.sqrt(nu), eps), updates, nu
+                lambda ud, nu: ud / jnp.maximum(jnp.sqrt(nu), eps), updates, state.nu
             )
-            b1_ = jnp.where(state.count > 0, b1, 0)
         mu = otu.tree_update_moment(mu_updates, state.mu, b1_, 1)
         count_inc = optax._src.numerics.safe_increment(state.count)
         if nesterov:
-            mu_ = jax.tree.map(
-                lambda m, g: b1 * m + (1 - b1) * g,
-                mu,
-                mu_updates,
-            )
+            mu_ = otu.tree_update_moment(mu_updates, state.mu, b1_, 1)
         else:
             mu_ = mu
         updates = mu_
