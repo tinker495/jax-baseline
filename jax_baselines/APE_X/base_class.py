@@ -8,14 +8,11 @@ import numpy as np
 import ray
 from tqdm.auto import trange
 
-from jax_baselines.common.base_classes import (
-    TensorboardWriter,
-    restore,
-    save,
-)
+from jax_baselines.common.base_classes import TensorboardWriter, restore, save
 from jax_baselines.common.cpprb_buffers import MultiPrioritizedReplayBuffer
-from jax_baselines.common.utils import key_gen
 from jax_baselines.common.optimizer import select_optimizer
+from jax_baselines.common.utils import key_gen
+
 
 class Ape_X_Family(object):
     def __init__(
@@ -87,7 +84,7 @@ class Ape_X_Family(object):
         self.params = None
         self.target_params = None
         self.save_path = None
-        self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-2 / self.batch_size)
+        self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-3 / self.batch_size)
         self.model_builder = None
         self.actor_builder = None
 

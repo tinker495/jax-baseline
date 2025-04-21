@@ -97,7 +97,7 @@ class Q_Network_Family(object):
         self.params = None
         self.target_params = None
         self.save_path = None
-        self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-2 / self.batch_size)
+        self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-3 / self.batch_size)
 
         self.compress_memory = compress_memory
 

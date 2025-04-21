@@ -13,13 +13,8 @@ from jax_baselines.common.cpprb_buffers import (
 )
 from jax_baselines.common.env_builer import VectorizedEnv
 from jax_baselines.common.logger import TensorboardLogger
-from jax_baselines.common.utils import (
-    RunningMeanStd,
-    key_gen,
-    restore,
-    save,
-)
 from jax_baselines.common.optimizer import select_optimizer
+from jax_baselines.common.utils import RunningMeanStd, key_gen, restore, save
 
 
 class Deteministic_Policy_Gradient_Family(object):
@@ -86,7 +81,7 @@ class Deteministic_Policy_Gradient_Family(object):
         self.params = None
         self.target_params = None
         self.save_path = None
-        self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-2 / self.batch_size)
+        self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-3 / self.batch_size)
 
         self.get_env_setup()
         self.get_memory_setup()
