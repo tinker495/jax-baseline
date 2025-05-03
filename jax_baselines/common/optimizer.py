@@ -14,7 +14,7 @@ def adopt(
     mu_dtype: Optional[Any] = None,
     *,
     nesterov: bool = False,
-    use_clipping: bool = False,
+    use_clipping: bool = True,
 ) -> optax.GradientTransformationExtraArgs:
     return optax.chain(
         scale_by_adopt(
@@ -161,10 +161,14 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
     match optim_str:
         case "adam":
             optim = optax.adam(lr_schedule, b1=0.9, b2=0.999, eps=eps)
+        case "nadam":
+            optim = optax.adam(lr_schedule, b1=0.9, b2=0.999, eps=eps, nesterov=True)
         case "adam_low_b1":
             optim = optax.adam(lr_schedule, b1=0.5, b2=0.999, eps=eps)
         case "adopt":
             optim = adopt(lr_schedule, b1=0.9, b2=0.9999, eps=eps)
+        case "nadopt":
+            optim = adopt(lr_schedule, b1=0.9, b2=0.9999, eps=eps, nesterov=True)
         case "adamw":
             optim = optax.adamw(lr_schedule, b1=0.9, b2=0.999, eps=eps, weight_decay=1e-4)
         case "rmsprop":
