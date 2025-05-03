@@ -92,7 +92,7 @@ def scale_by_adopt(
         mu = otu.tree_update_moment(mu_updates, state.mu, b1_, 1)
         count_inc = optax._src.numerics.safe_increment(state.count)
         if nesterov:
-            mu_ = otu.tree_update_moment(mu_updates, state.mu, b1_, 1)
+            mu_ = otu.tree_update_moment(mu_updates, mu, b1_, 1)
         else:
             mu_ = mu
         updates = mu_
@@ -164,7 +164,7 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
         case "adam_low_b1":
             optim = optax.adam(lr_schedule, b1=0.5, b2=0.999, eps=eps)
         case "adopt":
-            optim = adopt(lr_schedule, b1=0.9, b2=0.999, eps=eps)
+            optim = adopt(lr_schedule, b1=0.9, b2=0.9999, eps=eps)
         case "adamw":
             optim = optax.adamw(lr_schedule, b1=0.9, b2=0.999, eps=eps, weight_decay=1e-4)
         case "rmsprop":
