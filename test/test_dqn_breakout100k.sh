@@ -6,7 +6,7 @@ pip install -q ..
 EXPERIMENT_NAME="--experiment_name DQN_Breakout100k"
 ENV="--env BreakoutNoFrameskip-v4"
 LR="--learning_rate 0.0001"
-OPTIMIZER="--optimizer adopt"
+OPTIMIZER="--optimizer adam"
 MODEL="--node 512 --hidden_n 1"
 
 TRAIN="--steps 1e5 --batch 32 --train_freq 4 --final_eps 0.01 --learning_starts 2000 --gamma 0.99 --buffer_size 1e5 --exploration_fraction 0.2"
