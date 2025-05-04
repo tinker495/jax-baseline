@@ -349,6 +349,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
         if self.scaled_by_reset:
             pessimistic_policy_params = scaled_by_reset(
                 pessimistic_policy_params,
+                opt_pessimistic_policy_state,
+                self.optimizer,
                 key,
                 step,
                 self.reset_freq,
@@ -356,6 +358,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
             )
             optimistic_policy_params = scaled_by_reset(
                 optimistic_policy_params,
+                opt_optimistic_policy_state,
+                self.optimizer,
                 key,
                 step,
                 self.reset_freq,
@@ -363,6 +367,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
             )
             critic_params = scaled_by_reset(
                 critic_params,
+                opt_critic_state,
+                self.optimizer,
                 key,
                 step,
                 self.reset_freq,

@@ -6,6 +6,7 @@ from typing import Any, Callable
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optax
 
 cpu_jit = partial(jax.jit, backend="cpu")
 gpu_jit = partial(jax.jit, backend="gpu")
@@ -28,11 +29,11 @@ def restore(ckpt_dir):
     with open(os.path.join(ckpt_dir, "tree.pkl"), "rb") as f:
         tree_struct = pickle.load(f)
 
-    leaves, treedef = jax.tree_flatten(tree_struct)
+    leaves, treedef = jax.tree.flatten(tree_struct)
     with open(os.path.join(ckpt_dir, "arrays.npy"), "rb") as f:
         flat_state = [np.load(f) for _ in leaves]
 
-    return jax.tree_unflatten(treedef, flat_state)
+    return jax.tree.unflatten(treedef, flat_state)
 
 
 def key_gen(seed):
@@ -44,9 +45,9 @@ def key_gen(seed):
 
 def random_split_like_tree(rng_key: jax.random.PRNGKey, target: PyTree = None, treedef=None):
     if treedef is None:
-        treedef = jax.tree_structure(target)
+        treedef = jax.tree.structure(target)
     keys = jax.random.split(rng_key, treedef.num_leaves)
-    return jax.tree_unflatten(treedef, keys)
+    return jax.tree.unflatten(treedef, keys)
 
 
 def tree_random_normal_like(rng_key: jax.random.PRNGKey, target: PyTree):
@@ -59,37 +60,53 @@ def tree_random_normal_like(rng_key: jax.random.PRNGKey, target: PyTree):
 
 
 def scaled_by_reset(
-    tensors: PyTree, key: jax.random.PRNGKey, steps: int, update_period: int, tau: float
+    tensors: PyTree,
+    optimizer_state: optax.GradientTransformationExtraArgs,
+    optimizer: optax.GradientTransformation,
+    key: jax.random.PRNGKey,
+    steps: int,
+    update_period: int,
+    tau: float,
 ):
     update = steps % update_period == 0
 
-    def _soft_reset(old_tensors, key):
+    def _soft_reset(old_tensors, old_optimizer_state, key):
         new_tensors = tree_random_normal_like(key, tensors)
         soft_reseted = jax.tree_util.tree_map(
             lambda new, old: tau * new + (1.0 - tau) * old, new_tensors, old_tensors
         )
         # name dense is hardreset
-        return soft_reseted
+        return soft_reseted, optimizer.init(soft_reseted)
 
-    tensors = jax.lax.cond(update, _soft_reset, lambda x, k: x, tensors, key)
-    return tensors
+    tensors, optimizer_state = jax.lax.cond(
+        update, _soft_reset, lambda p, os, k: (p, os), tensors, optimizer_state, key
+    )
+    return tensors, optimizer_state
 
 
 def scaled_by_reset_with_filter(
-    tensors: PyTree, key: jax.random.PRNGKey, steps: int, update_period: int, taus: PyTree
+    tensors: PyTree,
+    optimizer_state: optax.GradientTransformationExtraArgs,
+    optimizer: optax.GradientTransformation,
+    key: jax.random.PRNGKey,
+    steps: int,
+    update_period: int,
+    taus: PyTree,
 ):
     update = steps % update_period == 0
 
-    def _soft_reset(old_tensors, key):
+    def _soft_reset(old_tensors, old_optimizer_state, key):
         new_tensors = tree_random_normal_like(key, tensors)
         soft_reseted = jax.tree_util.tree_map(
             lambda new, old, tau: tau * new + (1.0 - tau) * old, new_tensors, old_tensors, taus
         )
         # name dense is hardreset
-        return soft_reseted
+        return soft_reseted, optimizer.init(soft_reseted)
 
-    tensors = jax.lax.cond(update, _soft_reset, lambda x, k: x, tensors, key)
-    return tensors
+    tensors, optimizer_state = jax.lax.cond(
+        update, _soft_reset, lambda p, os, k: (p, os), tensors, optimizer_state, key
+    )
+    return tensors, optimizer_state
 
 
 def filter_like_tree(tensors: PyTree, name_filter: str, filter_fn: Callable):

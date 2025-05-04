@@ -350,6 +350,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
         if self.scaled_by_reset:
             policy_params = scaled_by_reset(
                 policy_params,
+                opt_policy_state,
+                self.optimizer,
                 key,
                 step,
                 self.reset_freq,
@@ -357,6 +359,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
             )
             critic_params = scaled_by_reset(
                 critic_params,
+                opt_critic_state,
+                self.optimizer,
                 key,
                 step,
                 self.reset_freq,

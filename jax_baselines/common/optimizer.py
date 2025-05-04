@@ -149,9 +149,6 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
         grad_max: Gradient clipping value
     """
 
-    lr_schedule = optax.linear_schedule(init_value=0, end_value=lr, transition_steps=1000)
-    # warmup
-
     optim = None
     reset_steps = None
     if "_reset_" in optim_str:
@@ -160,28 +157,27 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
 
     match optim_str:
         case "adam":
-            optim = optax.adam(lr_schedule, b1=0.9, b2=0.999, eps=eps)
+            optim = optax.adam(lr, b1=0.9, b2=0.999, eps=eps)
         case "nadam":
-            optim = optax.adam(lr_schedule, b1=0.9, b2=0.999, eps=eps, nesterov=True)
-        case "adam_low_b1":
-            optim = optax.adam(lr_schedule, b1=0.5, b2=0.999, eps=eps)
+            optim = optax.adam(lr, b1=0.9, b2=0.999, eps=eps, nesterov=True)
+        case "schedule_free_adam":
+            optim = optax.contrib.schedule_free_adamw(lr, b1=0.9, b2=0.999, eps=eps)
         case "adopt":
-            optim = adopt(lr_schedule, b1=0.9, b2=0.9999, eps=eps)
+            optim = adopt(lr, b1=0.9, b2=0.9999, eps=eps)
         case "nadopt":
-            optim = adopt(lr_schedule, b1=0.9, b2=0.9999, eps=eps, nesterov=True)
+            optim = adopt(lr, b1=0.9, b2=0.9999, eps=eps, nesterov=True)
         case "adamw":
-            optim = optax.adamw(lr_schedule, b1=0.9, b2=0.999, eps=eps, weight_decay=1e-4)
+            optim = optax.adamw(lr, b1=0.9, b2=0.999, eps=eps, weight_decay=1e-4)
         case "rmsprop":
-            optim = optax.rmsprop(lr_schedule, eps=eps)
+            optim = optax.rmsprop(lr, eps=eps)
         case "sgd":
-            optim = optax.sgd(lr_schedule)
+            optim = optax.sgd(lr)
         case "adabelief":
-            optim = optax.adabelief(lr_schedule, eps=eps)
+            optim = optax.adabelief(lr, eps=eps)
         case "lion":
-            optim = optax.lion(lr_schedule, weight_decay=1e-5)
+            optim = optax.lion(lr, weight_decay=1e-5)
         case "prodigy":
-            lr_schedule = optax.linear_schedule(init_value=0, end_value=0.5, transition_steps=1000)
-            optim = optax.contrib.prodigy(lr_schedule, eps=eps, weight_decay=1e-4)
+            optim = optax.contrib.prodigy(lr, eps=eps, weight_decay=1e-4)
         case _:
             raise ValueError(f"Unknown optimizer: {optim_str}")
 

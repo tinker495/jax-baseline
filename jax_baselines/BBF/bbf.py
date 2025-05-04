@@ -380,8 +380,14 @@ class BBF(Q_Network_Family):
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
             params = optax.apply_updates(params, updates)
             target_params = soft_update(params, target_params, 0.005)
-            params = scaled_by_reset_with_filter(
-                params, key, steps, self.soft_reset_freq, self.reset_hardsoft
+            params, opt_state = scaled_by_reset_with_filter(
+                params,
+                opt_state,
+                self.optimizer,
+                key,
+                steps,
+                self.soft_reset_freq,
+                self.reset_hardsoft,
             )
             target_q = jnp.sum(
                 target_distribution * self.categorial_bar,

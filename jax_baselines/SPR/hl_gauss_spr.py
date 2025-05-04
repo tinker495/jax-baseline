@@ -400,8 +400,14 @@ class HL_GAUSS_SPR(Q_Network_Family):
             params = optax.apply_updates(params, updates)
             target_params = soft_update(params, target_params, 0.005)
             if self.scaled_by_reset:
-                params = scaled_by_reset_with_filter(
-                    params, key, steps, self.soft_reset_freq, self.reset_hardsoft
+                params, opt_state = scaled_by_reset_with_filter(
+                    params,
+                    opt_state,
+                    self.optimizer,
+                    key,
+                    steps,
+                    self.soft_reset_freq,
+                    self.reset_hardsoft,
                 )
             target_q = self.to_scalar(jnp.expand_dims(target_distribution, 1)).mean()
             return (params, target_params, opt_state, subkey), (centropy, qloss, rprloss, target_q)
