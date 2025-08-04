@@ -3,6 +3,7 @@ import argparse
 from jax_baselines.A2C.a2c import A2C
 from jax_baselines.common.env_builer import get_env_builder
 from jax_baselines.PPO.ppo import PPO
+from jax_baselines.SPO.spo import SPO
 from jax_baselines.TPPO.tppo import TPPO
 
 if __name__ == "__main__":
@@ -79,6 +80,22 @@ if __name__ == "__main__":
         )
     if args.algo == "TPPO":
         agent = TPPO(
+            env_builder,
+            model_builder_maker=model_builder_maker,
+            num_workers=args.worker,
+            gamma=args.gamma,
+            lamda=args.lamda,
+            gae_normalize=args.gae_normalize,
+            batch_size=args.batch,
+            minibatch_size=args.mini_batch,
+            val_coef=args.val_coef,
+            ent_coef=args.ent_coef,
+            log_dir=args.logdir,
+            policy_kwargs=policy_kwargs,
+            optimizer=args.optimizer,
+        )
+    if args.algo == "SPO":
+        agent = SPO(
             env_builder,
             model_builder_maker=model_builder_maker,
             num_workers=args.worker,
