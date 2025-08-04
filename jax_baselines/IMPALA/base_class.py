@@ -10,7 +10,8 @@ import ray
 from gymnasium import spaces
 from tqdm.auto import trange
 
-from jax_baselines.common.base_classes import TensorboardWriter, restore, save
+from jax_baselines.common.utils import restore, save
+from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.utils import convert_jax, key_gen
 from jax_baselines.IMPALA.cpprb_buffers import ImpalaBuffer
@@ -302,7 +303,7 @@ class Param_server(object):
 @ray.remote
 class Logger_server(object):
     def __init__(self, log_dir, log_name) -> None:
-        self.writer = TensorboardWriter(log_dir, log_name)
+        self.writer = TensorboardLogger(log_name, "experiment", log_dir, self)
         self.step = 0
         self.old_step = 0
         self.save_dict = dict()
