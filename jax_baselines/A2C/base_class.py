@@ -358,8 +358,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
         directory = self.logger_run.get_local_path("video")
         os.makedirs(directory, exist_ok=True)
 
-        Render_env = RecordVideo(self.eval_env, directory, episode_trigger=lambda x: True)
-        Render_env = RecordEpisodeStatistics(Render_env, buffer_length=episode)
+        test_env = self.env_builder(1, render_mode="rgb_array")
+        Render_env = RecordVideo(test_env, directory, episode_trigger=lambda x: True)
+        Render_env = RecordEpisodeStatistics(Render_env)
         total_rewards = []
         with Render_env:
             for i in range(episode):
