@@ -7,6 +7,7 @@ from jax_baselines.A2C.impala import IMPALA
 from jax_baselines.IMPALA.worker import Impala_Worker
 from jax_baselines.PPO.impala_ppo import IMPALA_PPO
 from jax_baselines.TPPO.impala_tppo import IMPALA_TPPO
+from jax_baselines.SPO.impala_spo import IMPALA_SPO
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -101,6 +102,26 @@ if __name__ == "__main__":
 
     elif args.algo == "TPPO":
         agent = IMPALA_TPPO(
+            workers,
+            model_builder_maker,
+            manger,
+            gamma=args.gamma,
+            lamda=args.lamda,
+            learning_rate=args.learning_rate,
+            update_freq=args.update_freq,
+            batch_size=args.batch,
+            sample_size=args.sample_size,
+            buffer_size=int(args.buffer_size),
+            policy_kwargs=policy_kwargs,
+            optimizer=args.optimizer,
+            val_coef=args.val_coef,
+            ent_coef=args.ent_coef,
+            rho_max=args.rho_max,
+            log_dir=args.logdir,
+        )
+
+    elif args.algo == "SPO":
+        agent = IMPALA_SPO(
             workers,
             model_builder_maker,
             manger,
