@@ -2,7 +2,7 @@ import argparse
 
 import gymnasium as gym
 
-from jax_baselines.common.env_builer import get_env_builder
+from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DAC.dac import DAC
 from jax_baselines.DDPG.ddpg import DDPG

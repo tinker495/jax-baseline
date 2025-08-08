@@ -11,7 +11,7 @@ from jax_baselines.common.cpprb_buffers import (
     PrioritizedReplayBuffer,
     ReplayBuffer,
 )
-from jax_baselines.common.env_builer import VectorizedEnv
+from jax_baselines.common.env_builder import VectorizedEnv
 from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.schedules import ConstantSchedule, LinearSchedule

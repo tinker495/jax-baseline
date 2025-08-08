@@ -5,7 +5,7 @@ import ray
 
 from jax_baselines.APE_X.worker import Ape_X_Worker
 from jax_baselines.C51.apex_c51 import APE_X_C51
-from jax_baselines.common.env_builer import get_env_builder
+from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.DQN.apex_dqn import APE_X_DQN
 from jax_baselines.IQN.apex_iqn import APE_X_IQN
 from jax_baselines.QRDQN.apex_qrdqn import APE_X_QRDQN

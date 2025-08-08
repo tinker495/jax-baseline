@@ -1,7 +1,7 @@
 import argparse
 
 from jax_baselines.A2C.a2c import A2C
-from jax_baselines.common.env_builer import get_env_builder
+from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.PPO.ppo import PPO
 from jax_baselines.SPO.spo import SPO
 from jax_baselines.TPPO.tppo import TPPO

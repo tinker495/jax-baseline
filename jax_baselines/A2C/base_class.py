@@ -9,15 +9,10 @@ from gymnasium import spaces
 from tqdm.auto import trange
 
 from jax_baselines.common.cpprb_buffers import EpochBuffer
-from jax_baselines.common.env_builer import VectorizedEnv
+from jax_baselines.common.env_builder import VectorizedEnv
 from jax_baselines.common.logger import TensorboardLogger
-from jax_baselines.common.utils import (
-    convert_jax,
-    key_gen,
-    restore,
-    save,
-)
 from jax_baselines.common.optimizer import select_optimizer
+from jax_baselines.common.utils import convert_jax, key_gen, restore, save
 
 
 class Actor_Critic_Policy_Gradient_Family(object):
