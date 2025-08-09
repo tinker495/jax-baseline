@@ -18,11 +18,34 @@ class Ape_X_Worker(object):
         mp.current_process().authkey = base64.b64decode(self.encoded)
         from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
 
-        self.env_type, self.env_id = get_env_type(env_name_)
-        if self.env_type == "atari_env":
-            self.env = make_wrap_atari(env_name_, clip_rewards=True)
+        # Accept either an env id (string) or an env_builder callable
+        if callable(env_name_):
+            # env_builder is expected to return a gym env when called
+            try:
+                env = env_name_()
+            except TypeError:
+                # some builders accept worker/render args; try default worker=1
+                env = env_name_(1)
+            self.env = env
+            # Try to infer env_id from env.spec
+            try:
+                self.env_id = env.unwrapped.spec.id
+            except Exception:
+                self.env_id = getattr(getattr(env, "spec", None), "id", None)
+            # If we can, map env_id to env_type, otherwise fallback to SingleEnv
+            if self.env_id is not None:
+                self.env_type, _ = get_env_type(self.env_id)
+                if self.env_type is None:
+                    self.env_type = "SingleEnv"
+            else:
+                # Best-effort fallback
+                self.env_type = "SingleEnv"
         else:
-            self.env = gym.make(env_name_)
+            self.env_type, self.env_id = get_env_type(env_name_)
+            if self.env_type == "atari_env":
+                self.env = make_wrap_atari(env_name_, clip_rewards=True)
+            else:
+                self.env = gym.make(env_name_)
 
     def get_info(self):
         return {
