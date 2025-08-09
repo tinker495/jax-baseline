@@ -225,7 +225,9 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
         spo_term1 = ratio * adv
         spo_term2 = jnp.abs(adv) / (2 * self.ppo_eps) * jnp.square(ratio - 1)
         actor_loss = jnp.mean(-spo_term1 + spo_term2)
-        entropy_loss = jnp.mean(prob * jnp.log(prob))
+        # Numerical stability: avoid log(0) with small epsilon
+        epsilon = 1e-8
+        entropy_loss = jnp.mean(prob * jnp.log(jnp.maximum(prob, epsilon)))
         total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
@@ -246,7 +248,10 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
         spo_term2 = jnp.abs(adv) / (2 * self.ppo_eps) * jnp.square(ratio - 1)
         actor_loss = jnp.mean(-spo_term1 + spo_term2)
         mu, log_std = prob
-        entropy_loss = jnp.mean(jnp.square(mu) - log_std)
+        # Correct Gaussian entropy: -H = -sum(log_std) - 0.5*dim*(1+log(2π))
+        dim = mu.shape[-1]
+        neg_entropy = -jnp.sum(log_std, axis=-1) - 0.5 * dim * (1.0 + jnp.log(2.0 * jnp.pi))
+        entropy_loss = jnp.mean(neg_entropy)
         total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 

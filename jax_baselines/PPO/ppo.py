@@ -224,7 +224,9 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         cross_entropy1 = -adv * ratio
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
-        entropy_loss = jnp.mean(prob * jnp.log(prob))
+        # Numerical stability: avoid log(0) with small epsilon
+        epsilon = 1e-8
+        entropy_loss = jnp.mean(prob * jnp.log(jnp.maximum(prob, epsilon)))
         total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
@@ -244,7 +246,10 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
         mu, log_std = prob
-        entropy_loss = jnp.mean(jnp.square(mu) - log_std)
+        # Correct Gaussian entropy: -H = -sum(log_std) - 0.5*dim*(1+log(2π))
+        dim = mu.shape[-1]
+        neg_entropy = -jnp.sum(log_std, axis=-1) - 0.5 * dim * (1.0 + jnp.log(2.0 * jnp.pi))
+        entropy_loss = jnp.mean(neg_entropy)
         total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
