@@ -23,6 +23,7 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
         epoch_num=4,
         val_coef=0.5,
         ent_coef=0.001,
+        value_clip=0.5,
         ppo_eps=0.2,
         log_interval=200,
         log_dir=None,
@@ -54,6 +55,7 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
         self.name = "SPO"
         self.lamda = lamda
         self.gae_normalize = gae_normalize
+        self.value_clip = value_clip
         self.ppo_eps = ppo_eps
         self.minibatch_size = minibatch_size
         self.batch_size = int(
@@ -210,7 +212,7 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
     def _loss_discrete(self, params, obses, actions, old_value, targets, old_prob, adv, key):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
-        vals_clip = old_value + jnp.clip(vals - old_value, -0.5, 0.5)
+        vals_clip = old_value + jnp.clip(vals - old_value, -self.value_clip, self.value_clip)
         vf1 = jnp.square(vals - targets)
         vf2 = jnp.square(vals_clip - targets)
         critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
@@ -230,9 +232,9 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
     def _loss_continuous(self, params, obses, actions, old_value, targets, old_prob, adv, key):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
-        vals_clip = old_value + jnp.clip(vals - old_value, -self.ppo_eps, self.ppo_eps)
-        vf1 = jnp.square(jnp.squeeze(vals - targets))
-        vf2 = jnp.square(jnp.squeeze(vals_clip - targets))
+        vals_clip = old_value + jnp.clip(vals - old_value, -self.value_clip, self.value_clip)
+        vf1 = jnp.square(vals - targets)
+        vf2 = jnp.square(vals_clip - targets)
         critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
 
         prob, log_prob = self.get_logprob(

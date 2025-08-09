@@ -30,6 +30,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         ent_coef=0.001,
         kl_range=0.0008,
         kl_coef=20,
+        value_clip=0.5,
         log_interval=200,
         log_dir=None,
         _init_setup_model=True,
@@ -60,6 +61,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         self.name = "TPPO"
         self.lamda = lamda
         self.gae_normalize = gae_normalize
+        self.value_clip = value_clip
         self.kl_range = kl_range
         self.kl_coef = kl_coef
         self.minibatch_size = minibatch_size
@@ -229,7 +231,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
     ):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
-        vals_clip = old_value + jnp.clip(vals - old_value, -0.5, 0.5)
+        vals_clip = old_value + jnp.clip(vals - old_value, -self.value_clip, self.value_clip)
         vf1 = jnp.square(vals - targets)
         vf2 = jnp.square(vals_clip - targets)
         critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
@@ -252,10 +254,15 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss, jnp.mean(kl))
 
-    def _loss_continuous(self, params, obses, actions, targets, old_prob, old_act_prob, adv, key):
+    def _loss_continuous(
+        self, params, obses, actions, old_value, targets, old_prob, old_act_prob, adv, key
+    ):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
-        critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
+        vals_clip = old_value + jnp.clip(vals - old_value, -self.value_clip, self.value_clip)
+        vf1 = jnp.square(vals - targets)
+        vf2 = jnp.square(vals_clip - targets)
+        critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
 
         prob, log_prob = self.get_logprob(
             self.actor(params, key, feature), actions, key, out_prob=True
