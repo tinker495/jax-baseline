@@ -48,6 +48,7 @@ pip install .
 | A2C[^A3C]              | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:        | :x:             |
 | PPO[^PPO]              | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:[^APPO] | :x:             |
 | Truly PPO(TPPO)[^TPPO] | :heavy_check_mark: | :heavy_check_mark: | :x:                       | :x:             |
+| SPO[^SPO]              | :heavy_check_mark: | :heavy_check_mark: | :x:                       | :x:             |
 
 #### DPG bases
 
@@ -128,6 +129,8 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 [^APPO]: [IMPALA + PPO, APPO](https://docs.ray.io/en/latest/rllib/rllib-algorithms.html#appo)
 
 [^TPPO]: [Truly PPO](https://arxiv.org/abs/1903.07940)
+
+[^SPO]: [SPO](https://arxiv.org/abs/2401.16025)
 
 [^DDPG]: [DDPG](https://arxiv.org/abs/1509.02971)
 
