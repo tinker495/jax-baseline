@@ -1,19 +1,13 @@
-import os
 from collections import deque
 
-import gymnasium as gym
 import numpy as np
 from tqdm.auto import trange
 
-from jax_baselines.common.cpprb_buffers import (
-    NstepReplayBuffer,
-    PrioritizedNstepReplayBuffer,
-    PrioritizedReplayBuffer,
-    ReplayBuffer,
-)
-from jax_baselines.common.env_builder import VectorizedEnv
+from jax_baselines.common.env_info import get_local_env_info
+from jax_baselines.common.eval import evaluate_policy, record_and_test
 from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.optimizer import select_optimizer
+from jax_baselines.common.replay_factory import make_replay_buffer
 from jax_baselines.common.utils import RunningMeanStd, key_gen, restore, save
 
 
@@ -96,70 +90,33 @@ class Deteministic_Policy_Gradient_Family(object):
         self.params = self.target_params = restore(path)
 
     def get_env_setup(self):
-        self.env = self.env_builder(self.num_workers)
-        self.eval_env = self.env_builder(1)
-
-        print("----------------------env------------------------")
-        if isinstance(self.env, VectorizedEnv):
-            print("Vectorized environmet")
-            env_info = self.env.env_info
-            self.observation_space = [list(env_info["observation_space"].shape)]
-            self.action_size = [env_info["action_space"].shape[0]]
-            self.worker_size = self.env.worker_num
-            self.env_type = "VectorizedEnv"
-
-        elif isinstance(self.env, gym.Env) or isinstance(self.env, gym.Wrapper):
-            print("Single environmet")
-            action_space = self.env.action_space
-            observation_space = self.env.observation_space
-            self.observation_space = [list(observation_space.shape)]
-            self.action_size = [action_space.shape[0]]
-            self.worker_size = 1
-            self.env_type = "SingleEnv"
-
+        # Use common helper to standardize environment info
+        (
+            self.env,
+            self.eval_env,
+            self.observation_space,
+            self.action_size,
+            self.worker_size,
+            self.env_type,
+        ) = get_local_env_info(self.env_builder, self.num_workers)
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
         print("worker_size : ", self.worker_size)
         print("-------------------------------------------------")
 
     def get_memory_setup(self):
-        if self.prioritized_replay:
-            if self.n_step_method:
-                self.replay_buffer = PrioritizedNstepReplayBuffer(
-                    self.buffer_size,
-                    self.observation_space,
-                    self.action_size,
-                    self.worker_size,
-                    self.n_step,
-                    self.gamma,
-                    self.prioritized_replay_alpha,
-                    False,
-                    self.prioritized_replay_eps,
-                )
-            else:
-                self.replay_buffer = PrioritizedReplayBuffer(
-                    self.buffer_size,
-                    self.observation_space,
-                    self.prioritized_replay_alpha,
-                    self.action_size,
-                    False,
-                    self.prioritized_replay_eps,
-                )
-
-        else:
-            if self.n_step_method:
-                self.replay_buffer = NstepReplayBuffer(
-                    self.buffer_size,
-                    self.observation_space,
-                    self.action_size,
-                    self.worker_size,
-                    self.n_step,
-                    self.gamma,
-                )
-            else:
-                self.replay_buffer = ReplayBuffer(
-                    self.buffer_size, self.observation_space, self.action_size
-                )
+        # Use common replay factory to pick the correct buffer type
+        self.replay_buffer = make_replay_buffer(
+            buffer_size=self.buffer_size,
+            observation_space=self.observation_space,
+            action_shape_or_n=self.action_size,
+            worker_size=self.worker_size,
+            n_step=self.n_step if self.n_step_method else 1,
+            gamma=self.gamma,
+            prioritized=self.prioritized_replay,
+            alpha=self.prioritized_replay_alpha,
+            eps=self.prioritized_replay_eps,
+        )
 
     def setup_model(self):
         pass
@@ -271,41 +228,19 @@ class Deteministic_Policy_Gradient_Family(object):
                 pbar.set_description(self.discription(eval_result))
 
     def eval(self, steps):
-        total_reward = np.zeros(self.eval_eps)
-        total_ep_len = np.zeros(self.eval_eps)
-        total_truncated = np.zeros(self.eval_eps)
+        # Wrap actions to provide the expected signature for evaluate_policy
+        # Some DPG-family algorithms expect (obs, steps, eval=False), so close
+        # over `steps` and call with eval=True for deterministic evaluation.
+        def eval_action_fn(obs):
+            return self.actions(obs, steps, eval=True)
 
-        obs, info = self.eval_env.reset()
-        obs = [np.expand_dims(obs, axis=0)]
-        terminated = False
-        truncated = False
-        eplen = 0
-
-        for ep in range(self.eval_eps):
-            while not terminated and not truncated:
-                actions = self.actions(obs, steps, eval=True)
-                observation, reward, terminated, truncated, info = self.eval_env.step(actions[0])
-                obs = [np.expand_dims(observation, axis=0)]
-                total_reward[ep] += reward
-                eplen += 1
-
-            total_ep_len[ep] = eplen
-            total_truncated[ep] = float(truncated)
-
-            obs, info = self.eval_env.reset()
-            obs = [np.expand_dims(obs, axis=0)]
-            terminated = False
-            truncated = False
-            eplen = 0
-
-        mean_reward = np.mean(total_reward)
-        mean_ep_len = np.mean(total_ep_len)
-
-        if self.logger_run:
-            self.logger_run.log_metric("env/episode_reward", mean_reward, steps)
-            self.logger_run.log_metric("env/episode len", mean_ep_len, steps)
-            self.logger_run.log_metric("env/time over", np.mean(total_truncated), steps)
-        return {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
+        return evaluate_policy(
+            self.eval_env,
+            self.eval_eps,
+            eval_action_fn,
+            logger_run=self.logger_run,
+            steps=steps,
+        )
 
     def test(self, episode=10, run_name=None):
         with self.logger as self.logger_run:
@@ -315,31 +250,11 @@ class Deteministic_Policy_Gradient_Family(object):
         return self.actions(obs, np.inf)
 
     def test_eval_env(self, episode):
-        from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
-
-        directory = self.logger_run.get_local_path("video")
-        os.makedirs(directory, exist_ok=True)
-        test_env = self.env_builder(1, render_mode="rgb_array")
-
-        Render_env = RecordVideo(test_env, directory, episode_trigger=lambda x: True)
-        Render_env = RecordEpisodeStatistics(Render_env)
-        total_rewards = []
-        with Render_env:
-            for i in range(episode):
-                obs, info = Render_env.reset()
-                obs = [np.expand_dims(obs, axis=0)]
-                terminated = False
-                truncated = False
-                episode_rew = 0
-                eplen = 0
-                while not terminated and not truncated:
-                    actions = self.test_action(obs)
-                    observation, reward, terminated, truncated, info = Render_env.step(actions[0])
-                    obs = [np.expand_dims(observation, axis=0)]
-                    episode_rew += reward
-                    eplen += 1
-                print("episod reward :", episode_rew, "episod len :", eplen)
-                total_rewards.append(episode_rew)
-        avg_reward = np.mean(total_rewards)
-        std_reward = np.std(total_rewards)
-        print(f"reward : {avg_reward} +- {std_reward}(std)")
+        # Use common test helper: (env_builder, logger_run, actions_eval_fn, episode, conv_action=None)
+        return record_and_test(
+            self.env_builder,
+            self.logger_run,
+            self.test_action,
+            episode,
+            conv_action=None,
+        )

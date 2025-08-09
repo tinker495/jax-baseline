@@ -1,15 +1,13 @@
-import os
 from collections import deque
 
-import gymnasium as gym
 import jax
 import jax.numpy as jnp
 import numpy as np
-from gymnasium import spaces
 from tqdm.auto import trange
 
 from jax_baselines.common.cpprb_buffers import EpochBuffer
-from jax_baselines.common.env_builder import VectorizedEnv
+from jax_baselines.common.env_info import get_local_env_info, infer_action_meta
+from jax_baselines.common.eval import evaluate_policy, record_and_test
 from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.utils import convert_jax, key_gen, restore, save
@@ -74,40 +72,23 @@ class Actor_Critic_Policy_Gradient_Family(object):
         )
 
     def get_env_setup(self):
-        self.env = self.env_builder(self.num_workers)
-        self.eval_env = self.env_builder(1)
+        # Use helper to standardize environment info
+        (
+            self.env,
+            self.eval_env,
+            self.observation_space,
+            self.action_size,
+            self.worker_size,
+            self.env_type,
+        ) = get_local_env_info(self.env_builder, self.num_workers)
 
-        print("----------------------env------------------------")
-        if isinstance(self.env, VectorizedEnv):
-            print("Vectorized environmet")
-            env_info = self.env.env_info
-            self.observation_space = [list(env_info["observation_space"].shape)]
-            if not isinstance(env_info["action_space"], spaces.Box):
-                self.action_size = [env_info["action_space"].n]
-                self.action_type = "discrete"
-                self.conv_action = lambda a: a[0]
-            else:
-                self.action_size = [env_info["action_space"].shape[0]]
-                self.action_type = "continuous"
-                self.conv_action = lambda a: np.clip(a, -3.0, 3.0) / 3.0
-            self.worker_size = self.env.worker_num
-            self.env_type = "VectorizedEnv"
-
-        elif isinstance(self.env, gym.Env) or isinstance(self.env, gym.Wrapper):
-            print("Single environmet")
+        # infer action metadata (type and conversion)
+        # For vectorized envs the underlying action_space is stored in env.env_info
+        if self.env_type == "VectorizedEnv":
+            action_space = self.env.env_info["action_space"]
+        else:
             action_space = self.env.action_space
-            observation_space = self.env.observation_space
-            self.observation_space = [list(observation_space.shape)]
-            if not isinstance(action_space, spaces.Box):
-                self.action_size = [action_space.n]
-                self.action_type = "discrete"
-                self.conv_action = lambda a: a[0]
-            else:
-                self.action_size = [action_space.shape[0]]
-                self.action_type = "continuous"
-                self.conv_action = lambda a: np.clip(a, -3.0, 3.0) / 3.0
-            self.worker_size = 1
-            self.env_type = "SingleEnv"
+        self.action_type, self.conv_action = infer_action_meta(action_space)
 
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
@@ -277,104 +258,24 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 pbar.set_description(self.discription(eval_result))
 
     def eval(self, steps):
-        original_rewards = []
-        total_reward = np.zeros(self.eval_eps)
-        total_ep_len = np.zeros(self.eval_eps)
-        total_truncated = np.zeros(self.eval_eps)
-
-        obs, info = self.eval_env.reset()
-        obs = [np.expand_dims(obs, axis=0)]
-        have_original_reward = "original_reward" in info.keys()
-        have_lives = "lives" in info.keys()
-        if have_original_reward:
-            original_reward = info["original_reward"]
-        terminated = False
-        truncated = False
-        eplen = 0
-
-        for ep in range(self.eval_eps):
-            while not terminated and not truncated:
-                actions = self.actions(obs)[0]
-                observation, reward, terminated, truncated, info = self.eval_env.step(
-                    self.conv_action(actions)
-                )
-                obs = [np.expand_dims(observation, axis=0)]
-                if have_original_reward:
-                    original_reward += info["original_reward"]
-                total_reward[ep] += reward
-                eplen += 1
-
-            total_ep_len[ep] = eplen
-            total_truncated[ep] = float(truncated)
-            if have_original_reward:
-                if have_lives:
-                    if info["lives"] == 0:
-                        original_rewards.append(original_reward)
-                        original_reward = 0
-                else:
-                    original_rewards.append(original_reward)
-                    original_reward = 0
-
-            obs, info = self.eval_env.reset()
-            obs = [np.expand_dims(obs, axis=0)]
-            terminated = False
-            truncated = False
-            eplen = 0
-
-        if have_original_reward:
-            mean_original_score = np.mean(original_rewards)
-        mean_reward = np.mean(total_reward)
-        mean_ep_len = np.mean(total_ep_len)
-
-        if self.logger_run:
-            if have_original_reward:
-                self.logger_run.log_metric("env/original_reward", mean_original_score, steps)
-            self.logger_run.log_metric("env/episode_reward", mean_reward, steps)
-            self.logger_run.log_metric("env/episode len", mean_ep_len, steps)
-            self.logger_run.log_metric("env/time over", np.mean(total_truncated), steps)
-
-        if have_original_reward:
-            eval_result = {
-                "mean_reward": mean_reward,
-                "mean_ep_len": mean_ep_len,
-                "mean_original_score": mean_original_score,
-            }
-        else:
-            eval_result = {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
-        return eval_result
+        return evaluate_policy(
+            self.eval_env,
+            self.eval_eps,
+            self.actions,
+            logger_run=self.logger_run,
+            steps=steps,
+            conv_action=self.conv_action,
+        )
 
     def test(self, episode=10):
         with self.logger as self.logger_run:
             self.test_eval_env(episode)
 
     def test_eval_env(self, episode):
-        from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
-
-        directory = self.logger_run.get_local_path("video")
-        os.makedirs(directory, exist_ok=True)
-
-        test_env = self.env_builder(1, render_mode="rgb_array")
-        Render_env = RecordVideo(test_env, directory, episode_trigger=lambda x: True)
-        Render_env = RecordEpisodeStatistics(Render_env)
-        total_rewards = []
-        with Render_env:
-            for i in range(episode):
-                obs, info = Render_env.reset()
-                obs = [np.expand_dims(obs, axis=0)]
-                terminated = False
-                truncated = False
-                episode_rew = 0
-                eplen = 0
-                while not terminated and not truncated:
-                    actions = self.actions(obs)[0]
-                    observation, reward, terminated, truncated, info = self.eval_env.step(
-                        self.conv_action(actions)
-                    )
-                    obs = [np.expand_dims(observation, axis=0)]
-                    episode_rew += reward
-                    eplen += 1
-                print("episod reward :", episode_rew, "episod len :", eplen)
-                total_rewards.append(episode_rew)
-        avg_reward = np.mean(total_rewards)
-        std_reward = np.std(total_rewards)
-        print(f"reward : {avg_reward} +- {std_reward}(std)")
+        return record_and_test(
+            self.env_builder,
+            self.logger_run,
+            self.actions,
+            episode,
+            conv_action=self.conv_action,
+        )

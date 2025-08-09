@@ -2,18 +2,16 @@ import multiprocessing as mp
 import time
 from collections import deque
 
-import gymnasium as gym
 import jax
 import jax.numpy as jnp
 import numpy as np
 import ray
-from gymnasium import spaces
 from tqdm.auto import trange
 
-from jax_baselines.common.utils import restore, save
-from jax_baselines.common.logger import TensorboardLogger
+from jax_baselines.APE_X.common_servers import Logger_server, Param_server
+from jax_baselines.common.env_info import get_remote_env_info
 from jax_baselines.common.optimizer import select_optimizer
-from jax_baselines.common.utils import convert_jax, key_gen
+from jax_baselines.common.utils import convert_jax, key_gen, restore, save
 from jax_baselines.IMPALA.cpprb_buffers import ImpalaBuffer
 
 
@@ -80,22 +78,13 @@ class IMPALA_Family(object):
         self.params = self.target_params = restore(path)
 
     def get_env_setup(self):
-        print("----------------------env------------------------")
-        if isinstance(self.workers, list) or isinstance(self.env, gym.Wrapper):
-            print("Single environmet")
-            self.worker_num = len(self.workers)
-            env_dict = ray.get(self.workers[0].get_info.remote())
-            self.observation_space = [list(env_dict["observation_space"].shape)]
-            if not isinstance(env_dict["action_space"], spaces.Box):
-                self.action_size = [env_dict["action_space"].n]
-                self.action_type = "discrete"
-            else:
-                self.action_size = [env_dict["action_space"].shape[0]]
-                self.action_type = "continuous"
-            self.env_type = "SingleEnv"
-        else:
-            raise ValueError("Invalid environment type")
-
+        (
+            self.observation_space,
+            self.action_size,
+            self.env_type,
+            self.action_type,
+        ) = get_remote_env_info(self.workers, include_action_type=True)
+        self.worker_num = len(self.workers)
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
         print("worker_size : ", len(self.workers))
@@ -288,75 +277,4 @@ class IMPALA_Family(object):
         self.m.shutdown()
 
 
-@ray.remote
-class Param_server(object):
-    def __init__(self, params) -> None:
-        self.params = params
-
-    def get_params(self):
-        return self.params
-
-    def update_params(self, params):
-        self.params = params
-
-
-@ray.remote
-class Logger_server(object):
-    def __init__(self, log_dir, log_name) -> None:
-        self.writer = TensorboardLogger(log_name, "experiment", log_dir, self)
-        self.step = 0
-        self.old_step = 0
-        self.save_dict = dict()
-        with self.writer as (summary, save_path):
-            self.save_path = save_path
-
-    def get_log_dir(self):
-        return self.save_path
-
-    def add_multiline(self, eps):
-        with self.writer as (summary, _):
-            layout = {
-                "env": {
-                    "episode_reward": [
-                        "Multiline",
-                        ["env/episode_reward"],
-                    ],
-                    "original_reward": [
-                        "Multiline",
-                        ["env/original_reward"],
-                    ],
-                    "episode_len": [
-                        "Multiline",
-                        ["env/episode_len"],
-                    ],
-                    "time_over": [
-                        "Multiline",
-                        ["env/time_over"],
-                    ],
-                },
-            }
-            summary.add_custom_scalars(layout)
-
-    def log_trainer(self, step, log_dict):
-        self.step = step
-        with self.writer as (summary, _):
-            for key, value in log_dict.items():
-                summary.add_scalar(key, value, self.step)
-
-    def log_worker(self, log_dict, episode):
-        if self.old_step != self.step:
-            with self.writer as (summary, _):
-                for key, value in self.save_dict.items():
-                    summary.add_scalar(key, np.mean(value), self.step)
-                self.save_dict = dict()
-                self.old_step = self.step
-        for key, value in log_dict.items():
-            if key in self.save_dict:
-                self.save_dict[key].append(value)
-            else:
-                self.save_dict[key] = [value]
-
-    def last_update(self):
-        with self.writer as (summary, _):
-            for key, value in self.save_dict.items():
-                summary.add_scalar(key, np.mean(value), self.step)
+# Param_server and Logger_server are provided by `jax_baselines.APE_X.common_servers`
