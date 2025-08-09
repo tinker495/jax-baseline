@@ -113,11 +113,8 @@ class QRDQN(Q_Network_Family):
             jnp.tile(jnp.expand_dims(quantile, axis=(0, 1)), (self.batch_size, 1, 1))
         )  # [batch x 1 x support]
 
-        self.get_q = jax.jit(self.get_q)
-        self._get_actions = jax.jit(self._get_actions)
-        self._loss = jax.jit(self._loss)
-        self._target = jax.jit(self._target)
-        self._train_step = jax.jit(self._train_step)
+        # Use common JIT compilation
+        self._compile_common_functions()
 
     def get_q(self, params, obses, key=None) -> jnp.ndarray:
         return self.model(params, key, self.preproc(params, key, obses))
@@ -129,39 +126,19 @@ class QRDQN(Q_Network_Family):
         )
 
     def train_step(self, steps, gradient_steps):
-        for _ in range(gradient_steps):
-            self.train_steps_count += 1
-            if self.prioritized_replay:
-                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
-            else:
-                data = self.replay_buffer.sample(self.batch_size)
+        # Use common training step wrapper
+        return self._common_train_step_wrapper(steps, gradient_steps, self._train_step_internal)
 
-            (
-                self.params,
-                self.target_params,
-                self.opt_state,
-                loss,
-                t_mean,
-                t_std,
-                new_priorities,
-            ) = self._train_step(
-                self.params,
-                self.target_params,
-                self.opt_state,
-                self.train_steps_count,
-                next(self.key_seq) if self.param_noise or self.munchausen else None,
-                **data
-            )
-
-            if self.prioritized_replay:
-                self.replay_buffer.update_priorities(data["indexes"], new_priorities)
-
-        if self.logger_run and steps % self.log_interval == 0:
-            self.logger_run.log_metric("loss/qloss", loss, steps)
-            self.logger_run.log_metric("loss/targets", t_mean, steps)
-            self.logger_run.log_metric("loss/target_stds", t_std, steps)
-
-        return loss
+    def _train_step_internal(self, data):
+        """Internal training step that returns the result tuple for the wrapper."""
+        return self._train_step(
+            self.params,
+            self.target_params,
+            self.opt_state,
+            self.train_steps_count,
+            next(self.key_seq) if self.param_noise else None,
+            **data
+        )
 
     def _train_step(
         self,

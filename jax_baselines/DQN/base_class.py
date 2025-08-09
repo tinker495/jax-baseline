@@ -2,6 +2,7 @@ import os
 from collections import deque
 
 import gymnasium as gym
+import jax
 import numpy as np
 from tqdm.auto import trange
 
@@ -182,6 +183,84 @@ class Q_Network_Family(object):
 
     def _get_actions(self, params, obses) -> np.ndarray:
         pass
+
+    def _compile_common_functions(self):
+        """Common JIT compilation for Q-Network family algorithms."""
+        self.get_q = jax.jit(self.get_q)
+        self._get_actions = jax.jit(self._get_actions)
+        self._loss = jax.jit(self._loss)
+        self._target = jax.jit(self._target)
+        self._train_step = jax.jit(self._train_step)
+
+    def _sample_batch(self, batch_size=None):
+        """Common batch sampling logic for Q-Network family algorithms."""
+        if batch_size is None:
+            batch_size = self.batch_size
+        if self.prioritized_replay:
+            return self.replay_buffer.sample(batch_size, self.prioritized_replay_beta0)
+        else:
+            return self.replay_buffer.sample(batch_size)
+
+    def _update_priorities(self, data, new_priorities):
+        """Common priority update logic for Q-Network family algorithms."""
+        if self.prioritized_replay:
+            self.replay_buffer.update_priorities(data["indexes"], new_priorities)
+
+    def _common_train_step_wrapper(self, steps, gradient_steps, train_step_func):
+        """Common training step wrapper for Q-Network family algorithms."""
+        for _ in range(gradient_steps):
+            self.train_steps_count += 1
+            data = self._sample_batch()
+
+            result = train_step_func(data)
+
+            # Extract results based on the algorithm
+            if (
+                len(result) == 6
+            ):  # DQN style: params, target_params, opt_state, loss, t_mean, new_priorities
+                (
+                    self.params,
+                    self.target_params,
+                    self.opt_state,
+                    loss,
+                    t_mean,
+                    new_priorities,
+                ) = result
+                self._update_priorities(data, new_priorities)
+
+                if self.logger_run and steps % self.log_interval == 0:
+                    self.logger_run.log_metric("loss/qloss", loss, steps)
+                    self.logger_run.log_metric("loss/targets", t_mean, steps)
+
+            elif (
+                len(result) == 7
+            ):  # QRDQN/IQN style: params, target_params, opt_state, loss, t_mean, t_std, new_priorities
+                (
+                    self.params,
+                    self.target_params,
+                    self.opt_state,
+                    loss,
+                    t_mean,
+                    t_std,
+                    new_priorities,
+                ) = result
+                self._update_priorities(data, new_priorities)
+
+                if self.logger_run and steps % self.log_interval == 0:
+                    self.logger_run.log_metric("loss/qloss", loss, steps)
+                    self.logger_run.log_metric("loss/targets", t_mean, steps)
+                    self.logger_run.log_metric("loss/target_stds", t_std, steps)
+
+            else:  # Fallback for other cases
+                self.params, self.target_params, self.opt_state, loss = result[:4]
+                if len(result) > 4 and self.prioritized_replay:
+                    new_priorities = result[4]
+                    self._update_priorities(data, new_priorities)
+
+                if self.logger_run and steps % self.log_interval == 0:
+                    self.logger_run.log_metric("loss/qloss", loss, steps)
+
+        return loss
 
     def actions(self, obs, epsilon):
         if epsilon <= np.random.uniform(0, 1):

@@ -153,11 +153,8 @@ class SPR(Q_Network_Family):
             (self.categorial_max - self.categorial_min) / (self.categorial_bar_n - 1)
         )
 
-        self.get_q = jax.jit(self.get_q)
-        self._get_actions = jax.jit(self._get_actions)
-        self._loss = jax.jit(self._loss)
-        self._target = jax.jit(self._target)
-        self._train_step = jax.jit(self._train_step)
+        # Use common JIT compilation
+        self._compile_common_functions()
 
     def actions(self, obs, epsilon):
         if epsilon <= np.random.uniform(0, 1):
@@ -188,14 +185,8 @@ class SPR(Q_Network_Family):
         )
 
     def train_step(self, steps, gradient_steps):
-        # Sample a batch from the replay buffer
-
-        if self.prioritized_replay:
-            data = self.replay_buffer.sample(
-                gradient_steps * self.batch_size, self.prioritized_replay_beta0
-            )
-        else:
-            data = self.replay_buffer.sample(gradient_steps * self.batch_size)
+        # SPR has a more complex structure, so we handle it specially
+        data = self._sample_batch(gradient_steps * self.batch_size)
 
         (
             self.params,
@@ -216,8 +207,7 @@ class SPR(Q_Network_Family):
 
         self.train_steps_count += gradient_steps
 
-        if self.prioritized_replay:
-            self.replay_buffer.update_priorities(data["indexes"], new_priorities)
+        self._update_priorities(data, new_priorities)
 
         if self.logger_run and steps % self.log_interval == 0:
             self.logger_run.log_metric("loss/qloss", loss, steps)
@@ -525,24 +515,42 @@ class SPR(Q_Network_Family):
             )  # bar index as float
             C51_L = jnp.floor(C51_B).astype(jnp.int32)  # bar lower index as int
             C51_H = jnp.ceil(C51_B).astype(jnp.int32)  # bar higher index as int
-            C51_L = jnp.where(
-                (C51_L > 0) * (C51_L == C51_H), C51_L - 1, C51_L
-            )  # C51_L.at[].add(-1)
-            C51_H = jnp.where(
-                (C51_H < (self.categorial_bar_n - 1)) * (C51_L == C51_H), C51_H + 1, C51_H
-            )  # C51_H.at[].add(1)
 
-            def tdist(next_distribution, C51_L, C51_H, C51_b):
+            # Handle the case where Tz exactly matches an atom
+            # If C51_L == C51_H, it means Tz exactly matches an atom
+            exact_match = C51_L == C51_H
+
+            def tdist(next_distribution, C51_L, C51_H, C51_b, exact_match):
                 target_distribution = jnp.zeros((self.categorial_bar_n))
-                target_distribution = target_distribution.at[C51_L].add(
-                    next_distribution * (C51_H.astype(jnp.float32) - C51_b)
+
+                # If exact match, assign all probability to that atom
+                target_distribution = jnp.where(
+                    exact_match,
+                    target_distribution.at[C51_L].add(next_distribution),
+                    target_distribution,
                 )
-                target_distribution = target_distribution.at[C51_H].add(
-                    next_distribution * (C51_b - C51_L.astype(jnp.float32))
+
+                # If not exact match, use linear interpolation between two closest atoms
+                target_distribution = jnp.where(
+                    ~exact_match,
+                    target_distribution.at[C51_L].add(
+                        next_distribution * (C51_H.astype(jnp.float32) - C51_b)
+                    ),
+                    target_distribution,
                 )
+                target_distribution = jnp.where(
+                    ~exact_match,
+                    target_distribution.at[C51_H].add(
+                        next_distribution * (C51_b - C51_L.astype(jnp.float32))
+                    ),
+                    target_distribution,
+                )
+
                 return target_distribution
 
-            return jax.vmap(tdist, in_axes=(0, 0, 0, 0))(next_distribution, C51_L, C51_H, C51_B)
+            return jax.vmap(tdist, in_axes=(0, 0, 0, 0, 0))(
+                next_distribution, C51_L, C51_H, C51_B, exact_match
+            )
 
         if self.munchausen:
             next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)

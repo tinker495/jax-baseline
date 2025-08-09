@@ -6,13 +6,9 @@ import numpy as np
 import optax
 
 from jax_baselines.common.losses import FQFQuantileLosses, QuantileHuberLosses
-from jax_baselines.common.utils import (
-    convert_jax,
-    hard_update,
-    q_log_pi,
-)
-from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.common.optimizer import select_optimizer
+from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
+from jax_baselines.DQN.base_class import Q_Network_Family
 
 
 class FQF(Q_Network_Family):
@@ -119,11 +115,8 @@ class FQF(Q_Network_Family):
         )
         self.fqf_opt_state = self.fqf_optimizer.init(self.fqf_params)
 
-        self.get_q = jax.jit(self.get_q)
-        self._get_actions = jax.jit(self._get_actions)
-        self._loss = jax.jit(self._loss)
-        self._target = jax.jit(self._target)
-        self._train_step = jax.jit(self._train_step)
+        # Use common JIT compilation
+        self._compile_common_functions()
 
     def actions(self, obs, epsilon):
         if epsilon <= np.random.uniform(0, 1):
@@ -159,12 +152,10 @@ class FQF(Q_Network_Family):
         return jnp.sum(q, axis=2)
 
     def train_step(self, steps, gradient_steps):
+        # FQF has a more complex structure, so we handle it specially
         for _ in range(gradient_steps):
             self.train_steps_count += 1
-            if self.prioritized_replay:
-                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
-            else:
-                data = self.replay_buffer.sample(self.batch_size)
+            data = self._sample_batch()
 
             (
                 self.params,
@@ -189,8 +180,7 @@ class FQF(Q_Network_Family):
                 **data
             )
 
-            if self.prioritized_replay:
-                self.replay_buffer.update_priorities(data["indexes"], new_priorities)
+            self._update_priorities(data, new_priorities)
 
         if self.logger_run and steps % self.log_interval == 0:
             self.logger_run.log_metric("loss/qloss", loss, steps)
