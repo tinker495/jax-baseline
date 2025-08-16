@@ -25,28 +25,12 @@ class HL_GAUSS_SPR(Q_Network_Family):
         self,
         env_builder: callable,
         model_builder_maker,
-        num_workers=1,
-        eval_eps=20,
-        gamma=0.995,
-        learning_rate=3e-4,
-        buffer_size=100000,
-        gradient_steps=1,
-        batch_size=32,
         off_policy_fix=False,
         scaled_by_reset=False,
-        learning_starts=1000,
-        munchausen=False,
-        log_interval=200,
-        log_dir=None,
-        _init_setup_model=True,
-        policy_kwargs=None,
         categorial_bar_n=51,
         categorial_max=250,
         categorial_min=-250,
-        full_tensorboard_log=False,
-        seed=None,
-        optimizer="adamw",
-        compress_memory=False,
+        **kwargs
     ):
 
         self.shift_size = 4
@@ -59,46 +43,27 @@ class HL_GAUSS_SPR(Q_Network_Family):
         self.categorial_max = float(categorial_max)
         self.categorial_min = float(categorial_min)
 
-        super().__init__(
-            env_builder,
-            model_builder_maker,
-            num_workers,
-            eval_eps,
-            gamma,
-            learning_rate,
-            buffer_size,
-            0,
-            0,
-            0,
-            1,
-            gradient_steps,
-            batch_size,
-            True,
-            True,
-            10,
-            learning_starts,
-            0,
-            True,
-            0.6,
-            0.4,
-            1e-3,
-            True,
-            munchausen,
-            log_interval,
-            log_dir,
-            _init_setup_model,
-            policy_kwargs,
-            full_tensorboard_log,
-            seed,
-            optimizer,
-            compress_memory,
-        )
+        # Set HL_GAUSS_SPR-specific defaults
+        hl_gauss_spr_kwargs = {
+            "exploration_fraction": 0,
+            "exploration_final_eps": 0,
+            "exploration_initial_eps": 0,
+            "train_freq": 1,
+            "double_q": True,
+            "dueling_model": True,
+            "n_step": 10,
+            "prioritized_replay": True,
+            "param_noise": True,
+            **kwargs,
+        }
+
+        super().__init__(env_builder, model_builder_maker, **hl_gauss_spr_kwargs)
 
         self.name = "HL_GAUSS_SPR"
 
         self._gamma = jnp.power(self.gamma, jnp.arange(self.n_step))
 
-        if _init_setup_model:
+        if kwargs.get("_init_setup_model", True):
             self.setup_model()
 
     def get_memory_setup(self):

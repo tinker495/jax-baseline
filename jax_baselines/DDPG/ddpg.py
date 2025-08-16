@@ -16,62 +16,12 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         self,
         env_builder: callable,
         model_builder_maker,
-        num_workers=1,
-        eval_eps=20,
-        gamma=0.995,
-        learning_rate=3e-4,
-        buffer_size=100000,
         exploration_fraction=0.3,
         exploration_final_eps=0.02,
         exploration_initial_eps=1.0,
-        train_freq=1,
-        gradient_steps=1,
-        batch_size=32,
-        n_step=1,
-        learning_starts=1000,
-        target_network_update_tau=5e-4,
-        prioritized_replay=False,
-        prioritized_replay_alpha=0.6,
-        prioritized_replay_beta0=0.4,
-        prioritized_replay_eps=1e-3,
-        scaled_by_reset=False,
-        simba=False,
-        log_interval=200,
-        log_dir=None,
-        _init_setup_model=True,
-        policy_kwargs=None,
-        full_tensorboard_log=False,
-        seed=None,
-        optimizer="adamw",
+        **kwargs,
     ):
-        super().__init__(
-            env_builder,
-            model_builder_maker,
-            num_workers,
-            eval_eps,
-            gamma,
-            learning_rate,
-            buffer_size,
-            train_freq,
-            gradient_steps,
-            batch_size,
-            n_step,
-            learning_starts,
-            target_network_update_tau,
-            prioritized_replay,
-            prioritized_replay_alpha,
-            prioritized_replay_beta0,
-            prioritized_replay_eps,
-            scaled_by_reset,
-            simba,
-            log_interval,
-            log_dir,
-            _init_setup_model,
-            policy_kwargs,
-            full_tensorboard_log,
-            seed,
-            optimizer,
-        )
+        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         self.name = "DDPG"
         self.exploration_final_eps = exploration_final_eps
@@ -80,7 +30,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
 
         self.noise = OUNoise(action_size=self.action_size[0], worker_size=self.worker_size)
 
-        if _init_setup_model:
+        if kwargs.get("_init_setup_model", True):
             self.setup_model()
 
     def setup_model(self):

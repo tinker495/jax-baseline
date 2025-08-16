@@ -13,81 +13,19 @@ class C51(Q_Network_Family):
         self,
         env_builder: callable,
         model_builder_maker,
-        num_workers=1,
-        eval_eps=20,
-        gamma=0.995,
-        learning_rate=3e-4,
-        buffer_size=100000,
-        exploration_fraction=0.3,
-        exploration_final_eps=0.02,
-        exploration_initial_eps=1.0,
-        train_freq=1,
-        gradient_steps=1,
-        batch_size=32,
-        double_q=True,
-        dueling_model=False,
-        n_step=1,
-        learning_starts=1000,
-        target_network_update_freq=2000,
-        prioritized_replay=False,
-        prioritized_replay_alpha=0.6,
-        prioritized_replay_beta0=0.4,
-        prioritized_replay_eps=1e-3,
-        param_noise=False,
-        munchausen=False,
-        log_interval=200,
-        log_dir=None,
-        _init_setup_model=True,
-        policy_kwargs=None,
         categorial_bar_n=51,
         categorial_max=250,
         categorial_min=-250,
-        full_tensorboard_log=False,
-        seed=None,
-        optimizer="adamw",
-        compress_memory=False,
+        **kwargs
     ):
-        super().__init__(
-            env_builder,
-            model_builder_maker,
-            num_workers,
-            eval_eps,
-            gamma,
-            learning_rate,
-            buffer_size,
-            exploration_fraction,
-            exploration_final_eps,
-            exploration_initial_eps,
-            train_freq,
-            gradient_steps,
-            batch_size,
-            double_q,
-            dueling_model,
-            n_step,
-            learning_starts,
-            target_network_update_freq,
-            prioritized_replay,
-            prioritized_replay_alpha,
-            prioritized_replay_beta0,
-            prioritized_replay_eps,
-            param_noise,
-            munchausen,
-            log_interval,
-            log_dir,
-            _init_setup_model,
-            policy_kwargs,
-            full_tensorboard_log,
-            seed,
-            optimizer,
-            compress_memory,
-        )
+        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         self.name = "C51"
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = float(categorial_max)
         self.categorial_min = float(categorial_min)
 
-        if _init_setup_model:
+        if kwargs.get("_init_setup_model", True):
             self.setup_model()
 
     def setup_model(self):

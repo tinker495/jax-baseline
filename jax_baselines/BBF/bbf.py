@@ -24,32 +24,11 @@ class BBF(Q_Network_Family):
         self,
         env_builder: callable,
         model_builder_maker,
-        num_workers=1,
-        eval_eps=20,
-        gamma=0.995,
-        learning_rate=3e-4,
-        buffer_size=100000,
-        exploration_fraction=0.3,
-        exploration_final_eps=0.02,
-        exploration_initial_eps=1.0,
-        train_freq=1,
-        gradient_steps=1,
-        batch_size=32,
         off_policy_fix=False,
-        learning_starts=1000,
-        param_noise=False,
-        munchausen=False,
-        log_interval=200,
-        log_dir=None,
-        _init_setup_model=True,
-        policy_kwargs=None,
         categorial_bar_n=51,
         categorial_max=250,
         categorial_min=-250,
-        full_tensorboard_log=False,
-        seed=None,
-        optimizer="adamw",
-        compress_memory=False,
+        **kwargs
     ):
 
         self.shift_size = 4
@@ -60,44 +39,20 @@ class BBF(Q_Network_Family):
         self.categorial_max = float(categorial_max)
         self.categorial_min = float(categorial_min)
 
-        super().__init__(
-            env_builder,
-            model_builder_maker,
-            num_workers,
-            eval_eps,
-            gamma,
-            learning_rate,
-            buffer_size,
-            exploration_fraction,
-            exploration_final_eps,
-            exploration_initial_eps,
-            train_freq,
-            gradient_steps,
-            batch_size,
-            True,
-            True,
-            10,
-            learning_starts,
-            0,
-            True,
-            0.6,
-            0.4,
-            1e-3,
-            param_noise,
-            munchausen,
-            log_interval,
-            log_dir,
-            _init_setup_model,
-            policy_kwargs,
-            full_tensorboard_log,
-            seed,
-            optimizer,
-            compress_memory,
-        )
+        # Set BBF-specific defaults
+        bbf_kwargs = {
+            "double_q": True,
+            "dueling_model": True,
+            "n_step": 10,
+            "prioritized_replay": True,
+            **kwargs,
+        }
+
+        super().__init__(env_builder, model_builder_maker, **bbf_kwargs)
 
         self.name = "BBF"
 
-        if _init_setup_model:
+        if kwargs.get("_init_setup_model", True):
             self.setup_model()
 
     def get_memory_setup(self):

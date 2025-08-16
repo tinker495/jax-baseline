@@ -15,57 +15,23 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self,
         env_builder: callable,
         model_builder_maker,
-        num_workers=1,
-        eval_eps=20,
-        gamma=0.995,
-        learning_rate=3e-4,
-        buffer_size=100000,
         target_action_noise_mul=2.0,
         action_noise=0.1,
-        train_freq=1,
-        gradient_steps=1,
-        batch_size=32,
         policy_delay=2,
-        learning_starts=1000,
         target_network_update_freq=250,
-        prioritized_replay_alpha=0.4,
-        simba=False,
-        log_interval=200,
-        log_dir=None,
-        _init_setup_model=True,
-        policy_kwargs=None,
-        full_tensorboard_log=False,
-        seed=None,
-        optimizer="adamw",
+        **kwargs,
     ):
-        super().__init__(
-            env_builder,
-            model_builder_maker,
-            num_workers,
-            eval_eps,
-            gamma,
-            learning_rate,
-            buffer_size,
-            train_freq,
-            gradient_steps,
-            batch_size,
-            1,
-            learning_starts,
-            0,
-            True,
-            prioritized_replay_alpha,
-            0,
-            0,
-            scaled_by_reset,
-            simba,
-            log_interval,
-            log_dir,
-            _init_setup_model,
-            policy_kwargs,
-            full_tensorboard_log,
-            seed,
-            optimizer,
-        )
+        # Set TD7-specific defaults
+        td7_kwargs = {
+            "n_step": 1,
+            "target_network_update_tau": 0,
+            "prioritized_replay": True,
+            "prioritized_replay_beta0": 0,
+            "prioritized_replay_eps": 0,
+            **kwargs,
+        }
+
+        super().__init__(env_builder, model_builder_maker, **td7_kwargs)
 
         self.name = "TD7"
         self.action_noise = action_noise
@@ -84,7 +50,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.steps_before_checkpointing = int(5e5)
         self.max_eps_before_checkpointing = 20
 
-        if _init_setup_model:
+        if kwargs.get("_init_setup_model", True):
             self.setup_model()
 
     def setup_model(self):
