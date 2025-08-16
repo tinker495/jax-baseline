@@ -327,9 +327,15 @@ class Q_Network_Family(object):
         self.logger = TensorboardLogger(run_name, experiment_name, self.log_dir, self)
         with self.logger as self.logger_run:
             if self.env_type == "SingleEnv":
-                self.learn_SingleEnv(pbar, callback, log_interval)
+                if self.use_checkpointing:
+                    self.learn_SingleEnv_checkpointing(pbar, callback, log_interval)
+                else:
+                    self.learn_SingleEnv(pbar, callback, log_interval)
             if self.env_type == "VectorizedEnv":
-                self.learn_VectorizedEnv(pbar, callback, log_interval)
+                if self.use_checkpointing:
+                    self.learn_VectorizedEnv_checkpointing(pbar, callback, log_interval)
+                else:
+                    self.learn_VectorizedEnv(pbar, callback, log_interval)
 
             self.eval(total_timesteps)
 
@@ -341,48 +347,7 @@ class Q_Network_Family(object):
         self.lossque = deque(maxlen=10)
         eval_result = None
 
-        # If checkpointing is enabled, drive training at episode ends
-        if self.use_checkpointing:
-            score = 0.0
-            eplen = 0
-
-            def _ckpt_train_and_reset(step_val, accumulated_timesteps):
-                # Match non-checkpoint behavior: scale by train_freq
-                num_update_iters = max(1, accumulated_timesteps // self.train_freq)
-                total_updates = num_update_iters * self.gradient_steps
-                loss_local = self.train_step(step_val, total_updates)
-                self.lossque.append(loss_local)
-
-            for steps in pbar:
-                actions = self.actions(obs, self.update_eps)
-                next_obs, reward, terminated, truncated, info = self.env.step(actions[0][0])
-                next_obs = [np.expand_dims(next_obs, axis=0)]
-                self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
-                score += float(reward)
-                obs = next_obs
-
-                if terminated or truncated:
-                    obs, info = self.env.reset()
-                    obs = [np.expand_dims(obs, axis=0)]
-                    if steps > self.learning_starts:
-                        self._checkpoint_on_episode_end(
-                            steps, score, eplen if eplen > 0 else 1, _ckpt_train_and_reset
-                        )
-                    score = 0.0
-                    eplen = 0
-                else:
-                    eplen += 1
-
-                # Maintain epsilon schedule
-                self.update_eps = self.exploration.value(steps)
-
-                if steps % self.eval_freq == 0:
-                    eval_result = self.eval(steps)
-
-                if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
-                    pbar.set_description(self.discription(eval_result))
-
-            return
+        # Always run non-checkpointing flow; branching handled in learn()
 
         for steps in pbar:
             actions = self.actions(obs, self.update_eps)
@@ -410,56 +375,7 @@ class Q_Network_Family(object):
         self.lossque = deque(maxlen=10)
         eval_result = None
 
-        # If checkpointing is enabled, drive training at episode ends per worker
-        if self.use_checkpointing:
-            scores = np.zeros([self.worker_size], dtype=np.float64)
-            eplens = np.zeros([self.worker_size], dtype=np.int32)
-
-            def _ckpt_train_and_reset(step_val, accumulated_timesteps):
-                # Match non-checkpoint behavior: scale by train_freq
-                num_update_iters = max(1, accumulated_timesteps // self.train_freq)
-                total_updates = num_update_iters * self.gradient_steps
-                loss_local = self.train_step(step_val, total_updates)
-                self.lossque.append(loss_local)
-
-            for steps in pbar:
-                self.update_eps = self.exploration.value(steps)
-                obs = self.env.current_obs()
-                actions = self.actions([obs], self.update_eps)
-                self.env.step(actions)
-
-                (
-                    next_obses,
-                    rewards,
-                    terminateds,
-                    truncateds,
-                    infos,
-                ) = self.env.get_result()
-
-                scores += rewards
-                eplens += 1
-
-                self.replay_buffer.add(
-                    [obs], actions, rewards, [next_obses], terminateds, truncateds
-                )
-
-                if steps > self.learning_starts:
-                    done = np.logical_or(terminateds, truncateds)
-                    done_idx = np.where(done)[0]
-                    for idx in done_idx:
-                        self._checkpoint_on_episode_end(
-                            steps, float(scores[idx]), int(eplens[idx]), _ckpt_train_and_reset
-                        )
-                        scores[idx] = 0.0
-                        eplens[idx] = 0
-
-                if steps % self.eval_freq == 0:
-                    eval_result = self.eval(steps)
-
-                if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
-                    pbar.set_description(self.discription(eval_result))
-
-            return
+        # Always run non-checkpointing flow; branching handled in learn()
 
         for steps in pbar:
             self.update_eps = self.exploration.value(steps)
@@ -505,6 +421,102 @@ class Q_Network_Family(object):
             logger_run=self.logger_run,
             steps=steps,
         )
+
+    def learn_SingleEnv_checkpointing(self, pbar, callback=None, log_interval=1000, obs=None):
+        # Initialize required state if not provided
+        if obs is None:
+            obs, info = self.env.reset()
+            obs = [np.expand_dims(obs, axis=0)]
+        self.lossque = deque(maxlen=10)
+        eval_result = None
+
+        score = 0.0
+        eplen = 0
+
+        def _ckpt_train_and_reset(step_val, accumulated_timesteps):
+            # Match non-checkpoint behavior: scale by train_freq
+            num_update_iters = max(1, accumulated_timesteps // self.train_freq)
+            total_updates = num_update_iters * self.gradient_steps
+            loss_local = self.train_step(step_val, total_updates)
+            self.lossque.append(loss_local)
+
+        for steps in pbar:
+            actions = self.actions(obs, self.update_eps)
+            next_obs, reward, terminated, truncated, info = self.env.step(actions[0][0])
+            next_obs = [np.expand_dims(next_obs, axis=0)]
+            self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
+            score += float(reward)
+            obs = next_obs
+
+            if terminated or truncated:
+                obs, info = self.env.reset()
+                obs = [np.expand_dims(obs, axis=0)]
+                if steps > self.learning_starts:
+                    self._checkpoint_on_episode_end(
+                        steps, score, eplen if eplen > 0 else 1, _ckpt_train_and_reset
+                    )
+                score = 0.0
+                eplen = 0
+            else:
+                eplen += 1
+
+            # Maintain epsilon schedule
+            self.update_eps = self.exploration.value(steps)
+
+            if steps % self.eval_freq == 0:
+                eval_result = self.eval(steps)
+
+            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+                pbar.set_description(self.discription(eval_result))
+
+    def learn_VectorizedEnv_checkpointing(self, pbar, callback=None, log_interval=1000):
+        self.lossque = deque(maxlen=10)
+        eval_result = None
+
+        scores = np.zeros([self.worker_size], dtype=np.float64)
+        eplens = np.zeros([self.worker_size], dtype=np.int32)
+
+        def _ckpt_train_and_reset(step_val, accumulated_timesteps):
+            # Match non-checkpoint behavior: scale by train_freq
+            num_update_iters = max(1, accumulated_timesteps // self.train_freq)
+            total_updates = num_update_iters * self.gradient_steps
+            loss_local = self.train_step(step_val, total_updates)
+            self.lossque.append(loss_local)
+
+        for steps in pbar:
+            self.update_eps = self.exploration.value(steps)
+            obs = self.env.current_obs()
+            actions = self.actions([obs], self.update_eps)
+            self.env.step(actions)
+
+            (
+                next_obses,
+                rewards,
+                terminateds,
+                truncateds,
+                infos,
+            ) = self.env.get_result()
+
+            scores += rewards
+            eplens += 1
+
+            self.replay_buffer.add([obs], actions, rewards, [next_obses], terminateds, truncateds)
+
+            if steps > self.learning_starts:
+                done = np.logical_or(terminateds, truncateds)
+                done_idx = np.where(done)[0]
+                for idx in done_idx:
+                    self._checkpoint_on_episode_end(
+                        steps, float(scores[idx]), int(eplens[idx]), _ckpt_train_and_reset
+                    )
+                    scores[idx] = 0.0
+                    eplens[idx] = 0
+
+            if steps % self.eval_freq == 0:
+                eval_result = self.eval(steps)
+
+            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+                pbar.set_description(self.discription(eval_result))
 
     def test(self, episode=10):
         with self.logger as self.logger_run:
