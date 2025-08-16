@@ -43,7 +43,7 @@ class Deteministic_Policy_Gradient_Family(object):
         # Checkpointing options (opt-in by default for base class)
         use_checkpointing=True,
         steps_before_checkpointing=500000,
-        max_eps_before_checkpointing=20,
+        max_eps_before_checkpointing=5,
         initial_checkpoint_window=1,
     ):
         self.name = "Deteministic_Policy_Gradient_Family"
@@ -103,6 +103,14 @@ class Deteministic_Policy_Gradient_Family(object):
         self._ckpt_max_eps_before_update = self.initial_checkpoint_window
         self._ckpt_min_return = 1e8
         self._ckpt_best_min_return = -1e8
+
+        # Robust checkpointing controls
+        self.ckpt_quantile = 0.2  # q-quantile statistic instead of strict min
+        self.ckpt_ewma_beta = 0.2  # EWMA smoothing factor for baseline
+        self.use_ckpt_return_standardization = True  # standardize returns within window
+        self._ckpt_returns_window = []  # recent episode returns in current window
+        self._ckpt_baseline = -1e8  # EWMA baseline over window stats
+        self._ckpt_update_residual = 0  # exact training-parity residual accumulator
 
         # Logging throttle based on last log step
         self._last_log_step = 0
@@ -332,27 +340,44 @@ class Deteministic_Policy_Gradient_Family(object):
         if not self.use_checkpointing:
             return
 
-        # Update runtime counters
+        # Update runtime counters and statistics
         self._ckpt_eps_since_update += 1
         self._ckpt_timesteps_since_update += int(episode_len)
         self._ckpt_min_return = min(self._ckpt_min_return, float(episode_return))
+        self._ckpt_returns_window.append(float(episode_return))
+        # Cap window size to current target
+        if len(self._ckpt_returns_window) > self._ckpt_max_eps_before_update:
+            self._ckpt_returns_window = self._ckpt_returns_window[
+                -self._ckpt_max_eps_before_update :
+            ]
 
         # Enable checkpointing mode once enough steps have elapsed
         self._maybe_enable_checkpointing(steps)
 
-        # Early break if worst-case this window is worse than best historical worst-case
-        if self._ckpt_min_return < self._ckpt_best_min_return:
+        # Compute robust window statistic (quantile on standardized returns if enabled)
+        window_stat = self._compute_ckpt_window_stat()
+
+        # Early training pulse on regression relative to baseline (no snapshot refresh)
+        if (window_stat is not None) and (window_stat < self._ckpt_baseline):
             if callable(train_and_reset_callback):
                 train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
             # Reset window stats
             self._ckpt_eps_since_update = 0
             self._ckpt_timesteps_since_update = 0
             self._ckpt_min_return = 1e8
+            self._ckpt_returns_window = []
             return
 
         # Refresh checkpoint at the end of the evaluation window
         if self._ckpt_eps_since_update >= self._ckpt_max_eps_before_update:
-            self._ckpt_best_min_return = self._ckpt_min_return
+            # Update EWMA baseline using window statistic; initialize if needed
+            if window_stat is not None:
+                if self._ckpt_baseline <= -1e7:
+                    self._ckpt_baseline = window_stat
+                else:
+                    self._ckpt_baseline = (
+                        1.0 - self.ckpt_ewma_beta
+                    ) * self._ckpt_baseline + self.ckpt_ewma_beta * window_stat
             self._checkpoint_update_snapshot()
             if callable(train_and_reset_callback):
                 train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
@@ -360,6 +385,26 @@ class Deteministic_Policy_Gradient_Family(object):
             self._ckpt_eps_since_update = 0
             self._ckpt_timesteps_since_update = 0
             self._ckpt_min_return = 1e8
+            self._ckpt_returns_window = []
+
+    def _compute_ckpt_window_stat(self):
+        """Compute robust window statistic for checkpoint decisions.
+
+        Uses q-quantile of returns in the current window. If
+        use_ckpt_return_standardization is True, standardizes using
+        median and MAD within the window before quantile.
+        """
+        if not self._ckpt_returns_window:
+            return None
+        arr = np.asarray(self._ckpt_returns_window, dtype=np.float64)
+        if self.use_ckpt_return_standardization and arr.size >= 3:
+            med = np.median(arr)
+            mad = np.median(np.abs(arr - med))
+            scale = mad if mad > 1e-8 else 1.0
+            arr = (arr - med) / scale
+        q = float(self.ckpt_quantile)
+        q = min(max(q, 0.0), 1.0)
+        return float(np.quantile(arr, q))
 
     def learn_SingleEnv_checkpointing(self, pbar, callback=None, log_interval=1000, obs=None):
         # Initialize required state if not provided
@@ -373,11 +418,16 @@ class Deteministic_Policy_Gradient_Family(object):
         eplen = 0
 
         def _ckpt_train_and_reset(step_val, accumulated_timesteps):
-            # Match non-checkpoint behavior: scale by train_freq
-            num_update_iters = max(1, accumulated_timesteps // self.train_freq)
-            total_updates = num_update_iters * self.gradient_steps
-            loss_local = self.train_step(step_val, total_updates)
-            self.lossque.append(loss_local)
+            # Exact training-parity via residual accumulation
+            self._ckpt_update_residual += int(accumulated_timesteps)
+            num_update_iters = 0
+            while self._ckpt_update_residual >= self.train_freq:
+                self._ckpt_update_residual -= self.train_freq
+                num_update_iters += 1
+            if num_update_iters > 0:
+                total_updates = num_update_iters * self.gradient_steps
+                loss_local = self.train_step(step_val, total_updates)
+                self.lossque.append(loss_local)
 
         for steps in pbar:
             eplen += 1
@@ -412,11 +462,16 @@ class Deteministic_Policy_Gradient_Family(object):
         eplens = np.zeros([self.worker_size], dtype=np.int32)
 
         def _ckpt_train_and_reset(step_val, accumulated_timesteps):
-            # Match non-checkpoint behavior: scale by train_freq
-            num_update_iters = max(1, accumulated_timesteps // self.train_freq)
-            total_updates = num_update_iters * self.gradient_steps
-            loss_local = self.train_step(step_val, total_updates)
-            self.lossque.append(loss_local)
+            # Exact training-parity via residual accumulation
+            self._ckpt_update_residual += int(accumulated_timesteps)
+            num_update_iters = 0
+            while self._ckpt_update_residual >= self.train_freq:
+                self._ckpt_update_residual -= self.train_freq
+                num_update_iters += 1
+            if num_update_iters > 0:
+                total_updates = num_update_iters * self.gradient_steps
+                loss_local = self.train_step(step_val, total_updates)
+                self.lossque.append(loss_local)
 
         for steps in pbar:
             obs = self.env.current_obs()
