@@ -115,8 +115,7 @@ class Q_Network_Family(object):
         self._ckpt_min_return = 1e8
         self._ckpt_best_min_return = -1e8
 
-        # During checkpoint-driven training pulses, throttle logging based on interval
-        self._force_log_every_update = False
+        # Logging throttle based on last log step
         self._last_log_step = 0
 
         # Control model initialization timing across children
@@ -213,19 +212,12 @@ class Q_Network_Family(object):
                 ) = result
                 self._update_priorities(data, new_priorities)
 
-                if self.logger_run:
-                    # When checkpointing pulse requests forced logging, throttle by interval
-                    if self._force_log_every_update:
-                        if self.train_steps_count - self._last_log_step >= self.log_interval:
-                            self._last_log_step = self.train_steps_count
-                            self.logger_run.log_metric("loss/qloss", loss, self.train_steps_count)
-                            self.logger_run.log_metric(
-                                "loss/targets", t_mean, self.train_steps_count
-                            )
-                    elif steps % self.log_interval == 0:
-                        self._last_log_step = self.train_steps_count
-                        self.logger_run.log_metric("loss/qloss", loss, steps)
-                        self.logger_run.log_metric("loss/targets", t_mean, steps)
+                if self.logger_run and (
+                    self.train_steps_count - self._last_log_step >= self.log_interval
+                ):
+                    self._last_log_step = self.train_steps_count
+                    self.logger_run.log_metric("loss/qloss", loss, steps)
+                    self.logger_run.log_metric("loss/targets", t_mean, steps)
 
             elif (
                 len(result) == 7
@@ -241,22 +233,13 @@ class Q_Network_Family(object):
                 ) = result
                 self._update_priorities(data, new_priorities)
 
-                if self.logger_run:
-                    if self._force_log_every_update:
-                        if self.train_steps_count - self._last_log_step >= self.log_interval:
-                            self._last_log_step = self.train_steps_count
-                            self.logger_run.log_metric("loss/qloss", loss, self.train_steps_count)
-                            self.logger_run.log_metric(
-                                "loss/targets", t_mean, self.train_steps_count
-                            )
-                            self.logger_run.log_metric(
-                                "loss/target_stds", t_std, self.train_steps_count
-                            )
-                    elif steps % self.log_interval == 0:
-                        self._last_log_step = self.train_steps_count
-                        self.logger_run.log_metric("loss/qloss", loss, steps)
-                        self.logger_run.log_metric("loss/targets", t_mean, steps)
-                        self.logger_run.log_metric("loss/target_stds", t_std, steps)
+                if self.logger_run and (
+                    self.train_steps_count - self._last_log_step >= self.log_interval
+                ):
+                    self._last_log_step = self.train_steps_count
+                    self.logger_run.log_metric("loss/qloss", loss, steps)
+                    self.logger_run.log_metric("loss/targets", t_mean, steps)
+                    self.logger_run.log_metric("loss/target_stds", t_std, steps)
 
             else:  # Fallback for other cases
                 self.params, self.target_params, self.opt_state, loss = result[:4]
@@ -264,14 +247,11 @@ class Q_Network_Family(object):
                     new_priorities = result[4]
                     self._update_priorities(data, new_priorities)
 
-                if self.logger_run:
-                    if self._force_log_every_update:
-                        if self.train_steps_count - self._last_log_step >= self.log_interval:
-                            self._last_log_step = self.train_steps_count
-                            self.logger_run.log_metric("loss/qloss", loss, self.train_steps_count)
-                    elif steps % self.log_interval == 0:
-                        self._last_log_step = self.train_steps_count
-                        self.logger_run.log_metric("loss/qloss", loss, steps)
+                if self.logger_run and (
+                    self.train_steps_count - self._last_log_step >= self.log_interval
+                ):
+                    self._last_log_step = self.train_steps_count
+                    self.logger_run.log_metric("loss/qloss", loss, steps)
 
         return loss
 
@@ -371,12 +351,7 @@ class Q_Network_Family(object):
                 # Match non-checkpoint behavior: scale by train_freq
                 num_update_iters = max(1, accumulated_timesteps // self.train_freq)
                 total_updates = num_update_iters * self.gradient_steps
-                # Force per-update logging for this checkpoint pulse
-                self._force_log_every_update = True
-                try:
-                    loss_local = self.train_step(step_val, total_updates)
-                finally:
-                    self._force_log_every_update = False
+                loss_local = self.train_step(step_val, total_updates)
                 self.lossque.append(loss_local)
 
             for steps in pbar:
@@ -445,12 +420,7 @@ class Q_Network_Family(object):
                 # Match non-checkpoint behavior: scale by train_freq
                 num_update_iters = max(1, accumulated_timesteps // self.train_freq)
                 total_updates = num_update_iters * self.gradient_steps
-                # Force per-update logging for this checkpoint pulse
-                self._force_log_every_update = True
-                try:
-                    loss_local = self.train_step(step_val, total_updates)
-                finally:
-                    self._force_log_every_update = False
+                loss_local = self.train_step(step_val, total_updates)
                 self.lossque.append(loss_local)
 
             for steps in pbar:

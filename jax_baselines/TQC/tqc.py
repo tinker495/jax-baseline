@@ -158,7 +158,8 @@ class TQC(Deteministic_Policy_Gradient_Family):
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.logger_run and steps % self.log_interval == 0:
+        if self.logger_run and (self.train_steps_count - self._last_log_step >= self.log_interval):
+            self._last_log_step = self.train_steps_count
             self.logger_run.log_metric("loss/qloss", loss, steps)
             self.logger_run.log_metric("loss/targets", t_mean, steps)
             self.logger_run.log_metric("loss/ent_coef", np.exp(self.log_ent_coef), steps)

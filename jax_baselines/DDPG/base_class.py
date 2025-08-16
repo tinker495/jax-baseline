@@ -104,8 +104,7 @@ class Deteministic_Policy_Gradient_Family(object):
         self._ckpt_min_return = 1e8
         self._ckpt_best_min_return = -1e8
 
-        # During checkpoint-driven training pulses, throttle logging based on interval
-        self._force_log_every_update = False
+        # Logging throttle based on last log step
         self._last_log_step = 0
 
     def save_params(self, path):
@@ -211,12 +210,7 @@ class Deteministic_Policy_Gradient_Family(object):
                 # Match non-checkpoint behavior: scale by train_freq
                 num_update_iters = max(1, accumulated_timesteps // self.train_freq)
                 total_updates = num_update_iters * self.gradient_steps
-                # Force per-update logging for this checkpoint pulse
-                self._force_log_every_update = True
-                try:
-                    loss_local = self.train_step(step_val, total_updates)
-                finally:
-                    self._force_log_every_update = False
+                loss_local = self.train_step(step_val, total_updates)
                 self.lossque.append(loss_local)
 
             for steps in pbar:
@@ -280,12 +274,7 @@ class Deteministic_Policy_Gradient_Family(object):
                 # Match non-checkpoint behavior: scale by train_freq
                 num_update_iters = max(1, accumulated_timesteps // self.train_freq)
                 total_updates = num_update_iters * self.gradient_steps
-                # Force per-update logging for this checkpoint pulse
-                self._force_log_every_update = True
-                try:
-                    loss_local = self.train_step(step_val, total_updates)
-                finally:
-                    self._force_log_every_update = False
+                loss_local = self.train_step(step_val, total_updates)
                 self.lossque.append(loss_local)
 
             for steps in pbar:
