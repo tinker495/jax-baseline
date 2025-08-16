@@ -8,12 +8,13 @@ from jax_baselines.IMPALA.base_class import IMPALA_Family
 
 class IMPALA_PPO(IMPALA_Family):
     def __init__(self, workers, model_builder_maker, ppo_eps=0.2, epoch_num=3, **kwargs):
-        super().__init__(workers, model_builder_maker, **kwargs)
 
         self.name = "IMPALA_PPO"
         self.minibatch_size = 256
         self.epoch_num = epoch_num
         self.ppo_eps = ppo_eps
+
+        super().__init__(workers, model_builder_maker, **kwargs)
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(

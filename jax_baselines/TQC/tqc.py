@@ -29,21 +29,21 @@ class TQC(Deteministic_Policy_Gradient_Family):
         risk_avoidance=0.0,
         **kwargs
     ):
-        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         self.name = "TQC"
         self._ent_coef = ent_coef
-        self.target_entropy = 0.5 * np.prod(self.action_size).astype(
-            np.float32
-        )  # -np.sqrt(np.prod(self.action_size).astype(np.float32))
         self.ent_coef_learning_rate = 1e-4
         self.n_support = n_support
         self.delta = delta
         self.critic_num = critic_num
-        self.quantile_drop = int(max(np.round(self.critic_num * self.n_support * quantile_drop), 1))
+        self.quantile_drop = int(max(np.round(critic_num * n_support * quantile_drop), 1))
         self.middle_support = int(np.floor(n_support / 2.0))
         self.mixture_type = mixture_type
         self.risk_avoidance = risk_avoidance
+
+        super().__init__(env_builder, model_builder_maker, **kwargs)
+
+        self.target_entropy = 0.5 * np.prod(self.action_size).astype(np.float32)
 
     def setup_model(self):
         model_builder = self.model_builder_maker(

@@ -1,6 +1,32 @@
 import numpy as np
 
 
+def _normalize_action_for_step(step_action):
+    """Convert model output to an env.step-compatible action.
+
+    - If it's effectively a single scalar (including shapes like (1,), (1,1)),
+      return a native Python scalar via .item(). This is required by some envs
+      such as ALE which expect an integer index.
+    - If it's a vector (e.g., continuous control), keep it as a 1-D numpy array.
+    - If it's a batched action (leading dimension as batch), reduce the batch
+      dimension if it's size 1.
+    """
+    arr = np.asarray(step_action)
+    # Single value anywhere: convert to Python scalar
+    if arr.size == 1:
+        return arr.reshape(-1)[0].item()
+
+    # If there is a leading batch dim of size 1, squeeze it
+    if arr.ndim >= 2 and arr.shape[0] == 1:
+        arr = np.asarray(arr[0])
+        if arr.size == 1:
+            return arr.reshape(-1)[0].item()
+        return arr
+
+    # Otherwise, return as-is (e.g., a proper action vector)
+    return arr
+
+
 def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, conv_action=None):
     """General evaluation helper used by multiple base classes.
 
@@ -30,28 +56,8 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
             else:
                 step_action = actions
 
-            # Normalize action to a Python scalar int when possible so downstream
-            # env.step receives a native Python int (required by some envs like ALE).
-            arr = np.asarray(step_action)
-            # Scalars
-            if arr.ndim == 0:
-                action_to_step = arr.item()
-            # 1-D arrays: could be a single discrete action [a] or a continuous
-            # action vector [a1, a2, ...]. If size == 1 treat as scalar.
-            elif arr.ndim == 1:
-                if arr.size == 1:
-                    action_to_step = arr.item()
-                else:
-                    action_to_step = arr
-            else:
-                # Higher-dim arrays: assume first entry corresponds to the
-                # environment's action (batch dim). Extract the first element
-                # and further reduce if necessary.
-                first = arr[0]
-                if np.asarray(first).ndim == 0:
-                    action_to_step = first.item()
-                else:
-                    action_to_step = np.asarray(first)
+            # Normalize action so env.step receives a proper scalar when applicable
+            action_to_step = _normalize_action_for_step(step_action)
 
             observation, reward, terminated, truncated, info = eval_env.step(action_to_step)
             obs = [np.expand_dims(observation, axis=0)]
@@ -128,20 +134,7 @@ def record_and_test(env_builder, logger_run, actions_eval_fn, episode, conv_acti
                     step_action = actions
 
                 # Normalize action similar to evaluate_policy
-                arr = np.asarray(step_action)
-                if arr.ndim == 0:
-                    action_to_step = arr.item()
-                elif arr.ndim == 1:
-                    if arr.size == 1:
-                        action_to_step = arr.item()
-                    else:
-                        action_to_step = arr
-                else:
-                    first = arr[0]
-                    if np.asarray(first).ndim == 0:
-                        action_to_step = first.item()
-                    else:
-                        action_to_step = np.asarray(first)
+                action_to_step = _normalize_action_for_step(step_action)
 
                 observation, reward, terminated, truncated, info = Render_env.step(action_to_step)
                 obs = [np.expand_dims(observation, axis=0)]

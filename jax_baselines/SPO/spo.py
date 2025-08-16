@@ -20,7 +20,6 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
         ppo_eps=0.2,
         **kwargs
     ):
-        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         self.name = "SPO"
         self.lamda = lamda
@@ -28,12 +27,19 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
         self.value_clip = value_clip
         self.ppo_eps = ppo_eps
         self.minibatch_size = minibatch_size
+        self._post_init_minibatch_size = minibatch_size
+        self.epoch_num = epoch_num
+
+        super().__init__(env_builder, model_builder_maker, **kwargs)
+
+        # Adjust batch_size after worker_size is known
         self.batch_size = int(
-            np.ceil(kwargs.get("batch_size", 256) * self.worker_size / minibatch_size)
-            * minibatch_size
+            np.ceil(
+                kwargs.get("batch_size", 256) * self.worker_size / self._post_init_minibatch_size
+            )
+            * self._post_init_minibatch_size
             / self.worker_size
         )
-        self.epoch_num = epoch_num
 
         self.get_memory_setup()
 

@@ -12,6 +12,7 @@ from jax_baselines.common.utils import convert_jax, hard_update, key_gen, q_log_
 
 class APE_X_DQN(Ape_X_Family):
     def __init__(self, workers, model_builder_maker, **kwargs):
+        # No subclass-specific fields to pre-set; keep pattern consistent
         super().__init__(workers, model_builder_maker, **kwargs)
 
     def setup_model(self):

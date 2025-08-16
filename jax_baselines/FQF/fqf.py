@@ -15,13 +15,14 @@ class FQF(Q_Network_Family):
     def __init__(
         self, env_builder: callable, model_builder_maker, n_support=32, delta=1.0, **kwargs
     ):
-        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         self.name = "FQF"
         self.n_support = n_support
         self.delta = delta
         self.fqf_factor = 1e-2
         self.ent_coef = 0.01
+
+        super().__init__(env_builder, model_builder_maker, **kwargs)
 
     def setup_model(self):
         self.model_bulder = self.model_builder_maker(

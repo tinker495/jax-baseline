@@ -18,12 +18,15 @@ class C51(Q_Network_Family):
         categorial_min=-250,
         **kwargs
     ):
-        super().__init__(env_builder, model_builder_maker, **kwargs)
-
+        # Initialize subclass-specific attributes BEFORE calling super().__init__
+        # because the base class constructor may call self.setup_model(), which
+        # needs these attributes to be present.
         self.name = "C51"
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = float(categorial_max)
         self.categorial_min = float(categorial_min)
+
+        super().__init__(env_builder, model_builder_maker, **kwargs)
 
     def setup_model(self):
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs

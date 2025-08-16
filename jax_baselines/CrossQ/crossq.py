@@ -17,15 +17,14 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             **kwargs,
         }
 
-        super().__init__(env_builder, model_builder_maker, **crossq_kwargs)
-
         self.name = "CrossQ"
         self._ent_coef = ent_coef
-        self.target_entropy = 0.5 * np.prod(self.action_size).astype(
-            np.float32
-        )  # -np.sqrt(np.prod(self.action_size).astype(np.float32))
         self.ent_coef_learning_rate = 1e-4
         self.policy_delay = policy_delay
+
+        super().__init__(env_builder, model_builder_maker, **crossq_kwargs)
+
+        self.target_entropy = 0.5 * np.prod(self.action_size).astype(np.float32)
 
         # Base already handled conditional setup
 

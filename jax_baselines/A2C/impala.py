@@ -8,9 +8,9 @@ from jax_baselines.IMPALA.base_class import IMPALA_Family
 
 class IMPALA(IMPALA_Family):
     def __init__(self, workers, model_builder_maker, **kwargs):
-        super().__init__(workers, model_builder_maker, **kwargs)
 
         self.name = "IMPALA_AC"
+        super().__init__(workers, model_builder_maker, **kwargs)
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(

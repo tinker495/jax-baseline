@@ -13,6 +13,7 @@ from jax_baselines.DDPG.ou_noise import OUNoise
 
 class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
     def __init__(self, workers, model_builder_maker, **kwargs):
+        # No subclass-specific fields to pre-set besides defaults; keep pattern consistent
         super().__init__(workers, model_builder_maker, **kwargs)
 
     def setup_model(self):

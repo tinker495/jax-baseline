@@ -20,11 +20,12 @@ class APE_X_C51(Ape_X_Family):
         categorial_min=-250,
         **kwargs
     ):
-        super().__init__(workers, model_builder_maker, **kwargs)
 
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = categorial_max
         self.categorial_min = categorial_min
+
+        super().__init__(workers, model_builder_maker, **kwargs)
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
