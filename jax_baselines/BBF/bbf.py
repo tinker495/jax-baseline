@@ -49,9 +49,8 @@ class BBF(Q_Network_Family):
             **kwargs,
         }
 
-        super().__init__(env_builder, model_builder_maker, **bbf_kwargs)
-
         self.name = "BBF"
+        super().__init__(env_builder, model_builder_maker, **bbf_kwargs)
 
     def get_memory_setup(self):
         if self.prioritized_replay:

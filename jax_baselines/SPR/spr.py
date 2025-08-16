@@ -56,9 +56,8 @@ class SPR(Q_Network_Family):
             **kwargs,
         }
 
-        super().__init__(env_builder, model_builder_maker, **spr_kwargs)
-
         self.name = "SPR"
+        super().__init__(env_builder, model_builder_maker, **spr_kwargs)
 
         self._gamma = jnp.power(self.gamma, jnp.arange(self.n_step))
 

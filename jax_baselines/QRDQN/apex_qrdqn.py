@@ -13,10 +13,11 @@ from jax_baselines.common.utils import convert_jax, hard_update, key_gen, q_log_
 
 class APE_X_QRDQN(Ape_X_Family):
     def __init__(self, workers, model_builder_maker, n_support=200, delta=1.0, **kwargs):
-        super().__init__(workers, model_builder_maker, **kwargs)
 
         self.n_support = n_support
         self.delta = delta
+
+        super().__init__(workers, model_builder_maker, **kwargs)
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(

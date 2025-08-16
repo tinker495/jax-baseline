@@ -20,13 +20,14 @@ class IQN(Q_Network_Family):
         CVaR=1.0,
         **kwargs
     ):
-        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         self.name = "IQN"
         self.n_support = n_support
         self.delta = delta
         self.CVaR = CVaR
         self.risk_avoid = CVaR != 1.0
+
+        super().__init__(env_builder, model_builder_maker, **kwargs)
 
     def setup_model(self):
         model_builder = self.model_builder_maker(

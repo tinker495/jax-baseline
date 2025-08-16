@@ -22,12 +22,13 @@ class IMPALA_TPPO(IMPALA_Family):
         epoch_num=3,
         **kwargs,
     ):
-        super().__init__(workers, model_builder_maker, **kwargs)
+
         self.mu_ratio = mu_ratio
         self.minibatch_size = 256
         self.epoch_num = epoch_num
         self.kl_range = kl_range
         self.kl_coef = kl_coef
+        super().__init__(workers, model_builder_maker, **kwargs)
         self.get_memory_setup()
 
     def setup_model(self):

@@ -13,11 +13,12 @@ class QRDQN(Q_Network_Family):
     def __init__(
         self, env_builder: callable, model_builder_maker, n_support=200, delta=1.0, **kwargs
     ):
-        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         self.name = "QRDQN"
         self.n_support = n_support
         self.delta = delta
+
+        super().__init__(env_builder, model_builder_maker, **kwargs)
 
     def setup_model(self):
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs

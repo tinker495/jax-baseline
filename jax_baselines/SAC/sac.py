@@ -11,14 +11,14 @@ from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 
 class SAC(Deteministic_Policy_Gradient_Family):
     def __init__(self, env_builder: callable, model_builder_maker, ent_coef="auto", **kwargs):
-        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         self.name = "SAC"
         self._ent_coef = ent_coef
-        self.target_entropy = 0.5 * np.prod(self.action_size).astype(
-            np.float32
-        )  # -np.sqrt(np.prod(self.action_size).astype(np.float32))
         self.ent_coef_learning_rate = 1e-4
+
+        super().__init__(env_builder, model_builder_maker, **kwargs)
+
+        self.target_entropy = 0.5 * np.prod(self.action_size).astype(np.float32)
 
     def setup_model(self):
         model_builder = self.model_builder_maker(

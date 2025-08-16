@@ -10,9 +10,9 @@ from jax_baselines.DQN.base_class import Q_Network_Family
 
 class DQN(Q_Network_Family):
     def __init__(self, env_builder: callable, model_builder_maker, **kwargs):
-        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         self.name = "DQN"
+        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         # Base class already handled conditional setup via self._init_setup_model
 

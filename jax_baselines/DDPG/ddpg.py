@@ -21,12 +21,13 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         exploration_initial_eps=1.0,
         **kwargs,
     ):
-        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         self.name = "DDPG"
         self.exploration_final_eps = exploration_final_eps
         self.exploration_initial_eps = exploration_initial_eps
         self.exploration_fraction = exploration_fraction
+
+        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         self.noise = OUNoise(action_size=self.action_size[0], worker_size=self.worker_size)
 

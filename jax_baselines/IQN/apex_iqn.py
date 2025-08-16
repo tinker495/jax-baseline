@@ -12,12 +12,13 @@ from jax_baselines.common.utils import convert_jax, hard_update, key_gen, q_log_
 
 class APE_X_IQN(Ape_X_Family):
     def __init__(self, workers, model_builder_maker, CVaR=1.0, n_support=200, delta=1.0, **kwargs):
-        super().__init__(workers, model_builder_maker, **kwargs)
 
         self.n_support = n_support
         self.delta = delta
         self.CVaR = CVaR
         self.risk_avoid = CVaR != 1.0
+
+        super().__init__(workers, model_builder_maker, **kwargs)
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(

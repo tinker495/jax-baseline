@@ -8,9 +8,9 @@ from jax_baselines.common.utils import convert_jax, discount_with_terminated
 
 class A2C(Actor_Critic_Policy_Gradient_Family):
     def __init__(self, env_builder, model_builder_maker, **kwargs):
-        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         self.name = "A2C"
+        super().__init__(env_builder, model_builder_maker, **kwargs)
         self.get_memory_setup()
 
     def setup_model(self):
