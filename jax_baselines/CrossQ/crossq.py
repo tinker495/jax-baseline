@@ -27,8 +27,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         self.ent_coef_learning_rate = 1e-4
         self.policy_delay = policy_delay
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
+        # Base already handled conditional setup
 
     def setup_model(self):
         model_builder = self.model_builder_maker(

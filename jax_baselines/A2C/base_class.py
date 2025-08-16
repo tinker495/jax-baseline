@@ -29,7 +29,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
         log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
-        full_tensorboard_log=False,
         seed=None,
         optimizer="adamw",
     ):
@@ -49,13 +48,16 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.val_coef = val_coef
         self.ent_coef = ent_coef
         self.log_dir = log_dir
-        self.full_tensorboard_log = full_tensorboard_log
 
         self.params = None
         self.save_path = None
         self.optimizer = select_optimizer(optimizer, self.learning_rate)
 
         self.get_env_setup()
+        # Control model initialization timing across children
+        self._init_setup_model = _init_setup_model
+        if self._init_setup_model:
+            self.setup_model()
 
     def save_params(self, path):
         save(path, self.params)

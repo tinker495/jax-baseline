@@ -25,9 +25,6 @@ class C51(Q_Network_Family):
         self.categorial_max = float(categorial_max)
         self.categorial_min = float(categorial_min)
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def setup_model(self):
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
 

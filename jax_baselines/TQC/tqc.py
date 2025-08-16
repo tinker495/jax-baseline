@@ -45,9 +45,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
         self.mixture_type = mixture_type
         self.risk_avoidance = risk_avoidance
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def setup_model(self):
         model_builder = self.model_builder_maker(
             self.observation_space,

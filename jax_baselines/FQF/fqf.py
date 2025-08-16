@@ -23,9 +23,6 @@ class FQF(Q_Network_Family):
         self.fqf_factor = 1e-2
         self.ent_coef = 0.01
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def setup_model(self):
         self.model_bulder = self.model_builder_maker(
             self.observation_space,

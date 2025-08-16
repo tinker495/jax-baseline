@@ -44,7 +44,6 @@ class Q_Network_Family(object):
         log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
-        full_tensorboard_log=False,
         seed=None,
         optimizer="adamw",
         compress_memory=False,
@@ -79,7 +78,6 @@ class Q_Network_Family(object):
         self.gamma = gamma
         self._gamma = np.power(gamma, n_step)  # n_step gamma
         self.log_dir = log_dir
-        self.full_tensorboard_log = full_tensorboard_log
         self.double_q = double_q
         self.dueling_model = dueling_model
         self.n_step_method = n_step > 1
@@ -98,6 +96,12 @@ class Q_Network_Family(object):
 
         self.get_env_setup()
         self.get_memory_setup()
+
+        # Control model initialization timing across children
+        self._init_setup_model = _init_setup_model
+        if self._init_setup_model:
+            # Calls overridden setup_model in children
+            self.setup_model()
 
     def save_params(self, path):
         save(path, self.params)

@@ -50,9 +50,6 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.steps_before_checkpointing = int(5e5)
         self.max_eps_before_checkpointing = 20
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def setup_model(self):
         model_builder = self.model_builder_maker(
             self.observation_space,

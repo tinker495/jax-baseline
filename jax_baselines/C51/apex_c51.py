@@ -26,9 +26,6 @@ class APE_X_C51(Ape_X_Family):
         self.categorial_max = categorial_max
         self.categorial_min = categorial_min
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
             self.observation_space,

@@ -14,8 +14,7 @@ class DQN(Q_Network_Family):
 
         self.name = "DQN"
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
+        # Base class already handled conditional setup via self._init_setup_model
 
     def setup_model(self):
         model_builder = self.model_builder_maker(

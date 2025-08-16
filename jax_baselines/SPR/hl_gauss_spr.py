@@ -64,9 +64,6 @@ class HL_GAUSS_SPR(Q_Network_Family):
 
         self._gamma = jnp.power(self.gamma, jnp.arange(self.n_step))
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def get_memory_setup(self):
         if self.prioritized_replay:
             self.replay_buffer = PrioritizedTransitionReplayBuffer(

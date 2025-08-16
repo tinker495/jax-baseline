@@ -30,9 +30,6 @@ class DDPG(Deteministic_Policy_Gradient_Family):
 
         self.noise = OUNoise(action_size=self.action_size[0], worker_size=self.worker_size)
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def setup_model(self):
         model_builder = self.model_builder_maker(
             self.observation_space,

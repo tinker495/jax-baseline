@@ -14,9 +14,6 @@ class APE_X_DQN(Ape_X_Family):
     def __init__(self, workers, model_builder_maker, **kwargs):
         super().__init__(workers, model_builder_maker, **kwargs)
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
             self.observation_space,

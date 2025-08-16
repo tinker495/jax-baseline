@@ -30,9 +30,6 @@ class IMPALA_TPPO(IMPALA_Family):
         self.kl_coef = kl_coef
         self.get_memory_setup()
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
             self.observation_space, self.action_size, self.action_type, self.policy_kwargs

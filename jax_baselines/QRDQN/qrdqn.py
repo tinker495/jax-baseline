@@ -19,9 +19,6 @@ class QRDQN(Q_Network_Family):
         self.n_support = n_support
         self.delta = delta
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def setup_model(self):
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
 

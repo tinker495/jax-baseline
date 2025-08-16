@@ -13,9 +13,6 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         self.name = "A2C"
         self.get_memory_setup()
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
             self.observation_space, self.action_size, self.action_type, self.policy_kwargs

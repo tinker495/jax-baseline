@@ -20,9 +20,6 @@ class SAC(Deteministic_Policy_Gradient_Family):
         )  # -np.sqrt(np.prod(self.action_size).astype(np.float32))
         self.ent_coef_learning_rate = 1e-4
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def setup_model(self):
         model_builder = self.model_builder_maker(
             self.observation_space,

@@ -27,9 +27,6 @@ class TD3(Deteministic_Policy_Gradient_Family):
         self.action_noise_clamp = 0.5  # self.target_action_noise*1.5
         self.policy_delay = policy_delay
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def setup_model(self):
         model_builder = self.model_builder_maker(
             self.observation_space,

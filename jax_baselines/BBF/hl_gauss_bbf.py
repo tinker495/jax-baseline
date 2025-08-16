@@ -54,9 +54,6 @@ class HL_GAUSS_BBF(Q_Network_Family):
 
         self.name = "HL_GAUSS_BBF"
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def get_memory_setup(self):
         if self.prioritized_replay:
             self.replay_buffer = PrioritizedTransitionReplayBuffer(

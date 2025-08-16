@@ -15,9 +15,6 @@ class IMPALA_SPO(IMPALA_Family):
         self.epoch_num = epoch_num
         self.ppo_eps = ppo_eps
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
             self.observation_space, self.action_size, self.action_type, self.policy_kwargs

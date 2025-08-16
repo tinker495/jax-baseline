@@ -18,9 +18,6 @@ class APE_X_QRDQN(Ape_X_Family):
         self.n_support = n_support
         self.delta = delta
 
-        if kwargs.get("_init_setup_model", True):
-            self.setup_model()
-
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
             self.observation_space,
