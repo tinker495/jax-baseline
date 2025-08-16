@@ -23,7 +23,7 @@ class Buffer(object):
         return buffer
 
     def get_stored_size(self):
-        return min(self._idx, self.max_size)
+        return max(min(self._idx, self.max_size), 0)
 
     def update_idx(self):
         self._idx = self._idx + 1
@@ -79,8 +79,6 @@ class Buffer(object):
 
 
 class SumTree:
-    write = 0
-
     def __init__(self, capacity):
         self.capacity = capacity
         self.tree = np.zeros(2 * capacity - 1, dtype=np.float64)
@@ -88,6 +86,7 @@ class SumTree:
         self.n_entries = 0
         self.max_priority = 1.0
         self.min_priority = np.inf
+        self.write = 0
 
     # update to the root node
     def _propagate(self, idx, change):
@@ -216,7 +215,10 @@ class TransitionReplayBuffer(object):
             self.buffer.on_episode_end(truncated)
 
     def sample(self, batch_size: int):
-        idxs = np.random.randint(0, self.buffer.get_stored_size(), size=batch_size)
+        stored_size = self.buffer.get_stored_size()
+        if stored_size == 0:
+            raise ValueError("Cannot sample from empty buffer")
+        idxs = np.random.randint(0, stored_size, size=batch_size)
         obs, data, terminated, filled, _ = self.buffer.sample(idxs, traj_len=self.prediction_depth)
         return {"obses": obs, **data, "terminateds": terminated, "filled": filled}
 
@@ -246,7 +248,7 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
         )
         self.tree.add(self.tree.max(), idx)
         if terminated or truncated:
-            self.buffer.on_episode_end(terminated)
+            self.buffer.on_episode_end(truncated)
 
     def sample(self, batch_size: int, beta=0.4):
         idxs = np.zeros((batch_size), dtype=np.int32)
