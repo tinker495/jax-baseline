@@ -40,6 +40,11 @@ class Deteministic_Policy_Gradient_Family(object):
         full_tensorboard_log=False,
         seed=None,
         optimizer="adamw",
+        # Checkpointing options (opt-in by default for base class)
+        use_checkpointing=False,
+        steps_before_checkpointing=500000,
+        max_eps_before_checkpointing=20,
+        initial_checkpoint_window=1,
     ):
         self.name = "Deteministic_Policy_Gradient_Family"
         self.env_builder = env_builder
@@ -82,6 +87,18 @@ class Deteministic_Policy_Gradient_Family(object):
 
         if self.simba:
             self.obs_rms = RunningMeanStd(shapes=self.observation_space, dtype=np.float64)
+
+        # Generic checkpointing scaffolding (used by algorithms that opt-in)
+        self.use_checkpointing = use_checkpointing
+        self.checkpointing_enabled = False  # becomes True after steps_before_checkpointing
+        self.steps_before_checkpointing = int(steps_before_checkpointing)
+        self.max_eps_before_checkpointing = int(max_eps_before_checkpointing)
+        self.initial_checkpoint_window = int(initial_checkpoint_window)
+        self._ckpt_eps_since_update = 0
+        self._ckpt_timesteps_since_update = 0
+        self._ckpt_max_eps_before_update = self.initial_checkpoint_window
+        self._ckpt_min_return = 1e8
+        self._ckpt_best_min_return = -1e8
 
     def save_params(self, path):
         save(path, self.params)
@@ -177,6 +194,42 @@ class Deteministic_Policy_Gradient_Family(object):
         self.lossque = deque(maxlen=10)
         eval_result = None
 
+        # If checkpointing is enabled, drive training at episode ends
+        if self.use_checkpointing:
+            score = 0.0
+            eplen = 0
+
+            def _ckpt_train_and_reset(step_val, accumulated_timesteps):
+                loss_local = self.train_step(step_val, accumulated_timesteps * self.gradient_steps)
+                self.lossque.append(loss_local)
+
+            for steps in pbar:
+                eplen += 1
+                actions = self.actions(obs, steps)
+                next_obs, reward, terminated, truncated, info = self.env.step(actions[0])
+                next_obs = [np.expand_dims(next_obs, axis=0)]
+                self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
+                score += float(reward)
+                obs = next_obs
+
+                if terminated or truncated:
+                    if steps > self.learning_starts:
+                        self._checkpoint_on_episode_end(
+                            steps, score, eplen, train_and_reset_callback=_ckpt_train_and_reset
+                        )
+                    score = 0.0
+                    eplen = 0
+                    obs, info = self.env.reset()
+                    obs = [np.expand_dims(obs, axis=0)]
+
+                if steps % self.eval_freq == 0:
+                    eval_result = self.eval(steps)
+
+                if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+                    pbar.set_description(self.discription(eval_result))
+
+            return
+
         for steps in pbar:
             actions = self.actions(obs, steps)
             next_obs, reward, terminated, truncated, info = self.env.step(actions[0])
@@ -201,6 +254,54 @@ class Deteministic_Policy_Gradient_Family(object):
     def learn_VectorizedEnv(self, pbar, callback=None, log_interval=1000):
         self.lossque = deque(maxlen=10)
         eval_result = None
+
+        # If checkpointing is enabled, drive training at episode ends per worker
+        if self.use_checkpointing:
+            scores = np.zeros([self.worker_size], dtype=np.float64)
+            eplens = np.zeros([self.worker_size], dtype=np.int32)
+
+            def _ckpt_train_and_reset(step_val, accumulated_timesteps):
+                loss_local = self.train_step(step_val, accumulated_timesteps * self.gradient_steps)
+                self.lossque.append(loss_local)
+
+            for steps in pbar:
+                obs = self.env.current_obs()
+                actions = self.actions([obs], steps)
+                self.env.step(actions)
+
+                (
+                    next_obses,
+                    rewards,
+                    terminateds,
+                    truncateds,
+                    infos,
+                ) = self.env.get_result()
+
+                # accumulate
+                scores += rewards
+                eplens += 1
+
+                self.replay_buffer.add(
+                    [obs], actions, rewards, [next_obses], terminateds, truncateds
+                )
+
+                if steps > self.learning_starts:
+                    done_mask = np.logical_or(terminateds, truncateds)
+                    done_indices = np.where(done_mask)[0]
+                    for idx in done_indices:
+                        self._checkpoint_on_episode_end(
+                            steps, float(scores[idx]), int(eplens[idx]), _ckpt_train_and_reset
+                        )
+                        scores[idx] = 0.0
+                        eplens[idx] = 0
+
+                if steps % self.eval_freq == 0:
+                    eval_result = self.eval(steps)
+
+                if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+                    pbar.set_description(self.discription(eval_result))
+
+            return
 
         for steps in pbar:
             obs = self.env.current_obs()
@@ -258,3 +359,67 @@ class Deteministic_Policy_Gradient_Family(object):
             episode,
             conv_action=None,
         )
+
+    # -------------------------------
+    # Checkpointing scaffolding hooks
+    # -------------------------------
+    def _maybe_enable_checkpointing(self, steps):
+        if (
+            self.use_checkpointing
+            and (not self.checkpointing_enabled)
+            and steps > self.steps_before_checkpointing
+        ):
+            # Relax the threshold slightly when entering checkpointing mode
+            self._ckpt_best_min_return = 0.9 * self._ckpt_best_min_return
+            self._ckpt_max_eps_before_update = self.max_eps_before_checkpointing
+            self.checkpointing_enabled = True
+
+    def _checkpoint_update_snapshot(self):
+        """Override in subclasses to copy current policy-related params into a checkpoint snapshot.
+
+        For example (TD-style):
+            self.checkpoint_policy_params = deepcopy(self.policy_params)
+            self.checkpoint_encoder_params = deepcopy(self.fixed_encoder_params)
+        """
+        pass
+
+    def _checkpoint_on_episode_end(
+        self, steps, episode_return, episode_len, train_and_reset_callback=None
+    ):
+        """Generic per-episode checkpointing state update.
+
+        Subclasses can call this at the end of an episode to drive a TD7-like
+        checkpoint schedule. If a callback is provided, it will be called when
+        it's time to perform a training/reset pulse.
+        """
+        if not self.use_checkpointing:
+            return
+
+        # Update runtime counters
+        self._ckpt_eps_since_update += 1
+        self._ckpt_timesteps_since_update += int(episode_len)
+        self._ckpt_min_return = min(self._ckpt_min_return, float(episode_return))
+
+        # Enable checkpointing mode once enough steps have elapsed
+        self._maybe_enable_checkpointing(steps)
+
+        # Early break if worst-case this window is worse than best historical worst-case
+        if self._ckpt_min_return < self._ckpt_best_min_return:
+            if callable(train_and_reset_callback):
+                train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
+            # Reset window stats
+            self._ckpt_eps_since_update = 0
+            self._ckpt_timesteps_since_update = 0
+            self._ckpt_min_return = 1e8
+            return
+
+        # Refresh checkpoint at the end of the evaluation window
+        if self._ckpt_eps_since_update >= self._ckpt_max_eps_before_update:
+            self._ckpt_best_min_return = self._ckpt_min_return
+            self._checkpoint_update_snapshot()
+            if callable(train_and_reset_callback):
+                train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
+            # Reset window stats
+            self._ckpt_eps_since_update = 0
+            self._ckpt_timesteps_since_update = 0
+            self._ckpt_min_return = 1e8

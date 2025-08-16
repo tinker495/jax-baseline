@@ -65,6 +65,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             full_tensorboard_log,
             seed,
             optimizer,
+            use_checkpointing=True,
         )
 
         self.name = "TD7"
