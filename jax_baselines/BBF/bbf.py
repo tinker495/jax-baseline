@@ -45,6 +45,7 @@ class BBF(Q_Network_Family):
             "dueling_model": True,
             "n_step": 10,
             "prioritized_replay": True,
+            "target_network_update_freq": 0,
             **kwargs,
         }
 

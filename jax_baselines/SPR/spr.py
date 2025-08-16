@@ -52,6 +52,7 @@ class SPR(Q_Network_Family):
             "n_step": 3,  # n_step 3 is better than 10 in breakout
             "prioritized_replay": True,
             "param_noise": True,
+            "target_network_update_freq": 0,
             **kwargs,
         }
 

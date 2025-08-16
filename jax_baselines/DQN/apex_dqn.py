@@ -11,71 +11,10 @@ from jax_baselines.common.utils import convert_jax, hard_update, key_gen, q_log_
 
 
 class APE_X_DQN(Ape_X_Family):
-    def __init__(
-        self,
-        workers,
-        model_builder_maker,
-        manager=None,
-        gamma=0.995,
-        learning_rate=5e-5,
-        buffer_size=50000,
-        exploration_initial_eps=0.8,
-        exploration_decay=0.7,
-        batch_num=16,
-        mini_batch_size=512,
-        double_q=False,
-        dueling_model=False,
-        n_step=1,
-        learning_starts=1000,
-        target_network_update_freq=2000,
-        gradient_steps=1,
-        prioritized_replay_alpha=0.6,
-        prioritized_replay_beta0=0.4,
-        prioritized_replay_eps=1e-3,
-        param_noise=False,
-        munchausen=False,
-        log_interval=10,
-        log_dir=None,
-        _init_setup_model=True,
-        policy_kwargs=None,
-        full_tensorboard_log=False,
-        seed=None,
-        optimizer="adamw",
-        compress_memory=False,
-    ):
-        super().__init__(
-            workers,
-            model_builder_maker,
-            manager,
-            gamma,
-            learning_rate,
-            buffer_size,
-            exploration_initial_eps,
-            exploration_decay,
-            batch_num,
-            mini_batch_size,
-            double_q,
-            dueling_model,
-            n_step,
-            learning_starts,
-            target_network_update_freq,
-            gradient_steps,
-            prioritized_replay_alpha,
-            prioritized_replay_beta0,
-            prioritized_replay_eps,
-            param_noise,
-            munchausen,
-            log_interval,
-            log_dir,
-            _init_setup_model,
-            policy_kwargs,
-            full_tensorboard_log,
-            seed,
-            optimizer,
-            compress_memory,
-        )
+    def __init__(self, workers, model_builder_maker, **kwargs):
+        super().__init__(workers, model_builder_maker, **kwargs)
 
-        if _init_setup_model:
+        if kwargs.get("_init_setup_model", True):
             self.setup_model()
 
     def setup_model(self):

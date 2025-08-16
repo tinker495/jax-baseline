@@ -54,6 +54,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
             "n_step": 10,
             "prioritized_replay": True,
             "param_noise": True,
+            "target_network_update_freq": 0,
             **kwargs,
         }
 
