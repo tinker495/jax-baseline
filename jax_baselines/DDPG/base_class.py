@@ -356,9 +356,18 @@ class Deteministic_Policy_Gradient_Family(object):
 
         # Compute robust window statistic (quantile on standardized returns if enabled)
         window_stat = self._compute_ckpt_window_stat()
+        if window_stat is not None:
+            if self._ckpt_baseline <= -1e7:
+                self._ckpt_baseline = window_stat
+            else:
+                self._ckpt_baseline = (
+                    1.0 - self.ckpt_ewma_beta
+                ) * self._ckpt_baseline + self.ckpt_ewma_beta * window_stat
 
         # Early training pulse on regression relative to baseline (no snapshot refresh)
         if (window_stat is not None) and (window_stat < self._ckpt_baseline):
+            if steps < self.steps_before_checkpointing:
+                self._checkpoint_update_snapshot()
             if callable(train_and_reset_callback):
                 train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
             # Reset window stats
@@ -371,13 +380,6 @@ class Deteministic_Policy_Gradient_Family(object):
         # Refresh checkpoint at the end of the evaluation window
         if self._ckpt_eps_since_update >= self._ckpt_max_eps_before_update:
             # Update EWMA baseline using window statistic; initialize if needed
-            if window_stat is not None:
-                if self._ckpt_baseline <= -1e7:
-                    self._ckpt_baseline = window_stat
-                else:
-                    self._ckpt_baseline = (
-                        1.0 - self.ckpt_ewma_beta
-                    ) * self._ckpt_baseline + self.ckpt_ewma_beta * window_stat
             self._checkpoint_update_snapshot()
             if callable(train_and_reset_callback):
                 train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
