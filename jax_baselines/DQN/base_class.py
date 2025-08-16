@@ -1,4 +1,5 @@
 from collections import deque
+from copy import deepcopy
 
 import jax
 import numpy as np
@@ -48,7 +49,7 @@ class Q_Network_Family(object):
         optimizer="adamw",
         compress_memory=False,
         # Checkpointing options (opt-in by default for base class)
-        use_checkpointing=False,
+        use_checkpointing=True,
         steps_before_checkpointing=500000,
         max_eps_before_checkpointing=20,
         initial_checkpoint_window=1,
@@ -105,7 +106,7 @@ class Q_Network_Family(object):
         # Generic checkpointing scaffolding (used by algorithms that opt-in)
         self.use_checkpointing = use_checkpointing
         self.checkpointing_enabled = False  # becomes True after steps_before_checkpointing
-        self.steps_before_checkpointing = int(steps_before_checkpointing)
+        self.steps_before_checkpointing = min(int(steps_before_checkpointing), learning_starts * 2)
         self.max_eps_before_checkpointing = int(max_eps_before_checkpointing)
         self.initial_checkpoint_window = int(initial_checkpoint_window)
         self._ckpt_eps_since_update = 0
@@ -113,6 +114,9 @@ class Q_Network_Family(object):
         self._ckpt_max_eps_before_update = self.initial_checkpoint_window
         self._ckpt_min_return = 1e8
         self._ckpt_best_min_return = -1e8
+
+        # During checkpoint-driven training pulses, force per-update logging
+        self._force_log_every_update = False
 
         # Control model initialization timing across children
         self._init_setup_model = _init_setup_model
@@ -208,9 +212,12 @@ class Q_Network_Family(object):
                 ) = result
                 self._update_priorities(data, new_priorities)
 
-                if self.logger_run and steps % self.log_interval == 0:
-                    self.logger_run.log_metric("loss/qloss", loss, steps)
-                    self.logger_run.log_metric("loss/targets", t_mean, steps)
+                if self.logger_run and (
+                    self._force_log_every_update or steps % self.log_interval == 0
+                ):
+                    log_step = self.train_steps_count if self._force_log_every_update else steps
+                    self.logger_run.log_metric("loss/qloss", loss, log_step)
+                    self.logger_run.log_metric("loss/targets", t_mean, log_step)
 
             elif (
                 len(result) == 7
@@ -226,10 +233,13 @@ class Q_Network_Family(object):
                 ) = result
                 self._update_priorities(data, new_priorities)
 
-                if self.logger_run and steps % self.log_interval == 0:
-                    self.logger_run.log_metric("loss/qloss", loss, steps)
-                    self.logger_run.log_metric("loss/targets", t_mean, steps)
-                    self.logger_run.log_metric("loss/target_stds", t_std, steps)
+                if self.logger_run and (
+                    self._force_log_every_update or steps % self.log_interval == 0
+                ):
+                    log_step = self.train_steps_count if self._force_log_every_update else steps
+                    self.logger_run.log_metric("loss/qloss", loss, log_step)
+                    self.logger_run.log_metric("loss/targets", t_mean, log_step)
+                    self.logger_run.log_metric("loss/target_stds", t_std, log_step)
 
             else:  # Fallback for other cases
                 self.params, self.target_params, self.opt_state, loss = result[:4]
@@ -237,8 +247,11 @@ class Q_Network_Family(object):
                     new_priorities = result[4]
                     self._update_priorities(data, new_priorities)
 
-                if self.logger_run and steps % self.log_interval == 0:
-                    self.logger_run.log_metric("loss/qloss", loss, steps)
+                if self.logger_run and (
+                    self._force_log_every_update or steps % self.log_interval == 0
+                ):
+                    log_step = self.train_steps_count if self._force_log_every_update else steps
+                    self.logger_run.log_metric("loss/qloss", loss, log_step)
 
         return loss
 
@@ -335,8 +348,15 @@ class Q_Network_Family(object):
             eplen = 0
 
             def _ckpt_train_and_reset(step_val, accumulated_timesteps):
-                # Use accumulated environment timesteps to scale gradient steps
-                loss_local = self.train_step(step_val, accumulated_timesteps * self.gradient_steps)
+                # Match non-checkpoint behavior: scale by train_freq
+                num_update_iters = max(1, accumulated_timesteps // self.train_freq)
+                total_updates = num_update_iters * self.gradient_steps
+                # Force per-update logging for this checkpoint pulse
+                self._force_log_every_update = True
+                try:
+                    loss_local = self.train_step(step_val, total_updates)
+                finally:
+                    self._force_log_every_update = False
                 self.lossque.append(loss_local)
 
             for steps in pbar:
@@ -402,7 +422,15 @@ class Q_Network_Family(object):
             eplens = np.zeros([self.worker_size], dtype=np.int32)
 
             def _ckpt_train_and_reset(step_val, accumulated_timesteps):
-                loss_local = self.train_step(step_val, accumulated_timesteps * self.gradient_steps)
+                # Match non-checkpoint behavior: scale by train_freq
+                num_update_iters = max(1, accumulated_timesteps // self.train_freq)
+                total_updates = num_update_iters * self.gradient_steps
+                # Force per-update logging for this checkpoint pulse
+                self._force_log_every_update = True
+                try:
+                    loss_local = self.train_step(step_val, total_updates)
+                finally:
+                    self._force_log_every_update = False
                 self.lossque.append(loss_local)
 
             for steps in pbar:
@@ -526,12 +554,14 @@ class Q_Network_Family(object):
             self.checkpointing_enabled = True
 
     def _checkpoint_update_snapshot(self):
-        """Override in subclasses to copy current policy-related params into a checkpoint snapshot.
+        """Default checkpoint snapshot strategy for Q-Network family.
 
-        Example strategy for Q-learning agents might be to snapshot current network params:
-            self.checkpoint_params = deepcopy(self.params)
+        This copies current network parameters into checkpoint snapshots.
+        Subclasses can override this for custom snapshot strategies.
         """
-        pass
+        # Default strategy: snapshot current network params
+        if hasattr(self, "params"):
+            self.checkpoint_params = deepcopy(self.params)
 
     def _checkpoint_on_episode_end(
         self, steps, episode_return, episode_len, train_and_reset_callback=None
