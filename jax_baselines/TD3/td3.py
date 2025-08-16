@@ -61,13 +61,22 @@ class TD3(Deteministic_Policy_Gradient_Family):
             obs = self.obs_rms.normalize(obs)
 
         if self.learning_starts < steps:
-            actions = np.clip(
-                np.asarray(self._get_actions(self.policy_params, obs, None))
-                + self.action_noise
-                * np.random.normal(0, 1, size=(self.worker_size, self.action_size[0])),
-                -1,
-                1,
+            # Select params: during eval with checkpointing prefer snapshot
+            policy_params = (
+                self.checkpoint_policy_params
+                if (eval and self.use_checkpointing and hasattr(self, "checkpoint_policy_params"))
+                else self.policy_params
             )
+
+            actions = np.asarray(self._get_actions(policy_params, obs, None))
+            if not eval:
+                actions = np.clip(
+                    actions
+                    + self.action_noise
+                    * np.random.normal(0, 1, size=(self.worker_size, self.action_size[0])),
+                    -1,
+                    1,
+                )
         else:
             actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
         return actions

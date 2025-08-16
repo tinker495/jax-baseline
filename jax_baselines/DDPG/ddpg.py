@@ -74,13 +74,17 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             obs = self.obs_rms.normalize(obs)
 
         if self.learning_starts < steps:
-            self.epsilon = self.exploration.value(steps)
-            actions = np.clip(
-                np.asarray(self._get_actions(self.policy_params, obs, None))
-                + self.noise() * self.epsilon,
-                -1,
-                1,
+            # Select params: during eval with checkpointing prefer snapshot
+            policy_params = (
+                self.checkpoint_policy_params
+                if (eval and self.use_checkpointing and hasattr(self, "checkpoint_policy_params"))
+                else self.policy_params
             )
+
+            actions = np.asarray(self._get_actions(policy_params, obs, None))
+            if not eval:
+                self.epsilon = self.exploration.value(steps)
+                actions = np.clip(actions + self.noise() * self.epsilon, -1, 1)
         else:
             actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
         return actions

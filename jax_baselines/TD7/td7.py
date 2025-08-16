@@ -94,18 +94,19 @@ class TD7(Deteministic_Policy_Gradient_Family):
             # Use checkpoint params during evaluation, current params during training
             if (
                 eval
-                and hasattr(self, "checkpoint_policy_params")
-                and hasattr(self, "checkpoint_encoder_params")
+                and self.use_checkpointing
+                and (
+                    hasattr(self, "checkpoint_policy_params")
+                    and hasattr(self, "checkpoint_encoder_params")
+                )
             ):
-                actions = np.asarray(
-                    self._get_actions(
-                        self.checkpoint_encoder_params, self.checkpoint_policy_params, obs, None
-                    )
-                )
+                encoder_params = self.checkpoint_encoder_params
+                policy_params = self.checkpoint_policy_params
             else:
-                actions = np.asarray(
-                    self._get_actions(self.fixed_encoder_params, self.policy_params, obs, None)
-                )
+                encoder_params = self.fixed_encoder_params
+                policy_params = self.policy_params
+
+            actions = np.asarray(self._get_actions(encoder_params, policy_params, obs, None))
 
             # Add exploration noise only during training
             if not eval:

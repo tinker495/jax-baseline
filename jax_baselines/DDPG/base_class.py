@@ -342,9 +342,8 @@ class Deteministic_Policy_Gradient_Family(object):
                 pbar.set_description(self.discription(eval_result))
 
     def eval(self, steps):
-        # Wrap actions to provide the expected signature for evaluate_policy
-        # Some DPG-family algorithms expect (obs, steps, eval=False), so close
-        # over `steps` and call with eval=True for deterministic evaluation.
+        # Evaluation should use the public actions() API with eval=True so that
+        # subclasses can implement snapshot-aware behavior consistently.
         def eval_action_fn(obs):
             return self.actions(obs, steps, eval=True)
 

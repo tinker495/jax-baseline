@@ -249,11 +249,16 @@ class Q_Network_Family(object):
 
         return loss
 
-    def actions(self, obs, epsilon):
+    def actions(self, obs, epsilon, eval_mode=False):
+        # Select params: during eval with checkpointing prefer snapshot
+        params_to_use = self.params
+        if eval_mode and self.use_checkpointing and hasattr(self, "checkpoint_params"):
+            params_to_use = self.checkpoint_params
+
         if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(
                 self._get_actions(
-                    self.params, obs, next(self.key_seq) if self.param_noise else None
+                    params_to_use, obs, next(self.key_seq) if self.param_noise else None
                 )
             )
         else:
@@ -484,13 +489,10 @@ class Q_Network_Family(object):
                 pbar.set_description(self.discription(eval_result))
 
     def eval(self, steps):
-        # Wrap actions to provide a deterministic (greedy) epsilon=0.0 during evaluation
-        # and return a scalar action suitable for eval_env.step(action).
+        # Deterministic greedy evaluation using public actions() API.
         def eval_action_fn(obs):
-            a = self.actions(obs, 0.0)
+            a = self.actions(obs, 0.0, eval_mode=True)
             arr = np.asarray(a)
-            # If it's a single-element array, return the scalar. Otherwise try to
-            # index [0][0] which matches how actions are used elsewhere.
             if arr.size == 1:
                 return int(arr.item())
             else:
