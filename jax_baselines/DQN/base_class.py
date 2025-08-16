@@ -115,8 +115,9 @@ class Q_Network_Family(object):
         self._ckpt_min_return = 1e8
         self._ckpt_best_min_return = -1e8
 
-        # During checkpoint-driven training pulses, force per-update logging
+        # During checkpoint-driven training pulses, throttle logging based on interval
         self._force_log_every_update = False
+        self._last_log_step = 0
 
         # Control model initialization timing across children
         self._init_setup_model = _init_setup_model
@@ -212,12 +213,19 @@ class Q_Network_Family(object):
                 ) = result
                 self._update_priorities(data, new_priorities)
 
-                if self.logger_run and (
-                    self._force_log_every_update or steps % self.log_interval == 0
-                ):
-                    log_step = self.train_steps_count if self._force_log_every_update else steps
-                    self.logger_run.log_metric("loss/qloss", loss, log_step)
-                    self.logger_run.log_metric("loss/targets", t_mean, log_step)
+                if self.logger_run:
+                    # When checkpointing pulse requests forced logging, throttle by interval
+                    if self._force_log_every_update:
+                        if self.train_steps_count - self._last_log_step >= self.log_interval:
+                            self._last_log_step = self.train_steps_count
+                            self.logger_run.log_metric("loss/qloss", loss, self.train_steps_count)
+                            self.logger_run.log_metric(
+                                "loss/targets", t_mean, self.train_steps_count
+                            )
+                    elif steps % self.log_interval == 0:
+                        self._last_log_step = self.train_steps_count
+                        self.logger_run.log_metric("loss/qloss", loss, steps)
+                        self.logger_run.log_metric("loss/targets", t_mean, steps)
 
             elif (
                 len(result) == 7
@@ -233,13 +241,22 @@ class Q_Network_Family(object):
                 ) = result
                 self._update_priorities(data, new_priorities)
 
-                if self.logger_run and (
-                    self._force_log_every_update or steps % self.log_interval == 0
-                ):
-                    log_step = self.train_steps_count if self._force_log_every_update else steps
-                    self.logger_run.log_metric("loss/qloss", loss, log_step)
-                    self.logger_run.log_metric("loss/targets", t_mean, log_step)
-                    self.logger_run.log_metric("loss/target_stds", t_std, log_step)
+                if self.logger_run:
+                    if self._force_log_every_update:
+                        if self.train_steps_count - self._last_log_step >= self.log_interval:
+                            self._last_log_step = self.train_steps_count
+                            self.logger_run.log_metric("loss/qloss", loss, self.train_steps_count)
+                            self.logger_run.log_metric(
+                                "loss/targets", t_mean, self.train_steps_count
+                            )
+                            self.logger_run.log_metric(
+                                "loss/target_stds", t_std, self.train_steps_count
+                            )
+                    elif steps % self.log_interval == 0:
+                        self._last_log_step = self.train_steps_count
+                        self.logger_run.log_metric("loss/qloss", loss, steps)
+                        self.logger_run.log_metric("loss/targets", t_mean, steps)
+                        self.logger_run.log_metric("loss/target_stds", t_std, steps)
 
             else:  # Fallback for other cases
                 self.params, self.target_params, self.opt_state, loss = result[:4]
@@ -247,11 +264,14 @@ class Q_Network_Family(object):
                     new_priorities = result[4]
                     self._update_priorities(data, new_priorities)
 
-                if self.logger_run and (
-                    self._force_log_every_update or steps % self.log_interval == 0
-                ):
-                    log_step = self.train_steps_count if self._force_log_every_update else steps
-                    self.logger_run.log_metric("loss/qloss", loss, log_step)
+                if self.logger_run:
+                    if self._force_log_every_update:
+                        if self.train_steps_count - self._last_log_step >= self.log_interval:
+                            self._last_log_step = self.train_steps_count
+                            self.logger_run.log_metric("loss/qloss", loss, self.train_steps_count)
+                    elif steps % self.log_interval == 0:
+                        self._last_log_step = self.train_steps_count
+                        self.logger_run.log_metric("loss/qloss", loss, steps)
 
         return loss
 

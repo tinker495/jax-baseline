@@ -104,8 +104,9 @@ class Deteministic_Policy_Gradient_Family(object):
         self._ckpt_min_return = 1e8
         self._ckpt_best_min_return = -1e8
 
-        # During checkpoint-driven training pulses, force per-update logging
+        # During checkpoint-driven training pulses, throttle logging based on interval
         self._force_log_every_update = False
+        self._last_log_step = 0
 
     def save_params(self, path):
         save(path, self.params)
