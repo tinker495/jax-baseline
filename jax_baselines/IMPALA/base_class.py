@@ -35,7 +35,6 @@ class IMPALA_Family(object):
         log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
-        full_tensorboard_log=False,
         seed=None,
         optimizer="adamw",
     ):
@@ -70,6 +69,11 @@ class IMPALA_Family(object):
 
         self.get_env_setup()
         self.get_memory_setup()
+
+        # Control model initialization timing across children
+        self._init_setup_model = _init_setup_model
+        if self._init_setup_model:
+            self.setup_model()
 
     def save_params(self, path):
         save(path, self.params)

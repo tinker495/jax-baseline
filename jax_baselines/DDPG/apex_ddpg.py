@@ -12,64 +12,8 @@ from jax_baselines.DDPG.ou_noise import OUNoise
 
 
 class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
-    def __init__(
-        self,
-        workers,
-        model_builder_maker,
-        manager=None,
-        gamma=0.995,
-        learning_rate=5e-5,
-        buffer_size=50000,
-        exploration_initial_eps=0.9,
-        exploration_decay=0.7,
-        batch_num=16,
-        mini_batch_size=512,
-        n_step=1,
-        learning_starts=1000,
-        target_network_update_tau=5e-4,
-        gradient_steps=1,
-        prioritized_replay_alpha=0.6,
-        prioritized_replay_beta0=0.4,
-        prioritized_replay_eps=1e-3,
-        log_interval=10,
-        log_dir=None,
-        _init_setup_model=True,
-        policy_kwargs=None,
-        full_tensorboard_log=False,
-        seed=None,
-        optimizer="adamw",
-        compress_memory=False,
-    ):
-        super().__init__(
-            workers,
-            model_builder_maker,
-            manager,
-            gamma,
-            learning_rate,
-            buffer_size,
-            exploration_initial_eps,
-            exploration_decay,
-            batch_num,
-            mini_batch_size,
-            n_step,
-            learning_starts,
-            target_network_update_tau,
-            gradient_steps,
-            prioritized_replay_alpha,
-            prioritized_replay_beta0,
-            prioritized_replay_eps,
-            log_interval,
-            log_dir,
-            _init_setup_model,
-            policy_kwargs,
-            full_tensorboard_log,
-            seed,
-            optimizer,
-            compress_memory,
-        )
-
-        if _init_setup_model:
-            self.setup_model()
+    def __init__(self, workers, model_builder_maker, **kwargs):
+        super().__init__(workers, model_builder_maker, **kwargs)
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
