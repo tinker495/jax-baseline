@@ -1,4 +1,3 @@
---find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 requests
 protobuf
 swig
