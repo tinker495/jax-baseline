@@ -218,8 +218,8 @@ class SPR(Q_Network_Family):
             rprloss = total_rprloss / chunk_count
             t_mean = total_t_mean / chunk_count
 
-        if self.logger_run and (self.train_steps_count - self._last_log_step >= self.log_interval):
-            self._last_log_step = self.train_steps_count
+        if self.logger_run and (steps - self._last_log_step >= self.log_interval):
+            self._last_log_step = steps
             self.logger_run.log_metric("loss/qloss", loss, steps)
             self.logger_run.log_metric("loss/rprloss", rprloss, steps)
             self.logger_run.log_metric("loss/targets", t_mean, steps)

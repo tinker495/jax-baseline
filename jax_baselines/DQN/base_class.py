@@ -212,10 +212,8 @@ class Q_Network_Family(object):
                 ) = result
                 self._update_priorities(data, new_priorities)
 
-                if self.logger_run and (
-                    self.train_steps_count - self._last_log_step >= self.log_interval
-                ):
-                    self._last_log_step = self.train_steps_count
+                if self.logger_run and (steps - self._last_log_step >= self.log_interval):
+                    self._last_log_step = steps
                     self.logger_run.log_metric("loss/qloss", loss, steps)
                     self.logger_run.log_metric("loss/targets", t_mean, steps)
 
@@ -233,10 +231,8 @@ class Q_Network_Family(object):
                 ) = result
                 self._update_priorities(data, new_priorities)
 
-                if self.logger_run and (
-                    self.train_steps_count - self._last_log_step >= self.log_interval
-                ):
-                    self._last_log_step = self.train_steps_count
+                if self.logger_run and (steps - self._last_log_step >= self.log_interval):
+                    self._last_log_step = steps
                     self.logger_run.log_metric("loss/qloss", loss, steps)
                     self.logger_run.log_metric("loss/targets", t_mean, steps)
                     self.logger_run.log_metric("loss/target_stds", t_std, steps)
@@ -247,10 +243,8 @@ class Q_Network_Family(object):
                     new_priorities = result[4]
                     self._update_priorities(data, new_priorities)
 
-                if self.logger_run and (
-                    self.train_steps_count - self._last_log_step >= self.log_interval
-                ):
-                    self._last_log_step = self.train_steps_count
+                if self.logger_run and (steps - self._last_log_step >= self.log_interval):
+                    self._last_log_step = steps
                     self.logger_run.log_metric("loss/qloss", loss, steps)
 
         return loss

@@ -131,8 +131,8 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.logger_run and (self.train_steps_count - self._last_log_step >= self.log_interval):
-            self._last_log_step = self.train_steps_count
+        if self.logger_run and (steps - self._last_log_step >= self.log_interval):
+            self._last_log_step = steps
             self.logger_run.log_metric("loss/qloss", loss, steps)
             self.logger_run.log_metric("loss/targets", t_mean, steps)
 
