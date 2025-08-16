@@ -44,7 +44,6 @@ class Q_Network_Family(object):
         log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
-        full_tensorboard_log=False,
         seed=None,
         optimizer="adamw",
         compress_memory=False,
@@ -84,7 +83,6 @@ class Q_Network_Family(object):
         self.gamma = gamma
         self._gamma = np.power(gamma, n_step)  # n_step gamma
         self.log_dir = log_dir
-        self.full_tensorboard_log = full_tensorboard_log
         self.double_q = double_q
         self.dueling_model = dueling_model
         self.n_step_method = n_step > 1
@@ -115,6 +113,12 @@ class Q_Network_Family(object):
         self._ckpt_max_eps_before_update = self.initial_checkpoint_window
         self._ckpt_min_return = 1e8
         self._ckpt_best_min_return = -1e8
+
+        # Control model initialization timing across children
+        self._init_setup_model = _init_setup_model
+        if self._init_setup_model:
+            # Calls overridden setup_model in children
+            self.setup_model()
 
     def save_params(self, path):
         save(path, self.params)

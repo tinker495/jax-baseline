@@ -1,4 +1,3 @@
---find-links https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 requests
 protobuf
 swig
@@ -14,14 +13,14 @@ dm_pix
 dm-haiku
 flax
 equinox
-scipy==1.12.0
+scipy
 optax
-numpy==1.26.4
+numpy
 ray[default]
-cpprb @ git+https://github.com/tinker495/cpprb.git
+cpprb
 imageio-ffmpeg
 ffmpeg
 moviepy
-decorator==4.0.2
+decorator
 opencv-python
 pre-commit

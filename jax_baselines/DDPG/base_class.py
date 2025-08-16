@@ -37,7 +37,6 @@ class Deteministic_Policy_Gradient_Family(object):
         log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
-        full_tensorboard_log=False,
         seed=None,
         optimizer="adamw",
         # Checkpointing options (opt-in by default for base class)
@@ -71,7 +70,6 @@ class Deteministic_Policy_Gradient_Family(object):
         self.gamma = gamma
         self._gamma = self.gamma**n_step  # n_step gamma
         self.log_dir = log_dir
-        self.full_tensorboard_log = full_tensorboard_log
         self.n_step_method = n_step > 1
         self.n_step = n_step
         self.scaled_by_reset = scaled_by_reset
@@ -84,6 +82,11 @@ class Deteministic_Policy_Gradient_Family(object):
 
         self.get_env_setup()
         self.get_memory_setup()
+
+        # Control model initialization timing across children
+        self._init_setup_model = _init_setup_model
+        if self._init_setup_model:
+            self.setup_model()
 
         if self.simba:
             self.obs_rms = RunningMeanStd(shapes=self.observation_space, dtype=np.float64)

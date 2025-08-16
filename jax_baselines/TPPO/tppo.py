@@ -17,46 +17,16 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         self,
         env_builder,
         model_builder_maker,
-        num_workers=1,
-        eval_eps=20,
-        gamma=0.995,
         lamda=0.95,
         gae_normalize=False,
-        learning_rate=3e-4,
-        batch_size=256,
         minibatch_size=32,
         epoch_num=4,
-        val_coef=0.5,
-        ent_coef=0.001,
         kl_range=0.0008,
         kl_coef=20,
         value_clip=0.5,
-        log_interval=200,
-        log_dir=None,
-        _init_setup_model=True,
-        policy_kwargs=None,
-        full_tensorboard_log=False,
-        seed=None,
-        optimizer="rmsprop",
+        **kwargs
     ):
-        super().__init__(
-            env_builder,
-            model_builder_maker,
-            num_workers,
-            eval_eps,
-            gamma,
-            learning_rate,
-            batch_size,
-            val_coef,
-            ent_coef,
-            log_interval,
-            log_dir,
-            _init_setup_model,
-            policy_kwargs,
-            full_tensorboard_log,
-            seed,
-            optimizer,
-        )
+        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         self.name = "TPPO"
         self.lamda = lamda
@@ -66,16 +36,13 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         self.kl_coef = kl_coef
         self.minibatch_size = minibatch_size
         self.batch_size = int(
-            np.ceil(batch_size * self.worker_size / minibatch_size)
+            np.ceil(kwargs.get("batch_size", 256) * self.worker_size / minibatch_size)
             * minibatch_size
             / self.worker_size
         )
         self.epoch_num = epoch_num
 
         self.get_memory_setup()
-
-        if _init_setup_model:
-            self.setup_model()
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(

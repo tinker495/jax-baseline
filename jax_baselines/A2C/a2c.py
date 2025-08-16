@@ -7,49 +7,11 @@ from jax_baselines.common.utils import convert_jax, discount_with_terminated
 
 
 class A2C(Actor_Critic_Policy_Gradient_Family):
-    def __init__(
-        self,
-        env_builder,
-        model_builder_maker,
-        num_workers=1,
-        eval_eps=20,
-        gamma=0.995,
-        learning_rate=3e-4,
-        batch_size=32,
-        val_coef=0.2,
-        ent_coef=0.5,
-        log_interval=200,
-        log_dir=None,
-        _init_setup_model=True,
-        policy_kwargs=None,
-        full_tensorboard_log=False,
-        seed=None,
-        optimizer="rmsprop",
-    ):
-        super().__init__(
-            env_builder,
-            model_builder_maker,
-            num_workers,
-            eval_eps,
-            gamma,
-            learning_rate,
-            batch_size,
-            val_coef,
-            ent_coef,
-            log_interval,
-            log_dir,
-            _init_setup_model,
-            policy_kwargs,
-            full_tensorboard_log,
-            seed,
-            optimizer,
-        )
+    def __init__(self, env_builder, model_builder_maker, **kwargs):
+        super().__init__(env_builder, model_builder_maker, **kwargs)
 
         self.name = "A2C"
         self.get_memory_setup()
-
-        if _init_setup_model:
-            self.setup_model()
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
