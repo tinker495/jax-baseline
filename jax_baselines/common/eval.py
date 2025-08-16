@@ -38,7 +38,11 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
     total_ep_len = np.zeros(eval_eps)
     total_truncated = np.zeros(eval_eps)
 
-    obs, info = eval_env.reset()
+    # Prefer a true environment reset if available (e.g., Atari EpisodicLifeEnv)
+    if hasattr(eval_env, "true_reset") and callable(getattr(eval_env, "true_reset")):
+        obs, info = eval_env.true_reset()
+    else:
+        obs, info = eval_env.reset()
     obs = [np.expand_dims(obs, axis=0)]
     have_original_reward = "original_reward" in info.keys()
     have_lives = "lives" in info.keys()
