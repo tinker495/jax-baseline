@@ -108,11 +108,14 @@ class HL_GAUSS_BBF(Q_Network_Family):
         # Use common JIT compilation
         self._compile_common_functions()
 
-    def actions(self, obs, epsilon):
+    def actions(self, obs, epsilon, eval_mode=False):
+        params_to_use = self.target_params
+        if eval_mode and self.use_checkpointing and hasattr(self, "checkpoint_params"):
+            params_to_use = self.checkpoint_params
         if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(
                 self._get_actions(
-                    self.target_params,
+                    params_to_use,
                     obs,
                     next(self.key_seq) if self.param_noise else None,
                 )

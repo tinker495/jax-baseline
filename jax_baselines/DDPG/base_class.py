@@ -101,12 +101,9 @@ class Deteministic_Policy_Gradient_Family(object):
         self._ckpt_eps_since_update = 0
         self._ckpt_timesteps_since_update = 0
         self._ckpt_max_eps_before_update = self.initial_checkpoint_window
-        self._ckpt_min_return = 1e8
-        self._ckpt_best_min_return = -1e8
 
         # Robust checkpointing controls
         self.ckpt_quantile = 0.2  # q-quantile statistic instead of strict min
-        self.ckpt_ewma_beta = 0.2  # EWMA smoothing factor for baseline
         self.use_ckpt_return_standardization = True  # standardize returns within window
         self._ckpt_returns_window = []  # recent episode returns in current window
         self._ckpt_baseline = -1e8  # EWMA baseline over window stats
@@ -310,9 +307,9 @@ class Deteministic_Policy_Gradient_Family(object):
             and steps > self.steps_before_checkpointing
         ):
             # Relax the threshold slightly when entering checkpointing mode
-            self._ckpt_best_min_return = 0.9 * self._ckpt_best_min_return
             self._ckpt_max_eps_before_update = self.max_eps_before_checkpointing
             self.checkpointing_enabled = True
+            self._ckpt_baseline = -1e8
 
     def _checkpoint_update_snapshot(self):
         """Default checkpoint snapshot strategy for DPG family.
@@ -343,13 +340,7 @@ class Deteministic_Policy_Gradient_Family(object):
         # Update runtime counters and statistics
         self._ckpt_eps_since_update += 1
         self._ckpt_timesteps_since_update += int(episode_len)
-        self._ckpt_min_return = min(self._ckpt_min_return, float(episode_return))
         self._ckpt_returns_window.append(float(episode_return))
-        # Cap window size to current target
-        if len(self._ckpt_returns_window) > self._ckpt_max_eps_before_update:
-            self._ckpt_returns_window = self._ckpt_returns_window[
-                -self._ckpt_max_eps_before_update :
-            ]
 
         # Enable checkpointing mode once enough steps have elapsed
         self._maybe_enable_checkpointing(steps)
@@ -357,35 +348,30 @@ class Deteministic_Policy_Gradient_Family(object):
         # Compute robust window statistic (quantile on standardized returns if enabled)
         window_stat = self._compute_ckpt_window_stat()
 
-        # Early training pulse on regression relative to baseline (no snapshot refresh)
-        if (window_stat is not None) and (window_stat < self._ckpt_baseline):
-            if self._ckpt_baseline <= -1e7:
-                self._ckpt_baseline = window_stat
-            else:
-                self._ckpt_baseline = (
-                    1.0 - self.ckpt_ewma_beta
-                ) * self._ckpt_baseline + self.ckpt_ewma_beta * window_stat
-            if steps < self.steps_before_checkpointing:
-                self._checkpoint_update_snapshot()
+        # Initialize baseline when first valid window statistic becomes available
+        if window_stat is None:
+            return
+
+        # Early training pulse on regression relative to baseline (no snapshot refresh by default)
+        if window_stat < self._ckpt_baseline and not self.checkpointing_enabled:
             if callable(train_and_reset_callback):
                 train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
             # Reset window stats
             self._ckpt_eps_since_update = 0
             self._ckpt_timesteps_since_update = 0
-            self._ckpt_min_return = 1e8
             self._ckpt_returns_window = []
             return
 
         # Refresh checkpoint at the end of the evaluation window
         if self._ckpt_eps_since_update >= self._ckpt_max_eps_before_update:
-            # Update EWMA baseline using window statistic; initialize if needed
+            # Update baseline using window statistic
             self._checkpoint_update_snapshot()
+            self._ckpt_baseline = window_stat
             if callable(train_and_reset_callback):
                 train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
             # Reset window stats
             self._ckpt_eps_since_update = 0
             self._ckpt_timesteps_since_update = 0
-            self._ckpt_min_return = 1e8
             self._ckpt_returns_window = []
 
     def _compute_ckpt_window_stat(self):
