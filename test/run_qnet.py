@@ -65,6 +65,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
+    parser.add_argument("--use_checkpointing", action="store_true")
     args = parser.parse_args()
     env_name = args.env
     embedding_mode = "normal"
@@ -104,6 +105,7 @@ if __name__ == "__main__":
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
             compress_memory=args.compress_memory,
+            use_checkpointing=args.use_checkpointing,
         )
     elif args.algo == "C51":
         if args.model_lib == "flax":
@@ -138,6 +140,7 @@ if __name__ == "__main__":
                 policy_kwargs=policy_kwargs,
                 optimizer=args.optimizer,
                 compress_memory=args.compress_memory,
+                use_checkpointing=args.use_checkpointing,
             )
         else:
             agent = C51(
@@ -166,6 +169,7 @@ if __name__ == "__main__":
                 policy_kwargs=policy_kwargs,
                 optimizer=args.optimizer,
                 compress_memory=args.compress_memory,
+                use_checkpointing=args.use_checkpointing,
             )
     elif args.algo == "QRDQN":
         if args.model_lib == "flax":
@@ -198,6 +202,7 @@ if __name__ == "__main__":
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
             compress_memory=args.compress_memory,
+            use_checkpointing=args.use_checkpointing,
         )
     elif args.algo == "IQN":
         if args.model_lib == "flax":
@@ -231,6 +236,7 @@ if __name__ == "__main__":
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
             compress_memory=args.compress_memory,
+            use_checkpointing=args.use_checkpointing,
         )
     elif args.algo == "FQF":
         if args.model_lib == "flax":
@@ -263,6 +269,7 @@ if __name__ == "__main__":
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
             compress_memory=args.compress_memory,
+            use_checkpointing=args.use_checkpointing,
         )
     elif args.algo == "SPR":
         if args.model_lib == "flax":
@@ -290,6 +297,7 @@ if __name__ == "__main__":
                 policy_kwargs=policy_kwargs,
                 optimizer=args.optimizer,
                 compress_memory=args.compress_memory,
+                use_checkpointing=args.use_checkpointing,
             )
         else:
             agent = SPR(
@@ -311,6 +319,7 @@ if __name__ == "__main__":
                 policy_kwargs=policy_kwargs,
                 optimizer=args.optimizer,
                 compress_memory=args.compress_memory,
+                use_checkpointing=args.use_checkpointing,
             )
 
     elif args.algo == "BBF":
@@ -342,6 +351,7 @@ if __name__ == "__main__":
                 policy_kwargs=policy_kwargs,
                 optimizer=args.optimizer,
                 compress_memory=args.compress_memory,
+                use_checkpointing=args.use_checkpointing,
             )
         else:
             agent = BBF(
@@ -366,6 +376,7 @@ if __name__ == "__main__":
                 policy_kwargs=policy_kwargs,
                 optimizer=args.optimizer,
                 compress_memory=args.compress_memory,
+                use_checkpointing=args.use_checkpointing,
             )
 
     agent.learn(int(args.steps), experiment_name=args.experiment_name)
