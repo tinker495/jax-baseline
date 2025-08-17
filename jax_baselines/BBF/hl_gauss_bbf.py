@@ -157,12 +157,21 @@ class HL_GAUSS_BBF(Q_Network_Family):
 
     def train_step(self, steps, gradient_steps):
         # HL_GAUSS_BBF has a more complex structure, so we handle it specially
-        # For large gradient_steps (e.g., from checkpointing), chunk to avoid memory issues
-        max_chunk_size = 64  # Tunable parameter to control memory usage
+        # Use fixed chunk size based on base gradient_steps to avoid JIT recompilation
+        fixed_chunk_size = (
+            self.gradient_steps
+        )  # Use base gradient_steps for consistent JIT compilation
 
-        if gradient_steps <= max_chunk_size:
-            # Small gradient_steps: process normally
-            data = self._sample_batch(gradient_steps * self.batch_size)
+        # Calculate how many chunks we need
+        num_chunks = gradient_steps // fixed_chunk_size
+
+        total_loss = 0.0
+        total_rprloss = 0.0
+        total_t_mean = 0.0
+
+        # Process all chunks
+        for _ in range(num_chunks):
+            data = self._sample_batch(fixed_chunk_size * self.batch_size)
 
             (
                 self.params,
@@ -181,51 +190,17 @@ class HL_GAUSS_BBF(Q_Network_Family):
                 **data,
             )
 
-            self.train_steps_count += gradient_steps
+            self.train_steps_count += fixed_chunk_size
             self._update_priorities(data, new_priorities)
 
-        else:
-            # Large gradient_steps: process in chunks
-            remaining_steps = gradient_steps
-            total_loss = 0.0
-            total_rprloss = 0.0
-            total_t_mean = 0.0
-            chunk_count = 0
+            total_loss += loss
+            total_rprloss += rprloss
+            total_t_mean += t_mean
 
-            while remaining_steps > 0:
-                chunk_size = min(remaining_steps, max_chunk_size)
-                data = self._sample_batch(chunk_size * self.batch_size)
-
-                (
-                    self.params,
-                    self.target_params,
-                    self.opt_state,
-                    loss,
-                    t_mean,
-                    new_priorities,
-                    rprloss,
-                ) = self._train_step(
-                    self.params,
-                    self.target_params,
-                    self.opt_state,
-                    self.train_steps_count,
-                    next(self.key_seq),
-                    **data,
-                )
-
-                self.train_steps_count += chunk_size
-                self._update_priorities(data, new_priorities)
-
-                total_loss += loss
-                total_rprloss += rprloss
-                total_t_mean += t_mean
-                chunk_count += 1
-                remaining_steps -= chunk_size
-
-            # Average the losses across chunks
-            loss = total_loss / chunk_count
-            rprloss = total_rprloss / chunk_count
-            t_mean = total_t_mean / chunk_count
+        # Average the losses across all chunks
+        loss = total_loss / num_chunks
+        rprloss = total_rprloss / num_chunks
+        t_mean = total_t_mean / num_chunks
 
         if self.logger_run and (steps - self._last_log_step >= self.log_interval):
             self._last_log_step = steps
