@@ -115,7 +115,7 @@ class Q_Network_Family(object):
 
         # Robust checkpointing controls
         self.ckpt_quantile = 0.2  # q-quantile statistic instead of strict min
-        self.use_ckpt_return_standardization = True  # standardize returns within window
+        self.use_ckpt_return_standardization = False  # compare windows in absolute return space
         self._ckpt_returns_window = []  # recent episode returns in current window
         self._ckpt_baseline = None  # window-stat baseline (initialized on first window)
         self._ckpt_update_residual = 0  # exact training-parity residual accumulator
