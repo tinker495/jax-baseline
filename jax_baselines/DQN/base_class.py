@@ -589,7 +589,9 @@ class Q_Network_Family(object):
         self._ckpt_update_count += 1
         if getattr(self, "logger_run", None) is not None:
             try:
-                self.logger_run.log_metric("ckpt/snapshot_update", 1.0, int(steps))
+                self.logger_run.log_metric(
+                    "ckpt/ckpt_baseline", float(self._ckpt_baseline), int(steps)
+                )
                 self.logger_run.log_metric(
                     "ckpt/update_count", float(self._ckpt_update_count), int(steps)
                 )
@@ -620,6 +622,7 @@ class Q_Network_Family(object):
         window_stat = self._compute_ckpt_window_stat()
         if window_stat is None:
             return
+        self.logger_run.log_metric("ckpt/window_stat", float(window_stat), int(steps))
 
         # Pre-enable phase: warm-up baseline/snapshot, no training pulses by default
         if not self.checkpointing_enabled:

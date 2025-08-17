@@ -335,7 +335,9 @@ class Deteministic_Policy_Gradient_Family(object):
         self._ckpt_update_count += 1
         if getattr(self, "logger_run", None) is not None:
             try:
-                self.logger_run.log_metric("ckpt/snapshot_update", 1.0, int(steps))
+                self.logger_run.log_metric(
+                    "ckpt/ckpt_baseline", float(self._ckpt_baseline), int(steps)
+                )
                 self.logger_run.log_metric(
                     "ckpt/update_count", float(self._ckpt_update_count), int(steps)
                 )
@@ -366,6 +368,7 @@ class Deteministic_Policy_Gradient_Family(object):
         window_stat = self._compute_ckpt_window_stat()
         if window_stat is None:
             return
+        self.logger_run.log_metric("ckpt/window_stat", float(window_stat), int(steps))
 
         # Initialize baseline once we obtain the first valid window statistic
         if self._ckpt_baseline is None:
