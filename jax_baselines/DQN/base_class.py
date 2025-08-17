@@ -117,7 +117,7 @@ class Q_Network_Family(object):
         self.ckpt_quantile = 0.2  # q-quantile statistic instead of strict min
         self.use_ckpt_return_standardization = True  # standardize returns within window
         self._ckpt_returns_window = []  # recent episode returns in current window
-        self._ckpt_baseline = -1e8  # EWMA baseline over window stats
+        self._ckpt_baseline = None  # window-stat baseline (initialized on first window)
         self._ckpt_update_residual = 0  # exact training-parity residual accumulator
 
         # Logging throttle based on last log step
@@ -257,7 +257,12 @@ class Q_Network_Family(object):
     def actions(self, obs, epsilon, eval_mode=False):
         # Select params: during eval with checkpointing prefer snapshot
         params_to_use = self.params
-        if eval_mode and self.use_checkpointing and hasattr(self, "checkpoint_params"):
+        if (
+            eval_mode
+            and self.use_checkpointing
+            and self.checkpointing_enabled
+            and hasattr(self, "checkpoint_params")
+        ):
             params_to_use = self.checkpoint_params
 
         if epsilon <= np.random.uniform(0, 1):
@@ -564,7 +569,6 @@ class Q_Network_Family(object):
             # Relax the threshold slightly when entering checkpointing mode
             self._ckpt_max_eps_before_update = self.max_eps_before_checkpointing
             self.checkpointing_enabled = True
-            self._ckpt_baseline = -1e8
 
     def _checkpoint_update_snapshot(self):
         """Default checkpoint snapshot strategy for Q-Network family.
@@ -598,29 +602,40 @@ class Q_Network_Family(object):
 
         # Compute robust window statistic (quantile on standardized returns if enabled)
         window_stat = self._compute_ckpt_window_stat()
-
-        # Initialize baseline when first valid window statistic becomes available
         if window_stat is None:
             return
 
-        # Early training pulse on regression relative to baseline (no snapshot refresh by default)
-        if window_stat < self._ckpt_baseline and not self.checkpointing_enabled:
-            if callable(train_and_reset_callback):
-                train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
-            # Reset window stats
-            self._ckpt_eps_since_update = 0
-            self._ckpt_timesteps_since_update = 0
-            self._ckpt_returns_window = []
+        # Initialize baseline once we obtain the first valid window statistic
+        if self._ckpt_baseline is None:
+            self._ckpt_baseline = window_stat
+
+        # Pre-enable phase: warm-up baseline/snapshot, no training pulses by default
+        if not self.checkpointing_enabled:
+            # Optional early pulse on regression vs baseline
+            if (self._ckpt_baseline is not None) and (window_stat < self._ckpt_baseline):
+                if callable(train_and_reset_callback):
+                    train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
+                self._ckpt_eps_since_update = 0
+                self._ckpt_timesteps_since_update = 0
+                self._ckpt_returns_window = []
+                return
+
+            # End of warm-up window: refresh baseline and create an initial snapshot if absent
+            if self._ckpt_eps_since_update >= self._ckpt_max_eps_before_update:
+                if not hasattr(self, "checkpoint_params"):
+                    self._checkpoint_update_snapshot()
+                self._ckpt_baseline = window_stat
+                self._ckpt_eps_since_update = 0
+                self._ckpt_timesteps_since_update = 0
+                self._ckpt_returns_window = []
             return
 
-        # Refresh checkpoint at the end of the evaluation window
+        # Enabled phase: end-of-window refresh with training pulse
         if self._ckpt_eps_since_update >= self._ckpt_max_eps_before_update:
-            # Update baseline using window statistic
             self._checkpoint_update_snapshot()
             self._ckpt_baseline = window_stat
             if callable(train_and_reset_callback):
                 train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
-            # Reset window stats
             self._ckpt_eps_since_update = 0
             self._ckpt_timesteps_since_update = 0
             self._ckpt_returns_window = []
