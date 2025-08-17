@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import dm_pix as pix
 import jax
 import jax.numpy as jnp
@@ -117,6 +119,18 @@ class SPR(Q_Network_Family):
 
         # Use common JIT compilation
         self._compile_common_functions()
+
+    def _checkpoint_update_snapshot(self):
+        """Default checkpoint snapshot strategy for Q-Network family.
+
+        This copies current network parameters into checkpoint snapshots.
+        Subclasses can override this for custom snapshot strategies.
+        """
+        # Default strategy: snapshot current network params
+        if hasattr(self, "params"):
+            self.checkpoint_params = deepcopy(
+                self.target_params if self.scaled_by_reset else self.params
+            )
 
     def actions(self, obs, epsilon, eval_mode=False):
         params_to_use = self.target_params if self.scaled_by_reset else self.params
