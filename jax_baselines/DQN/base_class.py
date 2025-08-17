@@ -119,6 +119,9 @@ class Q_Network_Family(object):
         self._ckpt_returns_window = []  # recent episode returns in current window
         self._ckpt_baseline = None  # window-stat baseline (initialized on first window)
         self._ckpt_update_residual = 0  # exact training-parity residual accumulator
+        # Track snapshot updates for logging and progress description
+        self._last_ckpt_update_step = None
+        self._ckpt_update_count = 0
 
         # Logging throttle based on last log step
         self._last_log_step = 0
@@ -257,12 +260,7 @@ class Q_Network_Family(object):
     def actions(self, obs, epsilon, eval_mode=False):
         # Select params: during eval with checkpointing prefer snapshot
         params_to_use = self.params
-        if (
-            eval_mode
-            and self.use_checkpointing
-            and self.checkpointing_enabled
-            and hasattr(self, "checkpoint_params")
-        ):
+        if eval_mode and self.use_checkpointing and self.checkpointing_enabled:
             params_to_use = self.checkpoint_params
 
         if epsilon <= np.random.uniform(0, 1):
@@ -284,9 +282,14 @@ class Q_Network_Family(object):
         discription += f"loss : {np.mean(self.lossque):.3f}"
 
         if self.param_noise:
-            return discription
+            pass
         else:
-            return discription + f", epsilon : {self.update_eps:.3f}"
+            discription += f", epsilon : {self.update_eps:.3f}"
+
+        if self.use_checkpointing and (self._last_ckpt_update_step is not None):
+            discription += f", ckpt_upd_step : {int(self._last_ckpt_update_step)}"
+
+        return discription
 
     def run_name_update(self, run_name):
         if self.munchausen:
@@ -580,6 +583,19 @@ class Q_Network_Family(object):
         if hasattr(self, "params"):
             self.checkpoint_params = deepcopy(self.params)
 
+    def _log_ckpt_snapshot_update(self, steps):
+        """Record that a checkpoint snapshot was updated and log it."""
+        self._last_ckpt_update_step = int(steps)
+        self._ckpt_update_count += 1
+        if getattr(self, "logger_run", None) is not None:
+            try:
+                self.logger_run.log_metric("ckpt/snapshot_update", 1.0, int(steps))
+                self.logger_run.log_metric(
+                    "ckpt/update_count", float(self._ckpt_update_count), int(steps)
+                )
+            except Exception:
+                pass
+
     def _checkpoint_on_episode_end(
         self, steps, episode_return, episode_len, train_and_reset_callback=None
     ):
@@ -605,35 +621,32 @@ class Q_Network_Family(object):
         if window_stat is None:
             return
 
-        # Initialize baseline once we obtain the first valid window statistic
-        if self._ckpt_baseline is None:
-            self._ckpt_baseline = window_stat
-
         # Pre-enable phase: warm-up baseline/snapshot, no training pulses by default
         if not self.checkpointing_enabled:
-            # Optional early pulse on regression vs baseline
-            if (self._ckpt_baseline is not None) and (window_stat < self._ckpt_baseline):
-                if callable(train_and_reset_callback):
-                    train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
-                self._ckpt_eps_since_update = 0
-                self._ckpt_timesteps_since_update = 0
-                self._ckpt_returns_window = []
-                return
-
-            # End of warm-up window: refresh baseline and create an initial snapshot if absent
-            if self._ckpt_eps_since_update >= self._ckpt_max_eps_before_update:
-                if not hasattr(self, "checkpoint_params"):
-                    self._checkpoint_update_snapshot()
+            # Initialize baseline once we obtain the first valid window statistic
+            if self._ckpt_baseline is None:
                 self._ckpt_baseline = window_stat
-                self._ckpt_eps_since_update = 0
-                self._ckpt_timesteps_since_update = 0
-                self._ckpt_returns_window = []
+            self._checkpoint_update_snapshot()
+            self._log_ckpt_snapshot_update(steps)
+            if callable(train_and_reset_callback):
+                train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
+            self._ckpt_eps_since_update = 0
+            self._ckpt_timesteps_since_update = 0
+            self._ckpt_returns_window = []
+
+        if (self._ckpt_baseline is not None) and (window_stat < self._ckpt_baseline):
+            if callable(train_and_reset_callback):
+                train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
+            self._ckpt_eps_since_update = 0
+            self._ckpt_timesteps_since_update = 0
+            self._ckpt_returns_window = []
             return
 
         # Enabled phase: end-of-window refresh with training pulse
         if self._ckpt_eps_since_update >= self._ckpt_max_eps_before_update:
             self._checkpoint_update_snapshot()
             self._ckpt_baseline = window_stat
+            self._log_ckpt_snapshot_update(steps)
             if callable(train_and_reset_callback):
                 train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
             self._ckpt_eps_since_update = 0

@@ -120,12 +120,7 @@ class SPR(Q_Network_Family):
 
     def actions(self, obs, epsilon, eval_mode=False):
         params_to_use = self.target_params if self.scaled_by_reset else self.params
-        if (
-            eval_mode
-            and self.use_checkpointing
-            and self.checkpointing_enabled
-            and hasattr(self, "checkpoint_params")
-        ):
+        if eval_mode and self.use_checkpointing and self.checkpointing_enabled:
             params_to_use = self.checkpoint_params
         if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(
