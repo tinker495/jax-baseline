@@ -654,7 +654,7 @@ class Q_Network_Family(object):
                     self._ckpt_max_eps_before_update,
                     self.ckpt_quantile,
                 )
-                if prob > 0.5:
+                if prob <= 0.5:
                     if callable(train_and_reset_callback):
                         train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
                     self._ckpt_eps_since_update = 0
