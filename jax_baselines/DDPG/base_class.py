@@ -9,7 +9,14 @@ from jax_baselines.common.eval import evaluate_policy, record_and_test
 from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.replay_factory import make_replay_buffer
-from jax_baselines.common.utils import RunningMeanStd, key_gen, restore, save
+from jax_baselines.common.utils import (
+    RunningMeanStd,
+    ckpt_prob_full_window_quantile_exceeds_baseline,
+    compute_ckpt_window_stat,
+    key_gen,
+    restore,
+    save,
+)
 
 
 class Deteministic_Policy_Gradient_Family(object):
@@ -332,7 +339,7 @@ class Deteministic_Policy_Gradient_Family(object):
     def _log_ckpt_snapshot_update(self, steps):
         """Record that a checkpoint snapshot was updated and log it."""
         self._last_ckpt_update_step = int(steps)
-        self._ckpt_update_count += 1
+        self._ckpt_update_count += self.checkpointing_enabled
         if getattr(self, "logger_run", None) is not None:
             try:
                 self.logger_run.log_metric(
@@ -365,7 +372,9 @@ class Deteministic_Policy_Gradient_Family(object):
         self._maybe_enable_checkpointing(steps)
 
         # Compute robust window statistic (quantile on standardized returns if enabled)
-        window_stat = self._compute_ckpt_window_stat()
+        window_stat = compute_ckpt_window_stat(
+            self._ckpt_returns_window, self.ckpt_quantile, self.use_ckpt_return_standardization
+        )
         if window_stat is None:
             return
         self.logger_run.log_metric("ckpt/window_stat", float(window_stat), int(steps))
@@ -388,12 +397,30 @@ class Deteministic_Policy_Gradient_Family(object):
             self._ckpt_returns_window = []
 
         if (self._ckpt_baseline is not None) and (window_stat < self._ckpt_baseline):
-            if callable(train_and_reset_callback):
-                train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
-            self._ckpt_eps_since_update = 0
-            self._ckpt_timesteps_since_update = 0
-            self._ckpt_returns_window = []
-            return
+            # If window is not yet full, gate early termination by predictive probability
+            if self._ckpt_eps_since_update < self._ckpt_max_eps_before_update:
+                prob = ckpt_prob_full_window_quantile_exceeds_baseline(
+                    self._ckpt_returns_window,
+                    self._ckpt_baseline,
+                    self._ckpt_max_eps_before_update,
+                    self.ckpt_quantile,
+                )
+                if prob > 0.5:
+                    if callable(train_and_reset_callback):
+                        train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
+                    self._ckpt_eps_since_update = 0
+                    self._ckpt_timesteps_since_update = 0
+                    self._ckpt_returns_window = []
+                    return
+                # Otherwise, do not early-terminate; continue accumulating the window
+            else:
+                # Window full: preserve original early-termination behavior
+                if callable(train_and_reset_callback):
+                    train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
+                self._ckpt_eps_since_update = 0
+                self._ckpt_timesteps_since_update = 0
+                self._ckpt_returns_window = []
+                return
 
         # Enabled phase: end-of-window refresh with training pulse
         if self._ckpt_eps_since_update >= self._ckpt_max_eps_before_update:
@@ -405,25 +432,6 @@ class Deteministic_Policy_Gradient_Family(object):
             self._ckpt_eps_since_update = 0
             self._ckpt_timesteps_since_update = 0
             self._ckpt_returns_window = []
-
-    def _compute_ckpt_window_stat(self):
-        """Compute robust window statistic for checkpoint decisions.
-
-        Uses q-quantile of returns in the current window. If
-        use_ckpt_return_standardization is True, standardizes using
-        median and MAD within the window before quantile.
-        """
-        if not self._ckpt_returns_window:
-            return None
-        arr = np.asarray(self._ckpt_returns_window, dtype=np.float64)
-        if self.use_ckpt_return_standardization and arr.size >= 3:
-            med = np.median(arr)
-            mad = np.median(np.abs(arr - med))
-            scale = mad if mad > 1e-8 else 1.0
-            arr = (arr - med) / scale
-        q = float(self.ckpt_quantile)
-        q = min(max(q, 0.0), 1.0)
-        return float(np.quantile(arr, q))
 
     def learn_SingleEnv_checkpointing(self, pbar, callback=None, log_interval=1000, obs=None):
         # Initialize required state if not provided

@@ -1,3 +1,4 @@
+import math
 import os
 import pickle
 from functools import partial
@@ -270,6 +271,82 @@ def get_hyper_params(agent):
 def add_hparams(agent, tensorboardrun):
     hparam_dict = get_hyper_params(agent)
     tensorboardrun.log_param(hparam_dict)
+
+
+def compute_ckpt_window_stat(returns_window: list, q: float, use_standardization: bool):
+    """Compute robust window statistic for checkpoint decisions.
+
+    Uses q-quantile of returns in the current window. If use_standardization is True,
+    standardizes using median and MAD within the window before quantile.
+    """
+    if returns_window is None or len(returns_window) == 0:
+        return None
+    arr = np.asarray(returns_window, dtype=np.float64)
+    if use_standardization and arr.size >= 3:
+        med = np.median(arr)
+        mad = np.median(np.abs(arr - med))
+        scale = mad if mad > 1e-8 else 1.0
+        arr = (arr - med) / scale
+    q = float(q)
+    q = min(max(q, 0.0), 1.0)
+    return float(np.quantile(arr, q))
+
+
+def ckpt_prob_full_window_quantile_exceeds_baseline(
+    returns_window: list,
+    baseline_value: float,
+    target_window_size: int,
+    q: float,
+    alpha0: float = 1.0,
+    beta0: float = 1.0,
+) -> float:
+    """Posterior predictive probability that full-window q-quantile > baseline.
+
+    Bayesian model on indicators 1{R <= baseline} with Beta(alpha0, beta0) prior and
+    Beta-Binomial posterior predictive for the remaining samples.
+    """
+    if returns_window is None:
+        returns_window = []
+    arr = np.asarray(returns_window, dtype=np.float64)
+    n = int(arr.size)
+    # Count of current returns not exceeding the baseline
+    s_n = int(np.sum(arr <= float(baseline_value)))
+    N = int(target_window_size)
+    if N <= 0:
+        return 0.0
+    q = float(q)
+    k = int(np.ceil(q * N))
+
+    alpha = float(alpha0) + float(s_n)
+    beta = float(beta0) + float(n - s_n)
+    M = max(N - n, 0)
+
+    if M == 0:
+        return 1.0 if s_n <= (k - 1) else 0.0
+
+    smax = min(M, (k - 1) - s_n)
+    if smax < 0:
+        return 0.0
+
+    def log_comb(Mv: int, rv: int) -> float:
+        return math.lgamma(Mv + 1) - math.lgamma(rv + 1) - math.lgamma(Mv - rv + 1)
+
+    log_beta_ab = math.lgamma(alpha) + math.lgamma(beta) - math.lgamma(alpha + beta)
+
+    total_prob = 0.0
+    for s in range(0, smax + 1):
+        log_p = (
+            log_comb(M, s)
+            + (math.lgamma(s + alpha) + math.lgamma(M - s + beta) - math.lgamma(M + alpha + beta))
+            - log_beta_ab
+        )
+        total_prob += math.exp(log_p)
+
+    if total_prob < 0.0:
+        total_prob = 0.0
+    if total_prob > 1.0:
+        total_prob = 1.0
+    return float(total_prob)
 
 
 class RunningMeanStd:
