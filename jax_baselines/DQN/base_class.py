@@ -57,7 +57,7 @@ class Q_Network_Family(object):
         # Checkpointing options (opt-in by default for base class)
         use_checkpointing=True,
         steps_before_checkpointing=500000,
-        max_eps_before_checkpointing=5,
+        max_eps_before_checkpointing=10,
         initial_checkpoint_window=1,
     ):
         self.name = "Q_Network_Family"
@@ -123,7 +123,7 @@ class Q_Network_Family(object):
         self.ckpt_quantile = 0.2  # q-quantile statistic instead of strict min
         self.use_ckpt_return_standardization = False  # compare windows in absolute return space
         self._ckpt_returns_window = []  # recent episode returns in current window
-        self._ckpt_baseline = None  # window-stat baseline (initialized on first window)
+        self._ckpt_baseline = -1e8  # window-stat baseline (initialized on first window)
         self._ckpt_update_residual = 0  # exact training-parity residual accumulator
         # Track snapshot updates for logging and progress description
         self._last_ckpt_update_step = None
@@ -634,18 +634,14 @@ class Q_Network_Family(object):
 
         # Pre-enable phase: warm-up baseline/snapshot, no training pulses by default
         if not self.checkpointing_enabled:
-            # Initialize baseline once we obtain the first valid window statistic
-            if self._ckpt_baseline is None:
-                self._ckpt_baseline = window_stat
             self._checkpoint_update_snapshot()
-            self._log_ckpt_snapshot_update(steps)
             if callable(train_and_reset_callback):
                 train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
             self._ckpt_eps_since_update = 0
             self._ckpt_timesteps_since_update = 0
             self._ckpt_returns_window = []
 
-        if (self._ckpt_baseline is not None) and (window_stat < self._ckpt_baseline):
+        if window_stat < self._ckpt_baseline:
             # If window is not yet full, gate early termination by predictive probability
             if self._ckpt_eps_since_update < self._ckpt_max_eps_before_update:
                 prob = ckpt_prob_full_window_quantile_exceeds_baseline(
