@@ -43,7 +43,7 @@ class Deteministic_Policy_Gradient_Family(object):
         # Checkpointing options (opt-in by default for base class)
         use_checkpointing=True,
         steps_before_checkpointing=500000,
-        max_eps_before_checkpointing=5,
+        max_eps_before_checkpointing=20,
         initial_checkpoint_window=1,
     ):
         self.name = "Deteministic_Policy_Gradient_Family"
