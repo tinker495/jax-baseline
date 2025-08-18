@@ -69,9 +69,16 @@ class DDPG(Deteministic_Policy_Gradient_Family):
 
     def actions(self, obs, steps, eval=False):
         if self.simba:
-            if steps != np.inf:
+            # During eval with checkpointing, normalize using snapshot obs_rms if available
+            rms = (
+                self.checkpoint_obs_rms
+                if (eval and self.use_checkpointing and hasattr(self, "checkpoint_obs_rms"))
+                else self.obs_rms
+            )
+            # Only update live obs_rms during training (not eval) and when steps is finite
+            if (not eval) and steps != np.inf:
                 self.obs_rms.update(obs)
-            obs = self.obs_rms.normalize(obs)
+            obs = rms.normalize(obs)
 
         if self.learning_starts < steps:
             # Select params: during eval with checkpointing prefer snapshot

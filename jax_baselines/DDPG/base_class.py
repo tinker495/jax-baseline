@@ -335,6 +335,13 @@ class Deteministic_Policy_Gradient_Family(object):
             self.checkpoint_encoder_params = deepcopy(self.fixed_encoder_params)
         elif hasattr(self, "encoder_params"):
             self.checkpoint_encoder_params = deepcopy(self.encoder_params)
+        # If using SIMBA normalization, snapshot obs_rms as well for eval-time consistency
+        if getattr(self, "simba", False) and hasattr(self, "obs_rms"):
+            try:
+                self.checkpoint_obs_rms = deepcopy(self.obs_rms)
+            except Exception:
+                # Fallback: if deepcopy fails for any reason, skip without crashing
+                pass
 
     def _log_ckpt_snapshot_update(self, steps):
         """Record that a checkpoint snapshot was updated and log it."""
