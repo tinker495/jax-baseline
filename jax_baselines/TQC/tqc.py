@@ -118,7 +118,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
             # Select params: during eval with checkpointing prefer snapshot
             policy_params = (
                 self.checkpoint_policy_params
-                if (eval and self.use_checkpointing and hasattr(self, "checkpoint_policy_params"))
+                if (eval and self.use_checkpointing)
                 else self.policy_params
             )
             actions = np.asarray(self._get_actions(policy_params, obs, next(self.key_seq)))

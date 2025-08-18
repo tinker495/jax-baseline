@@ -81,7 +81,12 @@ class SAC(Deteministic_Policy_Gradient_Family):
             obs = self.obs_rms.normalize(obs)
 
         if self.learning_starts < steps:
-            actions = np.asarray(self._get_actions(self.policy_params, obs, next(self.key_seq)))
+            policy_params = (
+                self.checkpoint_policy_params
+                if (eval and self.use_checkpointing)
+                else self.policy_params
+            )
+            actions = np.asarray(self._get_actions(policy_params, obs, next(self.key_seq)))
         else:
             actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
         return actions

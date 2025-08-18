@@ -92,14 +92,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
         if self.learning_starts < steps:
             # Use checkpoint params during evaluation, current params during training
-            if (
-                eval
-                and self.use_checkpointing
-                and (
-                    hasattr(self, "checkpoint_policy_params")
-                    and hasattr(self, "checkpoint_encoder_params")
-                )
-            ):
+            if eval and self.use_checkpointing:
                 encoder_params = self.checkpoint_encoder_params
                 policy_params = self.checkpoint_policy_params
             else:
