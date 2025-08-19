@@ -276,9 +276,8 @@ def add_hparams(agent, tensorboardrun):
 def compute_ckpt_window_stat(returns_window: list, q: float, use_standardization: bool):
     """Compute robust window statistic for checkpoint decisions.
 
-    Returns lower-tail CVaR at level q: the mean of the worst q-fraction of returns.
-    If use_standardization is True, standardizes using median and MAD within the
-    window before computing CVaR.
+    Uses q-quantile of returns in the current window. If use_standardization is True,
+    standardizes using median and MAD within the window before quantile.
     """
     if returns_window is None or len(returns_window) == 0:
         return None
@@ -290,11 +289,7 @@ def compute_ckpt_window_stat(returns_window: list, q: float, use_standardization
         arr = (arr - med) / scale
     q = float(q)
     q = min(max(q, 0.0), 1.0)
-    if arr.size == 1:
-        return float(arr[0])
-    sorted_arr = np.sort(arr)
-    k = max(1, int(np.ceil(q * sorted_arr.size)))
-    return float(np.mean(sorted_arr[:k]))
+    return float(np.quantile(arr, q))
 
 
 def ckpt_prob_full_window_quantile_exceeds_baseline(
@@ -305,43 +300,30 @@ def ckpt_prob_full_window_quantile_exceeds_baseline(
     alpha0: float = 1.0,
     beta0: float = 1.0,
 ) -> float:
-    """Exact posterior predictive P(CVaR_q > baseline) via Beta-Binomial.
+    """Posterior predictive probability that full-window q-quantile > baseline.
 
-    Key fact: For a completed window of size N with k=ceil(q*N), CVaR_q > b iff the k-th
-    order statistic > b, which is equivalent to the count S_N of values <= b being <= k-1.
-
-    Let p = P(R <= b). With a Beta(alpha0, beta0) prior and current observations of size n
-    containing s_n values <= b, the posterior is Beta(alpha0+s_n, beta0+n-s_n). For the
-    remaining M=N-n samples, the posterior predictive distribution of S' (number of
-    future values <= b) is Beta-Binomial(M, alpha, beta). Therefore the desired probability is
-
-        P(S_N <= k-1) = sum_{s'=0}^{min(M, k-1 - s_n)} BetaBinom(s'; M, alpha, beta).
+    Bayesian model on indicators 1{R <= baseline} with Beta(alpha0, beta0) prior and
+    Beta-Binomial posterior predictive for the remaining samples.
     """
     if returns_window is None:
         returns_window = []
     arr = np.asarray(returns_window, dtype=np.float64)
     n = int(arr.size)
+    # Count of current returns not exceeding the baseline
+    s_n = int(np.sum(arr <= float(baseline_value)))
     N = int(target_window_size)
     if N <= 0:
         return 0.0
-    b = float(baseline_value)
     q = float(q)
-    k = max(1, int(np.ceil(q * N)))
-
-    # Current count of values <= baseline
-    s_n = int(np.sum(arr <= b))
-
-    # Remaining samples
-    M = max(N - n, 0)
-
-    # If already full, return deterministic event
-    if M == 0:
-        return 1.0 if s_n <= (k - 1) else 0.0
+    k = int(np.ceil(q * N))
 
     alpha = float(alpha0) + float(s_n)
     beta = float(beta0) + float(n - s_n)
+    M = max(N - n, 0)
 
-    # Upper limit for s'
+    if M == 0:
+        return 1.0 if s_n <= (k - 1) else 0.0
+
     smax = min(M, (k - 1) - s_n)
     if smax < 0:
         return 0.0
@@ -353,7 +335,6 @@ def ckpt_prob_full_window_quantile_exceeds_baseline(
 
     total_prob = 0.0
     for s in range(0, smax + 1):
-        # Beta-Binomial PMF in log-space
         log_p = (
             log_comb(M, s)
             + (math.lgamma(s + alpha) + math.lgamma(M - s + beta) - math.lgamma(M + alpha + beta))
