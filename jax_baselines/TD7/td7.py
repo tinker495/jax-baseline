@@ -21,13 +21,14 @@ class TD7(Deteministic_Policy_Gradient_Family):
         target_network_update_freq=250,
         **kwargs,
     ):
-        # Set TD7-specific defaults
+        # Set TD7-specific defaults - always enable checkpointing
         td7_kwargs = {
             "n_step": 1,
             "target_network_update_tau": 0,
             "prioritized_replay": True,
             "prioritized_replay_beta0": 0,
             "prioritized_replay_eps": 0,
+            "use_checkpointing": True,  # TD7 always uses checkpointing
             **kwargs,
         }
 
@@ -39,16 +40,6 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.action_noise_clamp = 0.5  # self.target_action_noise*1.5
         self.target_network_update_freq = target_network_update_freq
         self.policy_delay = policy_delay
-
-        self.eps_since_update = 0
-        self.timesteps_since_update = 0
-        self.max_eps_before_update = 1
-        self.min_return = 1e8
-        self.best_min_return = -1e8
-
-        self.checkpointing = False
-        self.steps_before_checkpointing = int(5e5)
-        self.max_eps_before_checkpointing = 20
 
     def setup_model(self):
         model_builder = self.model_builder_maker(
@@ -93,24 +84,25 @@ class TD7(Deteministic_Policy_Gradient_Family):
         zs = self.encoder(encoder_params, key, feature)
         return self.actor(policy_params, key, feature, zs)
 
-    def actions(self, obs, steps, use_checkpoint=False, exploration=True):
+    def actions(self, obs, steps, eval=False):
         if self.simba:
-            if exploration:
+            if not eval:  # Only update normalization during training
                 self.obs_rms.update(obs)
             obs = self.obs_rms.normalize(obs)
 
         if self.learning_starts < steps:
-            if use_checkpoint:
-                actions = np.asarray(
-                    self._get_actions(
-                        self.checkpoint_encoder_params, self.checkpoint_policy_params, obs, None
-                    )
-                )
+            # Use checkpoint params during evaluation, current params during training
+            if eval and self.use_checkpointing:
+                encoder_params = self.checkpoint_encoder_params
+                policy_params = self.checkpoint_policy_params
             else:
-                actions = np.asarray(
-                    self._get_actions(self.fixed_encoder_params, self.policy_params, obs, None)
-                )
-            if exploration:
+                encoder_params = self.fixed_encoder_params
+                policy_params = self.policy_params
+
+            actions = np.asarray(self._get_actions(encoder_params, policy_params, obs, None))
+
+            # Add exploration noise only during training
+            if not eval:
                 actions = np.clip(
                     actions
                     + self.action_noise
@@ -121,35 +113,6 @@ class TD7(Deteministic_Policy_Gradient_Family):
         else:
             actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
         return actions
-
-    def end_episode(self, steps, score, eplen):
-        if self.learning_starts > steps:
-            return
-        self.eps_since_update += 1
-        self.timesteps_since_update += eplen
-
-        self.min_return = min(self.min_return, score)
-        # End evaluation of current policy early
-        if self.min_return < self.best_min_return:
-            self.train_and_reset(steps)
-
-        # Update checkpoint
-        elif self.eps_since_update >= self.max_eps_before_update:
-            self.best_min_return = self.min_return
-            self.checkpoint_policy_params = self.policy_params
-            self.checkpoint_encoder_params = self.fixed_encoder_params
-            self.train_and_reset(steps)
-
-    def train_and_reset(self, steps):
-        if not self.checkpointing and steps > self.steps_before_checkpointing:
-            self.best_min_return = 0.9 * self.best_min_return
-            self.max_eps_before_update = self.max_eps_before_checkpointing
-            self.checkpointing = True
-        self.loss_mean = self.train_step(steps, self.timesteps_since_update * self.gradient_steps)
-
-        self.eps_since_update = 0
-        self.timesteps_since_update = 0
-        self.min_return = 1e8
 
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
@@ -422,7 +385,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             for k, v in eval_result.items():
                 discription += f"{k} : {v:8.2f}, "
 
-        discription += f"loss : {np.mean(self.loss_mean):.3f}"
+        discription += f"loss : {np.mean(self.lossque):.3f}"
         return discription
 
     def run_name_update(self, run_name):
@@ -447,61 +410,3 @@ class TD7(Deteministic_Policy_Gradient_Family):
             experiment_name,
             run_name,
         )
-
-    def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
-        obs, info = self.env.reset()
-        obs = [np.expand_dims(obs, axis=0)]
-        self.scores = np.zeros([self.worker_size])
-        self.eplen = np.zeros([self.worker_size], dtype=np.int32)
-        self.score_mean = None
-        self.loss_mean = None
-        for steps in pbar:
-            self.eplen += 1
-            actions = self.actions(obs, steps)
-            next_obs, reward, terminated, truncated, info = self.env.step(actions[0])
-            next_obs = [np.expand_dims(next_obs, axis=0)]
-            self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
-            self.scores[0] += reward
-            obs = next_obs
-            if terminated or truncated:
-                self.end_episode(steps, self.scores[0], self.eplen[0])
-                self.scores[0] = 0
-                self.eplen[0] = 0
-                obs, info = self.env.reset()
-                obs = [np.expand_dims(obs, axis=0)]
-
-            if steps % self.eval_freq == 0:
-                eval_result = self.eval(steps)
-
-            if steps % log_interval == 0 and eval_result is not None and self.loss_mean is not None:
-                pbar.set_description(self.discription(eval_result))
-
-    def eval(self, steps):
-        total_reward = np.zeros(self.eval_eps)
-        total_ep_len = np.zeros(self.eval_eps)
-        total_truncated = np.zeros(self.eval_eps)
-        for ep in range(self.eval_eps):
-            obs, info = self.eval_env.reset()
-            obs = [np.expand_dims(obs, axis=0)]
-            terminated = False
-            truncated = False
-            eplen = 0
-            while not terminated and not truncated:
-                actions = self.actions(obs, steps, use_checkpoint=True, exploration=False)
-                next_obs, reward, terminated, truncated, info = self.eval_env.step(actions[0])
-                next_obs = [np.expand_dims(next_obs, axis=0)]
-                # self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
-                total_reward[ep] += reward
-                obs = next_obs
-                eplen += 1
-            total_ep_len[ep] = eplen
-            total_truncated[ep] = float(truncated)
-
-        mean_reward = np.mean(total_reward)
-        mean_ep_len = np.mean(total_ep_len)
-
-        if self.logger_run:
-            self.logger_run.log_metric("env/episode_reward", mean_reward, steps)
-            self.logger_run.log_metric("env/episode len", mean_ep_len, steps)
-            self.logger_run.log_metric("env/time over", np.mean(total_truncated), steps)
-        return {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}

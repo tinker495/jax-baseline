@@ -113,7 +113,8 @@ class FQF(Q_Network_Family):
 
             self._update_priorities(data, new_priorities)
 
-        if self.logger_run and steps % self.log_interval == 0:
+        if self.logger_run and (steps - self._last_log_step >= self.log_interval):
+            self._last_log_step = steps
             self.logger_run.log_metric("loss/qloss", loss, steps)
             self.logger_run.log_metric("loss/fqf_loss", fqf_loss, steps)
             self.logger_run.log_metric("loss/targets", t_mean, steps)

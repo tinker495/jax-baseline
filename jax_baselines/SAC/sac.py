@@ -76,12 +76,24 @@ class SAC(Deteministic_Policy_Gradient_Family):
 
     def actions(self, obs, steps, eval=False):
         if self.simba:
-            if steps != np.inf:
+            # During eval with checkpointing, normalize using snapshot obs_rms if available
+            rms = (
+                self.checkpoint_obs_rms
+                if (eval and self.use_checkpointing and hasattr(self, "checkpoint_obs_rms"))
+                else self.obs_rms
+            )
+            # Only update live obs_rms during training (not eval) and when steps is finite
+            if (not eval) and steps != np.inf:
                 self.obs_rms.update(obs)
-            obs = self.obs_rms.normalize(obs)
+            obs = rms.normalize(obs)
 
         if self.learning_starts < steps:
-            actions = np.asarray(self._get_actions(self.policy_params, obs, next(self.key_seq)))
+            policy_params = (
+                self.checkpoint_policy_params
+                if (eval and self.use_checkpointing)
+                else self.policy_params
+            )
+            actions = np.asarray(self._get_actions(policy_params, obs, next(self.key_seq)))
         else:
             actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
         return actions
@@ -124,7 +136,8 @@ class SAC(Deteministic_Policy_Gradient_Family):
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.logger_run and steps % self.log_interval == 0:
+        if self.logger_run and (steps - self._last_log_step >= self.log_interval):
+            self._last_log_step = steps
             self.logger_run.log_metric("loss/qloss", loss, steps)
             self.logger_run.log_metric("loss/targets", t_mean, steps)
             self.logger_run.log_metric("loss/ent_coef", np.exp(self.log_ent_coef), steps)

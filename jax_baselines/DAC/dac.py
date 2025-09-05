@@ -194,7 +194,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
             if self.prioritized_replay:
                 self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
-        if self.logger_run and steps % self.log_interval == 0:
+        if self.logger_run and (steps - self._last_log_step >= self.log_interval):
+            self._last_log_step = steps
             self.logger_run.log_metric("loss/qloss", loss, steps)
             self.logger_run.log_metric("loss/targets", t_mean, steps)
             self.logger_run.log_metric("loss/kl_divergence", kl_divergence, steps)

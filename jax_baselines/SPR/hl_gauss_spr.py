@@ -118,11 +118,26 @@ class HL_GAUSS_SPR(Q_Network_Family):
         # Use common JIT compilation
         self._compile_common_functions()
 
-    def actions(self, obs, epsilon):
+    def _checkpoint_update_snapshot(self):
+        """Default checkpoint snapshot strategy for Q-Network family.
+
+        This copies current network parameters into checkpoint snapshots.
+        Subclasses can override this for custom snapshot strategies.
+        """
+        # Default strategy: snapshot current network params
+        if hasattr(self, "params"):
+            self.checkpoint_params = deepcopy(
+                self.target_params if self.scaled_by_reset else self.params
+            )
+
+    def actions(self, obs, epsilon, eval_mode=False):
+        params_to_use = self.target_params if self.scaled_by_reset else self.params
+        if eval_mode and self.use_checkpointing and self.checkpointing_enabled:
+            params_to_use = self.checkpoint_params
         if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(
                 self._get_actions(
-                    self.target_params if self.scaled_by_reset else self.params,
+                    params_to_use,
                     obs,
                     next(self.key_seq) if self.param_noise else None,
                 )
@@ -159,30 +174,53 @@ class HL_GAUSS_SPR(Q_Network_Family):
 
     def train_step(self, steps, gradient_steps):
         # HL_GAUSS_SPR has a more complex structure, so we handle it specially
-        data = self._sample_batch(gradient_steps * self.batch_size)
+        # Use fixed chunk size based on base gradient_steps to avoid JIT recompilation
+        fixed_chunk_size = (
+            self.gradient_steps
+        )  # Use base gradient_steps for consistent JIT compilation
 
-        (
-            self.params,
-            self.target_params,
-            self.opt_state,
-            loss,
-            t_mean,
-            new_priorities,
-            rprloss,
-        ) = self._train_step(
-            self.params,
-            self.target_params,
-            self.opt_state,
-            self.train_steps_count,
-            next(self.key_seq),
-            **data,
-        )
+        # Calculate how many chunks we need
+        num_chunks = gradient_steps // fixed_chunk_size
 
-        self.train_steps_count += gradient_steps
+        total_loss = 0.0
+        total_rprloss = 0.0
+        total_t_mean = 0.0
 
-        self._update_priorities(data, new_priorities)
+        # Process all chunks
+        for _ in range(num_chunks):
+            data = self._sample_batch(fixed_chunk_size * self.batch_size)
 
-        if self.logger_run and steps % self.log_interval == 0:
+            (
+                self.params,
+                self.target_params,
+                self.opt_state,
+                loss,
+                t_mean,
+                new_priorities,
+                rprloss,
+            ) = self._train_step(
+                self.params,
+                self.target_params,
+                self.opt_state,
+                self.train_steps_count,
+                next(self.key_seq),
+                **data,
+            )
+
+            self.train_steps_count += fixed_chunk_size
+            self._update_priorities(data, new_priorities)
+
+            total_loss += loss
+            total_rprloss += rprloss
+            total_t_mean += t_mean
+
+        # Average the losses across all chunks
+        loss = total_loss / num_chunks
+        rprloss = total_rprloss / num_chunks
+        t_mean = total_t_mean / num_chunks
+
+        if self.logger_run and (steps - self._last_log_step >= self.log_interval):
+            self._last_log_step = steps
             self.logger_run.log_metric("loss/qloss", loss, steps)
             self.logger_run.log_metric("loss/rprloss", rprloss, steps)
             self.logger_run.log_metric("loss/targets", t_mean, steps)

@@ -81,6 +81,18 @@ class EpisodicLifeEnv(gym.Wrapper):
         self.was_real_done = True
         self.kill_on_life_loss = kill_on_life_loss
 
+    def true_reset(self, **kwargs):
+        """Force a real environment reset, ignoring episodic life handling.
+
+        This bypasses the loss-of-life pseudo-terminal behavior and resets the
+        underlying environment, returning the initial observation and info.
+        """
+        obs, info = self.env.reset(**kwargs)
+        # Mark last transition as a real episode end and refresh lives info
+        self.was_real_done = True
+        self.lives = info.get("lives", 0)
+        return obs, info
+
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
         self.was_real_done = terminated or truncated

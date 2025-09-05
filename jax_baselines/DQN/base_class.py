@@ -1,4 +1,5 @@
 from collections import deque
+from copy import deepcopy
 
 import jax
 import numpy as np
@@ -10,7 +11,13 @@ from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.replay_factory import make_replay_buffer
 from jax_baselines.common.schedules import ConstantSchedule, LinearSchedule
-from jax_baselines.common.utils import key_gen, restore, save
+from jax_baselines.common.utils import (
+    ckpt_prob_full_window_quantile_exceeds_baseline,
+    compute_ckpt_window_stat,
+    key_gen,
+    restore,
+    save,
+)
 
 
 class Q_Network_Family(object):
@@ -47,6 +54,11 @@ class Q_Network_Family(object):
         seed=None,
         optimizer="adamw",
         compress_memory=False,
+        # Checkpointing options (opt-in by default for base class)
+        use_checkpointing=True,
+        steps_before_checkpointing=500000,
+        max_eps_before_checkpointing=10,
+        initial_checkpoint_window=1,
     ):
         self.name = "Q_Network_Family"
         self.env_builder = env_builder
@@ -96,6 +108,29 @@ class Q_Network_Family(object):
 
         self.get_env_setup()
         self.get_memory_setup()
+
+        # Generic checkpointing scaffolding (used by algorithms that opt-in)
+        self.use_checkpointing = use_checkpointing
+        self.checkpointing_enabled = False  # becomes True after steps_before_checkpointing
+        self.steps_before_checkpointing = min(int(steps_before_checkpointing), learning_starts * 2)
+        self.max_eps_before_checkpointing = int(max_eps_before_checkpointing)
+        self.initial_checkpoint_window = int(initial_checkpoint_window)
+        self._ckpt_eps_since_update = 0
+        self._ckpt_timesteps_since_update = 0
+        self._ckpt_max_eps_before_update = self.initial_checkpoint_window
+
+        # Robust checkpointing controls
+        self.ckpt_quantile = 0.2  # q-quantile statistic instead of strict min
+        self.use_ckpt_return_standardization = False  # compare windows in absolute return space
+        self._ckpt_returns_window = []  # recent episode returns in current window
+        self._ckpt_baseline = -1e8  # window-stat baseline (initialized on first window)
+        self._ckpt_update_residual = 0  # exact training-parity residual accumulator
+        # Track snapshot updates for logging and progress description
+        self._last_ckpt_update_step = None
+        self._ckpt_update_count = 0
+
+        # Logging throttle based on last log step
+        self._last_log_step = 0
 
         # Control model initialization timing across children
         self._init_setup_model = _init_setup_model
@@ -191,7 +226,8 @@ class Q_Network_Family(object):
                 ) = result
                 self._update_priorities(data, new_priorities)
 
-                if self.logger_run and steps % self.log_interval == 0:
+                if self.logger_run and (steps - self._last_log_step >= self.log_interval):
+                    self._last_log_step = steps
                     self.logger_run.log_metric("loss/qloss", loss, steps)
                     self.logger_run.log_metric("loss/targets", t_mean, steps)
 
@@ -209,7 +245,8 @@ class Q_Network_Family(object):
                 ) = result
                 self._update_priorities(data, new_priorities)
 
-                if self.logger_run and steps % self.log_interval == 0:
+                if self.logger_run and (steps - self._last_log_step >= self.log_interval):
+                    self._last_log_step = steps
                     self.logger_run.log_metric("loss/qloss", loss, steps)
                     self.logger_run.log_metric("loss/targets", t_mean, steps)
                     self.logger_run.log_metric("loss/target_stds", t_std, steps)
@@ -220,16 +257,22 @@ class Q_Network_Family(object):
                     new_priorities = result[4]
                     self._update_priorities(data, new_priorities)
 
-                if self.logger_run and steps % self.log_interval == 0:
+                if self.logger_run and (steps - self._last_log_step >= self.log_interval):
+                    self._last_log_step = steps
                     self.logger_run.log_metric("loss/qloss", loss, steps)
 
         return loss
 
-    def actions(self, obs, epsilon):
+    def actions(self, obs, epsilon, eval_mode=False):
+        # Select params: during eval with checkpointing prefer snapshot
+        params_to_use = self.params
+        if eval_mode and self.use_checkpointing and self.checkpointing_enabled:
+            params_to_use = self.checkpoint_params
+
         if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(
                 self._get_actions(
-                    self.params, obs, next(self.key_seq) if self.param_noise else None
+                    params_to_use, obs, next(self.key_seq) if self.param_noise else None
                 )
             )
         else:
@@ -245,9 +288,14 @@ class Q_Network_Family(object):
         discription += f"loss : {np.mean(self.lossque):.3f}"
 
         if self.param_noise:
-            return discription
+            pass
         else:
-            return discription + f", epsilon : {self.update_eps:.3f}"
+            discription += f", epsilon : {self.update_eps:.3f}"
+
+        if self.use_checkpointing and (self._last_ckpt_update_step is not None):
+            discription += f", ckpt_upd_step : {int(self._last_ckpt_update_step)}"
+
+        return discription
 
     def run_name_update(self, run_name):
         if self.munchausen:
@@ -298,9 +346,15 @@ class Q_Network_Family(object):
         self.logger = TensorboardLogger(run_name, experiment_name, self.log_dir, self)
         with self.logger as self.logger_run:
             if self.env_type == "SingleEnv":
-                self.learn_SingleEnv(pbar, callback, log_interval)
+                if self.use_checkpointing:
+                    self.learn_SingleEnv_checkpointing(pbar, callback, log_interval)
+                else:
+                    self.learn_SingleEnv(pbar, callback, log_interval)
             if self.env_type == "VectorizedEnv":
-                self.learn_VectorizedEnv(pbar, callback, log_interval)
+                if self.use_checkpointing:
+                    self.learn_VectorizedEnv_checkpointing(pbar, callback, log_interval)
+                else:
+                    self.learn_VectorizedEnv(pbar, callback, log_interval)
 
             self.eval(total_timesteps)
 
@@ -311,6 +365,8 @@ class Q_Network_Family(object):
         obs = [np.expand_dims(obs, axis=0)]
         self.lossque = deque(maxlen=10)
         eval_result = None
+
+        # Always run non-checkpointing flow; branching handled in learn()
 
         for steps in pbar:
             actions = self.actions(obs, self.update_eps)
@@ -337,6 +393,8 @@ class Q_Network_Family(object):
     def learn_VectorizedEnv(self, pbar, callback=None, log_interval=1000):
         self.lossque = deque(maxlen=10)
         eval_result = None
+
+        # Always run non-checkpointing flow; branching handled in learn()
 
         for steps in pbar:
             self.update_eps = self.exploration.value(steps)
@@ -366,13 +424,10 @@ class Q_Network_Family(object):
                 pbar.set_description(self.discription(eval_result))
 
     def eval(self, steps):
-        # Wrap actions to provide a deterministic (greedy) epsilon=0.0 during evaluation
-        # and return a scalar action suitable for eval_env.step(action).
+        # Deterministic greedy evaluation using public actions() API.
         def eval_action_fn(obs):
-            a = self.actions(obs, 0.0)
+            a = self.actions(obs, 0.0, eval_mode=True)
             arr = np.asarray(a)
-            # If it's a single-element array, return the scalar. Otherwise try to
-            # index [0][0] which matches how actions are used elsewhere.
             if arr.size == 1:
                 return int(arr.item())
             else:
@@ -385,6 +440,112 @@ class Q_Network_Family(object):
             logger_run=self.logger_run,
             steps=steps,
         )
+
+    def learn_SingleEnv_checkpointing(self, pbar, callback=None, log_interval=1000, obs=None):
+        # Initialize required state if not provided
+        if obs is None:
+            obs, info = self.env.reset()
+            obs = [np.expand_dims(obs, axis=0)]
+        self.lossque = deque(maxlen=10)
+        eval_result = None
+
+        score = 0.0
+        eplen = 0
+
+        def _ckpt_train_and_reset(step_val, accumulated_timesteps):
+            # Exact training-parity via residual accumulation
+            self._ckpt_update_residual += int(accumulated_timesteps)
+            num_update_iters = 0
+            while self._ckpt_update_residual >= self.train_freq:
+                self._ckpt_update_residual -= self.train_freq
+                num_update_iters += 1
+            if num_update_iters > 0:
+                total_updates = num_update_iters * self.gradient_steps
+                loss_local = self.train_step(step_val, total_updates)
+                self.lossque.append(loss_local)
+
+        for steps in pbar:
+            actions = self.actions(obs, self.update_eps)
+            next_obs, reward, terminated, truncated, info = self.env.step(actions[0][0])
+            next_obs = [np.expand_dims(next_obs, axis=0)]
+            self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
+            score += float(reward)
+            obs = next_obs
+
+            if terminated or truncated:
+                obs, info = self.env.reset()
+                obs = [np.expand_dims(obs, axis=0)]
+                if steps > self.learning_starts:
+                    self._checkpoint_on_episode_end(
+                        steps, score, eplen if eplen > 0 else 1, _ckpt_train_and_reset
+                    )
+                score = 0.0
+                eplen = 0
+            else:
+                eplen += 1
+
+            # Maintain epsilon schedule
+            self.update_eps = self.exploration.value(steps)
+
+            if steps % self.eval_freq == 0:
+                eval_result = self.eval(steps)
+
+            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+                pbar.set_description(self.discription(eval_result))
+
+    def learn_VectorizedEnv_checkpointing(self, pbar, callback=None, log_interval=1000):
+        self.lossque = deque(maxlen=10)
+        eval_result = None
+
+        scores = np.zeros([self.worker_size], dtype=np.float64)
+        eplens = np.zeros([self.worker_size], dtype=np.int32)
+
+        def _ckpt_train_and_reset(step_val, accumulated_timesteps):
+            # Exact training-parity via residual accumulation
+            self._ckpt_update_residual += int(accumulated_timesteps)
+            num_update_iters = 0
+            while self._ckpt_update_residual >= self.train_freq:
+                self._ckpt_update_residual -= self.train_freq
+                num_update_iters += 1
+            if num_update_iters > 0:
+                total_updates = num_update_iters * self.gradient_steps
+                loss_local = self.train_step(step_val, total_updates)
+                self.lossque.append(loss_local)
+
+        for steps in pbar:
+            self.update_eps = self.exploration.value(steps)
+            obs = self.env.current_obs()
+            actions = self.actions([obs], self.update_eps)
+            self.env.step(actions)
+
+            (
+                next_obses,
+                rewards,
+                terminateds,
+                truncateds,
+                infos,
+            ) = self.env.get_result()
+
+            scores += rewards
+            eplens += 1
+
+            self.replay_buffer.add([obs], actions, rewards, [next_obses], terminateds, truncateds)
+
+            if steps > self.learning_starts:
+                done = np.logical_or(terminateds, truncateds)
+                done_idx = np.where(done)[0]
+                for idx in done_idx:
+                    self._checkpoint_on_episode_end(
+                        steps, float(scores[idx]), int(eplens[idx]), _ckpt_train_and_reset
+                    )
+                    scores[idx] = 0.0
+                    eplens[idx] = 0
+
+            if steps % self.eval_freq == 0:
+                eval_result = self.eval(steps)
+
+            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+                pbar.set_description(self.discription(eval_result))
 
     def test(self, episode=10):
         with self.logger as self.logger_run:
@@ -404,3 +565,115 @@ class Q_Network_Family(object):
             episode,
             conv_action=None,
         )
+
+    # -------------------------------
+    # Checkpointing scaffolding hooks
+    # -------------------------------
+    def _maybe_enable_checkpointing(self, steps):
+        if (
+            self.use_checkpointing
+            and (not self.checkpointing_enabled)
+            and steps > self.steps_before_checkpointing
+        ):
+            # Relax the threshold slightly when entering checkpointing mode
+            self._ckpt_max_eps_before_update = self.max_eps_before_checkpointing
+            self.checkpointing_enabled = True
+
+    def _checkpoint_update_snapshot(self):
+        """Default checkpoint snapshot strategy for Q-Network family.
+
+        This copies current network parameters into checkpoint snapshots.
+        Subclasses can override this for custom snapshot strategies.
+        """
+        # Default strategy: snapshot current network params
+        if hasattr(self, "params"):
+            self.checkpoint_params = deepcopy(self.params)
+
+    def _log_ckpt_snapshot_update(self, steps):
+        """Record that a checkpoint snapshot was updated and log it."""
+        self._last_ckpt_update_step = int(steps)
+        self._ckpt_update_count += self.checkpointing_enabled
+        if getattr(self, "logger_run", None) is not None:
+            try:
+                self.logger_run.log_metric(
+                    "ckpt/ckpt_baseline", float(self._ckpt_baseline), int(steps)
+                )
+                self.logger_run.log_metric(
+                    "ckpt/update_count", float(self._ckpt_update_count), int(steps)
+                )
+            except Exception:
+                pass
+
+    def _checkpoint_on_episode_end(
+        self, steps, episode_return, episode_len, train_and_reset_callback=None
+    ):
+        """Generic per-episode checkpointing state update.
+
+        Subclasses can call this at the end of an episode to drive a TD7-like
+        checkpoint schedule. If a callback is provided, it will be called when
+        it's time to perform a training/reset pulse.
+        """
+        if not self.use_checkpointing:
+            return
+
+        # Update runtime counters and statistics
+        self._ckpt_eps_since_update += 1
+        self._ckpt_timesteps_since_update += int(episode_len)
+        self._ckpt_returns_window.append(float(episode_return))
+
+        # Enable checkpointing mode once enough steps have elapsed
+        self._maybe_enable_checkpointing(steps)
+
+        # Compute robust window statistic (quantile on standardized returns if enabled)
+        window_stat = compute_ckpt_window_stat(
+            self._ckpt_returns_window, self.ckpt_quantile, self.use_ckpt_return_standardization
+        )
+        if window_stat is None:
+            return
+        self.logger_run.log_metric("ckpt/window_stat", float(window_stat), int(steps))
+
+        # Pre-enable phase: warm-up baseline/snapshot, no training pulses by default
+        if not self.checkpointing_enabled:
+            self._checkpoint_update_snapshot()
+            if callable(train_and_reset_callback):
+                train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
+            self._ckpt_eps_since_update = 0
+            self._ckpt_timesteps_since_update = 0
+            self._ckpt_returns_window = []
+
+        if window_stat < self._ckpt_baseline:
+            # If window is not yet full, gate early termination by predictive probability
+            if self._ckpt_eps_since_update < self._ckpt_max_eps_before_update:
+                prob = ckpt_prob_full_window_quantile_exceeds_baseline(
+                    self._ckpt_returns_window,
+                    self._ckpt_baseline,
+                    self._ckpt_max_eps_before_update,
+                    self.ckpt_quantile,
+                )
+                if prob <= 0.5:
+                    if callable(train_and_reset_callback):
+                        train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
+                    self._ckpt_eps_since_update = 0
+                    self._ckpt_timesteps_since_update = 0
+                    self._ckpt_returns_window = []
+                    return
+                # Otherwise, do not early-terminate; continue accumulating the window
+            else:
+                # Window full: preserve original early-termination behavior
+                if callable(train_and_reset_callback):
+                    train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
+                self._ckpt_eps_since_update = 0
+                self._ckpt_timesteps_since_update = 0
+                self._ckpt_returns_window = []
+                return
+
+        # Enabled phase: end-of-window refresh with training pulse
+        if self._ckpt_eps_since_update >= self._ckpt_max_eps_before_update:
+            self._checkpoint_update_snapshot()
+            self._ckpt_baseline = window_stat
+            self._log_ckpt_snapshot_update(steps)
+            if callable(train_and_reset_callback):
+                train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
+            self._ckpt_eps_since_update = 0
+            self._ckpt_timesteps_since_update = 0
+            self._ckpt_returns_window = []
