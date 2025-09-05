@@ -125,10 +125,10 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             adv += jnp.minimum(self.ent_coef * entropy, adv / self.entropy_adv_shaping_kappa)
 
         actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
+        entropy_loss = jnp.mean(entropy)
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
         else:
-            entropy_loss = jnp.mean(entropy)
             total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
