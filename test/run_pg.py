@@ -30,6 +30,9 @@ if __name__ == "__main__":
     parser.add_argument("--gae_normalize", dest="gae_normalize", action="store_true")
     parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
     parser.add_argument(
+        "--use_entropy_adv_shaping", dest="use_entropy_adv_shaping", action="store_true"
+    )
+    parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
     parser.set_defaults(gae_normalize=False)
@@ -58,6 +61,7 @@ if __name__ == "__main__":
             batch_size=args.batch,
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
+            use_entropy_adv_shaping=args.use_entropy_adv_shaping,
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
@@ -74,6 +78,7 @@ if __name__ == "__main__":
             minibatch_size=args.mini_batch,
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
+            use_entropy_adv_shaping=args.use_entropy_adv_shaping,
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
@@ -90,6 +95,7 @@ if __name__ == "__main__":
             minibatch_size=args.mini_batch,
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
+            use_entropy_adv_shaping=args.use_entropy_adv_shaping,
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
@@ -106,6 +112,7 @@ if __name__ == "__main__":
             minibatch_size=args.mini_batch,
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
+            use_entropy_adv_shaping=args.use_entropy_adv_shaping,
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
