@@ -206,6 +206,11 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         prob, log_prob = self.get_logprob(
             self.actor(params, key, feature), actions, key, out_prob=True
         )
+        entropy = jnp.sum(prob * jnp.log(prob), axis=-1, keepdims=True)
+        if self.use_entropy_adv_shaping:
+            adv += jnp.minimum(self.ent_coef * entropy, adv / self.entropy_adv_shaping_kappa)
+        adv = jax.lax.stop_gradient(adv)
+
         ratio = jnp.exp(log_prob - old_act_prob)
         kl = jax.vmap(kl_divergence_discrete)(old_prob, prob)
         actor_loss = -jnp.mean(
@@ -217,10 +222,11 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
                 self.kl_range,
             )
         )
-        # Numerical stability: avoid log(0) with small epsilon
-        epsilon = 1e-8
-        entropy_loss = jnp.mean(prob * jnp.log(jnp.maximum(prob, epsilon)))
-        total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
+        entropy_loss = jnp.mean(entropy)
+        if self.use_entropy_adv_shaping:
+            total_loss = self.val_coef * critic_loss + actor_loss
+        else:
+            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss, jnp.mean(kl))
 
     def _loss_continuous(
@@ -236,6 +242,12 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         prob, log_prob = self.get_logprob(
             self.actor(params, key, feature), actions, key, out_prob=True
         )
+        mu, log_std = prob
+        entropy = jnp.sum(jnp.square(mu) - log_std, axis=-1, keepdims=True)
+        if self.use_entropy_adv_shaping:
+            adv += jnp.minimum(self.ent_coef * entropy, adv / self.entropy_adv_shaping_kappa)
+        adv = jax.lax.stop_gradient(adv)
+
         ratio = jnp.exp(log_prob - old_act_prob)
         kl = jax.vmap(kl_divergence_continuous)(old_prob, prob)
         actor_loss = -jnp.mean(
@@ -247,12 +259,11 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
                 self.kl_range,
             )
         )
-        mu, log_std = prob
-        # Correct Gaussian entropy: -H = -sum(log_std) - 0.5*dim*(1+log(2π))
-        dim = mu.shape[-1]
-        neg_entropy = -jnp.sum(log_std, axis=-1) - 0.5 * dim * (1.0 + jnp.log(2.0 * jnp.pi))
-        entropy_loss = jnp.mean(neg_entropy)
-        total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
+        entropy_loss = jnp.mean(entropy)
+        if self.use_entropy_adv_shaping:
+            total_loss = self.val_coef * critic_loss + actor_loss
+        else:
+            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss, jnp.mean(kl))
 
     def learn(

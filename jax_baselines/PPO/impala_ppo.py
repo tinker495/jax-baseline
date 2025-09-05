@@ -222,14 +222,21 @@ class IMPALA_PPO(IMPALA_Family):
 
         logit = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(logit, actions, key, out_prob=True)
+        entropy = jnp.sum(prob * jnp.log(prob), axis=-1, keepdims=True)
+        if self.use_entropy_adv_shaping:
+            adv += jnp.minimum(self.ent_coef * entropy, adv / self.entropy_adv_shaping_kappa)
+        adv = jax.lax.stop_gradient(adv)
+
         is_ratio = jnp.clip(jnp.exp(mu_prob - pi_prob), 0.0, 2.0)
         ratio = is_ratio * jnp.exp(log_prob - mu_prob)
         cross_entropy1 = -adv * ratio
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
-        entropy = prob * jnp.log(prob)
         entropy_loss = jnp.mean(entropy)
-        total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
+        if self.use_entropy_adv_shaping:
+            total_loss = self.val_coef * critic_loss + actor_loss
+        else:
+            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
     def _loss_continuous(self, params, obses, actions, old_value, vs, mu_prob, adv, key):
@@ -243,13 +250,21 @@ class IMPALA_PPO(IMPALA_Family):
 
         prob = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(prob, actions, key, out_prob=True)
+        mu, log_std = prob
+        entropy = jnp.sum(jnp.square(mu) - log_std, axis=-1, keepdims=True)
+        if self.use_entropy_adv_shaping:
+            adv += jnp.minimum(self.ent_coef * entropy, adv / self.entropy_adv_shaping_kappa)
+        adv = jax.lax.stop_gradient(adv)
+
         ratio = jnp.exp(log_prob - mu_prob)
         cross_entropy1 = -adv * ratio
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
-        mu, log_std = prob
-        entropy_loss = jnp.mean(jnp.square(mu) - log_std)
-        total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
+        entropy_loss = jnp.mean(entropy)
+        if self.use_entropy_adv_shaping:
+            total_loss = self.val_coef * critic_loss + actor_loss
+        else:
+            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
     def learn(

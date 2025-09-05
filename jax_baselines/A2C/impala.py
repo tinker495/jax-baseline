@@ -168,10 +168,16 @@ class IMPALA(IMPALA_Family):
 
         logit = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(logit, actions, key, out_prob=True)
-        actor_loss = -jnp.mean(adv * log_prob)
-        entropy = prob * jnp.log(prob)
-        entropy_loss = jnp.mean(entropy)
-        total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
+        entropy = jnp.sum(prob * jnp.log(prob), axis=-1, keepdims=True)
+        if self.use_entropy_adv_shaping:
+            adv += jnp.minimum(self.ent_coef * entropy, adv / self.entropy_adv_shaping_kappa)
+        actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
+
+        if self.use_entropy_adv_shaping:
+            total_loss = self.val_coef * critic_loss + actor_loss
+        else:
+            entropy_loss = jnp.mean(entropy)
+            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
     def _loss_continuous(self, params, obses, actions, vs, adv, key):
@@ -181,10 +187,16 @@ class IMPALA(IMPALA_Family):
 
         prob = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(prob, actions, key, out_prob=True)
-        actor_loss = -jnp.mean(adv * log_prob)
         mu, log_std = prob
-        entropy_loss = jnp.mean(jnp.square(mu) - log_std)
-        total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
+        entropy = jnp.sum(jnp.square(mu) - log_std, axis=-1, keepdims=True)
+        if self.use_entropy_adv_shaping:
+            adv += jnp.minimum(self.ent_coef * entropy, adv / self.entropy_adv_shaping_kappa)
+        actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
+        if self.use_entropy_adv_shaping:
+            total_loss = self.val_coef * critic_loss + actor_loss
+        else:
+            entropy_loss = jnp.mean(entropy)
+            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
     def learn(
