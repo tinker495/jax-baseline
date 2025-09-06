@@ -256,7 +256,9 @@ class IMPALA_TPPO(IMPALA_Family):
         entropy_h = -jnp.sum(prob * jnp.log(jnp.maximum(prob, 1e-8)), axis=-1, keepdims=True)
         if self.use_entropy_adv_shaping:
             # Paper's shaping: psi(H) = min(alpha * H, |A| / kappa) >= 0
-            psi_h = jnp.minimum(ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa)
+            psi_h = jnp.minimum(
+                self.ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa
+            )
             adv += psi_h
         adv = jax.lax.stop_gradient(adv)
 
@@ -303,7 +305,9 @@ class IMPALA_TPPO(IMPALA_Family):
         )
         if self.use_entropy_adv_shaping:
             # Paper's shaping: psi(H) = min(alpha * H, |A| / kappa) >= 0
-            psi_h = jnp.minimum(ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa)
+            psi_h = jnp.minimum(
+                self.ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa
+            )
             adv += psi_h
         adv = jax.lax.stop_gradient(adv)
 
