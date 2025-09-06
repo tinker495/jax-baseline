@@ -21,8 +21,8 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         gae_normalize=False,
         minibatch_size=32,
         epoch_num=4,
-        kl_range=0.0008,
-        kl_coef=20,
+        kl_range=0.008,
+        kl_coef=5,
         value_clip=2.0,
         **kwargs
     ):
@@ -77,7 +77,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             self.logger_run.log_metric("loss/actor_loss", actor_loss, steps)
             self.logger_run.log_metric("loss/entropy_loss", entropy_loss, steps)
             self.logger_run.log_metric("loss/mean_target", targets, steps)
-            self.logger_run.log_metric("loss/kl_divergense", kls, steps)
+            self.logger_run.log_metric("loss/kl_divergence", kls, steps)
 
         return critic_loss
 
@@ -248,6 +248,10 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             self.actor(params, key, feature), actions, key, out_prob=True
         )
         mu, log_std = prob
+        std = jnp.exp(log_std)
+        prob_std = (mu, std)
+        old_std = jnp.exp(jnp.array(old_prob[1]))
+        old_prob_std = (old_prob[0], old_std)
         # Paper's Gaussian entropy: H = sum(log(sigma)) + 0.5*d*(1+log(2*pi))
         dim = mu.shape[-1]
         entropy_h = jnp.sum(log_std, axis=-1, keepdims=True) + 0.5 * dim * (
@@ -262,7 +266,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         adv = jax.lax.stop_gradient(adv)
 
         ratio = jnp.exp(log_prob - old_act_prob)
-        kl = jax.vmap(kl_divergence_continuous)(old_prob, prob)
+        kl = jax.vmap(kl_divergence_continuous)(old_prob_std, prob_std)
         actor_loss = -jnp.mean(
             adv * ratio
             - self.kl_coef

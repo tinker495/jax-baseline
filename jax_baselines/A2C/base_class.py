@@ -140,7 +140,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
         return np.random.normal(mu, std)
 
     def get_logprob_discrete(self, prob, action, key, out_prob=False):
-        prob = jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0)
+        prob = jax.nn.softmax(prob)
+        prob = jnp.clip(prob, 1e-8, 1.0)
+        prob = prob / jnp.sum(prob, axis=-1, keepdims=True)
         action = action.astype(jnp.int32)
         if out_prob:
             return prob, jnp.log(jnp.take_along_axis(prob, action, axis=1))

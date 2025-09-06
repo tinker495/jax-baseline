@@ -27,6 +27,7 @@ if __name__ == "__main__":
     parser.add_argument("--optimizer", type=str, default="adamw", help="optimaizer")
     parser.add_argument("--ent_coef", type=float, default=0.001, help="entropy coefficient")
     parser.add_argument("--val_coef", type=float, default=0.6, help="val coefficient")
+    parser.add_argument("--epoch_num", type=int, default=4, help="epoch number")
     parser.add_argument("--gae_normalize", dest="gae_normalize", action="store_true")
     parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
     parser.add_argument(
@@ -79,6 +80,7 @@ if __name__ == "__main__":
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
             use_entropy_adv_shaping=args.use_entropy_adv_shaping,
+            epoch_num=args.epoch_num,
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
@@ -96,6 +98,7 @@ if __name__ == "__main__":
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
             use_entropy_adv_shaping=args.use_entropy_adv_shaping,
+            epoch_num=args.epoch_num,
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
@@ -113,6 +116,7 @@ if __name__ == "__main__":
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
             use_entropy_adv_shaping=args.use_entropy_adv_shaping,
+            epoch_num=args.epoch_num,
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
