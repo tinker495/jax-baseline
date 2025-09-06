@@ -195,17 +195,21 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         prob, log_prob = self.get_logprob(
             self.actor(params, key, feature), actions, key, out_prob=True
         )
-        entropy = jnp.sum(prob * jnp.log(prob), axis=-1, keepdims=True)
+        # Paper's entropy: H = -sum(p * log(p)) >= 0
+        entropy_h = -jnp.sum(prob * jnp.log(jnp.maximum(prob, 1e-8)), axis=-1, keepdims=True)
         if self.use_entropy_adv_shaping:
-            adv += jnp.minimum(self.ent_coef * entropy, adv / self.entropy_adv_shaping_kappa)
+            # Paper's shaping: psi(H) = min(alpha * H, |A| / kappa) >= 0
+            psi_h = jnp.minimum(
+                self.ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa
+            )
+            adv += psi_h
         adv = jax.lax.stop_gradient(adv)
 
         ratio = jnp.exp(log_prob - old_prob)
         cross_entropy1 = -adv * ratio
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
-        # Numerical stability: avoid log(0) with small epsilon
-        entropy_loss = jnp.mean(entropy)
+        entropy_loss = jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
         else:
@@ -224,19 +228,27 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
             self.actor(params, key, feature), actions, key, out_prob=True
         )
         mu, log_std = prob
-        entropy = jnp.sum(jnp.square(mu) - log_std, axis=-1, keepdims=True)
+        # Paper's Gaussian entropy: H = sum(log(sigma)) + 0.5*d*(1+log(2*pi))
+        dim = mu.shape[-1]
+        entropy_h = jnp.sum(log_std, axis=-1, keepdims=True) + 0.5 * dim * (
+            1.0 + jnp.log(2.0 * jnp.pi)
+        )
         if self.use_entropy_adv_shaping:
-            adv += jnp.minimum(self.ent_coef * entropy, adv / self.entropy_adv_shaping_kappa)
+            # Paper's shaping: psi(H) = min(alpha * H, |A| / kappa) >= 0
+            psi_h = jnp.minimum(
+                self.ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa
+            )
+            adv += psi_h
         adv = jax.lax.stop_gradient(adv)
 
         ratio = jnp.exp(log_prob - old_prob)
         cross_entropy1 = -adv * ratio
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
+        entropy_loss = jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
         else:
-            entropy_loss = jnp.mean(entropy)
             total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
