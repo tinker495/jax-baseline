@@ -39,13 +39,13 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     env_name = args.env
-    embedding_mode = "normal"
+    embedding_mode = "resnet"
     env_builder, env_info = get_env_builder(
         env_name, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
     )
     env_name = env_info["env_id"]
     env_type = env_info["env_type"]
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n}
+    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
     if args.model_lib == "flax":
         from model_builder.flax.ac.ac_builder import model_builder_maker

@@ -16,7 +16,7 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
         gae_normalize=False,
         minibatch_size=32,
         epoch_num=4,
-        value_clip=0.5,
+        value_clip=2.0,
         ppo_eps=0.2,
         **kwargs
     ):

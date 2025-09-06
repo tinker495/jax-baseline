@@ -23,7 +23,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         epoch_num=4,
         kl_range=0.0008,
         kl_coef=20,
-        value_clip=0.5,
+        value_clip=2.0,
         **kwargs
     ):
         super().__init__(env_builder, model_builder_maker, **kwargs)
