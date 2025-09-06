@@ -14,7 +14,7 @@ OPTIMIZER="--optimizer rmsprop"
 LR="--learning_rate 0.001"
 #python run_pg.py --algo A2C $EXPERIMENT_NAME $ENV $TRAIN $MODEL $OPTIONS $OPTIMIZER
 LR="--learning_rate 0.0003"
-OPTIONS="--ent_coef 1e-3"
+OPTIONS="--ent_coef 1e-2 --epoch_num 16"
 python run_pg.py --algo SPO $EXPERIMENT_NAME $ENV $TRAIN $MODEL $OPTIONS $OPTIMIZER
 python run_pg.py --algo TPPO $EXPERIMENT_NAME $ENV $TRAIN $MODEL $OPTIONS $OPTIMIZER
 python run_pg.py --algo PPO $EXPERIMENT_NAME $ENV $TRAIN $MODEL $OPTIONS $OPTIMIZER
