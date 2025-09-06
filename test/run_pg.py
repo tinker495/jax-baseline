@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     env_name = args.env
-    embedding_mode = "resnet"
+    embedding_mode = "normal"
     env_builder, env_info = get_env_builder(
         env_name, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
     )
