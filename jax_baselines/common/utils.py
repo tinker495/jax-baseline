@@ -252,7 +252,7 @@ def kl_divergence_continuous(p, q):
     q_mu, q_std = q
     term1 = jnp.log(q_std / p_std)
     term2 = (p_std**2 + (p_mu - q_mu) ** 2) / (2 * q_std**2)
-    return term1 + term2 - 0.5
+    return jnp.sum(term1 + term2 - 0.5, axis=-1, keepdims=True)
 
 
 def get_hyper_params(agent):

@@ -21,9 +21,9 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         gae_normalize=False,
         minibatch_size=32,
         epoch_num=4,
-        kl_range=0.0008,
-        kl_coef=20,
-        value_clip=0.5,
+        kl_range=0.008,
+        kl_coef=5,
+        value_clip=2.0,
         **kwargs
     ):
         super().__init__(env_builder, model_builder_maker, **kwargs)
@@ -77,7 +77,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             self.logger_run.log_metric("loss/actor_loss", actor_loss, steps)
             self.logger_run.log_metric("loss/entropy_loss", entropy_loss, steps)
             self.logger_run.log_metric("loss/mean_target", targets, steps)
-            self.logger_run.log_metric("loss/kl_divergense", kls, steps)
+            self.logger_run.log_metric("loss/kl_divergence", kls, steps)
 
         return critic_loss
 
@@ -206,6 +206,16 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         prob, log_prob = self.get_logprob(
             self.actor(params, key, feature), actions, key, out_prob=True
         )
+        # Paper's entropy: H = -sum(p * log(p)) >= 0
+        entropy_h = -jnp.sum(prob * jnp.log(jnp.maximum(prob, 1e-8)), axis=-1, keepdims=True)
+        if self.use_entropy_adv_shaping:
+            # Paper's shaping: psi(H) = min(alpha * H, |A| / kappa) >= 0
+            psi_h = jnp.minimum(
+                self.ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa
+            )
+            adv += psi_h
+        adv = jax.lax.stop_gradient(adv)
+
         ratio = jnp.exp(log_prob - old_act_prob)
         kl = jax.vmap(kl_divergence_discrete)(old_prob, prob)
         actor_loss = -jnp.mean(
@@ -217,10 +227,11 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
                 self.kl_range,
             )
         )
-        # Numerical stability: avoid log(0) with small epsilon
-        epsilon = 1e-8
-        entropy_loss = jnp.mean(prob * jnp.log(jnp.maximum(prob, epsilon)))
-        total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
+        entropy_loss = -jnp.mean(entropy_h)
+        if self.use_entropy_adv_shaping:
+            total_loss = self.val_coef * critic_loss + actor_loss
+        else:
+            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss, jnp.mean(kl))
 
     def _loss_continuous(
@@ -236,8 +247,26 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         prob, log_prob = self.get_logprob(
             self.actor(params, key, feature), actions, key, out_prob=True
         )
+        mu, log_std = prob
+        std = jnp.exp(log_std)
+        prob_std = (mu, std)
+        old_std = jnp.exp(jnp.array(old_prob[1]))
+        old_prob_std = (old_prob[0], old_std)
+        # Paper's Gaussian entropy: H = sum(log(sigma)) + 0.5*d*(1+log(2*pi))
+        dim = mu.shape[-1]
+        entropy_h = jnp.sum(log_std, axis=-1, keepdims=True) + 0.5 * dim * (
+            1.0 + jnp.log(2.0 * jnp.pi)
+        )
+        if self.use_entropy_adv_shaping:
+            # Paper's shaping: psi(H) = min(alpha * H, |A| / kappa) >= 0
+            psi_h = jnp.minimum(
+                self.ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa
+            )
+            adv += psi_h
+        adv = jax.lax.stop_gradient(adv)
+
         ratio = jnp.exp(log_prob - old_act_prob)
-        kl = jax.vmap(kl_divergence_continuous)(old_prob, prob)
+        kl = jax.vmap(kl_divergence_continuous)(old_prob_std, prob_std)
         actor_loss = -jnp.mean(
             adv * ratio
             - self.kl_coef
@@ -247,12 +276,11 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
                 self.kl_range,
             )
         )
-        mu, log_std = prob
-        # Correct Gaussian entropy: -H = -sum(log_std) - 0.5*dim*(1+log(2π))
-        dim = mu.shape[-1]
-        neg_entropy = -jnp.sum(log_std, axis=-1) - 0.5 * dim * (1.0 + jnp.log(2.0 * jnp.pi))
-        entropy_loss = jnp.mean(neg_entropy)
-        total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
+        entropy_loss = -jnp.mean(entropy_h)
+        if self.use_entropy_adv_shaping:
+            total_loss = self.val_coef * critic_loss + actor_loss
+        else:
+            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss, jnp.mean(kl))
 
     def learn(

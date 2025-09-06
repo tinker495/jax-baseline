@@ -27,8 +27,12 @@ if __name__ == "__main__":
     parser.add_argument("--optimizer", type=str, default="adamw", help="optimaizer")
     parser.add_argument("--ent_coef", type=float, default=0.001, help="entropy coefficient")
     parser.add_argument("--val_coef", type=float, default=0.6, help="val coefficient")
+    parser.add_argument("--epoch_num", type=int, default=4, help="epoch number")
     parser.add_argument("--gae_normalize", dest="gae_normalize", action="store_true")
     parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
+    parser.add_argument(
+        "--use_entropy_adv_shaping", dest="use_entropy_adv_shaping", action="store_true"
+    )
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
@@ -42,7 +46,7 @@ if __name__ == "__main__":
     )
     env_name = env_info["env_id"]
     env_type = env_info["env_type"]
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n}
+    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
     if args.model_lib == "flax":
         from model_builder.flax.ac.ac_builder import model_builder_maker
@@ -58,6 +62,7 @@ if __name__ == "__main__":
             batch_size=args.batch,
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
+            use_entropy_adv_shaping=args.use_entropy_adv_shaping,
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
@@ -74,6 +79,8 @@ if __name__ == "__main__":
             minibatch_size=args.mini_batch,
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
+            use_entropy_adv_shaping=args.use_entropy_adv_shaping,
+            epoch_num=args.epoch_num,
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
@@ -90,6 +97,8 @@ if __name__ == "__main__":
             minibatch_size=args.mini_batch,
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
+            use_entropy_adv_shaping=args.use_entropy_adv_shaping,
+            epoch_num=args.epoch_num,
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
@@ -106,6 +115,8 @@ if __name__ == "__main__":
             minibatch_size=args.mini_batch,
             val_coef=args.val_coef,
             ent_coef=args.ent_coef,
+            use_entropy_adv_shaping=args.use_entropy_adv_shaping,
+            epoch_num=args.epoch_num,
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,

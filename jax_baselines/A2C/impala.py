@@ -168,10 +168,20 @@ class IMPALA(IMPALA_Family):
 
         logit = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(logit, actions, key, out_prob=True)
-        actor_loss = -jnp.mean(adv * log_prob)
-        entropy = prob * jnp.log(prob)
-        entropy_loss = jnp.mean(entropy)
-        total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
+        entropy_h = -jnp.sum(prob * jnp.log(jnp.maximum(prob, 1e-8)), axis=-1, keepdims=True)
+        if self.use_entropy_adv_shaping:
+            psi_h = jnp.minimum(
+                self.ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa
+            )
+            adv += psi_h
+        adv = jax.lax.stop_gradient(adv)
+        actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
+
+        if self.use_entropy_adv_shaping:
+            total_loss = self.val_coef * critic_loss + actor_loss
+        else:
+            entropy_loss = jnp.mean(entropy_h)
+            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
     def _loss_continuous(self, params, obses, actions, vs, adv, key):
@@ -181,10 +191,24 @@ class IMPALA(IMPALA_Family):
 
         prob = self.actor(params, key, feature)
         prob, log_prob = self.get_logprob(prob, actions, key, out_prob=True)
-        actor_loss = -jnp.mean(adv * log_prob)
         mu, log_std = prob
-        entropy_loss = jnp.mean(jnp.square(mu) - log_std)
-        total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
+        # Paper's Gaussian entropy: H = sum(log(sigma)) + 0.5*d*(1+log(2*pi))
+        dim = mu.shape[-1]
+        entropy_h = jnp.sum(log_std, axis=-1, keepdims=True) + 0.5 * dim * (
+            1.0 + jnp.log(2.0 * jnp.pi)
+        )
+        if self.use_entropy_adv_shaping:
+            psi_h = jnp.minimum(
+                self.ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa
+            )
+            adv += psi_h
+        adv = jax.lax.stop_gradient(adv)
+        actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
+        if self.use_entropy_adv_shaping:
+            total_loss = self.val_coef * critic_loss + actor_loss
+        else:
+            entropy_loss = jnp.mean(entropy_h)
+            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
     def learn(

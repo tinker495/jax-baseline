@@ -30,6 +30,8 @@ class IMPALA_Family(object):
         sample_size=1,
         val_coef=0.2,
         ent_coef=0.01,
+        use_entropy_adv_shaping=True,
+        entropy_adv_shaping_kappa=2.0,
         rho_max=1.0,
         log_interval=1,
         log_dir=None,
@@ -56,6 +58,8 @@ class IMPALA_Family(object):
         self.lamda = lamda
         self.val_coef = val_coef
         self.ent_coef = ent_coef
+        self.use_entropy_adv_shaping = use_entropy_adv_shaping
+        self.entropy_adv_shaping_kappa = entropy_adv_shaping_kappa
         self.rho_max = rho_max
         self.cut_max = 1.0
         self.log_dir = log_dir

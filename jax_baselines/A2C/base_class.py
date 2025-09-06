@@ -25,6 +25,8 @@ class Actor_Critic_Policy_Gradient_Family(object):
         batch_size=32,
         val_coef=0.2,
         ent_coef=0.01,
+        use_entropy_adv_shaping=True,
+        entropy_adv_shaping_kappa=2.0,
         log_interval=200,
         log_dir=None,
         _init_setup_model=True,
@@ -48,6 +50,8 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.val_coef = val_coef
         self.ent_coef = ent_coef
         self.log_dir = log_dir
+        self.use_entropy_adv_shaping = use_entropy_adv_shaping
+        self.entropy_adv_shaping_kappa = entropy_adv_shaping_kappa
 
         self.params = None
         self.save_path = None
@@ -136,7 +140,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
         return np.random.normal(mu, std)
 
     def get_logprob_discrete(self, prob, action, key, out_prob=False):
-        prob = jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0)
+        prob = jax.nn.softmax(prob)
+        prob = jnp.clip(prob, 1e-8, 1.0)
+        prob = prob / jnp.sum(prob, axis=-1, keepdims=True)
         action = action.astype(jnp.int32)
         if out_prob:
             return prob, jnp.log(jnp.take_along_axis(prob, action, axis=1))
