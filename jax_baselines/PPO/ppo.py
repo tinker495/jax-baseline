@@ -209,7 +209,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         cross_entropy1 = -adv * ratio
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
-        entropy_loss = jnp.mean(entropy_h)
+        entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
         else:
@@ -245,7 +245,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         cross_entropy1 = -adv * ratio
         cross_entropy2 = -adv * jnp.clip(ratio, 1.0 - self.ppo_eps, 1.0 + self.ppo_eps)
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
-        entropy_loss = jnp.mean(entropy_h)
+        entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
         else:

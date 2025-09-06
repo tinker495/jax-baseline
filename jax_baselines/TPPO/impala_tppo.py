@@ -269,7 +269,7 @@ class IMPALA_TPPO(IMPALA_Family):
                 adv * ratio,
             )
         )
-        entropy_loss = jnp.mean(entropy_h)
+        entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
         else:
@@ -316,7 +316,7 @@ class IMPALA_TPPO(IMPALA_Family):
                 adv * ratio,
             )
         )
-        entropy_loss = jnp.mean(entropy_h)
+        entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
         else:

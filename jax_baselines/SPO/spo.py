@@ -208,7 +208,7 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
         spo_term1 = ratio * adv
         spo_term2 = jnp.abs(adv) / (2 * self.ppo_eps) * jnp.square(ratio - 1)
         actor_loss = jnp.mean(-spo_term1 + spo_term2)
-        entropy_loss = jnp.mean(entropy_h)
+        entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
         else:
@@ -245,7 +245,7 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
         spo_term1 = ratio * adv
         spo_term2 = jnp.abs(adv) / (2 * self.ppo_eps) * jnp.square(ratio - 1)
         actor_loss = jnp.mean(-spo_term1 + spo_term2)
-        entropy_loss = jnp.mean(entropy_h)
+        entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
         else:

@@ -109,7 +109,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             adv += psi_h
 
         actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
-        entropy_loss = jnp.mean(entropy_h)
+        entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
         else:
@@ -138,7 +138,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             adv += psi_h
 
         actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
-        entropy_loss = jnp.mean(entropy_h)
+        entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
         else:
