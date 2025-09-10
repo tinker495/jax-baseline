@@ -55,6 +55,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
+    parser.add_argument("--use_checkpointing", action="store_true")
     args = parser.parse_args()
     env_name = args.env
     embedding_mode = "normal"
@@ -96,6 +97,7 @@ if __name__ == "__main__":
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
+            use_checkpointing=args.use_checkpointing,
         )
     if args.algo == "TD3":
         if args.model_lib == "flax":
@@ -126,6 +128,7 @@ if __name__ == "__main__":
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
+            use_checkpointing=args.use_checkpointing,
         )
     if args.algo == "SAC":
         if args.model_lib == "flax":
@@ -156,6 +159,7 @@ if __name__ == "__main__":
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
+            use_checkpointing=args.use_checkpointing,
         )
     if args.algo == "CrossQ":
         if args.model_lib == "flax":
@@ -188,6 +192,7 @@ if __name__ == "__main__":
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
+            use_checkpointing=args.use_checkpointing,
         )
     if args.algo == "DAC":
         if args.model_lib == "flax":
@@ -218,6 +223,7 @@ if __name__ == "__main__":
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
+            use_checkpointing=args.use_checkpointing,
         )
     if args.algo == "TQC":
         if args.model_lib == "flax":
@@ -252,6 +258,7 @@ if __name__ == "__main__":
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
+            use_checkpointing=args.use_checkpointing,
         )
     if args.algo == "TD7":
         if args.model_lib == "flax":
