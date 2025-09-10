@@ -25,7 +25,7 @@ class ResBlock(nn.Module):
             padding="SAME",
             kernel_init=flax.linen.initializers.orthogonal(scale=1.0),
         )(inputs)
-        x = nn.GroupNorm(num_groups=max(self.filters // 32, 1))(x)
+        x = nn.GroupNorm(num_groups=max(self.filters // 8, 1))(x)
         x = nn.relu(x)
         x = nn.Conv(
             self.filters,
@@ -34,7 +34,7 @@ class ResBlock(nn.Module):
             padding="SAME",
             kernel_init=flax.linen.initializers.orthogonal(scale=1.0),
         )(x)
-        x = nn.GroupNorm(num_groups=max(self.filters // 32, 1))(x)
+        x = nn.GroupNorm(num_groups=max(self.filters // 8, 1))(x)
         x = nn.relu(x)
         return x + inputs
 

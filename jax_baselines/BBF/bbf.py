@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.utils import (
     convert_jax,
     filter_like_tree,
@@ -95,7 +96,7 @@ class BBF(Q_Network_Family):
             (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.5),
         )  # hard_reset for qnet and scaled_by_reset for the rest
         self.soft_reset_freq = 40000
-        self.optimizer = optax.adamw(learning_rate=self.learning_rate, weight_decay=0.1)
+        self.optimizer = select_optimizer(self.optimizer_name, self.learning_rate, weight_decay=0.1)
         self.opt_state = self.optimizer.init(self.params)
 
         self.categorial_bar = jnp.expand_dims(
