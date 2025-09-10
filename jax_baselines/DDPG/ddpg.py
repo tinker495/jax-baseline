@@ -72,7 +72,12 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             # During eval with checkpointing, normalize using snapshot obs_rms if available
             rms = (
                 self.checkpoint_obs_rms
-                if (eval and self.use_checkpointing and hasattr(self, "checkpoint_obs_rms"))
+                if (
+                    eval
+                    and self.use_checkpointing
+                    and self.checkpointing_enabled
+                    and hasattr(self, "checkpoint_obs_rms")
+                )
                 else self.action_obs_rms
                 if hasattr(self, "action_obs_rms")
                 else self.obs_rms
@@ -104,12 +109,8 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         return actions
 
     def test_action(self, obs):
-        return np.clip(
-            np.asarray(self._get_actions(self.policy_params, obs, None))
-            + self.noise() * self.exploration_final_eps,
-            -1,
-            1,
-        )
+        # Preserve SIMBA normalization and checkpoint snapshot behavior
+        return self.actions(obs, np.inf, eval=True)
 
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer

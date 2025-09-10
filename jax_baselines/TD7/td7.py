@@ -89,7 +89,12 @@ class TD7(Deteministic_Policy_Gradient_Family):
             # During eval with checkpointing, normalize using snapshot obs_rms if available
             rms = (
                 self.checkpoint_obs_rms
-                if (eval and self.use_checkpointing and hasattr(self, "checkpoint_obs_rms"))
+                if (
+                    eval
+                    and self.use_checkpointing
+                    and self.checkpointing_enabled
+                    and hasattr(self, "checkpoint_obs_rms")
+                )
                 else self.action_obs_rms
                 if hasattr(self, "action_obs_rms")
                 else self.obs_rms
