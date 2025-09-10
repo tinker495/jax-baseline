@@ -377,7 +377,7 @@ class Deteministic_Policy_Gradient_Family(object):
         # If using SIMBA normalization, snapshot obs_rms as well for eval-time consistency
         if getattr(self, "simba", False) and hasattr(self, "obs_rms"):
             try:
-                self.checkpoint_obs_rms = deepcopy(self.obs_rms)
+                self.checkpoint_obs_rms = deepcopy(self.action_obs_rms)
             except Exception:
                 # Fallback: if deepcopy fails for any reason, skip without crashing
                 pass
