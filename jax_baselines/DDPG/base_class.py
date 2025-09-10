@@ -375,7 +375,7 @@ class Deteministic_Policy_Gradient_Family(object):
             self.checkpoint_encoder_params = eval_state["encoder"]
 
         # If using SIMBA normalization, snapshot obs_rms as well for eval-time consistency
-        if getattr(self, "simba", False) and hasattr(self, "obs_rms"):
+        if getattr(self, "simba", False) and hasattr(self, "action_obs_rms"):
             try:
                 self.checkpoint_obs_rms = deepcopy(self.action_obs_rms)
             except Exception:
