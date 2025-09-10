@@ -136,7 +136,7 @@ def optimizer_reset_by_period(
     return optax.GradientTransformation(init_fn, update_fn)
 
 
-def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
+def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, weight_decay=1e-4, grad_max=None):
     """
     Selects an optimizer based on the optimizer string.
     If reset_steps is not None, it wraps the optimizer with periodic parameter resets.
@@ -167,7 +167,9 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, grad_max=None):
         case "nadopt":
             optim = adopt(lr, b1=0.9, b2=0.9999, eps=eps, nesterov=True)
         case "adamw":
-            optim = optax.adamw(lr, b1=0.9, b2=0.999, eps=eps, weight_decay=1e-4)
+            optim = optax.adamw(lr, b1=0.9, b2=0.999, eps=eps, weight_decay=weight_decay)
+        case "ano":
+            optim = optax.contrib.ano(lr, weight_decay=weight_decay)
         case "rmsprop":
             optim = optax.rmsprop(lr, eps=eps)
         case "sgd":

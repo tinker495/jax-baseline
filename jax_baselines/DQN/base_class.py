@@ -263,9 +263,17 @@ class Q_Network_Family(object):
 
         return loss
 
+    def get_behavior_params(self):
+        """Get parameters to use for behavior (training-time actions)."""
+        return self.params
+
+    def get_eval_params(self):
+        """Get parameters to use for evaluation (eval-time actions)."""
+        return self.get_behavior_params()
+
     def actions(self, obs, epsilon, eval_mode=False):
         # Select params: during eval with checkpointing prefer snapshot
-        params_to_use = self.params
+        params_to_use = self.get_behavior_params()
         if eval_mode and self.use_checkpointing and self.checkpointing_enabled:
             params_to_use = self.checkpoint_params
 
@@ -585,9 +593,9 @@ class Q_Network_Family(object):
         This copies current network parameters into checkpoint snapshots.
         Subclasses can override this for custom snapshot strategies.
         """
-        # Default strategy: snapshot current network params
+        # Default strategy: snapshot eval parameters (mirrors eval behavior)
         if hasattr(self, "params"):
-            self.checkpoint_params = deepcopy(self.params)
+            self.checkpoint_params = deepcopy(self.get_eval_params())
 
     def _log_ckpt_snapshot_update(self, steps):
         """Record that a checkpoint snapshot was updated and log it."""

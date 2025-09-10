@@ -80,6 +80,8 @@ class SAC(Deteministic_Policy_Gradient_Family):
             rms = (
                 self.checkpoint_obs_rms
                 if (eval and self.use_checkpointing and hasattr(self, "checkpoint_obs_rms"))
+                else self.action_obs_rms
+                if hasattr(self, "action_obs_rms")
                 else self.obs_rms
             )
             # Only update live obs_rms during training (not eval) and when steps is finite

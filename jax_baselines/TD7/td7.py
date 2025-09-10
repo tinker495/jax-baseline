@@ -86,18 +86,28 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
     def actions(self, obs, steps, eval=False):
         if self.simba:
-            if not eval:  # Only update normalization during training
+            # During eval with checkpointing, normalize using snapshot obs_rms if available
+            rms = (
+                self.checkpoint_obs_rms
+                if (eval and self.use_checkpointing and hasattr(self, "checkpoint_obs_rms"))
+                else self.action_obs_rms
+                if hasattr(self, "action_obs_rms")
+                else self.obs_rms
+            )
+            # Only update live obs_rms during training (not eval) and when steps is finite
+            if (not eval) and steps != np.inf:
                 self.obs_rms.update(obs)
-            obs = self.obs_rms.normalize(obs)
+            obs = rms.normalize(obs)
 
         if self.learning_starts < steps:
-            # Use checkpoint params during evaluation, current params during training
-            if eval and self.use_checkpointing:
-                encoder_params = self.checkpoint_encoder_params
-                policy_params = self.checkpoint_policy_params
+            # Use checkpoint state during evaluation, current state during training
+            if eval and self.use_checkpointing and hasattr(self, "checkpoint_state"):
+                encoder_params = self.checkpoint_state.get("encoder")
+                policy_params = self.checkpoint_state.get("policy")
             else:
-                encoder_params = self.fixed_encoder_params
-                policy_params = self.policy_params
+                behavior_state = self.get_behavior_state()
+                encoder_params = behavior_state.get("encoder")
+                policy_params = behavior_state.get("policy")
 
             actions = np.asarray(self._get_actions(encoder_params, policy_params, obs, None))
 

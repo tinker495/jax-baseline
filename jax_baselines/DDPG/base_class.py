@@ -166,6 +166,17 @@ class Deteministic_Policy_Gradient_Family(object):
     def _get_actions(self, params, obses) -> np.ndarray:
         pass
 
+    def get_behavior_state(self):
+        """Get state dict to use for behavior (training-time actions)."""
+        return {
+            "encoder": getattr(self, "fixed_encoder_params", getattr(self, "encoder_params", None)),
+            "policy": getattr(self, "policy_params", None),
+        }
+
+    def get_eval_state(self):
+        """Get state dict to use for evaluation (eval-time actions)."""
+        return self.get_behavior_state()
+
     def actions(self, obs, steps, eval=False):
         pass
 
@@ -328,13 +339,16 @@ class Deteministic_Policy_Gradient_Family(object):
         This copies current policy and encoder parameters into checkpoint snapshots.
         Subclasses can override this for custom snapshot strategies.
         """
-        # Default strategy: snapshot policy and encoder params if they exist
-        if hasattr(self, "policy_params"):
-            self.checkpoint_policy_params = deepcopy(self.policy_params)
-        if hasattr(self, "fixed_encoder_params"):
-            self.checkpoint_encoder_params = deepcopy(self.fixed_encoder_params)
-        elif hasattr(self, "encoder_params"):
-            self.checkpoint_encoder_params = deepcopy(self.encoder_params)
+        # Default strategy: snapshot eval state (mirrors eval behavior)
+        eval_state = self.get_eval_state()
+        self.checkpoint_state = deepcopy(eval_state)
+
+        # Keep legacy fields for backward compatibility
+        if eval_state.get("policy"):
+            self.checkpoint_policy_params = eval_state["policy"]
+        if eval_state.get("encoder"):
+            self.checkpoint_encoder_params = eval_state["encoder"]
+
         # If using SIMBA normalization, snapshot obs_rms as well for eval-time consistency
         if getattr(self, "simba", False) and hasattr(self, "obs_rms"):
             try:
@@ -455,6 +469,14 @@ class Deteministic_Policy_Gradient_Family(object):
                 loss_local = self.train_step(step_val, total_updates)
                 self.lossque.append(loss_local)
 
+            # If using SIMBA normalization, snapshot obs_rms as well for action policy consistency
+            if getattr(self, "simba", False) and hasattr(self, "obs_rms"):
+                try:
+                    self.action_obs_rms = deepcopy(self.obs_rms)
+                except Exception:
+                    # Fallback: if deepcopy fails for any reason, skip without crashing
+                    pass
+
         for steps in pbar:
             eplen += 1
             actions = self.actions(obs, steps)
@@ -498,6 +520,14 @@ class Deteministic_Policy_Gradient_Family(object):
                 total_updates = num_update_iters * self.gradient_steps
                 loss_local = self.train_step(step_val, total_updates)
                 self.lossque.append(loss_local)
+
+            # If using SIMBA normalization, snapshot obs_rms as well for action policy consistency
+            if getattr(self, "simba", False) and hasattr(self, "obs_rms"):
+                try:
+                    self.action_obs_rms = deepcopy(self.obs_rms)
+                except Exception:
+                    # Fallback: if deepcopy fails for any reason, skip without crashing
+                    pass
 
         for steps in pbar:
             obs = self.env.current_obs()
