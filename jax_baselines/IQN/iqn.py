@@ -50,7 +50,7 @@ class IQN(Q_Network_Family):
     def get_q(self, params, obses, tau, key=None) -> jnp.ndarray:
         return self.model(params, key, self.preproc(params, key, obses), tau)
 
-    def actions(self, obs, epsilon):
+    def actions(self, obs, epsilon, eval_mode=False):
         if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(self._get_actions(self.params, obs, next(self.key_seq)))
         else:

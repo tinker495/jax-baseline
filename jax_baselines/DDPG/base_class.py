@@ -11,7 +11,7 @@ from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.replay_factory import make_replay_buffer
 from jax_baselines.common.utils import (
     RunningMeanStd,
-    ckpt_prob_full_window_quantile_exceeds_baseline,
+    ckpt_prob_full_window_stat_exceeds_baseline,
     compute_ckpt_window_stat,
     key_gen,
     restore,
@@ -52,6 +52,10 @@ class Deteministic_Policy_Gradient_Family(object):
         steps_before_checkpointing=500000,
         max_eps_before_checkpointing=20,
         initial_checkpoint_window=1,
+        ckpt_baseline_mode="min",
+        ckpt_baseline_q=None,
+        ckpt_gate_mode=None,
+        ckpt_gate_q=None,
     ):
         self.name = "Deteministic_Policy_Gradient_Family"
         self.env_builder = env_builder
@@ -118,6 +122,25 @@ class Deteministic_Policy_Gradient_Family(object):
         # Track snapshot updates for logging and progress description
         self._last_ckpt_update_step = None
         self._ckpt_update_count = 0
+
+        # Checkpoint baseline mode configuration
+        self.ckpt_baseline_mode = ckpt_baseline_mode
+        self.ckpt_baseline_q = (
+            ckpt_baseline_q if ckpt_baseline_q is not None else self.ckpt_quantile
+        )
+
+        # Checkpoint gating mode configuration
+        self.ckpt_gate_mode = (
+            ckpt_gate_mode if ckpt_gate_mode is not None else self.ckpt_baseline_mode
+        )
+        if ckpt_gate_q is not None:
+            self.ckpt_gate_q = ckpt_gate_q
+        elif self.ckpt_gate_mode == "median":
+            self.ckpt_gate_q = 0.5
+        elif self.ckpt_gate_mode in ["quantile", "min", "mean"]:
+            self.ckpt_gate_q = self.ckpt_baseline_q
+        else:
+            self.ckpt_gate_q = self.ckpt_quantile
 
         # Logging throttle based on last log step
         self._last_log_step = 0
@@ -209,6 +232,8 @@ class Deteministic_Policy_Gradient_Family(object):
         run_name="DPG_network",
     ):
         run_name = self.run_name_update(run_name)
+        # Update log_interval to match the method parameter for consistency
+        self.log_interval = log_interval
         self.eval_freq = ((total_timesteps // 100) // self.worker_size) * self.worker_size
 
         pbar = trange(0, total_timesteps, self.worker_size, miniters=log_interval)
@@ -394,7 +419,10 @@ class Deteministic_Policy_Gradient_Family(object):
 
         # Compute robust window statistic (quantile on standardized returns if enabled)
         window_stat = compute_ckpt_window_stat(
-            self._ckpt_returns_window, self.ckpt_quantile, self.use_ckpt_return_standardization
+            self._ckpt_returns_window,
+            self.ckpt_baseline_q,
+            self.use_ckpt_return_standardization,
+            self.ckpt_baseline_mode,
         )
         if window_stat is None:
             return
@@ -412,11 +440,12 @@ class Deteministic_Policy_Gradient_Family(object):
         if window_stat < self._ckpt_baseline:
             # If window is not yet full, gate early termination by predictive probability
             if self._ckpt_eps_since_update < self._ckpt_max_eps_before_update:
-                prob = ckpt_prob_full_window_quantile_exceeds_baseline(
+                prob = ckpt_prob_full_window_stat_exceeds_baseline(
                     self._ckpt_returns_window,
                     self._ckpt_baseline,
                     self._ckpt_max_eps_before_update,
-                    self.ckpt_quantile,
+                    mode=self.ckpt_gate_mode,
+                    q=self.ckpt_gate_q,
                 )
                 if prob <= 0.5:
                     if callable(train_and_reset_callback):

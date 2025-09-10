@@ -181,7 +181,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
         mean_loss = jnp.mean(jnp.array(losses))
         mean_target = jnp.mean(jnp.array(targets))
 
-        if self.logger_run:
+        if self.logger_run and (steps - self._last_log_step >= self.log_interval):
+            self._last_log_step = steps
             self.logger_run.log_metric("loss/encoder_loss", mean_repr_loss, steps)
             self.logger_run.log_metric("loss/qloss", mean_loss, steps)
             self.logger_run.log_metric("loss/targets", mean_target, steps)

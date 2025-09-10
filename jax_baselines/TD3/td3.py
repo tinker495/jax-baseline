@@ -73,7 +73,12 @@ class TD3(Deteministic_Policy_Gradient_Family):
             # Select params: during eval with checkpointing prefer snapshot
             policy_params = (
                 self.checkpoint_policy_params
-                if (eval and self.use_checkpointing)
+                if (
+                    eval
+                    and self.use_checkpointing
+                    and self.checkpointing_enabled
+                    and hasattr(self, "checkpoint_policy_params")
+                )
                 else self.policy_params
             )
 

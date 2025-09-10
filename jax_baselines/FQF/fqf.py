@@ -49,7 +49,7 @@ class FQF(Q_Network_Family):
         # Use common JIT compilation
         self._compile_common_functions()
 
-    def actions(self, obs, epsilon):
+    def actions(self, obs, epsilon, eval_mode=False):
         if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(
                 self._get_actions(
