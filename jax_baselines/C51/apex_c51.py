@@ -117,13 +117,22 @@ class APE_X_C51(Ape_X_Family):
                 )  # C51_H.at[].add(1)
 
                 def tdist(next_distribution, C51_L, C51_H, C51_B):
+                    exact = C51_L == C51_H
                     target_distribution = jnp.zeros((self.categorial_bar_n))
-                    target_distribution = target_distribution.at[C51_L].add(
-                        next_distribution * (C51_H.astype(jnp.float32) - C51_B)
+
+                    w_l = jnp.where(
+                        exact,
+                        next_distribution,
+                        next_distribution * (C51_H.astype(jnp.float32) - C51_B),
                     )
-                    target_distribution = target_distribution.at[C51_H].add(
-                        next_distribution * (C51_B - C51_L.astype(jnp.float32))
+                    w_u = jnp.where(
+                        exact,
+                        jnp.zeros_like(next_distribution),
+                        next_distribution * (C51_B - C51_L.astype(jnp.float32)),
                     )
+
+                    target_distribution = target_distribution.at[C51_L].add(w_l)
+                    target_distribution = target_distribution.at[C51_H].add(w_u)
                     return target_distribution
 
                 target_distribution = jax.vmap(tdist, in_axes=(0, 0, 0, 0))(
@@ -322,13 +331,20 @@ class APE_X_C51(Ape_X_Family):
         )  # C51_H.at[].add(1)
 
         def tdist(next_distribution, C51_L, C51_H, C51_b):
+            exact = C51_L == C51_H
             target_distribution = jnp.zeros((self.categorial_bar_n))
-            target_distribution = target_distribution.at[C51_L].add(
-                next_distribution * (C51_H.astype(jnp.float32) - C51_b)
+
+            w_l = jnp.where(
+                exact, next_distribution, next_distribution * (C51_H.astype(jnp.float32) - C51_b)
             )
-            target_distribution = target_distribution.at[C51_H].add(
-                next_distribution * (C51_b - C51_L.astype(jnp.float32))
+            w_u = jnp.where(
+                exact,
+                jnp.zeros_like(next_distribution),
+                next_distribution * (C51_b - C51_L.astype(jnp.float32)),
             )
+
+            target_distribution = target_distribution.at[C51_L].add(w_l)
+            target_distribution = target_distribution.at[C51_H].add(w_u)
             return target_distribution
 
         target_distribution = jax.vmap(tdist, in_axes=(0, 0, 0, 0))(

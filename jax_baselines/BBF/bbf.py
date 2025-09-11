@@ -477,40 +477,19 @@ class BBF(Q_Network_Family):
             C51_L = jnp.floor(C51_B).astype(jnp.int32)  # bar lower index as int
             C51_H = jnp.ceil(C51_B).astype(jnp.int32)  # bar higher index as int
 
-            # Handle the case where Tz exactly matches an atom
-            # If C51_L == C51_H, it means Tz exactly matches an atom
-            exact_match = C51_L == C51_H
+            def project_one(p, b, _l, _u):
+                exact = _l == _u
+                m = jnp.zeros((self.categorial_bar_n,), dtype=p.dtype)
 
-            def tdist(next_distribution, C51_L, C51_H, C51_b, exact_match):
-                target_distribution = jnp.zeros((self.categorial_bar_n))
+                w_l = jnp.where(exact, p, p * (_u.astype(jnp.float32) - b))
+                w_u = jnp.where(exact, jnp.zeros_like(p), p * (b - _l.astype(jnp.float32)))
 
-                # If exact match, assign all probability to that atom
-                target_distribution = jnp.where(
-                    exact_match,
-                    target_distribution.at[C51_L].add(next_distribution),
-                    target_distribution,
-                )
+                m = m.at[_l].add(w_l)
+                m = m.at[_u].add(w_u)
+                return m
 
-                # If not exact match, use linear interpolation between two closest atoms
-                target_distribution = jnp.where(
-                    ~exact_match,
-                    target_distribution.at[C51_L].add(
-                        next_distribution * (C51_H.astype(jnp.float32) - C51_b)
-                    ),
-                    target_distribution,
-                )
-                target_distribution = jnp.where(
-                    ~exact_match,
-                    target_distribution.at[C51_H].add(
-                        next_distribution * (C51_b - C51_L.astype(jnp.float32))
-                    ),
-                    target_distribution,
-                )
-
-                return target_distribution
-
-            return jax.vmap(tdist, in_axes=(0, 0, 0, 0, 0))(
-                next_distribution, C51_L, C51_H, C51_B, exact_match
+            return jax.vmap(project_one, in_axes=(0, 0, 0, 0))(
+                next_distribution, C51_B, C51_L, C51_H
             )
 
         if self.munchausen:
