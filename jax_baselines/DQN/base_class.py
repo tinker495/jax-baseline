@@ -11,13 +11,7 @@ from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.replay_factory import make_replay_buffer
 from jax_baselines.common.schedules import ConstantSchedule, LinearSchedule
-from jax_baselines.common.utils import (
-    ckpt_prob_full_window_stat_exceeds_baseline,
-    compute_ckpt_window_stat,
-    key_gen,
-    restore,
-    save,
-)
+from jax_baselines.common.utils import compute_ckpt_window_stat, key_gen, restore, save
 
 
 class Q_Network_Family(object):
@@ -681,30 +675,12 @@ class Q_Network_Family(object):
 
         if window_stat < self._ckpt_baseline:
             # If window is not yet full, gate early termination by predictive probability
-            if self._ckpt_eps_since_update < self._ckpt_max_eps_before_update:
-                prob = ckpt_prob_full_window_stat_exceeds_baseline(
-                    self._ckpt_returns_window,
-                    self._ckpt_baseline,
-                    self._ckpt_max_eps_before_update,
-                    mode=self.ckpt_gate_mode,
-                    q=self.ckpt_gate_q,
-                )
-                if prob <= 0.5:
-                    if callable(train_and_reset_callback):
-                        train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
-                    self._ckpt_eps_since_update = 0
-                    self._ckpt_timesteps_since_update = 0
-                    self._ckpt_returns_window = []
-                    return
-                # Otherwise, do not early-terminate; continue accumulating the window
-            else:
-                # Window full: preserve original early-termination behavior
-                if callable(train_and_reset_callback):
-                    train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
-                self._ckpt_eps_since_update = 0
-                self._ckpt_timesteps_since_update = 0
-                self._ckpt_returns_window = []
-                return
+            if callable(train_and_reset_callback):
+                train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
+            self._ckpt_eps_since_update = 0
+            self._ckpt_timesteps_since_update = 0
+            self._ckpt_returns_window = []
+            return
 
         # Enabled phase: end-of-window refresh with training pulse
         if self._ckpt_eps_since_update >= self._ckpt_max_eps_before_update:
