@@ -1,4 +1,3 @@
-import math
 import os
 import pickle
 from functools import partial
@@ -8,7 +7,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-from scipy.stats import norm
 
 cpu_jit = partial(jax.jit, backend="cpu")
 gpu_jit = partial(jax.jit, backend="gpu")
@@ -313,143 +311,6 @@ def compute_ckpt_window_stat(
         q = float(q)
         q = min(max(q, 0.0), 1.0)
         return float(np.quantile(arr, q))
-
-
-def ckpt_prob_full_window_stat_exceeds_baseline(
-    returns_window: list,
-    baseline_value: float,
-    target_window_size: int,
-    mode: str = "quantile",
-    q: float = 0.2,
-    alpha0: float = 1.0,
-    beta0: float = 1.0,
-) -> float:
-    """Posterior predictive probability that full-window statistic > baseline.
-
-    Args:
-        returns_window: List of observed episode returns
-        baseline_value: Current baseline value to compare against
-        target_window_size: Target full window size N
-        mode: Statistic mode - "quantile", "median", "min", or "mean"
-        q: Quantile parameter (used when mode="quantile" or "median")
-        alpha0, beta0: Beta prior parameters for Bayesian inference
-
-    Returns:
-        Probability that the full-window statistic will exceed baseline
-    """
-    if returns_window is None:
-        returns_window = []
-    arr = np.asarray(returns_window, dtype=np.float64)
-    n = int(arr.size)
-    N = int(target_window_size)
-    M = max(N - n, 0)
-
-    if N <= 0:
-        return 0.0
-
-    # Handle edge case: if window is already full
-    if M == 0:
-        if mode in ["quantile", "median"]:
-            q_val = 0.5 if mode == "median" else float(q)
-            k = int(np.ceil(q_val * N))
-            s_n = int(np.sum(arr <= float(baseline_value)))
-            return 1.0 if s_n <= (k - 1) else 0.0
-        elif mode == "min":
-            return 1.0 if np.all(arr > float(baseline_value)) else 0.0
-        elif mode == "mean":
-            return 1.0 if np.mean(arr) > float(baseline_value) else 0.0
-        else:
-            return 0.0
-
-    # Mode-specific probability computation
-    if mode in ["quantile", "median"]:
-        # Use existing Beta-Binomial logic
-        q_val = 0.5 if mode == "median" else float(q)
-        k = int(np.ceil(q_val * N))
-        s_n = int(np.sum(arr <= float(baseline_value)))
-
-        alpha = float(alpha0) + float(s_n)
-        beta = float(beta0) + float(n - s_n)
-
-        smax = min(M, (k - 1) - s_n)
-        if smax < 0:
-            return 0.0
-
-        def log_comb(Mv: int, rv: int) -> float:
-            return math.lgamma(Mv + 1) - math.lgamma(rv + 1) - math.lgamma(Mv - rv + 1)
-
-        log_beta_ab = math.lgamma(alpha) + math.lgamma(beta) - math.lgamma(alpha + beta)
-
-        total_prob = 0.0
-        for s in range(0, smax + 1):
-            log_p = (
-                log_comb(M, s)
-                + (
-                    math.lgamma(s + alpha)
-                    + math.lgamma(M - s + beta)
-                    - math.lgamma(M + alpha + beta)
-                )
-                - log_beta_ab
-            )
-            total_prob += math.exp(log_p)
-
-        return max(0.0, min(1.0, float(total_prob)))
-
-    elif mode == "min":
-        # For min: P(min(R_1:N) > B) = P(all R_i > B)
-        s_n = int(np.sum(arr <= float(baseline_value)))
-        if s_n > 0:
-            return 0.0  # Already have some returns <= baseline
-
-        # All observed returns > baseline, compute probability that all future returns > baseline
-        alpha = float(alpha0)
-        beta = float(beta0) + float(n)
-
-        # P(S_M = 0) where S_M ~ BetaBinomial(M, alpha, beta)
-        # This is the probability that all M future returns exceed baseline
-        log_beta_ratio = (
-            math.lgamma(alpha)
-            + math.lgamma(beta + M)
-            - math.lgamma(alpha + beta + M)
-            - math.lgamma(alpha)
-            - math.lgamma(beta)
-            + math.lgamma(alpha + beta)
-        )
-        return max(0.0, min(1.0, math.exp(log_beta_ratio)))
-
-    elif mode == "mean":
-        # For mean: use normal approximation
-        if n < 2:
-            # Fallback to quantile gate if insufficient data
-            return ckpt_prob_full_window_stat_exceeds_baseline(
-                returns_window, baseline_value, target_window_size, "quantile", q, alpha0, beta0
-            )
-
-        mean_obs = np.mean(arr)
-        var_obs = np.var(arr, ddof=1)  # Unbiased sample variance
-
-        if var_obs < 1e-8:
-            # Fallback to quantile gate if variance is too small
-            return ckpt_prob_full_window_stat_exceeds_baseline(
-                returns_window, baseline_value, target_window_size, "quantile", q, alpha0, beta0
-            )
-
-        # Approximate full-window mean distribution
-        # E[mean_full] = mean_obs, Var[mean_full] = var_obs * M / N^2
-        mean_full = mean_obs
-        std_full = np.sqrt(var_obs * M / (N * N))
-
-        # P(mean_full > baseline)
-        z_score = (float(baseline_value) - mean_full) / std_full
-        prob = 1.0 - norm.cdf(z_score)
-
-        return max(0.0, min(1.0, float(prob)))
-
-    else:
-        # Unknown mode, fallback to quantile
-        return ckpt_prob_full_window_stat_exceeds_baseline(
-            returns_window, baseline_value, target_window_size, "quantile", q, alpha0, beta0
-        )
 
 
 class RunningMeanStd:
