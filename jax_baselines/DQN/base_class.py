@@ -493,6 +493,7 @@ class Q_Network_Family(object):
                 self.lossque.append(loss_local)
 
         for steps in pbar:
+            eplen += 1
             actions = self.actions(obs, self.update_eps)
             next_obs, reward, terminated, truncated, info = self.env.step(actions[0][0])
             next_obs = [np.expand_dims(next_obs, axis=0)]
@@ -501,16 +502,14 @@ class Q_Network_Family(object):
             obs = next_obs
 
             if terminated or truncated:
-                obs, info = self.env.reset()
-                obs = [np.expand_dims(obs, axis=0)]
                 if steps > self.learning_starts:
                     self._checkpoint_on_episode_end(
-                        steps, score, eplen if eplen > 0 else 1, _ckpt_train_and_reset
+                        steps, score, eplen, train_and_reset_callback=_ckpt_train_and_reset
                     )
                 score = 0.0
                 eplen = 0
-            else:
-                eplen += 1
+                obs, info = self.env.reset()
+                obs = [np.expand_dims(obs, axis=0)]
 
             # Maintain epsilon schedule - only update on training steps for consistency with non-checkpointing flow
             if steps > self.learning_starts and steps % self.train_freq == 0:
