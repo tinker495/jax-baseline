@@ -25,6 +25,5 @@ python run_qnet.py --algo SPR $EXPERIMENT_NAME $ENV $LR $TRAIN $MODEL $OPTIMIZER
 python run_qnet.py --algo BBF $EXPERIMENT_NAME $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
 
 # Super high replay ratio
-OPTIMIZER="--optimizer adamw"
 OPTIONS="--gradient_steps 8"
 python run_qnet.py --algo BBF $EXPERIMENT_NAME $ENV $LR $TRAIN $MODEL $OPTIMIZER $OPTIONS
