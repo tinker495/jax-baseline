@@ -52,7 +52,7 @@ def random_split_like_tree(rng_key: jax.random.PRNGKey, target: PyTree = None, t
     return jax.tree.unflatten(treedef, keys)
 
 
-def tree_random_normal_like(rng_key: jax.random.PRNGKey, target: PyTree, mul=2.0):
+def tree_random_normal_like(rng_key: jax.random.PRNGKey, target: PyTree, mul=1.2):
     keys_tree = random_split_like_tree(rng_key, target)
     return jax.tree_util.tree_map(
         lambda t, k: jax.random.normal(k, t.shape, t.dtype) * jnp.std(t) * mul,
