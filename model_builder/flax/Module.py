@@ -63,12 +63,11 @@ def flatten_fn(x: jnp.ndarray) -> jnp.ndarray:
 
 def visual_embedding(mode: str = "normal", flatten=True) -> Callable[[jnp.ndarray], jnp.ndarray]:
     if mode == "resnet":
-        mul = 1
         net = nn.Sequential(
             [
-                ImpalaBlock(16 * mul),
-                ImpalaBlock(32 * mul),
-                ImpalaBlock(32 * mul),
+                ImpalaBlock(32),
+                ImpalaBlock(64),
+                ImpalaBlock(64),
                 flatten_fn if flatten else lambda x: x,
             ]
         )
