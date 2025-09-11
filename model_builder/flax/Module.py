@@ -61,13 +61,16 @@ def flatten_fn(x: jnp.ndarray) -> jnp.ndarray:
     return x.reshape((x.shape[0], -1))
 
 
-def visual_embedding(mode: str = "normal", flatten=True) -> Callable[[jnp.ndarray], jnp.ndarray]:
+def visual_embedding(
+    mode: str = "normal", flatten=True, **kwargs
+) -> Callable[[jnp.ndarray], jnp.ndarray]:
     if mode == "resnet":
+        multiple = kwargs.get("multiple", 1)
         net = nn.Sequential(
             [
-                ImpalaBlock(32),
-                ImpalaBlock(64),
-                ImpalaBlock(64),
+                ImpalaBlock(16 * multiple),
+                ImpalaBlock(32 * multiple),
+                ImpalaBlock(32 * multiple),
                 flatten_fn if flatten else lambda x: x,
             ]
         )
@@ -159,10 +162,13 @@ class PreProcess(nn.Module):
     embedding_mode: str = "normal"
     flatten: bool = True
     pre_postprocess: Callable = lambda x: x  # Identity function
+    multiple: int = 1
 
     def setup(self):
         self.embedding = [
-            visual_embedding(self.embedding_mode, self.flatten) if len(st) == 3 else lambda x: x
+            visual_embedding(self.embedding_mode, self.flatten, multiple=self.multiple)
+            if len(st) == 3
+            else lambda x: x
             for st in self.states_size
         ]
 

@@ -145,7 +145,10 @@ def model_builder_maker(
         class Merged(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(
-                    observation_space, embedding_mode=embedding_mode, flatten=False
+                    observation_space,
+                    embedding_mode=embedding_mode,
+                    flatten=False,
+                    multiple=4,
                 )
                 self.qnet = Model(
                     action_space,
