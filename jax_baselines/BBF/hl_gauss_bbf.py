@@ -26,6 +26,7 @@ class HL_GAUSS_BBF(Q_Network_Family):
         env_builder: callable,
         model_builder_maker,
         off_policy_fix=False,
+        spr_weight=5.0,
         categorial_bar_n=51,
         categorial_max=250,
         categorial_min=-250,
@@ -37,6 +38,7 @@ class HL_GAUSS_BBF(Q_Network_Family):
         self.off_policy_fix = off_policy_fix
         self.intensity_scale = 0.05
         self.sigma = 0.75
+        self.spr_weight = float(spr_weight)
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = float(categorial_max)
         self.categorial_min = float(categorial_min)

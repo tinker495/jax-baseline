@@ -25,6 +25,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
         env_builder: callable,
         model_builder_maker,
         off_policy_fix=False,
+        spr_weight=5.0,
         scaled_by_reset=False,
         categorial_bar_n=51,
         categorial_max=250,
@@ -38,6 +39,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
         self.scaled_by_reset = scaled_by_reset
         self.intensity_scale = 0.05
         self.sigma = 0.75
+        self.spr_weight = float(spr_weight)
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = float(categorial_max)
         self.categorial_min = float(categorial_min)
@@ -433,7 +435,7 @@ class HL_GAUSS_SPR(Q_Network_Family):
         )
         centropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
         mean_centropy = jnp.mean(centropy)
-        total_loss = mean_centropy + rprloss
+        total_loss = mean_centropy + self.spr_weight * rprloss
         return total_loss, (
             centropy,
             mean_centropy,
