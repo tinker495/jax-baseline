@@ -503,12 +503,19 @@ class Q_Network_Family(object):
 
             if terminated or truncated:
                 if steps > self.learning_starts:
-                    self._checkpoint_on_episode_end(
+                    ckpt_success = self._checkpoint_on_episode_end(
                         steps, score, eplen, train_and_reset_callback=_ckpt_train_and_reset
                     )
+                else:
+                    ckpt_success = True  # No checkpointing yet, so consider it successful
                 score = 0.0
                 eplen = 0
-                obs, info = self.env.reset()
+
+                # Use true_reset if checkpointing failed and true_reset is available
+                if not ckpt_success and self._has_true_reset():
+                    obs, info = self.env.true_reset()
+                else:
+                    obs, info = self.env.reset()
                 obs = [np.expand_dims(obs, axis=0)]
 
             # Maintain epsilon schedule - only update on training steps for consistency with non-checkpointing flow
@@ -562,12 +569,26 @@ class Q_Network_Family(object):
             if steps > self.learning_starts:
                 done = np.logical_or(terminateds, truncateds)
                 done_idx = np.where(done)[0]
+                ckpt_results = []
                 for idx in done_idx:
-                    self._checkpoint_on_episode_end(
+                    ckpt_success = self._checkpoint_on_episode_end(
                         steps, float(scores[idx]), int(eplens[idx]), _ckpt_train_and_reset
                     )
+                    ckpt_results.append((idx, ckpt_success))
                     scores[idx] = 0.0
                     eplens[idx] = 0
+
+                # Check if any checkpointing failed and true_reset is available
+                # For vectorized environments, we apply true_reset to the entire environment
+                # if any worker had a checkpointing failure
+                if self._has_true_reset() and any(not success for _, success in ckpt_results):
+                    # Reset the entire vectorized environment with true_reset
+                    # This will affect all workers, but ensures consistency
+                    try:
+                        self.env.true_reset()
+                    except Exception:
+                        # Fallback to regular reset if true_reset fails
+                        self.env.reset()
 
             if steps % self.eval_freq == 0:
                 eval_result = self.eval(steps)
@@ -632,6 +653,10 @@ class Q_Network_Family(object):
             except Exception:
                 pass
 
+    def _has_true_reset(self):
+        """Check if the environment has true_reset method (from atari_wrappers)."""
+        return hasattr(self.env, "true_reset") and callable(getattr(self.env, "true_reset", None))
+
     def _checkpoint_on_episode_end(
         self, steps, episode_return, episode_len, train_and_reset_callback=None
     ):
@@ -640,9 +665,12 @@ class Q_Network_Family(object):
         Subclasses can call this at the end of an episode to drive a TD7-like
         checkpoint schedule. If a callback is provided, it will be called when
         it's time to perform a training/reset pulse.
+
+        Returns:
+            bool: True if checkpointing update was successful, False if failed (below baseline)
         """
         if not self.use_checkpointing:
-            return
+            return True
 
         # Update runtime counters and statistics
         self._ckpt_eps_since_update += 1
@@ -660,7 +688,7 @@ class Q_Network_Family(object):
             self.ckpt_baseline_mode,
         )
         if window_stat is None:
-            return
+            return True
         self.logger_run.log_metric("ckpt/window_stat", float(window_stat), int(steps))
 
         # Pre-enable phase: warm-up baseline/snapshot, no training pulses by default
@@ -671,15 +699,16 @@ class Q_Network_Family(object):
             self._ckpt_eps_since_update = 0
             self._ckpt_timesteps_since_update = 0
             self._ckpt_returns_window = []
+            return True
 
         if window_stat < self._ckpt_baseline:
-            # If window is not yet full, gate early termination by predictive probability
+            # Checkpointing update failed - return False to trigger true_reset if available
             if callable(train_and_reset_callback):
                 train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
             self._ckpt_eps_since_update = 0
             self._ckpt_timesteps_since_update = 0
             self._ckpt_returns_window = []
-            return
+            return False
 
         # Enabled phase: end-of-window refresh with training pulse
         if self._ckpt_eps_since_update >= self._ckpt_max_eps_before_update:
@@ -691,3 +720,5 @@ class Q_Network_Family(object):
             self._ckpt_eps_since_update = 0
             self._ckpt_timesteps_since_update = 0
             self._ckpt_returns_window = []
+
+        return True
