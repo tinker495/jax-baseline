@@ -23,7 +23,8 @@ class Buffer(object):
         return buffer
 
     def get_stored_size(self):
-        return max(min(self._idx, self.max_size), 0)
+        # Fix: off-by-one bug - number of valid entries written so far
+        return min(self._idx + 1, self.max_size)
 
     def update_idx(self):
         self._idx = self._idx + 1
@@ -138,8 +139,9 @@ class SumTree:
 
     # update priority
     def update(self, idx, p, minmax_decay=1e-4):
-        self.max_priority = max(p, self.max_priority * (1.0 - minmax_decay))
-        self.min_priority = min(p, self.min_priority * (1.0 + minmax_decay))
+        # Fix: Remove decay to prevent weight overflow and ensure true extrema
+        self.max_priority = max(p, self.max_priority)
+        self.min_priority = min(p, self.min_priority)
         change = p - self.tree[idx]
 
         self.tree[idx] = p
@@ -187,7 +189,8 @@ class TransitionReplayBuffer(object):
         )
 
     def __len__(self) -> int:
-        return self.buffer.get_stored_size()
+        # Fix: Use tree entries count instead of buffer storage size (includes sentinels)
+        return self.tree.n_entries
 
     @property
     def storage(self):
@@ -198,7 +201,8 @@ class TransitionReplayBuffer(object):
         return self.max_size
 
     def can_sample(self, n_samples: int) -> bool:
-        return len(self) >= n_samples
+        # Fix: Use tree entries count to prevent overreporting availability
+        return self.tree.n_entries >= n_samples
 
     def is_full(self) -> int:
         return len(self) == self.max_size
@@ -265,8 +269,9 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
         obs, data, terminated, filled, _ = self.buffer.sample(
             buffer_idxs, traj_len=self.prediction_depth
         )
+        # Fix: Use per-batch normalization to guarantee weights <= 1
         weight = np.power(self.tree.n_entries * priorities / self.tree.total(), -beta)
-        weight_max = np.power(self.tree.n_entries * self.tree.min() / self.tree.total(), -beta)
+        weight_max = np.max(weight)  # Per-batch maximum instead of global minimum
         weights = weight / weight_max
         return {
             "obses": obs,
