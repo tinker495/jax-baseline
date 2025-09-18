@@ -1,5 +1,6 @@
 import argparse
 import multiprocessing as mp
+import os
 
 import ray
 
@@ -7,6 +8,10 @@ from jax_baselines.APE_X.dpg_worker import Ape_X_Worker
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.DDPG.apex_ddpg import APE_X_DDPG
 from jax_baselines.TD3.apex_td3 import APE_X_TD3
+
+os.environ["XLA_FLAGS"] = (
+    "--xla_gpu_triton_gemm_any=True " "--xla_gpu_enable_latency_hiding_scheduler=true "
+)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

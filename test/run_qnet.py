@@ -1,4 +1,5 @@
 import argparse
+import os
 
 from jax_baselines.BBF.bbf import BBF
 from jax_baselines.BBF.hl_gauss_bbf import HL_GAUSS_BBF
@@ -11,6 +12,10 @@ from jax_baselines.IQN.iqn import IQN
 from jax_baselines.QRDQN.qrdqn import QRDQN
 from jax_baselines.SPR.hl_gauss_spr import HL_GAUSS_SPR
 from jax_baselines.SPR.spr import SPR
+
+os.environ["XLA_FLAGS"] = (
+    "--xla_gpu_triton_gemm_any=True " "--xla_gpu_enable_latency_hiding_scheduler=true "
+)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

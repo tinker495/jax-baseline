@@ -145,10 +145,140 @@ class Deteministic_Policy_Gradient_Family(object):
         self._last_log_step = 0
 
     def save_params(self, path):
-        save(path, self.params)
+        state = self._gather_checkpoint_state()
+        self.params = state
+        save(path, state)
 
     def load_params(self, path):
-        self.params = self.target_params = restore(path)
+        state = restore(path)
+        self._apply_checkpoint_state(state)
+        self.params = state
+        self.target_params = state
+
+    def _gather_checkpoint_state(self):
+        """Collect train/eval state required to resume or evaluate the agent."""
+        state = {}
+
+        param_attrs = [
+            "policy_params",
+            "critic_params",
+            "target_policy_params",
+            "target_critic_params",
+            "encoder_params",
+            "fixed_encoder_params",
+            "fixed_encoder_target_params",
+            "checkpoint_state",
+            "checkpoint_policy_params",
+            "checkpoint_encoder_params",
+            "target_encoder_params",
+        ]
+        for attr in param_attrs:
+            value = getattr(self, attr, None)
+            if value is not None:
+                state[attr] = value
+
+        if hasattr(self, "log_ent_coef"):
+            state["log_ent_coef"] = getattr(self, "log_ent_coef")
+
+        state["train_steps_count"] = np.asarray(self.train_steps_count, dtype=np.int64)
+        state["checkpointing_enabled"] = np.asarray(self.checkpointing_enabled, dtype=np.bool_)
+        state["_ckpt_eps_since_update"] = np.asarray(self._ckpt_eps_since_update, dtype=np.int32)
+        state["_ckpt_timesteps_since_update"] = np.asarray(
+            self._ckpt_timesteps_since_update, dtype=np.int64
+        )
+        state["_ckpt_update_residual"] = np.asarray(self._ckpt_update_residual, dtype=np.float32)
+        state["_ckpt_baseline"] = np.asarray(self._ckpt_baseline, dtype=np.float32)
+        state["_ckpt_update_count"] = np.asarray(self._ckpt_update_count, dtype=np.int32)
+        state["_ckpt_max_eps_before_update"] = np.asarray(
+            self._ckpt_max_eps_before_update, dtype=np.int32
+        )
+        state["_last_ckpt_update_step"] = (
+            np.asarray(self._last_ckpt_update_step, dtype=np.int64)
+            if self._last_ckpt_update_step is not None
+            else np.asarray(-1, dtype=np.int64)
+        )
+        state["_ckpt_returns_window"] = np.asarray(self._ckpt_returns_window, dtype=np.float32)
+
+        if getattr(self, "simba", False) and hasattr(self, "obs_rms"):
+            state["obs_rms_state"] = self.obs_rms.to_state()
+            if hasattr(self, "action_obs_rms"):
+                state["action_obs_rms_state"] = self.action_obs_rms.to_state()
+            if hasattr(self, "checkpoint_obs_rms"):
+                state["checkpoint_obs_rms_state"] = self.checkpoint_obs_rms.to_state()
+
+        return state
+
+    def _apply_checkpoint_state(self, state):
+        """Restore state captured by _gather_checkpoint_state."""
+        param_attrs = [
+            "policy_params",
+            "critic_params",
+            "target_policy_params",
+            "target_critic_params",
+            "encoder_params",
+            "fixed_encoder_params",
+            "fixed_encoder_target_params",
+            "checkpoint_state",
+            "checkpoint_policy_params",
+            "checkpoint_encoder_params",
+            "target_encoder_params",
+        ]
+        for attr in param_attrs:
+            if attr in state:
+                setattr(self, attr, state[attr])
+
+        if "log_ent_coef" in state:
+            self.log_ent_coef = state["log_ent_coef"]
+
+        if "train_steps_count" in state:
+            self.train_steps_count = int(np.asarray(state["train_steps_count"]).item())
+
+        if "checkpointing_enabled" in state:
+            self.checkpointing_enabled = bool(np.asarray(state["checkpointing_enabled"]).item())
+
+        if "_ckpt_eps_since_update" in state:
+            self._ckpt_eps_since_update = int(np.asarray(state["_ckpt_eps_since_update"]).item())
+
+        if "_ckpt_timesteps_since_update" in state:
+            self._ckpt_timesteps_since_update = int(
+                np.asarray(state["_ckpt_timesteps_since_update"]).item()
+            )
+
+        if "_ckpt_update_residual" in state:
+            self._ckpt_update_residual = float(np.asarray(state["_ckpt_update_residual"]).item())
+
+        if "_ckpt_baseline" in state:
+            self._ckpt_baseline = float(np.asarray(state["_ckpt_baseline"]).item())
+
+        if "_ckpt_update_count" in state:
+            self._ckpt_update_count = int(np.asarray(state["_ckpt_update_count"]).item())
+
+        if "_ckpt_max_eps_before_update" in state:
+            self._ckpt_max_eps_before_update = int(
+                np.asarray(state["_ckpt_max_eps_before_update"]).item()
+            )
+
+        if "_last_ckpt_update_step" in state:
+            last_update = int(np.asarray(state["_last_ckpt_update_step"]).item())
+            self._last_ckpt_update_step = None if last_update < 0 else last_update
+
+        if "_ckpt_returns_window" in state:
+            returns_window = np.asarray(state["_ckpt_returns_window"])
+            self._ckpt_returns_window = returns_window.tolist()
+
+        if getattr(self, "simba", False):
+            if "obs_rms_state" in state:
+                self.obs_rms = RunningMeanStd.from_state(state["obs_rms_state"])
+            elif not hasattr(self, "obs_rms"):
+                self.obs_rms = RunningMeanStd(shapes=self.observation_space, dtype=np.float64)
+
+            if "action_obs_rms_state" in state:
+                self.action_obs_rms = RunningMeanStd.from_state(state["action_obs_rms_state"])
+
+            if "checkpoint_obs_rms_state" in state:
+                self.checkpoint_obs_rms = RunningMeanStd.from_state(
+                    state["checkpoint_obs_rms_state"]
+                )
 
     def get_env_setup(self):
         # Use common helper to standardize environment info

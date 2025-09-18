@@ -1,10 +1,15 @@
 import argparse
+import os
 
 from jax_baselines.A2C.a2c import A2C
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.PPO.ppo import PPO
 from jax_baselines.SPO.spo import SPO
 from jax_baselines.TPPO.tppo import TPPO
+
+os.environ["XLA_FLAGS"] = (
+    "--xla_gpu_triton_gemm_any=True " "--xla_gpu_enable_latency_hiding_scheduler=true "
+)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

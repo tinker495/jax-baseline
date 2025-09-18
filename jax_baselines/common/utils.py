@@ -318,8 +318,9 @@ class RunningMeanStd:
 
     def __init__(self, epsilon=1e-4, shapes: list = [()], dtype=np.float64):
         """Tracks the mean, variance and count of values."""
-        self.means = [np.zeros(shape, dtype=dtype) for shape in shapes]
-        self.vars = [np.ones(shape, dtype=dtype) for shape in shapes]
+        self.dtype = np.dtype(dtype)
+        self.means = [np.zeros(shape, dtype=self.dtype) for shape in shapes]
+        self.vars = [np.ones(shape, dtype=self.dtype) for shape in shapes]
         self.count = epsilon
 
     def normalize(self, xs):
@@ -355,3 +356,27 @@ class RunningMeanStd:
         new_var = M2 / tot_count
 
         return new_mean, new_var
+
+    def to_state(self):
+        """Serialize running statistics to a numpy-friendly state."""
+        return {
+            "means": [np.asarray(arr) for arr in self.means],
+            "vars": [np.asarray(arr) for arr in self.vars],
+            "count": np.asarray(self.count, dtype=np.float64),
+        }
+
+    @classmethod
+    def from_state(cls, state):
+        """Deserialize running statistics from a saved state."""
+        means = [np.asarray(arr) for arr in state.get("means", [])]
+        vars_ = [np.asarray(arr) for arr in state.get("vars", [])]
+        dtype = means[0].dtype if means else np.float64
+        shapes = [arr.shape for arr in means]
+        instance = cls(shapes=shapes, dtype=dtype)
+        if means:
+            instance.means = [arr.astype(dtype, copy=False) for arr in means]
+        if vars_:
+            instance.vars = [arr.astype(dtype, copy=False) for arr in vars_]
+        count = state.get("count", np.array(0.0))
+        instance.count = float(np.asarray(count))
+        return instance

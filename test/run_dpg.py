@@ -1,4 +1,5 @@
 import argparse
+import os
 
 import gymnasium as gym
 
@@ -10,6 +11,10 @@ from jax_baselines.SAC.sac import SAC
 from jax_baselines.TD3.td3 import TD3
 from jax_baselines.TD7.td7 import TD7
 from jax_baselines.TQC.tqc import TQC
+
+os.environ["XLA_FLAGS"] = (
+    "--xla_gpu_triton_gemm_any=True " "--xla_gpu_enable_latency_hiding_scheduler=true "
+)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
