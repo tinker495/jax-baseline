@@ -302,15 +302,15 @@ def compute_ckpt_window_stat(
         return float(np.median(arr))
     elif mode == "mean":
         return float(np.mean(arr))
-    elif mode == "quantile" or mode == "lower_percent":
+    elif mode in ("quantile", "lower_percent"):
         q = float(q)
         q = min(max(q, 0.0), 1.0)
         return float(np.quantile(arr, q))
     else:
-        # Default to quantile for unknown modes
-        q = float(q)
-        q = min(max(q, 0.0), 1.0)
-        return float(np.quantile(arr, q))
+        raise ValueError(
+            f"Unsupported compute_ckpt_window_stat mode '{mode}'. "
+            "Expected one of {'min', 'median', 'mean', 'quantile', 'lower_percent'}."
+        )
 
 
 class RunningMeanStd:
