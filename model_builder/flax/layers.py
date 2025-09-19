@@ -210,16 +210,8 @@ class LERP(nn.Module):
 
     @nn.compact
     def __call__(self, start: jnp.ndarray, end: jnp.ndarray) -> jnp.ndarray:
-        alpha_param = self.param(
-            "alpha",
-            lambda key, shape: jnp.full(
-                shape, self.alpha_init * self.alpha_scale, dtype=start.dtype
-            ),
-            (self.features,),
-        )
-        alpha = jax.nn.sigmoid(alpha_param)
-        blended = (1.0 - alpha) * start + alpha * end
-        return l2_normalize(blended, eps=self.eps)
+        x = start + Scaler(self.features, init=self.alpha_init, scale=self.alpha_scale)(end - start)
+        return x
 
 
 class SimbaV2Embedding(nn.Module):
@@ -261,7 +253,7 @@ class SimbaV2Block(nn.Module):
             init=self.scaler_init,
             scale=self.scaler_scale,
         )(x)
-        x = nn.relu(x) + self.eps
+        x = nn.relu(x)
         x = nn.Dense(self.hidden_dim, use_bias=False, kernel_init=self.kernel_init)(x)
         x = l2_normalize(x, axis=-1)
         x = LERP(
@@ -270,6 +262,7 @@ class SimbaV2Block(nn.Module):
             alpha_init=self.alpha_init,
             alpha_scale=self.alpha_scale,
         )(inputs, x)
+        x = l2_normalize(x, axis=-1)
         return x
 
 
@@ -286,7 +279,6 @@ class SimbaV2Head(nn.Module):
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
         x = nn.Dense(self.hidden_dim, use_bias=False, kernel_init=self.kernel_init)(inputs)
         x = Scaler(self.hidden_dim, init=self.scaler_init, scale=self.scaler_scale)(x)
-        x = l2_normalize(x, axis=-1)
         x = nn.Dense(
             self.out_dim,
             use_bias=self.use_bias,

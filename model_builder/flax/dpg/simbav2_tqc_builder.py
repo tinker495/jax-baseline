@@ -4,7 +4,6 @@ import jax.numpy as jnp
 import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
-from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import SimbaV2Block, SimbaV2Embedding, SimbaV2Head
 from model_builder.flax.Module import PreProcess
 from model_builder.utils import print_param
@@ -28,12 +27,10 @@ class Actor(nn.Module):
         mu = SimbaV2Head(
             self.node,
             self.action_size[0],
-            kernel_init=clip_factorized_uniform(3),
         )(encoded)
         log_std_raw = SimbaV2Head(
             self.node,
             self.action_size[0],
-            kernel_init=clip_factorized_uniform(3),
         )(encoded)
         log_std = LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(log_std_raw / LOG_STD_SCALE)
         return mu, log_std
