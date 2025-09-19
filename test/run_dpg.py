@@ -40,6 +40,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--scaled_by_reset", action="store_true")
     parser.add_argument("--simba", action="store_true")
+    parser.add_argument("--simbav2", action="store_true")
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
     parser.add_argument("--verbose", type=int, default=0, help="verbose")
     parser.add_argument("--logdir", type=str, default="log/dpg/", help="log file dir")
@@ -62,6 +63,11 @@ if __name__ == "__main__":
     )
     parser.add_argument("--use_checkpointing", action="store_true")
     args = parser.parse_args()
+
+    if args.simba and args.simbav2:
+        parser.error("--simba and --simbav2 cannot be used together")
+
+    use_simba_features = args.simba or args.simbav2
     env_name = args.env
     embedding_mode = "normal"
     env_builder, env_info = get_env_builder(
@@ -74,7 +80,11 @@ if __name__ == "__main__":
 
     if args.algo == "DDPG":
         if args.model_lib == "flax":
-            if args.simba:
+            if args.simbav2:
+                from model_builder.flax.dpg.simbav2_ddpg_builder import (
+                    model_builder_maker,
+                )
+            elif args.simba:
                 from model_builder.flax.dpg.simba_ddpg_builder import (
                     model_builder_maker,
                 )
@@ -94,7 +104,8 @@ if __name__ == "__main__":
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
             scaled_by_reset=args.scaled_by_reset,
-            simba=args.simba,
+            simba=use_simba_features,
+            simba_v2=args.simbav2,
             n_step=args.n_step,
             train_freq=args.train_freq,
             seed=args.seed,
@@ -106,7 +117,11 @@ if __name__ == "__main__":
         )
     if args.algo == "TD3":
         if args.model_lib == "flax":
-            if args.simba:
+            if args.simbav2:
+                from model_builder.flax.dpg.simbav2_td3_builder import (
+                    model_builder_maker,
+                )
+            elif args.simba:
                 from model_builder.flax.dpg.simba_td3_builder import model_builder_maker
             else:
                 from model_builder.flax.dpg.td3_builder import model_builder_maker
@@ -124,7 +139,8 @@ if __name__ == "__main__":
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
             scaled_by_reset=args.scaled_by_reset,
-            simba=args.simba,
+            simba=use_simba_features,
+            simba_v2=args.simbav2,
             action_noise=args.action_noise,
             n_step=args.n_step,
             train_freq=args.train_freq,
@@ -137,7 +153,11 @@ if __name__ == "__main__":
         )
     if args.algo == "SAC":
         if args.model_lib == "flax":
-            if args.simba:
+            if args.simbav2:
+                from model_builder.flax.dpg.simbav2_sac_builder import (
+                    model_builder_maker,
+                )
+            elif args.simba:
                 from model_builder.flax.dpg.simba_sac_builder import model_builder_maker
             else:
                 from model_builder.flax.dpg.sac_builder import model_builder_maker
@@ -155,7 +175,8 @@ if __name__ == "__main__":
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
             scaled_by_reset=args.scaled_by_reset,
-            simba=args.simba,
+            simba=use_simba_features,
+            simba_v2=args.simbav2,
             n_step=args.n_step,
             train_freq=args.train_freq,
             ent_coef=args.ent_coef,
@@ -168,7 +189,11 @@ if __name__ == "__main__":
         )
     if args.algo == "CrossQ":
         if args.model_lib == "flax":
-            if args.simba:
+            if args.simbav2:
+                from model_builder.flax.dpg.simbav2_crossq_builder import (
+                    model_builder_maker,
+                )
+            elif args.simba:
                 from model_builder.flax.dpg.simba_crossq_builder import (
                     model_builder_maker,
                 )
@@ -188,7 +213,8 @@ if __name__ == "__main__":
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
             scaled_by_reset=args.scaled_by_reset,
-            simba=args.simba,
+            simba=use_simba_features,
+            simba_v2=args.simbav2,
             n_step=args.n_step,
             train_freq=args.train_freq,
             ent_coef=args.ent_coef,
@@ -201,7 +227,11 @@ if __name__ == "__main__":
         )
     if args.algo == "DAC":
         if args.model_lib == "flax":
-            if args.simba:
+            if args.simbav2:
+                from model_builder.flax.dpg.simbav2_dac_builder import (
+                    model_builder_maker,
+                )
+            elif args.simba:
                 from model_builder.flax.dpg.simba_dac_builder import model_builder_maker
             else:
                 from model_builder.flax.dpg.dac_builder import model_builder_maker
@@ -219,7 +249,8 @@ if __name__ == "__main__":
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
             scaled_by_reset=args.scaled_by_reset,
-            simba=args.simba,
+            simba=use_simba_features,
+            simba_v2=args.simbav2,
             n_step=args.n_step,
             train_freq=args.train_freq,
             ent_coef=args.ent_coef,
@@ -232,7 +263,11 @@ if __name__ == "__main__":
         )
     if args.algo == "TQC":
         if args.model_lib == "flax":
-            if args.simba:
+            if args.simbav2:
+                from model_builder.flax.dpg.simbav2_tqc_builder import (
+                    model_builder_maker,
+                )
+            elif args.simba:
                 from model_builder.flax.dpg.simba_tqc_builder import model_builder_maker
             else:
                 from model_builder.flax.dpg.tqc_builder import model_builder_maker
@@ -251,7 +286,8 @@ if __name__ == "__main__":
             quantile_drop=args.quantile_drop,
             prioritized_replay=args.per,
             scaled_by_reset=args.scaled_by_reset,
-            simba=args.simba,
+            simba=use_simba_features,
+            simba_v2=args.simbav2,
             n_step=args.n_step,
             train_freq=args.train_freq,
             ent_coef=args.ent_coef,
@@ -267,7 +303,11 @@ if __name__ == "__main__":
         )
     if args.algo == "TD7":
         if args.model_lib == "flax":
-            if args.simba:
+            if args.simbav2:
+                from model_builder.flax.dpg.simbav2_td7_builder import (
+                    model_builder_maker,
+                )
+            elif args.simba:
                 from model_builder.flax.dpg.simba_td7_builder import model_builder_maker
             else:
                 from model_builder.flax.dpg.td7_builder import model_builder_maker
@@ -287,7 +327,8 @@ if __name__ == "__main__":
             action_noise=args.action_noise,
             train_freq=args.train_freq,
             scaled_by_reset=args.scaled_by_reset,
-            simba=args.simba,
+            simba=use_simba_features,
+            simba_v2=args.simbav2,
             seed=args.seed,
             gradient_steps=args.gradient_steps,
             log_dir=args.logdir,

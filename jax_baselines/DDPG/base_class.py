@@ -40,6 +40,7 @@ class Deteministic_Policy_Gradient_Family(object):
         prioritized_replay_eps=1e-3,
         scaled_by_reset=False,
         simba=False,
+        simba_v2=False,
         log_interval=200,
         log_dir=None,
         _init_setup_model=True,
@@ -85,7 +86,8 @@ class Deteministic_Policy_Gradient_Family(object):
         self.n_step = n_step
         self.scaled_by_reset = scaled_by_reset
         self.reset_freq = 500000
-        self.simba = simba
+        self.simba = simba or simba_v2
+        self.simba_v2 = simba_v2
         self.params = None
         self.target_params = None
         self.save_path = None
@@ -344,7 +346,9 @@ class Deteministic_Policy_Gradient_Family(object):
         return discription
 
     def run_name_update(self, run_name):
-        if self.simba:
+        if self.simba_v2:
+            run_name = "SimbaV2_" + run_name
+        elif self.simba:
             run_name = "Simba_" + run_name
         if self.n_step_method:
             run_name = "{}Step_".format(self.n_step) + run_name

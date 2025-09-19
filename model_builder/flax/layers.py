@@ -165,3 +165,124 @@ class ResidualBlockBRN(nn.Module):
         x = self.activation(x)
         x = Dense(self.features, kernel_init=self.kernel_init, bias_init=self.bias_init)(x)
         return x + inputs
+
+
+# SimbaV2
+def _safe_norm(
+    x: jnp.ndarray, axis: int = -1, keepdims: bool = True, eps: float = 1e-6
+) -> jnp.ndarray:
+    return jnp.sqrt(jnp.sum(jnp.square(x), axis=axis, keepdims=keepdims) + eps)
+
+
+def l2_normalize(x: jnp.ndarray, axis: int = -1, eps: float = 1e-6) -> jnp.ndarray:
+    return x / _safe_norm(x, axis=axis, keepdims=True, eps=eps)
+
+
+class Shift(nn.Module):
+    c_shift: float = 1.0
+
+    @nn.compact
+    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
+        new_axis = jnp.ones(inputs.shape[:-1] + (1,), dtype=inputs.dtype) * self.c_shift
+        return jnp.concatenate([inputs, new_axis], axis=-1)
+
+
+class Scaler(nn.Module):
+    dim: int
+    init: float = 1.0
+    scale: float = 1.0
+
+    @nn.compact
+    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
+        param = self.param(
+            "scale",
+            nn.initializers.constant(self.scale),
+            (self.dim,),
+        )
+        return param * (self.init / self.scale) * inputs
+
+
+class LERP(nn.Module):
+    features: int
+    eps: float = 1e-6
+    alpha_init: float = 0.5
+    alpha_scale: float = 1.0
+
+    @nn.compact
+    def __call__(self, start: jnp.ndarray, end: jnp.ndarray) -> jnp.ndarray:
+        x = start + Scaler(self.features, init=self.alpha_init, scale=self.alpha_scale)(end - start)
+        return x
+
+
+class SimbaV2Embedding(nn.Module):
+    hidden_dim: int
+    c_shift: float = 3.0
+    scaler_init: float = 1.0
+    scaler_scale: float = 1.0
+    kernel_init: Callable = nn.initializers.orthogonal()
+
+    @nn.compact
+    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
+        x = Shift(self.c_shift)(inputs)
+        x = l2_normalize(x, axis=-1)
+        x = nn.Dense(self.hidden_dim, use_bias=False, kernel_init=self.kernel_init)(x)
+        x = Scaler(self.hidden_dim, init=self.scaler_init, scale=self.scaler_scale)(x)
+        x = l2_normalize(x, axis=-1)
+        return x
+
+
+class SimbaV2Block(nn.Module):
+    hidden_dim: int
+    hidden_multiplier: int = 4
+    scaler_init: float = 1.0
+    scaler_scale: float = 1.0
+    alpha_init: float = 0.5
+    alpha_scale: float = 1.0
+    kernel_init: Callable = nn.initializers.orthogonal()
+    eps: float = 1e-6
+
+    @nn.compact
+    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
+        x = nn.Dense(
+            self.hidden_dim * self.hidden_multiplier,
+            use_bias=False,
+            kernel_init=self.kernel_init,
+        )(inputs)
+        x = Scaler(
+            self.hidden_dim * self.hidden_multiplier,
+            init=self.scaler_init,
+            scale=self.scaler_scale,
+        )(x)
+        x = nn.relu(x)
+        x = nn.Dense(self.hidden_dim, use_bias=False, kernel_init=self.kernel_init)(x)
+        x = l2_normalize(x, axis=-1)
+        x = LERP(
+            self.hidden_dim,
+            eps=self.eps,
+            alpha_init=self.alpha_init,
+            alpha_scale=self.alpha_scale,
+        )(inputs, x)
+        x = l2_normalize(x, axis=-1)
+        return x
+
+
+class SimbaV2Head(nn.Module):
+    hidden_dim: int
+    out_dim: int
+    scaler_init: float = 1.0
+    scaler_scale: float = 1.0
+    kernel_init: Callable = nn.initializers.orthogonal()
+    use_bias: bool = False
+    bias_init: Callable = nn.initializers.zeros
+
+    @nn.compact
+    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
+        x = nn.Dense(self.hidden_dim, use_bias=False, kernel_init=self.kernel_init)(inputs)
+        x = Scaler(self.hidden_dim, init=self.scaler_init, scale=self.scaler_scale)(x)
+        x = nn.Dense(
+            self.out_dim,
+            use_bias=self.use_bias,
+            kernel_init=self.kernel_init,
+            bias_init=self.bias_init,
+        )(x)
+        return x
