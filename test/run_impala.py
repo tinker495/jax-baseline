@@ -54,7 +54,7 @@ if __name__ == "__main__":
 
     ray.init(num_cpus=args.worker + 4, num_gpus=0)
 
-    workers = [Impala_Worker.remote(env_name) for i in range(args.worker)]
+    workers = [Impala_Worker.remote(env_name, seed=args.seed + i) for i in range(args.worker)]
 
     env_type = "SingleEnv"
 
@@ -83,6 +83,7 @@ if __name__ == "__main__":
             ent_coef=args.ent_coef,
             rho_max=args.rho_max,
             log_dir=args.logdir,
+            seed=args.seed,
         )
 
     elif args.algo == "PPO":
@@ -103,6 +104,7 @@ if __name__ == "__main__":
             ent_coef=args.ent_coef,
             rho_max=args.rho_max,
             log_dir=args.logdir,
+            seed=args.seed,
         )
 
     elif args.algo == "TPPO":
@@ -123,6 +125,7 @@ if __name__ == "__main__":
             ent_coef=args.ent_coef,
             rho_max=args.rho_max,
             log_dir=args.logdir,
+            seed=args.seed,
         )
 
     elif args.algo == "SPO":
@@ -143,6 +146,7 @@ if __name__ == "__main__":
             ent_coef=args.ent_coef,
             rho_max=args.rho_max,
             log_dir=args.logdir,
+            seed=args.seed,
         )
 
     agent.learn(int(args.steps))

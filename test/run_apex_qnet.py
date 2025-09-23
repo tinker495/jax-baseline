@@ -69,7 +69,7 @@ if __name__ == "__main__":
     ray.init(num_cpus=args.worker + 2, num_gpus=0)
 
     env_builder, env_info = get_env_builder(env_name)
-    workers = [Ape_X_Worker.remote(env_builder) for i in range(args.worker)]
+    workers = [Ape_X_Worker.remote(env_builder, seed=args.seed + i) for i in range(args.worker)]
 
     env_type = env_info["env_type"]
     env_name = env_info["env_id"]
@@ -105,6 +105,7 @@ if __name__ == "__main__":
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
             compress_memory=args.compress_memory,
+            seed=args.seed,
         )
     elif args.algo == "C51":
         if args.model_lib == "flax":
@@ -137,6 +138,7 @@ if __name__ == "__main__":
             compress_memory=args.compress_memory,
             categorial_max=args.max,
             categorial_min=args.min,
+            seed=args.seed,
         )
     elif args.algo == "QRDQN":
         if args.model_lib == "flax":
@@ -169,6 +171,7 @@ if __name__ == "__main__":
             compress_memory=args.compress_memory,
             n_support=args.n_support,
             delta=args.delta,
+            seed=args.seed,
         )
     elif args.algo == "IQN":
         if args.model_lib == "flax":
@@ -202,6 +205,7 @@ if __name__ == "__main__":
             n_support=args.n_support,
             delta=args.delta,
             CVaR=args.CVaR,
+            seed=args.seed,
         )
 
     agent.learn(int(args.steps))

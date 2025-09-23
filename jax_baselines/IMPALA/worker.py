@@ -7,6 +7,8 @@ import jax
 import numpy as np
 import ray
 
+from jax_baselines.common.utils import seed_env, seed_prngs
+
 from jax_baselines.IMPALA.cpprb_buffers import EpochBuffer
 
 
@@ -14,7 +16,7 @@ from jax_baselines.IMPALA.cpprb_buffers import EpochBuffer
 class Impala_Worker(object):
     encoded = base64.b64encode(mp.current_process().authkey)
 
-    def __init__(self, env_name_) -> None:
+    def __init__(self, env_name_, seed=None) -> None:
         mp.current_process().authkey = base64.b64decode(self.encoded)
         from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
 
@@ -23,6 +25,9 @@ class Impala_Worker(object):
             self.env = make_wrap_atari(env_name_, clip_rewards=True)
         else:
             self.env = gym.make(env_name_)
+        self.base_seed = seed
+        seed_prngs(seed)
+        seed_env(self.env, seed)
 
     def get_info(self):
         return {
@@ -42,8 +47,10 @@ class Impala_Worker(object):
         update,
         logger_server,
         stop,
+        seed=None,
     ):
         try:
+            seed_prngs(seed)
             queue, env_dict, actor_num = buffer_info
             local_buffer = EpochBuffer(local_size, env_dict)
             preproc, actor_model, _ = model_builder()
@@ -52,7 +59,13 @@ class Impala_Worker(object):
             actor = jax.jit(partial(actor, actor_model, preproc))
             get_action_prob = partial(get_action_prob, actor)
 
-            obs, info = self.env.reset()
+            if seed is not None:
+                try:
+                    obs, info = self.env.reset(seed=seed)
+                except TypeError:
+                    obs, info = self.env.reset()
+            else:
+                obs, info = self.env.reset()
             have_original_reward = "original_reward" in info.keys()
             have_lives = "lives" in info.keys()
             if have_original_reward:

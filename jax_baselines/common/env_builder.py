@@ -5,11 +5,13 @@ import numpy as np
 import ray
 from gymnasium import spaces
 
+from jax_baselines.common.utils import seed_env, seed_prngs
+
 
 def get_env_builder(env_name, **kwargs):
-    def env_builder(worker=1, render_mode=None):
+    def env_builder(worker=1, render_mode=None, seed=None):
         if worker > 1:
-            return rayVectorizedGymEnv(env_name, worker_num=worker)
+            return rayVectorizedGymEnv(env_name, worker_num=worker, seed=seed)
         else:
             from jax_baselines.common.atari_wrappers import (
                 get_env_type,
@@ -21,6 +23,7 @@ def get_env_builder(env_name, **kwargs):
                 env = make_wrap_atari(env_name, clip_rewards=True)
             else:
                 env = gym.make(env_name, render_mode=render_mode)
+            seed_env(env, seed)
             return env
 
     env_type = "SingleEnv"
@@ -85,12 +88,16 @@ class VectorizedEnv(Env):
 
 
 class rayVectorizedGymEnv(VectorizedEnv):
-    def __init__(self, env_id, worker_num=8, render=False):
+    def __init__(self, env_id, worker_num=8, render=False, seed=None):
         ray.init(num_cpus=worker_num)
         self.env_id = env_id
         self.worker_num = worker_num
         self.workers = [
-            gymRayworker.remote(env_id, render=(w == 0) if render else False)
+            gymRayworker.remote(
+                env_id,
+                render=(w == 0) if render else False,
+                seed=None if seed is None else seed + w,
+            )
             for w in range(worker_num)
         ]
         self.env_info = ray.get(self.workers[0].get_info.remote())
@@ -129,7 +136,7 @@ class rayVectorizedGymEnv(VectorizedEnv):
 
 @ray.remote
 class gymRayworker:
-    def __init__(self, env_name_, render=False):
+    def __init__(self, env_name_, render=False, seed=None):
         from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
 
         self.env_type, self.env_id = get_env_type(env_name_)
@@ -137,6 +144,8 @@ class gymRayworker:
             self.env = make_wrap_atari(env_name_, clip_rewards=True)
         else:
             self.env = gym.make(env_name_)
+        seed_prngs(seed)
+        seed_env(self.env, seed)
         if not isinstance(self.env.action_space, spaces.Box):
             self.action_conv = lambda a: a[0]
         else:

@@ -11,7 +11,13 @@ from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.replay_factory import make_replay_buffer
 from jax_baselines.common.schedules import ConstantSchedule, LinearSchedule
-from jax_baselines.common.utils import compute_ckpt_window_stat, key_gen, restore, save
+from jax_baselines.common.utils import (
+    compute_ckpt_window_stat,
+    key_gen,
+    restore,
+    save,
+    set_global_seeds,
+)
 
 
 class Q_Network_Family(object):
@@ -66,6 +72,7 @@ class Q_Network_Family(object):
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
+        set_global_seeds(self.seed)
         self.key_seq = key_gen(self.seed)
 
         self.param_noise = param_noise
@@ -170,7 +177,7 @@ class Q_Network_Family(object):
             self.action_size,
             self.worker_size,
             self.env_type,
-        ) = get_local_env_info(self.env_builder, self.num_workers)
+        ) = get_local_env_info(self.env_builder, self.num_workers, seed=self.seed)
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
         print("worker_size : ", self.worker_size)
