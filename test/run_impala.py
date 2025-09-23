@@ -64,6 +64,10 @@ if __name__ == "__main__":
         from model_builder.flax.ac.ac_builder import model_builder_maker
     elif args.model_lib == "haiku":
         from model_builder.haiku.ac.ac_builder import model_builder_maker
+    elif args.model_lib == "equinox":
+        from model_builder.equinox.ac.ac_builder import model_builder_maker
+    else:
+        raise ValueError(f"Unsupported model_lib: {args.model_lib}")
 
     if args.algo == "A2C":
         agent = IMPALA(

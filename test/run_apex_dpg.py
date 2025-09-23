@@ -77,6 +77,10 @@ if __name__ == "__main__":
             from model_builder.flax.dpg.ddpg_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.ddpg_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            from model_builder.equinox.dpg.ddpg_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
 
         agent = APE_X_DDPG(
             workers,
@@ -103,6 +107,10 @@ if __name__ == "__main__":
             from model_builder.flax.dpg.td3_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.td3_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            from model_builder.equinox.dpg.td3_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
 
         agent = APE_X_TD3(
             workers,

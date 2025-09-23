@@ -81,11 +81,20 @@ if __name__ == "__main__":
     env_type = env_info["env_type"]
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n}
 
+    if args.model_lib == "equinox" and args.algo not in {"DQN", "C51", "QRDQN"}:
+        raise ValueError(
+            "Equinox backend currently supports only DQN, C51, and QRDQN in run_qnet."
+        )
+
     if args.algo == "DQN":
         if args.model_lib == "flax":
             from model_builder.flax.qnet.dqn_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.dqn_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            from model_builder.equinox.qnet.dqn_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
         agent = DQN(
             env_builder,
             model_builder_maker=model_builder_maker,
@@ -117,6 +126,10 @@ if __name__ == "__main__":
             from model_builder.flax.qnet.c51_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.c51_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            from model_builder.equinox.qnet.c51_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
 
         if args.hl_gauss:
             agent = HL_GAUSS_C51(
@@ -181,6 +194,10 @@ if __name__ == "__main__":
             from model_builder.flax.qnet.qrdqn_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.qrdqn_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            from model_builder.equinox.qnet.qrdqn_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
         agent = QRDQN(
             env_builder,
             model_builder_maker=model_builder_maker,
@@ -214,6 +231,10 @@ if __name__ == "__main__":
             from model_builder.flax.qnet.iqn_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.iqn_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            from model_builder.equinox.qnet.iqn_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
         agent = IQN(
             env_builder,
             model_builder_maker=model_builder_maker,
@@ -248,6 +269,10 @@ if __name__ == "__main__":
             from model_builder.flax.qnet.fqf_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.fqf_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            from model_builder.equinox.qnet.fqf_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
         agent = FQF(
             env_builder,
             model_builder_maker=model_builder_maker,
@@ -281,6 +306,10 @@ if __name__ == "__main__":
             from model_builder.flax.qnet.spr_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.spr_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            from model_builder.equinox.qnet.spr_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
 
         if args.hl_gauss:
             agent = HL_GAUSS_SPR(
@@ -332,6 +361,10 @@ if __name__ == "__main__":
             from model_builder.flax.qnet.bbf_builder import model_builder_maker
         elif args.model_lib == "haiku":
             raise NotImplementedError
+        elif args.model_lib == "equinox":
+            from model_builder.equinox.qnet.bbf_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
 
         if args.hl_gauss:
             agent = HL_GAUSS_BBF(

@@ -92,6 +92,19 @@ if __name__ == "__main__":
                 from model_builder.flax.dpg.ddpg_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.ddpg_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            if args.simbav2:
+                from model_builder.equinox.dpg.simbav2_ddpg_builder import (
+                    model_builder_maker,
+                )
+            elif args.simba:
+                from model_builder.equinox.dpg.simba_ddpg_builder import (
+                    model_builder_maker,
+                )
+            else:
+                from model_builder.equinox.dpg.ddpg_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
         agent = DDPG(
             env_builder,
             model_builder_maker,
@@ -127,6 +140,19 @@ if __name__ == "__main__":
                 from model_builder.flax.dpg.td3_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.td3_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            if args.simbav2:
+                from model_builder.equinox.dpg.simbav2_td3_builder import (
+                    model_builder_maker,
+                )
+            elif args.simba:
+                from model_builder.equinox.dpg.simba_td3_builder import (
+                    model_builder_maker,
+                )
+            else:
+                from model_builder.equinox.dpg.td3_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
         agent = TD3(
             env_builder,
             model_builder_maker,
@@ -163,6 +189,19 @@ if __name__ == "__main__":
                 from model_builder.flax.dpg.sac_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.sac_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            if args.simbav2:
+                from model_builder.equinox.dpg.simbav2_sac_builder import (
+                    model_builder_maker,
+                )
+            elif args.simba:
+                from model_builder.equinox.dpg.simba_sac_builder import (
+                    model_builder_maker,
+                )
+            else:
+                from model_builder.equinox.dpg.sac_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
         agent = SAC(
             env_builder,
             model_builder_maker,
@@ -202,6 +241,19 @@ if __name__ == "__main__":
         elif args.model_lib == "haiku":
             pass
             # from model_builder.haiku.dpg.crossq_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            if args.simbav2:
+                from model_builder.equinox.dpg.simbav2_crossq_builder import (
+                    model_builder_maker,
+                )
+            elif args.simba:
+                from model_builder.equinox.dpg.simba_crossq_builder import (
+                    model_builder_maker,
+                )
+            else:
+                from model_builder.equinox.dpg.crossq_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
         agent = CrossQ(
             env_builder,
             model_builder_maker,
@@ -237,6 +289,19 @@ if __name__ == "__main__":
                 from model_builder.flax.dpg.dac_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.dac_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            if args.simbav2:
+                from model_builder.equinox.dpg.simbav2_dac_builder import (
+                    model_builder_maker,
+                )
+            elif args.simba:
+                from model_builder.equinox.dpg.simba_dac_builder import (
+                    model_builder_maker,
+                )
+            else:
+                from model_builder.equinox.dpg.dac_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
         agent = DAC(
             env_builder,
             model_builder_maker,
@@ -273,6 +338,19 @@ if __name__ == "__main__":
                 from model_builder.flax.dpg.tqc_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.tqc_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            if args.simbav2:
+                from model_builder.equinox.dpg.simbav2_tqc_builder import (
+                    model_builder_maker,
+                )
+            elif args.simba:
+                from model_builder.equinox.dpg.simba_tqc_builder import (
+                    model_builder_maker,
+                )
+            else:
+                from model_builder.equinox.dpg.tqc_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
         agent = TQC(
             env_builder,
             model_builder_maker,
@@ -313,6 +391,19 @@ if __name__ == "__main__":
                 from model_builder.flax.dpg.td7_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.td7_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            if args.simbav2:
+                from model_builder.equinox.dpg.simbav2_td7_builder import (
+                    model_builder_maker,
+                )
+            elif args.simba:
+                from model_builder.equinox.dpg.simba_td7_builder import (
+                    model_builder_maker,
+                )
+            else:
+                from model_builder.equinox.dpg.td7_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
         eval_env = gym.make(env_name)
         agent = TD7(
             env_builder,

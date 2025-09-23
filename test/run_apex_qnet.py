@@ -76,11 +76,20 @@ if __name__ == "__main__":
 
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
 
+    if args.model_lib == "equinox" and args.algo not in {"DQN", "C51", "QRDQN", "IQN"}:
+        raise ValueError(
+            "Equinox backend currently supports only DQN, C51, QRDQN, and IQN in run_apex_qnet."
+        )
+
     if args.algo == "DQN":
         if args.model_lib == "flax":
             from model_builder.flax.qnet.dqn_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.dqn_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            from model_builder.equinox.qnet.dqn_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
 
         agent = APE_X_DQN(
             workers,
@@ -111,6 +120,10 @@ if __name__ == "__main__":
             from model_builder.flax.qnet.c51_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.c51_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            from model_builder.equinox.qnet.c51_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
 
         agent = APE_X_C51(
             workers,
@@ -143,6 +156,10 @@ if __name__ == "__main__":
             from model_builder.flax.qnet.qrdqn_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.qrdqn_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            from model_builder.equinox.qnet.qrdqn_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
 
         agent = APE_X_QRDQN(
             workers,
@@ -175,6 +192,10 @@ if __name__ == "__main__":
             from model_builder.flax.qnet.iqn_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.qnet.iqn_builder import model_builder_maker
+        elif args.model_lib == "equinox":
+            from model_builder.equinox.qnet.iqn_builder import model_builder_maker
+        else:
+            raise ValueError(f"Unsupported model_lib: {args.model_lib}")
 
         agent = APE_X_IQN(
             workers,
