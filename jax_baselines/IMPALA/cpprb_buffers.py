@@ -6,6 +6,8 @@ import numpy as np
 import ray
 from ray.util.queue import Queue
 
+from jax_baselines.common.utils import seed_prngs
+
 batch = namedtuple(
     "batch_tuple",
     ["obses", "actions", "mu_log_prob", "rewards", "nxtobses", "terminateds", "truncateds"],
@@ -54,13 +56,14 @@ class EpochBuffer:
 
 @ray.remote(num_cpus=1)
 class Buffer_getter:
-    def __init__(self, queue, env_dict, actor_num, size, sample_size):
+    def __init__(self, queue, env_dict, actor_num, size, sample_size, seed=None):
         self.queue = queue
         self.env_dict = env_dict
         self.actor_num = actor_num
         self.size = size
         self.replay = size > 0
         self.sample_size = sample_size
+        seed_prngs(seed)
         if self.replay:
             self.replay_buffer = deque(maxlen=size)
             self._sample = self.replay_sample
@@ -94,6 +97,7 @@ class ImpalaBuffer:
         discrete=True,
         action_space=1,
         sample_size=32,
+        seed=None,
     ):
         self.max_size = replay_size
         self.actor_num = actor_num
@@ -127,8 +131,9 @@ class ImpalaBuffer:
         }
 
         self.queue = Queue(maxsize=max(actor_num * 2, replay_size))
+        getter_seed = None if seed is None else seed + 10_000
         self.getter = Buffer_getter.remote(
-            self.queue, self.env_dict, actor_num, replay_size, sample_size
+            self.queue, self.env_dict, actor_num, replay_size, sample_size, getter_seed
         )
         self.get = self.getter.sample.remote()
 

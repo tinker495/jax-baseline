@@ -15,6 +15,7 @@ from jax_baselines.common.utils import (
     key_gen,
     restore,
     save,
+    set_global_seeds,
 )
 
 
@@ -65,6 +66,7 @@ class Deteministic_Policy_Gradient_Family(object):
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
+        set_global_seeds(self.seed)
         self.key_seq = key_gen(self.seed)
 
         self.train_steps_count = 0
@@ -291,7 +293,7 @@ class Deteministic_Policy_Gradient_Family(object):
             self.action_size,
             self.worker_size,
             self.env_type,
-        ) = get_local_env_info(self.env_builder, self.num_workers)
+        ) = get_local_env_info(self.env_builder, self.num_workers, seed=self.seed)
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
         print("worker_size : ", self.worker_size)

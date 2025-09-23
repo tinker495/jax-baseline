@@ -10,7 +10,7 @@ from jax_baselines.common.env_info import get_local_env_info, infer_action_meta
 from jax_baselines.common.eval import evaluate_policy, record_and_test
 from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.optimizer import select_optimizer
-from jax_baselines.common.utils import convert_jax, key_gen, restore, save
+from jax_baselines.common.utils import convert_jax, key_gen, restore, save, set_global_seeds
 
 
 class Actor_Critic_Policy_Gradient_Family(object):
@@ -42,6 +42,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
+        set_global_seeds(self.seed)
         self.key_seq = key_gen(self.seed)
 
         self.batch_size = batch_size
@@ -86,7 +87,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.action_size,
             self.worker_size,
             self.env_type,
-        ) = get_local_env_info(self.env_builder, self.num_workers)
+        ) = get_local_env_info(self.env_builder, self.num_workers, seed=self.seed)
 
         # infer action metadata (type and conversion)
         # For vectorized envs the underlying action_space is stored in env.env_info
