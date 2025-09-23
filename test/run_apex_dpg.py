@@ -65,7 +65,7 @@ if __name__ == "__main__":
     ray.init(num_cpus=args.worker + 2, num_gpus=0)
 
     env_builder, env_info = get_env_builder(env_name)
-    workers = [Ape_X_Worker.remote(env_builder) for i in range(args.worker)]
+    workers = [Ape_X_Worker.remote(env_builder, seed=args.seed + i) for i in range(args.worker)]
 
     env_type = env_info["env_type"]
     env_name = env_info["env_id"]

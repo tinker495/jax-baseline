@@ -10,7 +10,13 @@ from jax_baselines.APE_X.common_servers import Logger_server, Param_server
 from jax_baselines.common.env_info import get_remote_env_info
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.replay_factory import make_multi_prioritized_buffer
-from jax_baselines.common.utils import get_hyper_params, key_gen, restore, save
+from jax_baselines.common.utils import (
+    get_hyper_params,
+    key_gen,
+    restore,
+    save,
+    set_global_seeds,
+)
 
 
 class Ape_X_Deteministic_Policy_Gradient_Family(object):
@@ -50,6 +56,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
+        set_global_seeds(self.seed)
         self.key_seq = key_gen(self.seed)
 
         self.learning_starts = learning_starts
@@ -197,6 +204,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
                     self.logger_server,
                     update[idx],
                     stop,
+                    self.seed + idx,
                     eps,
                 )
             )

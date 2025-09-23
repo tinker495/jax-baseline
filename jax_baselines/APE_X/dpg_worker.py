@@ -7,6 +7,7 @@ import gymnasium as gym
 import jax
 import numpy as np
 import ray
+from jax_baselines.common.utils import seed_env, seed_prngs
 
 from jax_baselines.common.cpprb_buffers import ReplayBuffer
 
@@ -15,11 +16,30 @@ from jax_baselines.common.cpprb_buffers import ReplayBuffer
 class Ape_X_Worker(object):
     encoded = base64.b64encode(mp.current_process().authkey)
 
-    def __init__(self, env_name_) -> None:
+    def __init__(self, env_name_, seed=None) -> None:
         mp.current_process().authkey = base64.b64decode(self.encoded)
         self.env_type = "SingleEnv"
-        self.env_id = env_name_
-        self.env = gym.make(env_name_)
+        self.env_id = None
+        seed_prngs(seed)
+
+        if callable(env_name_):
+            try:
+                env = env_name_(worker=1, seed=seed)
+            except TypeError:
+                try:
+                    env = env_name_(1, seed=seed)
+                except TypeError:
+                    env = env_name_()
+            self.env = env
+            try:
+                self.env_id = env.unwrapped.spec.id
+            except Exception:
+                self.env_id = getattr(getattr(env, "spec", None), "id", None)
+        else:
+            self.env = gym.make(env_name_)
+            self.env_id = env_name_
+        seed_env(self.env, seed)
+        self.base_seed = seed
 
     def get_info(self):
         return {
@@ -40,8 +60,10 @@ class Ape_X_Worker(object):
         update,
         stop,
         eps=0.05,
+        seed=None,
     ):
         try:
+            seed_prngs(seed)
             gloabal_buffer, env_dict, n_s = buffer_info
             local_buffer = ReplayBuffer(local_size, env_dict=env_dict, n_s=n_s)
             preproc, actor_model, cricit_model = model_builder()
@@ -62,7 +84,13 @@ class Ape_X_Worker(object):
             get_action = random_action
 
             score = 0
-            obs, info = self.env.reset()
+            if seed is not None:
+                try:
+                    obs, info = self.env.reset(seed=seed)
+                except TypeError:
+                    obs, info = self.env.reset()
+            else:
+                obs, info = self.env.reset()
             obs = [np.expand_dims(obs, axis=0)]
             params = ray.get(param_server.get_params.remote())
             eplen = 0

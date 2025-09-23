@@ -11,7 +11,7 @@ from tqdm.auto import trange
 from jax_baselines.APE_X.common_servers import Logger_server, Param_server
 from jax_baselines.common.env_info import get_remote_env_info
 from jax_baselines.common.optimizer import select_optimizer
-from jax_baselines.common.utils import convert_jax, key_gen, restore, save
+from jax_baselines.common.utils import convert_jax, key_gen, restore, save, set_global_seeds
 from jax_baselines.IMPALA.cpprb_buffers import ImpalaBuffer
 
 
@@ -48,6 +48,7 @@ class IMPALA_Family(object):
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
+        set_global_seeds(self.seed)
         self.key_seq = key_gen(self.seed)
         self.update_freq = update_freq
 
@@ -142,6 +143,7 @@ class IMPALA_Family(object):
             discrete=(self.action_type == "discrete"),
             action_space=self.action_size,
             sample_size=self.sample_size,
+            seed=self.seed,
         )
 
     def setup_model(self):
@@ -248,6 +250,7 @@ class IMPALA_Family(object):
                     update[idx],
                     self.logger_server,
                     stop,
+                    seed=self.seed + idx,
                 )
             )
 

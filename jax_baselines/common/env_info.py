@@ -14,13 +14,14 @@ def _continuous_action_conv(a):
     return np.clip(a, -3.0, 3.0) / 3.0
 
 
-def get_local_env_info(env_builder, num_workers=1):
+def get_local_env_info(env_builder, num_workers=1, seed=None):
     """Create envs and extract standardized info used by base classes.
 
     Returns: (env, eval_env, observation_space, action_size, worker_size, env_type)
     """
-    env = env_builder(num_workers)
-    eval_env = env_builder(1)
+    eval_seed = None if seed is None else seed + 1
+    env = env_builder(num_workers, seed=seed)
+    eval_env = env_builder(1, seed=eval_seed)
 
     if isinstance(env, VectorizedEnv):
         env_info = env.env_info

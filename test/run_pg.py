@@ -71,6 +71,7 @@ if __name__ == "__main__":
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
+            seed=args.seed,
         )
     if args.algo == "PPO":
         agent = PPO(
@@ -89,6 +90,7 @@ if __name__ == "__main__":
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
+            seed=args.seed,
         )
     if args.algo == "TPPO":
         agent = TPPO(
@@ -107,6 +109,7 @@ if __name__ == "__main__":
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
+            seed=args.seed,
         )
     if args.algo == "SPO":
         agent = SPO(
@@ -125,6 +128,7 @@ if __name__ == "__main__":
             log_dir=args.logdir,
             policy_kwargs=policy_kwargs,
             optimizer=args.optimizer,
+            seed=args.seed,
         )
 
     agent.learn(int(args.steps), experiment_name=args.experiment_name)
