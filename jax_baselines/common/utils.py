@@ -215,7 +215,7 @@ def convert_states(obs: list):
 
 
 def convert_jax(obs: list):
-    return [jax.device_get(o).astype(jnp.float32) for o in obs]
+    return [o.astype(jnp.float32) for o in obs]
 
 
 def q_log_pi(q, entropy_tau):
