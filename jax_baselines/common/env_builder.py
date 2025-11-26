@@ -14,7 +14,7 @@ def get_env_builder(env_name, **kwargs):
             if _is_envpool_supported(env_name):
                 return EnvPoolVectorizedEnv(env_name, worker_num=worker, seed=seed)
             else:
-                return rayVectorizedGymEnv(env_name, worker_num=worker, seed=seed)
+                return GymVectorizedEnv(env_name, worker_num=worker, seed=seed)
         else:
             from jax_baselines.common.atari_wrappers import (
                 get_env_type,
@@ -428,10 +428,36 @@ class GymVectorizedEnv(VectorizedEnv):
         self.worker_num = worker_num
 
         # Create vectorized environment using gymnasium
-        self.env = gym.vector.make(env_id, num_envs=worker_num)
+        # For Atari, we need to use custom wrappers, so we use AsyncVectorEnv with explicit constructors
+        from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
 
-        if seed is not None:
-            seed_prngs(seed)
+        env_type, _ = get_env_type(env_id)
+
+        def make_env(seed_offset=0):
+            def _make():
+                if env_type == "atari_env":
+                    env = make_wrap_atari(env_id, clip_rewards=True)
+                else:
+                    env = gym.make(env_id)
+
+                if seed is not None:
+                    seed_env(env, seed + seed_offset)
+                return env
+
+            return _make
+
+        if hasattr(gym, "make_vec") and env_type != "atari_env":
+            # For non-Atari, try efficient make_vec if available
+            try:
+                self.env = gym.make_vec(env_id, num_envs=worker_num, vectorization_mode="async")
+            except Exception:
+                self.env = gym.vector.AsyncVectorEnv([make_env(i) for i in range(worker_num)])
+        elif hasattr(gym.vector, "AsyncVectorEnv"):
+            # For Atari or if make_vec fails/not avail, use AsyncVectorEnv manually to ensure wrappers applied
+            self.env = gym.vector.AsyncVectorEnv([make_env(i) for i in range(worker_num)])
+        else:
+            # Last resort fallback
+            self.env = gym.vector.make(env_id, num_envs=worker_num, asynchronous=True)
 
         # Store environment info
         self.env_info = {
