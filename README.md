@@ -22,10 +22,10 @@ pip install .
 
 ### Supported Environments
 
-| **Name**               | **Q-Net based**    | **Actor-Critic based** | **DPG based**      |
-| ---------------------- | ------------------ | ---------------------- | ------------------ |
-| Gymnasium              | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
-| VectorizedGym with Ray | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
+| **Name**  | **Q-Net based**    | **Actor-Critic based** | **DPG based**      |
+| --------- | ------------------ | ---------------------- | ------------------ |
+| Gymnasium | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
+| EnvPool   | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
 
 ### Implemented Algorithms
 
@@ -53,15 +53,15 @@ pip install .
 #### DPG bases
 
 | **Name**        | `Per`[^PER]                   | `N-step`[^NSTEP][^RAINBOW] | `Ape-X`[^APEX]     | `Simba`[^SIMBA]    | `Simba-v2`[^SIMBAv2] |
-| --------------- | ----------------------------- | -------------------------- | ------------------ | ------------------ | ------------------ |
-| DDPG[^DDPG]     | :heavy_check_mark:            | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| TD3[^TD3]       | :heavy_check_mark:            | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: |
-| SAC[^SAC]       | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark: |
-| DAC[^DAC]:x:    | :x:                           | :x:                        | :x:                | :x:                | :x:                |
-| TQC[^TQC]       | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark: |
-| TD7[^TD7]       | :white_check_mark:(LAP[^LaP]) | :x:                        | :x:                | :heavy_check_mark: | :heavy_check_mark: |
-| CrossQ[^CrossQ] | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark: |
-| BRO[^BRO]:x:    | :x:                           | :x:                        | :x:                | :x:                | :x:                |
+| --------------- | ----------------------------- | -------------------------- | ------------------ | ------------------ | -------------------- |
+| DDPG[^DDPG]     | :heavy_check_mark:            | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:   |
+| TD3[^TD3]       | :heavy_check_mark:            | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:   |
+| SAC[^SAC]       | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
+| DAC[^DAC]:x:    | :x:                           | :x:                        | :x:                | :x:                | :x:                  |
+| TQC[^TQC]       | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
+| TD7[^TD7]       | :white_check_mark:(LAP[^LaP]) | :x:                        | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
+| CrossQ[^CrossQ] | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
+| BRO[^BRO]:x:    | :x:                           | :x:                        | :x:                | :x:                | :x:                  |
 
 ## Performance Compariton
 
@@ -120,10 +120,6 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 
 [^IMPALA]: [IMPALA](https://arxiv.org/abs/1802.01561)
 
-[^SIMBA]: [SIMBA](https://arxiv.org/abs/2410.09754)
-
-[^SIMBAv2]: [SIMBAv2](https://arxiv.org/abs/2502.15280)
-
 [^A3C]: [A3C](https://arxiv.org/pdf/1602.01783)
 
 [^PPO]: [PPO](https://arxiv.org/abs/1707.06347)
@@ -133,6 +129,10 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 [^TPPO]: [Truly PPO](https://arxiv.org/abs/1903.07940)
 
 [^SPO]: [SPO](https://arxiv.org/abs/2401.16025)
+
+[^SIMBA]: [SIMBA](https://arxiv.org/abs/2410.09754)
+
+[^SIMBAv2]: [SIMBAv2](https://arxiv.org/abs/2502.15280)
 
 [^DDPG]: [DDPG](https://arxiv.org/abs/1509.02971)
 

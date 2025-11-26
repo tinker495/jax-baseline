@@ -25,12 +25,29 @@ def get_local_env_info(env_builder, num_workers=1, seed=None):
 
     if isinstance(env, VectorizedEnv):
         env_info = env.env_info
-        observation_space = [list(env_info["observation_space"].shape)]
-        action_size = [
-            env_info["action_space"].n
-            if not isinstance(env_info["action_space"], spaces.Box)
-            else env_info["action_space"].shape[0]
-        ]
+        obs_space = env_info["observation_space"]
+        act_space = env_info["action_space"]
+
+        # Handle different observation space types
+        # EnvPool may return different space types than gymnasium
+        if hasattr(obs_space, "shape"):
+            observation_space = [list(obs_space.shape)]
+        else:
+            # Fallback for tuple/dict spaces
+            observation_space = [list(obs_space)]
+
+        # Handle action space
+        if isinstance(act_space, spaces.Discrete):
+            action_size = [act_space.n]
+        elif isinstance(act_space, spaces.Box):
+            action_size = [act_space.shape[0]]
+        elif hasattr(act_space, "n"):
+            action_size = [act_space.n]
+        elif hasattr(act_space, "shape"):
+            action_size = [act_space.shape[0]]
+        else:
+            raise ValueError(f"Unsupported action space type: {type(act_space)}")
+
         worker_size = env.worker_num
         env_type = "VectorizedEnv"
     elif isinstance(env, gym.Env) or isinstance(env, gym.Wrapper):
