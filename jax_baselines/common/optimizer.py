@@ -182,6 +182,10 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, weight_decay=1e-4, grad_ma
             optim = optax.lion(lr, weight_decay=1e-5)
         case "prodigy":
             optim = optax.contrib.prodigy(lr, eps=eps, weight_decay=1e-4)
+        case "muon":
+            optim = optax.contrib.muon(lr, weight_decay=weight_decay, cautious_weight_decay=True)
+        case "normuon":
+            optim = optax.contrib.normuon(lr, weight_decay=weight_decay, cautious_weight_decay=True)
         case _:
             raise ValueError(f"Unknown optimizer: {optim_str}")
 
