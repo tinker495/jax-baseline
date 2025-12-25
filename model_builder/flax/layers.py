@@ -178,6 +178,61 @@ def l2_normalize(x: jnp.ndarray, axis: int = -1, eps: float = 1e-6) -> jnp.ndarr
     return x / _safe_norm(x, axis=axis, keepdims=True, eps=eps)
 
 
+class HypersphericalDense(nn.Module):
+    """Dense layer with hyperspherical weight normalization.
+
+    For a kernel of shape (in_features, out_features), we normalize each output
+    column vector to unit norm and then scale by a learnable per-output kappa.
+    This constrains weight norm growth while allowing controlled scaling.
+    """
+
+    features: int
+    use_bias: bool = False
+    eps: float = 1e-6
+    # Per-output norm scale (kappa) parameterization.
+    kappa_init: float = 1.0
+    kappa_scale: float = 1.0
+    kernel_init: Callable = nn.initializers.orthogonal()
+    bias_init: Callable = nn.initializers.zeros
+    dtype: any = None
+    param_dtype: any = jnp.float32
+    precision: any = None
+
+    @nn.compact
+    def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
+        in_features = inputs.shape[-1]
+        kernel = self.param(
+            "kernel",
+            self.kernel_init,
+            (in_features, self.features),
+            self.param_dtype,
+        )
+        # Normalize each output column: norm over input dimension (axis=0).
+        kernel_unit = kernel / _safe_norm(kernel, axis=0, keepdims=True, eps=self.eps)
+
+        # Learnable kappa per output feature; parameterized like Scaler does.
+        kappa_param = self.param(
+            "kappa",
+            nn.initializers.constant(self.kappa_scale),
+            (self.features,),
+            self.param_dtype,
+        )
+        kappa = kappa_param * (self.kappa_init / self.kappa_scale)
+        kernel_h = kernel_unit * kappa[None, :]
+
+        y = jax.lax.dot_general(
+            inputs,
+            kernel_h,
+            (((inputs.ndim - 1,), (0,)), ((), ())),
+            precision=self.precision,
+        )
+        if self.use_bias:
+            bias = self.param("bias", self.bias_init, (self.features,), self.param_dtype)
+            bias = jnp.asarray(bias, dtype=inputs.dtype)
+            y = y + jnp.reshape(bias, (1,) * (y.ndim - 1) + (-1,))
+        return y
+
+
 class Shift(nn.Module):
     c_shift: float = 1.0
 
@@ -219,13 +274,21 @@ class SimbaV2Embedding(nn.Module):
     c_shift: float = 3.0
     scaler_init: float = 1.0
     scaler_scale: float = 1.0
+    kappa_init: float = 1.0
+    kappa_scale: float = 1.0
     kernel_init: Callable = nn.initializers.orthogonal()
 
     @nn.compact
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
         x = Shift(self.c_shift)(inputs)
         x = l2_normalize(x, axis=-1)
-        x = nn.Dense(self.hidden_dim, use_bias=False, kernel_init=self.kernel_init)(x)
+        x = HypersphericalDense(
+            self.hidden_dim,
+            use_bias=False,
+            kappa_init=self.kappa_init,
+            kappa_scale=self.kappa_scale,
+            kernel_init=self.kernel_init,
+        )(x)
         x = Scaler(self.hidden_dim, init=self.scaler_init, scale=self.scaler_scale)(x)
         x = l2_normalize(x, axis=-1)
         return x
@@ -236,6 +299,8 @@ class SimbaV2Block(nn.Module):
     hidden_multiplier: int = 4
     scaler_init: float = 1.0
     scaler_scale: float = 1.0
+    kappa_init: float = 1.0
+    kappa_scale: float = 1.0
     alpha_init: float = 0.5
     alpha_scale: float = 1.0
     kernel_init: Callable = nn.initializers.orthogonal()
@@ -243,9 +308,11 @@ class SimbaV2Block(nn.Module):
 
     @nn.compact
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
-        x = nn.Dense(
+        x = HypersphericalDense(
             self.hidden_dim * self.hidden_multiplier,
             use_bias=False,
+            kappa_init=self.kappa_init,
+            kappa_scale=self.kappa_scale,
             kernel_init=self.kernel_init,
         )(inputs)
         x = Scaler(
@@ -254,7 +321,13 @@ class SimbaV2Block(nn.Module):
             scale=self.scaler_scale,
         )(x)
         x = nn.relu(x)
-        x = nn.Dense(self.hidden_dim, use_bias=False, kernel_init=self.kernel_init)(x)
+        x = HypersphericalDense(
+            self.hidden_dim,
+            use_bias=False,
+            kappa_init=self.kappa_init,
+            kappa_scale=self.kappa_scale,
+            kernel_init=self.kernel_init,
+        )(x)
         x = l2_normalize(x, axis=-1)
         x = LERP(
             self.hidden_dim,
@@ -271,18 +344,28 @@ class SimbaV2Head(nn.Module):
     out_dim: int
     scaler_init: float = 1.0
     scaler_scale: float = 1.0
+    kappa_init: float = 1.0
+    kappa_scale: float = 1.0
     kernel_init: Callable = nn.initializers.orthogonal()
     use_bias: bool = False
     bias_init: Callable = nn.initializers.zeros
 
     @nn.compact
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
-        x = nn.Dense(self.hidden_dim, use_bias=False, kernel_init=self.kernel_init)(inputs)
+        x = HypersphericalDense(
+            self.hidden_dim,
+            use_bias=False,
+            kappa_init=self.kappa_init,
+            kappa_scale=self.kappa_scale,
+            kernel_init=self.kernel_init,
+        )(inputs)
         x = Scaler(self.hidden_dim, init=self.scaler_init, scale=self.scaler_scale)(x)
-        x = nn.Dense(
+        x = HypersphericalDense(
             self.out_dim,
             use_bias=self.use_bias,
             kernel_init=self.kernel_init,
             bias_init=self.bias_init,
+            kappa_init=self.kappa_init,
+            kappa_scale=self.kappa_scale,
         )(x)
         return x
