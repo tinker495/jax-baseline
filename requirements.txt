@@ -14,7 +14,7 @@ dm-haiku
 flax
 equinox
 scipy
-optax
+optax @ git+https://github.com/tinker495/optax.git@dev/merge-all-custom
 numpy
 ray[default]
 cpprb
