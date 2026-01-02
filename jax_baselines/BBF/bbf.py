@@ -27,7 +27,7 @@ class BBF(Q_Network_Family):
         env_builder: callable,
         model_builder_maker,
         off_policy_fix=False,
-        spr_weight=1.0,
+        spr_weight=5.0,
         categorial_bar_n=51,
         categorial_max=250,
         categorial_min=-250,

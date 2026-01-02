@@ -26,7 +26,7 @@ class SPR(Q_Network_Family):
         env_builder: callable,
         model_builder_maker,
         off_policy_fix=False,
-        spr_weight=1.0,
+        spr_weight=5.0,
         scaled_by_reset=False,
         categorial_bar_n=51,
         categorial_max=250,
