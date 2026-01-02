@@ -27,7 +27,7 @@ class BBF(Q_Network_Family):
         env_builder: callable,
         model_builder_maker,
         off_policy_fix=False,
-        spr_weight=5.0,
+        spr_weight=1.0,
         categorial_bar_n=51,
         categorial_max=250,
         categorial_min=-250,
@@ -425,36 +425,37 @@ class BBF(Q_Network_Family):
         target_features = jax.vmap(self.preproc, in_axes=(None, None, 1), out_axes=1)(
             target_params, key, target_obs
         )  # B x K x D
-        traget_projection = jax.vmap(self.projection, in_axes=(None, None, 1), out_axes=1)(
+        target_projection = jax.vmap(self.projection, in_axes=(None, None, 1), out_axes=1)(
             target_params, key, target_features
         )  # B x K x D
-        traget_projection = traget_projection / jnp.linalg.norm(
-            traget_projection, axis=-1, keepdims=True
+        target_projection = target_projection / jnp.linalg.norm(
+            target_projection, axis=-1, keepdims=True
         )  # normalize
 
-        def body(carry, x):
-            loss, current_features = carry
-            action, filled, target_projection = x
+        def body(current_features, action):
             action = jax.nn.one_hot(jnp.squeeze(action), self.action_size[0])
             current_features = self.transition(params, key, current_features, action)
-            current_projection = self.projection(params, key, current_features)
-            current_projection = self.prediction(params, key, current_projection)
-            current_projection = current_projection / jnp.linalg.norm(
-                current_projection, axis=-1, keepdims=True
-            )  # normalize
-            cosine_similarity = jnp.sum(current_projection * target_projection, axis=-1) - 1.0
-            loss = loss - cosine_similarity * filled
-            return (loss, current_features), None
+            return current_features, current_features
 
         actions = jnp.swapaxes(actions, 0, 1)
         filled = jnp.swapaxes(filled, 0, 1)
-        traget_projection = jnp.swapaxes(traget_projection, 0, 1)
-        (loss, _), _ = jax.lax.scan(
+        target_projection = jnp.swapaxes(target_projection, 0, 1)
+        _, current_features = jax.lax.scan(
             body,
-            (jnp.zeros((initial_features.shape[0],)), initial_features),
-            (actions, filled, traget_projection),
+            initial_features,
+            actions,
         )
-        return jnp.mean(loss)
+        current_projection = jax.vmap(self.projection, in_axes=(None, None, 1), out_axes=1)(
+            params, key, current_features
+        )
+        current_projection = jax.vmap(self.prediction, in_axes=(None, None, 1), out_axes=1)(
+            params, key, current_projection
+        )
+        current_projection = current_projection / jnp.linalg.norm(
+            current_projection, axis=-1, keepdims=True
+        )  # normalize
+        cosine_similarity = 1.0 - jnp.sum(current_projection * target_projection, axis=-1)
+        return jnp.mean(cosine_similarity * filled)
 
     def _target(
         self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, gammas, key
