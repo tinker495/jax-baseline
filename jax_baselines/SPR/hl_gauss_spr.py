@@ -12,11 +12,11 @@ from jax_baselines.common.utils import (
     scaled_by_reset_with_filter,
     soft_update,
 )
-from jax_baselines.SPR.spr import SPR
 from jax_baselines.SPR.efficent_buffer import (
     PrioritizedTransitionReplayBuffer,
     TransitionReplayBuffer,
 )
+from jax_baselines.SPR.spr import SPR
 
 
 class HL_GAUSS_SPR(SPR):

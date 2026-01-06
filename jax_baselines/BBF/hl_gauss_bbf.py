@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from jax_baselines.BBF.bbf import BBF
 from jax_baselines.common.utils import (
     convert_jax,
     filter_like_tree,
@@ -13,7 +14,6 @@ from jax_baselines.common.utils import (
     soft_update,
     tree_random_normal_like,
 )
-from jax_baselines.BBF.bbf import BBF
 from jax_baselines.SPR.efficent_buffer import (
     PrioritizedTransitionReplayBuffer,
     TransitionReplayBuffer,
