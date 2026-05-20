@@ -1,7 +1,9 @@
 from collections import deque
 from copy import deepcopy
 
+import dm_pix as pix
 import jax
+import jax.numpy as jnp
 import numpy as np
 from tqdm.auto import trange
 
@@ -661,8 +663,58 @@ class Q_Network_Family(object):
                 pass
 
     def _has_true_reset(self):
-        """Check if the environment has true_reset method (from atari_wrappers)."""
-        return hasattr(self.env, "true_reset") and callable(getattr(self.env, "true_reset", None))
+        return False
+
+    def _categorical_projection(self, next_distribution, target_categorial):
+        Tz = jax.numpy.clip(target_categorial, self.categorial_min, self.categorial_max)
+        C51_B = ((Tz - self.categorial_min) / self.delta_bar).astype(jax.numpy.float32)
+        C51_L = jax.numpy.floor(C51_B).astype(jax.numpy.int32)
+        C51_H = jax.numpy.ceil(C51_B).astype(jax.numpy.int32)
+
+        def project_one(p, b, _l, _u):
+            exact = _l == _u
+            m = jax.numpy.zeros((self.categorial_bar_n,), dtype=p.dtype)
+            w_l = jax.numpy.where(exact, p, p * (_u.astype(jax.numpy.float32) - b))
+            w_u = jax.numpy.where(
+                exact, jax.numpy.zeros_like(p), p * (b - _l.astype(jax.numpy.float32))
+            )
+            m = m.at[_l].add(w_l)
+            m = m.at[_u].add(w_u)
+            return m
+
+        return jax.vmap(project_one, in_axes=(0, 0, 0, 0))(next_distribution, C51_B, C51_L, C51_H)
+
+    def _augment_observation(self, obs, key):
+        def random_shift(obs, key):
+            obs = jnp.pad(
+                obs,
+                ((self.shift_size, self.shift_size), (self.shift_size, self.shift_size), (0, 0)),
+                mode="constant",
+            )
+            obs = pix.random_crop(
+                key,
+                obs,
+                (
+                    obs.shape[0] - self.shift_size * 2,
+                    obs.shape[1] - self.shift_size * 2,
+                    obs.shape[2],
+                ),
+            )
+            return obs
+
+        def Intensity(obs, key):
+            noise = (
+                1.0 + jnp.clip(jax.random.normal(key, (1, 1, 1)), -2.0, 2.0) * self.intensity_scale
+            )
+            return obs * noise
+
+        def augment(obs, key):
+            subkey1, subkey2 = jax.random.split(key)
+            obs = jax.vmap(random_shift)(obs, jax.random.split(subkey1, obs.shape[0]))
+            obs = jax.vmap(Intensity)(obs, jax.random.split(subkey2, obs.shape[0]))
+            return obs
+
+        return jax.vmap(augment)(obs, jax.random.split(key, obs.shape[0]))
 
     def _checkpoint_on_episode_end(
         self, steps, episode_return, episode_len, train_and_reset_callback=None

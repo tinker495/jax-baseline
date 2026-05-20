@@ -358,6 +358,41 @@ class Deteministic_Policy_Gradient_Family(object):
             run_name = run_name + "+PER"
         return run_name
 
+    def _apply_simba_normalization(self, obs, eval, steps):
+        if self.simba:
+            rms = (
+                self.checkpoint_obs_rms
+                if (
+                    eval
+                    and self.use_checkpointing
+                    and self.checkpointing_enabled
+                    and hasattr(self, "checkpoint_obs_rms")
+                )
+                else self.action_obs_rms
+                if hasattr(self, "action_obs_rms")
+                else self.obs_rms
+            )
+            if (not eval) and steps != np.inf:
+                self.obs_rms.update(obs)
+            obs = rms.normalize(obs)
+        return obs
+
+    def _select_policy_params(self, eval, steps):
+        if self.learning_starts < steps:
+            policy_params = (
+                self.checkpoint_policy_params
+                if (
+                    eval
+                    and self.use_checkpointing
+                    and self.checkpointing_enabled
+                    and hasattr(self, "checkpoint_policy_params")
+                )
+                else self.policy_params
+            )
+        else:
+            policy_params = None
+        return policy_params
+
     def learn(
         self,
         total_timesteps,

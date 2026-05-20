@@ -12,14 +12,14 @@ from jax_baselines.common.utils import (
     scaled_by_reset_with_filter,
     soft_update,
 )
-from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.SPR.efficent_buffer import (
     PrioritizedTransitionReplayBuffer,
     TransitionReplayBuffer,
 )
+from jax_baselines.SPR.spr import SPR
 
 
-class HL_GAUSS_SPR(Q_Network_Family):
+class HL_GAUSS_SPR(SPR):
     def __init__(
         self,
         env_builder: callable,
@@ -441,45 +441,6 @@ class HL_GAUSS_SPR(Q_Network_Family):
             mean_centropy,
             rprloss,
         )  # jnp.sum(jnp.abs(error) * filled, axis=-1) / jnp.sum(filled, axis=-1)
-
-    def _represetation_loss(self, params, target_params, obses, actions, filled, key):
-        initial_obs = [o[:, 0] for o in obses]  # B x H x W x C
-        target_obs = [o[:, 1:] for o in obses]  # B x K x H x W x C
-        initial_features = self.preproc(params, key, initial_obs)  # B x D
-        target_features = jax.vmap(self.preproc, in_axes=(None, None, 1), out_axes=1)(
-            target_params, key, target_obs
-        )  # B x K x D
-        target_projection = jax.vmap(self.projection, in_axes=(None, None, 1), out_axes=1)(
-            target_params, key, target_features
-        )  # B x K x D
-        target_projection = target_projection / jnp.linalg.norm(
-            target_projection, axis=-1, keepdims=True
-        )  # normalize
-
-        def body(current_features, action):
-            action = jax.nn.one_hot(jnp.squeeze(action), self.action_size[0])
-            current_features = self.transition(params, key, current_features, action)
-            return current_features, current_features
-
-        actions = jnp.swapaxes(actions, 0, 1)
-        filled = jnp.swapaxes(filled, 0, 1)
-        target_projection = jnp.swapaxes(target_projection, 0, 1)
-        _, current_features = jax.lax.scan(
-            body,
-            initial_features,
-            actions,
-        )
-        current_projection = jax.vmap(self.projection, in_axes=(None, None, 1), out_axes=1)(
-            params, key, current_features
-        )
-        current_projection = jax.vmap(self.prediction, in_axes=(None, None, 1), out_axes=1)(
-            params, key, current_projection
-        )
-        current_projection = current_projection / jnp.linalg.norm(
-            current_projection, axis=-1, keepdims=True
-        )  # normalize
-        cosine_similarity = 1.0 - jnp.sum(current_projection * target_projection, axis=-1)
-        return jnp.mean(cosine_similarity * filled)
 
     def _target(
         self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, gammas, key

@@ -166,9 +166,11 @@ class PreProcess(nn.Module):
 
     def setup(self):
         self.embedding = [
-            visual_embedding(self.embedding_mode, self.flatten, multiple=self.multiple)
-            if len(st) == 3
-            else lambda x: x
+            (
+                visual_embedding(self.embedding_mode, self.flatten, multiple=self.multiple)
+                if len(st) == 3
+                else lambda x: x
+            )
             for st in self.states_size
         ]
 

@@ -8,18 +8,22 @@ class EpochBuffer(object):
         self.obsdict = dict(
             (
                 "obs{}".format(idx),
-                {"shape": o, "dtype": np.uint8}
-                if len(o) >= 3
-                else {"shape": o, "dtype": np.float32},
+                (
+                    {"shape": o, "dtype": np.uint8}
+                    if len(o) >= 3
+                    else {"shape": o, "dtype": np.float32}
+                ),
             )
             for idx, o in enumerate(observation_space)
         )
         self.nextobsdict = dict(
             (
                 "next_obs{}".format(idx),
-                {"shape": o, "dtype": np.uint8}
-                if len(o) >= 3
-                else {"shape": o, "dtype": np.float32},
+                (
+                    {"shape": o, "dtype": np.uint8}
+                    if len(o) >= 3
+                    else {"shape": o, "dtype": np.float32}
+                ),
             )
             for idx, o in enumerate(observation_space)
         )
@@ -91,18 +95,22 @@ class ReplayBuffer(object):
             self.obsdict = dict(
                 (
                     "obs{}".format(idx),
-                    {"shape": o, "dtype": np.uint8}
-                    if len(o) >= 3
-                    else {"shape": o, "dtype": np.float32},
+                    (
+                        {"shape": o, "dtype": np.uint8}
+                        if len(o) >= 3
+                        else {"shape": o, "dtype": np.float32}
+                    ),
                 )
                 for idx, o in enumerate(observation_space)
             )
             self.nextobsdict = dict(
                 (
                     "next_obs{}".format(idx),
-                    {"shape": o, "dtype": np.uint8}
-                    if len(o) >= 3
-                    else {"shape": o, "dtype": np.float32},
+                    (
+                        {"shape": o, "dtype": np.uint8}
+                        if len(o) >= 3
+                        else {"shape": o, "dtype": np.float32}
+                    ),
                 )
                 for idx, o in enumerate(observation_space)
             )
@@ -197,18 +205,22 @@ class NstepReplayBuffer(ReplayBuffer):
         self.obsdict = dict(
             (
                 "obs{}".format(idx),
-                {"shape": o, "dtype": np.uint8}
-                if len(o) >= 3
-                else {"shape": o, "dtype": np.float32},
+                (
+                    {"shape": o, "dtype": np.uint8}
+                    if len(o) >= 3
+                    else {"shape": o, "dtype": np.float32}
+                ),
             )
             for idx, o in enumerate(observation_space)
         )
         self.nextobsdict = dict(
             (
                 "next_obs{}".format(idx),
-                {"shape": o, "dtype": np.uint8}
-                if len(o) >= 3
-                else {"shape": o, "dtype": np.float32},
+                (
+                    {"shape": o, "dtype": np.uint8}
+                    if len(o) >= 3
+                    else {"shape": o, "dtype": np.float32}
+                ),
             )
             for idx, o in enumerate(observation_space)
         )
@@ -307,18 +319,22 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         self.obsdict = dict(
             (
                 "obs{}".format(idx),
-                {"shape": o, "dtype": np.uint8}
-                if len(o) >= 3
-                else {"shape": o, "dtype": np.float32},
+                (
+                    {"shape": o, "dtype": np.uint8}
+                    if len(o) >= 3
+                    else {"shape": o, "dtype": np.float32}
+                ),
             )
             for idx, o in enumerate(observation_space)
         )
         self.nextobsdict = dict(
             (
                 "next_obs{}".format(idx),
-                {"shape": o, "dtype": np.uint8}
-                if len(o) >= 3
-                else {"shape": o, "dtype": np.float32},
+                (
+                    {"shape": o, "dtype": np.uint8}
+                    if len(o) >= 3
+                    else {"shape": o, "dtype": np.float32}
+                ),
             )
             for idx, o in enumerate(observation_space)
         )
@@ -378,18 +394,22 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
         self.obsdict = dict(
             (
                 "obs{}".format(idx),
-                {"shape": o, "dtype": np.uint8}
-                if len(o) >= 3
-                else {"shape": o, "dtype": np.float32},
+                (
+                    {"shape": o, "dtype": np.uint8}
+                    if len(o) >= 3
+                    else {"shape": o, "dtype": np.float32}
+                ),
             )
             for idx, o in enumerate(observation_space)
         )
         self.nextobsdict = dict(
             (
                 "next_obs{}".format(idx),
-                {"shape": o, "dtype": np.uint8}
-                if len(o) >= 3
-                else {"shape": o, "dtype": np.float32},
+                (
+                    {"shape": o, "dtype": np.uint8}
+                    if len(o) >= 3
+                    else {"shape": o, "dtype": np.float32}
+                ),
             )
             for idx, o in enumerate(observation_space)
         )
@@ -489,18 +509,22 @@ class MultiPrioritizedReplayBuffer:
         self.obsdict = dict(
             (
                 "obs{}".format(idx),
-                {"shape": o, "dtype": np.uint8}
-                if len(o) >= 3
-                else {"shape": o, "dtype": np.float32},
+                (
+                    {"shape": o, "dtype": np.uint8}
+                    if len(o) >= 3
+                    else {"shape": o, "dtype": np.float32}
+                ),
             )
             for idx, o in enumerate(observation_space)
         )
         self.nextobsdict = dict(
             (
                 "next_obs{}".format(idx),
-                {"shape": o, "dtype": np.uint8}
-                if len(o) >= 3
-                else {"shape": o, "dtype": np.float32},
+                (
+                    {"shape": o, "dtype": np.uint8}
+                    if len(o) >= 3
+                    else {"shape": o, "dtype": np.float32}
+                ),
             )
             for idx, o in enumerate(observation_space)
         )

@@ -35,9 +35,9 @@ class EpochBuffer:
             reward=reward,
             **nextobsdict,
             terminated=terminated,
-            truncted=truncted
+            truncted=truncted,
         )
-        if terminated or terminated:
+        if terminated or truncted:
             self.buffer.on_episode_end()
 
     def get_buffer(self):
@@ -104,18 +104,22 @@ class ImpalaBuffer:
         self.obsdict = dict(
             (
                 "obs{}".format(idx),
-                {"shape": o, "dtype": np.uint8}
-                if len(o) >= 3
-                else {"shape": o, "dtype": np.float32},
+                (
+                    {"shape": o, "dtype": np.uint8}
+                    if len(o) >= 3
+                    else {"shape": o, "dtype": np.float32}
+                ),
             )
             for idx, o in enumerate(observation_space)
         )
         self.nextobsdict = dict(
             (
                 "next_obs{}".format(idx),
-                {"shape": o, "dtype": np.uint8}
-                if len(o) >= 3
-                else {"shape": o, "dtype": np.float32},
+                (
+                    {"shape": o, "dtype": np.uint8}
+                    if len(o) >= 3
+                    else {"shape": o, "dtype": np.float32}
+                ),
             )
             for idx, o in enumerate(observation_space)
         )

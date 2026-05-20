@@ -1,18 +1,12 @@
 import os
 
-import cv2
 import numpy as np
-from tqdm import tqdm
-
-from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
-
-env_name = "BreakoutNoFrameskip-v4"
-env_type, env_id = get_env_type(env_name)
-if env_type == "atari_env":
-    env = make_wrap_atari(env_name, clip_rewards=True)
 
 
 def save_obs(obs, path):
+    import cv2
+    from tqdm import tqdm
+
     if not os.path.exists(path):
         os.makedirs(path)
     else:
@@ -31,11 +25,24 @@ def save_obs(obs, path):
         # cv2.imwrite(os.path.join(path, f'{i}.png'), obs[i])
 
 
-obs = []
-for i in range(1):
-    obs_ep = [env.reset()[0]]
-    for j in range(1):
-        obs_ep.append(env.step(env.action_space.sample())[0])
-    obs.extend(obs_ep)
+def main():
+    from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
 
-save_obs(obs, "test/test")
+    env_name = "BreakoutNoFrameskip-v4"
+    env_type, env_id = get_env_type(env_name)
+    if env_type != "atari_env":
+        raise RuntimeError(f"{env_name} resolved to unsupported env type: {env_type}")
+
+    env = make_wrap_atari(env_name, clip_rewards=True)
+    obs = []
+    for i in range(1):
+        obs_ep = [env.reset()[0]]
+        for j in range(1):
+            obs_ep.append(env.step(env.action_space.sample())[0])
+        obs.extend(obs_ep)
+
+    save_obs(obs, "test/test")
+
+
+if __name__ == "__main__":
+    main()
