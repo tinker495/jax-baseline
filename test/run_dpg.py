@@ -5,7 +5,6 @@ import gymnasium as gym
 
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.CrossQ.crossq import CrossQ
-from jax_baselines.DAC.dac import DAC
 from jax_baselines.DDPG.ddpg import DDPG
 from jax_baselines.SAC.sac import SAC
 from jax_baselines.TD3.td3 import TD3
@@ -210,42 +209,6 @@ if __name__ == "__main__":
             learning_rate=args.learning_rate,
             batch_size=args.batch,
             buffer_size=int(args.buffer_size),
-            learning_starts=args.learning_starts,
-            prioritized_replay=args.per,
-            scaled_by_reset=args.scaled_by_reset,
-            simba=use_simba_features,
-            simba_v2=args.simbav2,
-            n_step=args.n_step,
-            train_freq=args.train_freq,
-            ent_coef=args.ent_coef,
-            seed=args.seed,
-            gradient_steps=args.gradient_steps,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            use_checkpointing=args.use_checkpointing,
-        )
-    if args.algo == "DAC":
-        if args.model_lib == "flax":
-            if args.simbav2:
-                from model_builder.flax.dpg.simbav2_dac_builder import (
-                    model_builder_maker,
-                )
-            elif args.simba:
-                from model_builder.flax.dpg.simba_dac_builder import model_builder_maker
-            else:
-                from model_builder.flax.dpg.dac_builder import model_builder_maker
-        elif args.model_lib == "haiku":
-            from model_builder.haiku.dpg.dac_builder import model_builder_maker
-        agent = DAC(
-            env_builder,
-            model_builder_maker,
-            num_workers=args.worker,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_size=args.batch,
-            buffer_size=int(args.buffer_size),
-            target_network_update_tau=args.target_update_tau,
             learning_starts=args.learning_starts,
             prioritized_replay=args.per,
             scaled_by_reset=args.scaled_by_reset,

@@ -7,6 +7,7 @@ import optax
 
 from jax_baselines.common.utils import convert_jax, scaled_by_reset, soft_update
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
+from jax_baselines.DDPG.lifecycle import DPGTrainReport
 
 
 class TD3(Deteministic_Policy_Gradient_Family):
@@ -17,7 +18,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         target_action_noise_mul=2.0,
         action_noise=0.1,
         policy_delay=2,
-        **kwargs
+        **kwargs,
     ):
 
         self.name = "TD3"
@@ -68,50 +69,29 @@ class TD3(Deteministic_Policy_Gradient_Family):
             1,
         )
 
-    def train_step(self, steps, gradient_steps):
-        # Sample a batch from the replay buffer
-        for _ in range(gradient_steps):
-            self.train_steps_count += 1
-            if self.prioritized_replay:
-                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
-            else:
-                data = self.replay_buffer.sample(self.batch_size)
-
-            if self.simba:
-                data["obses"] = self.obs_rms.normalize(data["obses"])
-                data["nxtobses"] = self.obs_rms.normalize(data["nxtobses"])
-
-            (
-                self.policy_params,
-                self.critic_params,
-                self.target_policy_params,
-                self.target_critic_params,
-                self.opt_policy_state,
-                self.opt_critic_state,
-                loss,
-                t_mean,
-                new_priorities,
-            ) = self._train_step(
-                self.policy_params,
-                self.critic_params,
-                self.target_policy_params,
-                self.target_critic_params,
-                self.opt_policy_state,
-                self.opt_critic_state,
-                next(self.key_seq),
-                steps,
-                **data
-            )
-
-            if self.prioritized_replay:
-                self.replay_buffer.update_priorities(data["indexes"], new_priorities)
-
-        if self.logger_run and (steps - self._last_log_step >= self.log_interval):
-            self._last_log_step = steps
-            self.logger_run.log_metric("loss/qloss", loss, steps)
-            self.logger_run.log_metric("loss/targets", t_mean, steps)
-
-        return loss
+    def _train_on_batch(self, data, context):
+        (
+            self.policy_params,
+            self.critic_params,
+            self.target_policy_params,
+            self.target_critic_params,
+            self.opt_policy_state,
+            self.opt_critic_state,
+            loss,
+            t_mean,
+            new_priorities,
+        ) = self._train_step(
+            self.policy_params,
+            self.critic_params,
+            self.target_policy_params,
+            self.target_critic_params,
+            self.opt_policy_state,
+            self.opt_critic_state,
+            next(self.key_seq),
+            context.steps,
+            **data,
+        )
+        return DPGTrainReport(loss=loss, target=t_mean, new_priorities=new_priorities)
 
     def _train_step(
         self,
@@ -135,7 +115,12 @@ class TD3(Deteministic_Policy_Gradient_Family):
         nxtobses = convert_jax(nxtobses)
         not_terminateds = 1.0 - terminateds
         targets = self._target(
-            target_policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key
+            target_policy_params,
+            target_critic_params,
+            rewards,
+            nxtobses,
+            not_terminateds,
+            key,
         )
         (critic_loss, abs_error), grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
             critic_params, policy_params, obses, actions, targets, weights, key
@@ -245,7 +230,13 @@ class TD3(Deteministic_Policy_Gradient_Family):
         return -jnp.mean(q1)
 
     def _target(
-        self, target_policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key
+        self,
+        target_policy_params,
+        target_critic_params,
+        rewards,
+        nxtobses,
+        not_terminateds,
+        key,
     ):
         next_feature = self.preproc(target_policy_params, key, nxtobses)
         next_action = jnp.clip(

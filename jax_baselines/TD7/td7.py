@@ -8,6 +8,7 @@ import optax
 from jax_baselines.common.losses import hubberloss
 from jax_baselines.common.utils import convert_jax, hard_update, scaled_by_reset
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
+from jax_baselines.DDPG.lifecycle import DPGTrainReport
 
 
 class TD7(Deteministic_Policy_Gradient_Family):
@@ -103,76 +104,61 @@ class TD7(Deteministic_Policy_Gradient_Family):
             1,
         )
 
-    def train_step(self, steps, gradient_steps):
-        # Sample a batch from the replay buffer
-        repr_losses = []
-        losses = []
-        targets = []
-        for _ in range(gradient_steps):
-            self.train_steps_count += 1
-            if self.prioritized_replay:
-                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
-            else:
-                data = self.replay_buffer.sample(self.batch_size)
+    def _train_on_batch(self, data, context):
+        (
+            self.encoder_params,
+            self.policy_params,
+            self.critic_params,
+            self.fixed_encoder_params,
+            self.fixed_encoder_target_params,
+            self.target_policy_params,
+            self.target_critic_params,
+            self.encoder_opt_state,
+            self.opt_policy_state,
+            self.opt_critic_state,
+            repr_loss,
+            loss,
+            t_mean,
+            new_priorities,
+        ) = self._train_step(
+            self.encoder_params,
+            self.policy_params,
+            self.critic_params,
+            self.fixed_encoder_params,
+            self.fixed_encoder_target_params,
+            self.target_policy_params,
+            self.target_critic_params,
+            self.encoder_opt_state,
+            self.opt_policy_state,
+            self.opt_critic_state,
+            next(self.key_seq),
+            context.train_steps_count,
+            **data,
+        )
+        return DPGTrainReport(
+            loss=loss,
+            target=t_mean,
+            new_priorities=new_priorities,
+            metrics={"loss/encoder_loss": repr_loss},
+        )
 
-            if self.simba:
-                data["obses"] = self.obs_rms.normalize(data["obses"])
-                data["nxtobses"] = self.obs_rms.normalize(data["nxtobses"])
-
-            (
-                self.encoder_params,
-                self.policy_params,
-                self.critic_params,
-                self.fixed_encoder_params,
-                self.fixed_encoder_target_params,
-                self.target_policy_params,
-                self.target_critic_params,
-                self.encoder_opt_state,
-                self.opt_policy_state,
-                self.opt_critic_state,
-                repr_loss,
-                loss,
-                t_mean,
-                new_priorities,
-            ) = self._train_step(
-                self.encoder_params,
-                self.policy_params,
-                self.critic_params,
-                self.fixed_encoder_params,
-                self.fixed_encoder_target_params,
-                self.target_policy_params,
-                self.target_critic_params,
-                self.encoder_opt_state,
-                self.opt_policy_state,
-                self.opt_critic_state,
-                next(self.key_seq),
-                self.train_steps_count,
-                **data,
-            )
-            repr_losses.append(repr_loss)
-            losses.append(loss)
-            targets.append(t_mean)
-
-            if self.prioritized_replay:
-                self.replay_buffer.update_priorities(data["indexes"], new_priorities)
-
-        mean_repr_loss = jnp.mean(jnp.array(repr_losses))
-        mean_loss = jnp.mean(jnp.array(losses))
-        mean_target = jnp.mean(jnp.array(targets))
-
-        if self.logger_run and (steps - self._last_log_step >= self.log_interval):
-            self._last_log_step = steps
-            self.logger_run.log_metric("loss/encoder_loss", mean_repr_loss, steps)
-            self.logger_run.log_metric("loss/qloss", mean_loss, steps)
-            self.logger_run.log_metric("loss/targets", mean_target, steps)
-            self.logger_run.log_metric(
-                "loss/min_value", self.critic_params["values"]["min_value"], steps
-            )
-            self.logger_run.log_metric(
-                "loss/max_value", self.critic_params["values"]["max_value"], steps
-            )
-
-        return mean_loss
+    def _aggregate_train_reports(self, reports):
+        mean_repr_loss = jnp.mean(
+            jnp.array([report.metrics["loss/encoder_loss"] for report in reports])
+        )
+        mean_loss = jnp.mean(jnp.array([report.loss for report in reports]))
+        mean_target = jnp.mean(jnp.array([report.target for report in reports]))
+        return DPGTrainReport(
+            loss=mean_loss,
+            target=mean_target,
+            metrics={
+                "loss/encoder_loss": mean_repr_loss,
+                "loss/qloss": mean_loss,
+                "loss/targets": mean_target,
+                "loss/min_value": self.critic_params["values"]["min_value"],
+                "loss/max_value": self.critic_params["values"]["max_value"],
+            },
+        )
 
     def _train_step(
         self,
@@ -258,7 +244,10 @@ class TD7(Deteministic_Policy_Gradient_Family):
             critic_params, target_critic_params, step, self.target_network_update_freq
         )
         fixed_encoder_target_params = hard_update(
-            fixed_encoder_params, fixed_encoder_target_params, step, self.target_network_update_freq
+            fixed_encoder_params,
+            fixed_encoder_target_params,
+            step,
+            self.target_network_update_freq,
         )
         fixed_encoder_params = hard_update(
             encoder_params, fixed_encoder_params, step, self.target_network_update_freq
@@ -360,7 +349,12 @@ class TD7(Deteministic_Policy_Gradient_Family):
         )
 
         q1, q2 = self.critic(
-            target_critic_params, key, next_feature, fixed_target_zs, fixed_target_zsa, next_action
+            target_critic_params,
+            key,
+            next_feature,
+            fixed_target_zs,
+            fixed_target_zsa,
+            next_action,
         )
         next_q = jnp.clip(
             jnp.minimum(q1, q2),

@@ -17,6 +17,7 @@ from jax_baselines.common.utils import (
     save,
     set_global_seeds,
 )
+from jax_baselines.DDPG.lifecycle import DPGCheckpointingAdapter, DPGTrainingLifecycle
 
 
 class Deteministic_Policy_Gradient_Family(object):
@@ -147,6 +148,8 @@ class Deteministic_Policy_Gradient_Family(object):
 
         # Logging throttle based on last log step
         self._last_log_step = 0
+        self.training_lifecycle = DPGTrainingLifecycle(self)
+        self.checkpointing_adapter = DPGCheckpointingAdapter(self)
 
     def save_params(self, path):
         state = self._gather_checkpoint_state()
@@ -319,6 +322,15 @@ class Deteministic_Policy_Gradient_Family(object):
     def _train_step(self, steps):
         pass
 
+    def train_step(self, steps, gradient_steps):
+        return self.training_lifecycle.train(steps, gradient_steps)
+
+    def _train_on_batch(self, data, context):
+        raise NotImplementedError
+
+    def _aggregate_train_reports(self, reports):
+        return reports[-1]
+
     def _get_actions(self, params, obses) -> np.ndarray:
         pass
 
@@ -392,9 +404,7 @@ class Deteministic_Policy_Gradient_Family(object):
                     and self.checkpointing_enabled
                     and hasattr(self, "checkpoint_obs_rms")
                 )
-                else self.action_obs_rms
-                if hasattr(self, "action_obs_rms")
-                else self.obs_rms
+                else (self.action_obs_rms if hasattr(self, "action_obs_rms") else self.obs_rms)
             )
             if (not eval) and steps != np.inf:
                 self.obs_rms.update(obs)
@@ -647,26 +657,6 @@ class Deteministic_Policy_Gradient_Family(object):
         score = 0.0
         eplen = 0
 
-        def _ckpt_train_and_reset(step_val, accumulated_timesteps):
-            # Exact training-parity via residual accumulation
-            self._ckpt_update_residual += int(accumulated_timesteps)
-            num_update_iters = 0
-            while self._ckpt_update_residual >= self.train_freq:
-                self._ckpt_update_residual -= self.train_freq
-                num_update_iters += 1
-            if num_update_iters > 0:
-                total_updates = num_update_iters * self.gradient_steps
-                loss_local = self.train_step(step_val, total_updates)
-                self.lossque.append(loss_local)
-
-            # If using SIMBA normalization, snapshot obs_rms as well for action policy consistency
-            if getattr(self, "simba", False) and hasattr(self, "obs_rms"):
-                try:
-                    self.action_obs_rms = deepcopy(self.obs_rms)
-                except Exception:
-                    # Fallback: if deepcopy fails for any reason, skip without crashing
-                    pass
-
         for steps in pbar:
             eplen += 1
             actions = self.actions(obs, steps)
@@ -679,7 +669,10 @@ class Deteministic_Policy_Gradient_Family(object):
             if terminated or truncated:
                 if steps > self.learning_starts:
                     self._checkpoint_on_episode_end(
-                        steps, score, eplen, train_and_reset_callback=_ckpt_train_and_reset
+                        steps,
+                        score,
+                        eplen,
+                        train_and_reset_callback=self.checkpointing_adapter.train_and_reset,
                     )
                 score = 0.0
                 eplen = 0
@@ -698,26 +691,6 @@ class Deteministic_Policy_Gradient_Family(object):
 
         scores = np.zeros([self.worker_size], dtype=np.float64)
         eplens = np.zeros([self.worker_size], dtype=np.int32)
-
-        def _ckpt_train_and_reset(step_val, accumulated_timesteps):
-            # Exact training-parity via residual accumulation
-            self._ckpt_update_residual += int(accumulated_timesteps)
-            num_update_iters = 0
-            while self._ckpt_update_residual >= self.train_freq:
-                self._ckpt_update_residual -= self.train_freq
-                num_update_iters += 1
-            if num_update_iters > 0:
-                total_updates = num_update_iters * self.gradient_steps
-                loss_local = self.train_step(step_val, total_updates)
-                self.lossque.append(loss_local)
-
-            # If using SIMBA normalization, snapshot obs_rms as well for action policy consistency
-            if getattr(self, "simba", False) and hasattr(self, "obs_rms"):
-                try:
-                    self.action_obs_rms = deepcopy(self.obs_rms)
-                except Exception:
-                    # Fallback: if deepcopy fails for any reason, skip without crashing
-                    pass
 
         for steps in pbar:
             obs = self.env.current_obs()
@@ -743,7 +716,10 @@ class Deteministic_Policy_Gradient_Family(object):
                 done_indices = np.where(done_mask)[0]
                 for idx in done_indices:
                     self._checkpoint_on_episode_end(
-                        steps, float(scores[idx]), int(eplens[idx]), _ckpt_train_and_reset
+                        steps,
+                        float(scores[idx]),
+                        int(eplens[idx]),
+                        self.checkpointing_adapter.train_and_reset,
                     )
                     scores[idx] = 0.0
                     eplens[idx] = 0

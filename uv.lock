@@ -1353,7 +1353,7 @@ requires-dist = [
     { name = "mujoco" },
     { name = "numpy" },
     { name = "opencv-python" },
-    { name = "optax", git = "https://github.com/tinker495/optax.git?rev=dev%2Fmerge-all-custom" },
+    { name = "optax" },
     { name = "protobuf" },
     { name = "ray", extras = ["default"] },
     { name = "requests" },
@@ -2303,13 +2303,17 @@ wheels = [
 
 [[package]]
 name = "optax"
-version = "0.2.8.dev0"
-source = { git = "https://github.com/tinker495/optax.git?rev=dev%2Fmerge-all-custom#3a4f4325d2b2b8fdcb86865bc4e4c479b7000afd" }
+version = "0.2.8"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "absl-py" },
     { name = "jax" },
     { name = "jaxlib" },
     { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8c/f9/e3d11ae6f298ee941a0690e353a323d158ba5dedc436e75621c310845c5c/optax-0.2.8.tar.gz", hash = "sha256:5b225b35066fc3eebaa4d798f1b4173b4d57d1a480610908981f8343b50af0b0", size = 301193, upload-time = "2026-03-20T23:30:05.465Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8a/69/6a93d8600c339d7687a05857c7907bd4dd8cf88691a5ea106d7a50af90a1/optax-0.2.8-py3-none-any.whl", hash = "sha256:e3ca2d36c99daab1800ae9dbc0545034382d6bc780b24d969e1b0df65fa31cb4", size = 402960, upload-time = "2026-03-20T23:30:03.886Z" },
 ]
 
 [[package]]

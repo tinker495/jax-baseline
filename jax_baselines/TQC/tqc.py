@@ -13,6 +13,7 @@ from jax_baselines.common.utils import (
     truncated_mixture,
 )
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
+from jax_baselines.DDPG.lifecycle import DPGTrainReport
 
 
 class TQC(Deteministic_Policy_Gradient_Family):
@@ -27,7 +28,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         quantile_drop=0.05,
         mixture_type="truncated",
         risk_avoidance=0.0,
-        **kwargs
+        **kwargs,
     ):
 
         self.name = "TQC"
@@ -108,51 +109,38 @@ class TQC(Deteministic_Policy_Gradient_Family):
         pi = jax.nn.tanh(mu + std * jax.random.normal(key, std.shape))
         return pi
 
-    def train_step(self, steps, gradient_steps):
-        # Sample a batch from the replay buffer
-        for _ in range(gradient_steps):
-            self.train_steps_count += 1
-            if self.prioritized_replay:
-                data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
-            else:
-                data = self.replay_buffer.sample(self.batch_size)
-
-            if self.simba:
-                data["obses"] = self.obs_rms.normalize(data["obses"])
-                data["nxtobses"] = self.obs_rms.normalize(data["nxtobses"])
-
-            (
-                self.policy_params,
-                self.critic_params,
-                self.target_critic_params,
-                self.opt_policy_state,
-                self.opt_critic_state,
-                loss,
-                t_mean,
-                self.log_ent_coef,
-                new_priorities,
-            ) = self._train_step(
-                self.policy_params,
-                self.critic_params,
-                self.target_critic_params,
-                self.opt_policy_state,
-                self.opt_critic_state,
-                next(self.key_seq),
-                self.train_steps_count,
-                self.log_ent_coef,
-                **data
-            )
-
-            if self.prioritized_replay:
-                self.replay_buffer.update_priorities(data["indexes"], new_priorities)
-
-        if self.logger_run and (steps - self._last_log_step >= self.log_interval):
-            self._last_log_step = steps
-            self.logger_run.log_metric("loss/qloss", loss, steps)
-            self.logger_run.log_metric("loss/targets", t_mean, steps)
-            self.logger_run.log_metric("loss/ent_coef", np.exp(self.log_ent_coef), steps)
-
-        return loss
+    def _train_on_batch(self, data, context):
+        (
+            self.policy_params,
+            self.critic_params,
+            self.target_critic_params,
+            self.opt_policy_state,
+            self.opt_critic_state,
+            loss,
+            t_mean,
+            self.log_ent_coef,
+            new_priorities,
+        ) = self._train_step(
+            self.policy_params,
+            self.critic_params,
+            self.target_critic_params,
+            self.opt_policy_state,
+            self.opt_critic_state,
+            next(self.key_seq),
+            context.train_steps_count,
+            self.log_ent_coef,
+            **data,
+        )
+        return DPGTrainReport(
+            loss=loss,
+            target=t_mean,
+            new_priorities=new_priorities,
+            metrics={
+                "loss/qloss": loss,
+                "loss/targets": t_mean,
+                "loss/ent_coef": np.exp(self.log_ent_coef),
+            },
+        )
 
     def _train_step(
         self,
@@ -178,7 +166,13 @@ class TQC(Deteministic_Policy_Gradient_Family):
         ent_coef = jnp.exp(log_ent_coef)
         key1, key2, key3 = jax.random.split(key, 3)
         targets = self._target(
-            policy_params, target_critic_params, rewards, nxtobses, not_terminateds, key1, ent_coef
+            policy_params,
+            target_critic_params,
+            rewards,
+            nxtobses,
+            not_terminateds,
+            key1,
+            ent_coef,
         )
 
         (critic_loss, abs_error), grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
