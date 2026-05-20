@@ -334,7 +334,31 @@ class Deteministic_Policy_Gradient_Family(object):
         return self.get_behavior_state()
 
     def actions(self, obs, steps, eval=False):
-        pass
+        obs = self._apply_simba_normalization(obs, eval, steps)
+        if steps <= self.learning_starts:
+            return self._random_warmup_actions()
+        state = self._select_action_state(eval, steps)
+        actions = self._policy_action_from_state(state, obs, eval, steps)
+        return self._apply_action_noise(actions, steps, eval)
+
+    def _random_warmup_actions(self):
+        return np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
+
+    def _select_action_state(self, eval, steps):
+        if (
+            eval
+            and self.use_checkpointing
+            and self.checkpointing_enabled
+            and getattr(self, "checkpoint_state", None) is not None
+        ):
+            return self.checkpoint_state
+        return self.get_behavior_state()
+
+    def _policy_action_from_state(self, state, obs, eval, steps):
+        return np.asarray(self._get_actions(state["policy"], obs, next(self.key_seq)))
+
+    def _apply_action_noise(self, actions, steps, eval):
+        return actions
 
     def discription(self, eval_result=None):
         discription = ""
@@ -376,22 +400,6 @@ class Deteministic_Policy_Gradient_Family(object):
                 self.obs_rms.update(obs)
             obs = rms.normalize(obs)
         return obs
-
-    def _select_policy_params(self, eval, steps):
-        if self.learning_starts < steps:
-            policy_params = (
-                self.checkpoint_policy_params
-                if (
-                    eval
-                    and self.use_checkpointing
-                    and self.checkpointing_enabled
-                    and hasattr(self, "checkpoint_policy_params")
-                )
-                else self.policy_params
-            )
-        else:
-            policy_params = None
-        return policy_params
 
     def learn(
         self,

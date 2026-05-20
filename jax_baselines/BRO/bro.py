@@ -106,28 +106,8 @@ class DAC(Deteministic_Policy_Gradient_Family):
         pi = jax.nn.tanh(x_t)
         return pi
 
-    def actions(self, obs, steps, eval=False):
-        if self.simba:
-            # During eval with checkpointing, normalize using snapshot obs_rms if available
-            rms = (
-                self.checkpoint_obs_rms
-                if (eval and self.use_checkpointing and hasattr(self, "checkpoint_obs_rms"))
-                else self.action_obs_rms
-                if hasattr(self, "action_obs_rms")
-                else self.obs_rms
-            )
-            # Only update live obs_rms during training (not eval) and when steps is finite
-            if (not eval) and steps != np.inf:
-                self.obs_rms.update(obs)
-            obs = rms.normalize(obs)
-
-        if self.learning_starts < steps:
-            actions = np.asarray(
-                self._get_actions(self.optimistic_policy_params, obs, next(self.key_seq))
-            )
-        else:
-            actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
-        return actions
+    def _select_action_state(self, eval, steps):
+        return {"policy": self.optimistic_policy_params}
 
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer

@@ -84,50 +84,24 @@ class TD7(Deteministic_Policy_Gradient_Family):
         zs = self.encoder(encoder_params, key, feature)
         return self.actor(policy_params, key, feature, zs)
 
-    def actions(self, obs, steps, eval=False):
-        if self.simba:
-            # During eval with checkpointing, normalize using snapshot obs_rms if available
-            rms = (
-                self.checkpoint_obs_rms
-                if (
-                    eval
-                    and self.use_checkpointing
-                    and self.checkpointing_enabled
-                    and hasattr(self, "checkpoint_obs_rms")
-                )
-                else self.action_obs_rms
-                if hasattr(self, "action_obs_rms")
-                else self.obs_rms
-            )
-            # Only update live obs_rms during training (not eval) and when steps is finite
-            if (not eval) and steps != np.inf:
-                self.obs_rms.update(obs)
-            obs = rms.normalize(obs)
+    def _select_action_state(self, eval, steps):
+        if eval and self.use_checkpointing and getattr(self, "checkpoint_state", None) is not None:
+            return self.checkpoint_state
+        return self.get_behavior_state()
 
-        if self.learning_starts < steps:
-            # Use checkpoint state during evaluation, current state during training
-            if eval and self.use_checkpointing and hasattr(self, "checkpoint_state"):
-                encoder_params = self.checkpoint_state.get("encoder")
-                policy_params = self.checkpoint_state.get("policy")
-            else:
-                behavior_state = self.get_behavior_state()
-                encoder_params = behavior_state.get("encoder")
-                policy_params = behavior_state.get("policy")
+    def _policy_action_from_state(self, state, obs, eval, steps):
+        return np.asarray(self._get_actions(state["encoder"], state["policy"], obs, None))
 
-            actions = np.asarray(self._get_actions(encoder_params, policy_params, obs, None))
-
-            # Add exploration noise only during training
-            if not eval:
-                actions = np.clip(
-                    actions
-                    + self.action_noise
-                    * np.random.normal(0, 1, size=(self.worker_size, self.action_size[0])),
-                    -1,
-                    1,
-                )
-        else:
-            actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
-        return actions
+    def _apply_action_noise(self, actions, steps, eval):
+        if eval:
+            return actions
+        return np.clip(
+            actions
+            + self.action_noise
+            * np.random.normal(0, 1, size=(self.worker_size, self.action_size[0])),
+            -1,
+            1,
+        )
 
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
