@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jax_baselines"
+version = "0.0.1"
+description = "JAX-based reinforcement learning algorithm implementations."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "requests",
+    "protobuf",
+    "swig",
+    "gymnasium",
+    "gymnasium[atari,box2d,mujoco]",
+    "autorom[accept-rom-license]",
+    "mujoco",
+    "box2d",
+    "box2d-py",
+    "box2d-kengz",
+    "tensorboardX",
+    "jax[cuda12]",
+    "dm_pix",
+    "dm-haiku",
+    "flax",
+    "equinox",
+    "scipy",
+    "optax",
+    "numpy",
+    "ray[default]",
+    "cpprb",
+    "imageio-ffmpeg",
+    "ffmpeg",
+    "moviepy",
+    "decorator",
+    "opencv-python",
+    "envpool",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit",
+]
+
+[tool.setuptools.packages.find]
+include = [
+    "jax_baselines*",
+    "model_builder*",
+]
+
+[tool.uv]
+package = true

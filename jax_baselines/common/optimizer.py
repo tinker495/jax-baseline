@@ -167,9 +167,7 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, weight_decay=1e-4, grad_ma
         case "nadopt":
             optim = adopt(lr, b1=0.9, b2=0.9999, eps=eps, nesterov=True)
         case "adamw":
-            optim = optax.adamw(
-                lr, b1=0.9, b2=0.999, eps=eps, weight_decay=weight_decay, cautious_weight_decay=True
-            )
+            optim = optax.adamw(lr, b1=0.9, b2=0.999, eps=eps, weight_decay=weight_decay)
         case "ano":
             optim = optax.contrib.ano(lr, weight_decay=weight_decay)
         case "rmsprop":
@@ -183,9 +181,9 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, weight_decay=1e-4, grad_ma
         case "prodigy":
             optim = optax.contrib.prodigy(lr, eps=eps, weight_decay=1e-4)
         case "muon":
-            optim = optax.contrib.muon(lr, weight_decay=weight_decay, cautious_weight_decay=True)
+            optim = optax.contrib.muon(lr, weight_decay=weight_decay)
         case "normuon":
-            optim = optax.contrib.normuon(lr, weight_decay=weight_decay, cautious_weight_decay=True)
+            optim = optax.contrib.normuon(lr, weight_decay=weight_decay)
         case _:
             raise ValueError(f"Unknown optimizer: {optim_str}")
 
