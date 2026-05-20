@@ -6,6 +6,7 @@ import optax
 
 from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
+from jax_baselines.DQN.lifecycle import QNetTrainResult
 
 
 class HL_GAUSS_C51(Q_Network_Family):
@@ -16,7 +17,7 @@ class HL_GAUSS_C51(Q_Network_Family):
         categorial_bar_n=51,
         categorial_max=250,
         categorial_min=-250,
-        **kwargs
+        **kwargs,
     ):
 
         self.name = "HL_GAUSS_C51"
@@ -47,7 +48,10 @@ class HL_GAUSS_C51(Q_Network_Family):
         self.opt_state = self.optimizer.init(self.params)
 
         self.support = jnp.linspace(
-            self.categorial_min, self.categorial_max, self.categorial_bar_n + 1, dtype=jnp.float32
+            self.categorial_min,
+            self.categorial_max,
+            self.categorial_bar_n + 1,
+            dtype=jnp.float32,
         )
         bin_width = self.support[1] - self.support[0]
         self.sigma = self.sigma * bin_width
@@ -78,22 +82,29 @@ class HL_GAUSS_C51(Q_Network_Family):
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         return jnp.argmax(
-            self.to_scalar(self.get_q(params, convert_jax(obses), key)), axis=1, keepdims=True
+            self.to_scalar(self.get_q(params, convert_jax(obses), key)),
+            axis=1,
+            keepdims=True,
         )
 
-    def train_step(self, steps, gradient_steps):
-        # Use common training step wrapper
-        return self._common_train_step_wrapper(steps, gradient_steps, self._train_step_internal)
-
-    def _train_step_internal(self, data):
-        """Internal training step that returns the result tuple for the wrapper."""
-        return self._train_step(
+    def _train_on_batch(self, data, context):
+        (
             self.params,
             self.target_params,
             self.opt_state,
-            self.train_steps_count,
+            loss,
+            t_mean,
+            new_priorities,
+        ) = self._train_step(
+            self.params,
+            self.target_params,
+            self.opt_state,
+            context.train_steps_count,
             next(self.key_seq) if self.param_noise else None,
-            **data
+            **data,
+        )
+        return QNetTrainResult.from_values(
+            loss=loss, target=t_mean, replay_priorities=new_priorities
         )
 
     def _train_step(
@@ -116,7 +127,14 @@ class HL_GAUSS_C51(Q_Network_Family):
         actions = jnp.expand_dims(actions.astype(jnp.int32), axis=2)
         not_terminateds = 1.0 - terminateds
         target_distribution = self._target(
-            params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
+            params,
+            target_params,
+            obses,
+            actions,
+            rewards,
+            nxtobses,
+            not_terminateds,
+            key,
         )
         (loss, centropy), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params, obses, actions, target_distribution, weights, key
@@ -144,7 +162,15 @@ class HL_GAUSS_C51(Q_Network_Family):
         return jnp.mean(cross_entropy), cross_entropy
 
     def _target(
-        self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
+        self,
+        params,
+        target_params,
+        obses,
+        actions,
+        rewards,
+        nxtobses,
+        not_terminateds,
+        key,
     ):
         next_prob = self.get_q(target_params, nxtobses, key)
         next_q = self.to_scalar(next_prob)

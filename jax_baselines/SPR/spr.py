@@ -14,6 +14,7 @@ from jax_baselines.common.utils import (
     tree_random_normal_like,
 )
 from jax_baselines.DQN.base_class import Q_Network_Family
+from jax_baselines.DQN.lifecycle import QNetTrainReport, QNetTrainResult
 from jax_baselines.SPR.efficent_buffer import (
     PrioritizedTransitionReplayBuffer,
     TransitionReplayBuffer,
@@ -21,6 +22,8 @@ from jax_baselines.SPR.efficent_buffer import (
 
 
 class SPR(Q_Network_Family):
+    _qnet_handles_train_pulse = True
+
     def __init__(
         self,
         env_builder: callable,
@@ -31,7 +34,7 @@ class SPR(Q_Network_Family):
         categorial_bar_n=51,
         categorial_max=250,
         categorial_min=-250,
-        **kwargs
+        **kwargs,
     ):
 
         self.shift_size = 4
@@ -104,7 +107,7 @@ class SPR(Q_Network_Family):
             self.reset_hardsoft = filter_like_tree(
                 self.params,
                 "qnet",
-                (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2),
+                (lambda x, filtered: (jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2)),
             )  # hard_reset for qnet and scaled_by_reset for the rest
             self.soft_reset_freq = 40000
         self.opt_state = self.optimizer.init(self.params)
@@ -146,60 +149,40 @@ class SPR(Q_Network_Family):
             axis=1,
         )
 
-    def train_step(self, steps, gradient_steps):
-        # SPR has a more complex structure, so we handle it specially
-        # Use fixed chunk size based on base gradient_steps to avoid JIT recompilation
-        fixed_chunk_size = (
-            self.gradient_steps
-        )  # Use base gradient_steps for consistent JIT compilation
+    def _train_on_batch(self, data, context):
+        (
+            self.params,
+            self.target_params,
+            self.opt_state,
+            loss,
+            t_mean,
+            new_priorities,
+            rprloss,
+        ) = self._train_step(
+            self.params,
+            self.target_params,
+            self.opt_state,
+            context.train_steps_count,
+            next(self.key_seq),
+            **data,
+        )
 
-        # Calculate how many chunks we need
-        num_chunks = gradient_steps // fixed_chunk_size
+        return QNetTrainResult.from_values(
+            loss=loss,
+            target=t_mean,
+            replay_priorities=new_priorities,
+            metrics={"loss/rprloss": rprloss},
+        )
 
-        total_loss = 0.0
-        total_rprloss = 0.0
-        total_t_mean = 0.0
-
-        # Process all chunks
-        for _ in range(num_chunks):
-            data = self._sample_batch(fixed_chunk_size * self.batch_size)
-
-            (
-                self.params,
-                self.target_params,
-                self.opt_state,
-                loss,
-                t_mean,
-                new_priorities,
-                rprloss,
-            ) = self._train_step(
-                self.params,
-                self.target_params,
-                self.opt_state,
-                self.train_steps_count,
-                next(self.key_seq),
-                **data,
-            )
-
-            self.train_steps_count += fixed_chunk_size
-            self._update_priorities(data, new_priorities)
-
-            total_loss += loss
-            total_rprloss += rprloss
-            total_t_mean += t_mean
-
-        # Average the losses across all chunks
-        loss = total_loss / num_chunks
-        rprloss = total_rprloss / num_chunks
-        t_mean = total_t_mean / num_chunks
-
-        if self.logger_run and (steps - self._last_log_step >= self.log_interval):
-            self._last_log_step = steps
-            self.logger_run.log_metric("loss/qloss", loss, steps)
-            self.logger_run.log_metric("loss/rprloss", rprloss, steps)
-            self.logger_run.log_metric("loss/targets", t_mean, steps)
-
-        return loss
+    def _aggregate_train_reports(self, reports):
+        mean_loss = jnp.mean(jnp.array([report.loss for report in reports]))
+        mean_target = jnp.mean(jnp.array([report.target for report in reports]))
+        mean_rprloss = jnp.mean(jnp.array([report.metrics["loss/rprloss"] for report in reports]))
+        return QNetTrainReport(
+            loss=mean_loss,
+            target=mean_target,
+            metrics={"loss/rprloss": mean_rprloss},
+        )
 
     def _image_augmentation(self, obs, key):
         """Random augmentation for input images.
@@ -215,7 +198,11 @@ class SPR(Q_Network_Family):
         def random_shift(obs, key):  # K x H x W x C
             obs = jnp.pad(
                 obs,
-                ((self.shift_size, self.shift_size), (self.shift_size, self.shift_size), (0, 0)),
+                (
+                    (self.shift_size, self.shift_size),
+                    (self.shift_size, self.shift_size),
+                    (0, 0),
+                ),
                 mode="constant",
             )
             obs = pix.random_crop(
@@ -383,7 +370,12 @@ class SPR(Q_Network_Family):
                 target_distribution * self.categorial_bar,
                 axis=1,
             )
-            return (params, target_params, opt_state, subkey), (centropy, qloss, rprloss, target_q)
+            return (params, target_params, opt_state, subkey), (
+                centropy,
+                qloss,
+                rprloss,
+                target_q,
+            )
 
         (params, target_params, opt_state, _), outputs = jax.lax.scan(
             f,
@@ -482,7 +474,16 @@ class SPR(Q_Network_Family):
         return jnp.mean(cosine_similarity * filled)
 
     def _target(
-        self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, gammas, key
+        self,
+        params,
+        target_params,
+        obses,
+        actions,
+        rewards,
+        nxtobses,
+        not_terminateds,
+        gammas,
+        key,
     ):
         next_distributions = self.get_q(target_params, nxtobses, key)
         if self.double_q:

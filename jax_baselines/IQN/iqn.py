@@ -8,6 +8,7 @@ import optax
 from jax_baselines.common.losses import QuantileHuberLosses
 from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
+from jax_baselines.DQN.lifecycle import QNetTrainResult
 
 
 class IQN(Q_Network_Family):
@@ -18,7 +19,7 @@ class IQN(Q_Network_Family):
         n_support=32,
         delta=1.0,
         CVaR=1.0,
-        **kwargs
+        **kwargs,
     ):
 
         self.name = "IQN"
@@ -67,19 +68,28 @@ class IQN(Q_Network_Family):
             axis=1,
         )
 
-    def train_step(self, steps, gradient_steps):
-        # Use common training step wrapper
-        return self._common_train_step_wrapper(steps, gradient_steps, self._train_step_internal)
-
-    def _train_step_internal(self, data):
-        """Internal training step that returns the result tuple for the wrapper."""
-        return self._train_step(
+    def _train_on_batch(self, data, context):
+        (
             self.params,
             self.target_params,
             self.opt_state,
-            self.train_steps_count,
+            loss,
+            t_mean,
+            t_std,
+            new_priorities,
+        ) = self._train_step(
+            self.params,
+            self.target_params,
+            self.opt_state,
+            context.train_steps_count,
             next(self.key_seq),
-            **data
+            **data,
+        )
+        return QNetTrainResult.from_values(
+            loss=loss,
+            target=t_mean,
+            replay_priorities=new_priorities,
+            metrics={"loss/target_stds": t_std},
         )
 
     def _train_step(
@@ -103,7 +113,14 @@ class IQN(Q_Network_Family):
         not_terminateds = 1.0 - terminateds
         key1, key2 = jax.random.split(key, 2)
         targets = self._target(
-            params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key1
+            params,
+            target_params,
+            obses,
+            actions,
+            rewards,
+            nxtobses,
+            not_terminateds,
+            key1,
         )
         (loss, abs_error), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params, obses, actions, targets, weights, key2
@@ -136,7 +153,15 @@ class IQN(Q_Network_Family):
         return jnp.mean(loss * weights), loss
 
     def _target(
-        self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
+        self,
+        params,
+        target_params,
+        obses,
+        actions,
+        rewards,
+        nxtobses,
+        not_terminateds,
+        key,
     ):
         target_tau = jax.random.uniform(key, (self.batch_size, self.n_support))
         next_q = self.get_q(target_params, nxtobses, target_tau, key)
@@ -174,7 +199,11 @@ class IQN(Q_Network_Family):
         else:
             if self.double_q:
                 next_actions = jnp.argmax(
-                    jnp.mean(self.get_q(params, nxtobses, target_tau, key), axis=2, keepdims=True),
+                    jnp.mean(
+                        self.get_q(params, nxtobses, target_tau, key),
+                        axis=2,
+                        keepdims=True,
+                    ),
                     axis=1,
                     keepdims=True,
                 )

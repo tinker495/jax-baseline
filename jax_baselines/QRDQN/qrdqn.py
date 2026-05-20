@@ -7,11 +7,17 @@ import optax
 from jax_baselines.common.losses import QuantileHuberLosses
 from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
+from jax_baselines.DQN.lifecycle import QNetTrainResult
 
 
 class QRDQN(Q_Network_Family):
     def __init__(
-        self, env_builder: callable, model_builder_maker, n_support=200, delta=1.0, **kwargs
+        self,
+        env_builder: callable,
+        model_builder_maker,
+        n_support=200,
+        delta=1.0,
+        **kwargs,
     ):
 
         self.name = "QRDQN"
@@ -56,19 +62,28 @@ class QRDQN(Q_Network_Family):
             axis=1,
         )
 
-    def train_step(self, steps, gradient_steps):
-        # Use common training step wrapper
-        return self._common_train_step_wrapper(steps, gradient_steps, self._train_step_internal)
-
-    def _train_step_internal(self, data):
-        """Internal training step that returns the result tuple for the wrapper."""
-        return self._train_step(
+    def _train_on_batch(self, data, context):
+        (
             self.params,
             self.target_params,
             self.opt_state,
-            self.train_steps_count,
+            loss,
+            t_mean,
+            t_std,
+            new_priorities,
+        ) = self._train_step(
+            self.params,
+            self.target_params,
+            self.opt_state,
+            context.train_steps_count,
             next(self.key_seq) if self.param_noise else None,
-            **data
+            **data,
+        )
+        return QNetTrainResult.from_values(
+            loss=loss,
+            target=t_mean,
+            replay_priorities=new_priorities,
+            metrics={"loss/target_stds": t_std},
         )
 
     def _train_step(
@@ -91,7 +106,14 @@ class QRDQN(Q_Network_Family):
         actions = jnp.expand_dims(actions.astype(jnp.int32), axis=2)
         not_terminateds = 1.0 - terminateds
         targets = self._target(
-            params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
+            params,
+            target_params,
+            obses,
+            actions,
+            rewards,
+            nxtobses,
+            not_terminateds,
+            key,
         )
         (loss, abs_error), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params, obses, actions, targets, weights, key
@@ -121,7 +143,15 @@ class QRDQN(Q_Network_Family):
         return jnp.mean(loss * weights), loss
 
     def _target(
-        self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
+        self,
+        params,
+        target_params,
+        obses,
+        actions,
+        rewards,
+        nxtobses,
+        not_terminateds,
+        key,
     ):
         next_q = self.get_q(target_params, nxtobses, key)
 

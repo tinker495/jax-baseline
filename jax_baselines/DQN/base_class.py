@@ -20,9 +20,12 @@ from jax_baselines.common.utils import (
     save,
     set_global_seeds,
 )
+from jax_baselines.DQN.lifecycle import QNetCheckpointingAdapter, QNetTrainingLifecycle
 
 
 class Q_Network_Family(object):
+    _qnet_handles_train_pulse = False
+
     def __init__(
         self,
         env_builder: callable,
@@ -158,6 +161,8 @@ class Q_Network_Family(object):
 
         # Logging throttle based on last log step
         self._last_log_step = 0
+        self.training_lifecycle = QNetTrainingLifecycle(self)
+        self.checkpointing_adapter = QNetCheckpointingAdapter(self)
 
         # Control model initialization timing across children
         self._init_setup_model = _init_setup_model
@@ -206,6 +211,16 @@ class Q_Network_Family(object):
     def _train_step(self, steps):
         pass
 
+    def train_step(self, steps, gradient_steps):
+        return self.training_lifecycle.train(steps, gradient_steps)
+
+    def _train_on_batch(self, data, context):
+        """Run one algorithm-specific update and return a QNetTrainResult."""
+        raise NotImplementedError
+
+    def _aggregate_train_reports(self, reports):
+        return reports[-1]
+
     def _get_actions(self, params, obses) -> np.ndarray:
         pass
 
@@ -225,70 +240,6 @@ class Q_Network_Family(object):
             return self.replay_buffer.sample(batch_size, self.prioritized_replay_beta0)
         else:
             return self.replay_buffer.sample(batch_size)
-
-    def _update_priorities(self, data, new_priorities):
-        """Common priority update logic for Q-Network family algorithms."""
-        if self.prioritized_replay:
-            self.replay_buffer.update_priorities(data["indexes"], new_priorities)
-
-    def _common_train_step_wrapper(self, steps, gradient_steps, train_step_func):
-        """Common training step wrapper for Q-Network family algorithms."""
-        for _ in range(gradient_steps):
-            self.train_steps_count += 1
-            data = self._sample_batch()
-
-            result = train_step_func(data)
-
-            # Extract results based on the algorithm
-            if (
-                len(result) == 6
-            ):  # DQN style: params, target_params, opt_state, loss, t_mean, new_priorities
-                (
-                    self.params,
-                    self.target_params,
-                    self.opt_state,
-                    loss,
-                    t_mean,
-                    new_priorities,
-                ) = result
-                self._update_priorities(data, new_priorities)
-
-                if self.logger_run and (steps - self._last_log_step >= self.log_interval):
-                    self._last_log_step = steps
-                    self.logger_run.log_metric("loss/qloss", loss, steps)
-                    self.logger_run.log_metric("loss/targets", t_mean, steps)
-
-            elif (
-                len(result) == 7
-            ):  # QRDQN/IQN style: params, target_params, opt_state, loss, t_mean, t_std, new_priorities
-                (
-                    self.params,
-                    self.target_params,
-                    self.opt_state,
-                    loss,
-                    t_mean,
-                    t_std,
-                    new_priorities,
-                ) = result
-                self._update_priorities(data, new_priorities)
-
-                if self.logger_run and (steps - self._last_log_step >= self.log_interval):
-                    self._last_log_step = steps
-                    self.logger_run.log_metric("loss/qloss", loss, steps)
-                    self.logger_run.log_metric("loss/targets", t_mean, steps)
-                    self.logger_run.log_metric("loss/target_stds", t_std, steps)
-
-            else:  # Fallback for other cases
-                self.params, self.target_params, self.opt_state, loss = result[:4]
-                if len(result) > 4 and self.prioritized_replay:
-                    new_priorities = result[4]
-                    self._update_priorities(data, new_priorities)
-
-                if self.logger_run and (steps - self._last_log_step >= self.log_interval):
-                    self._last_log_step = steps
-                    self.logger_run.log_metric("loss/qloss", loss, steps)
-
-        return loss
 
     def get_behavior_params(self):
         """Get parameters to use for behavior (training-time actions)."""
@@ -489,18 +440,6 @@ class Q_Network_Family(object):
         score = 0.0
         eplen = 0
 
-        def _ckpt_train_and_reset(step_val, accumulated_timesteps):
-            # Exact training-parity via residual accumulation
-            self._ckpt_update_residual += int(accumulated_timesteps)
-            num_update_iters = 0
-            while self._ckpt_update_residual >= self.train_freq:
-                self._ckpt_update_residual -= self.train_freq
-                num_update_iters += 1
-            if num_update_iters > 0:
-                total_updates = num_update_iters * self.gradient_steps
-                loss_local = self.train_step(step_val, total_updates)
-                self.lossque.append(loss_local)
-
         for steps in pbar:
             eplen += 1
             actions = self.actions(obs, self.update_eps)
@@ -513,7 +452,10 @@ class Q_Network_Family(object):
             if terminated or truncated:
                 if steps > self.learning_starts:
                     ckpt_success = self._checkpoint_on_episode_end(
-                        steps, score, eplen, train_and_reset_callback=_ckpt_train_and_reset
+                        steps,
+                        score,
+                        eplen,
+                        train_and_reset_callback=self.checkpointing_adapter.train_and_reset,
                     )
                 else:
                     ckpt_success = True  # No checkpointing yet, so consider it successful
@@ -544,18 +486,6 @@ class Q_Network_Family(object):
         scores = np.zeros([self.worker_size], dtype=np.float64)
         eplens = np.zeros([self.worker_size], dtype=np.int32)
 
-        def _ckpt_train_and_reset(step_val, accumulated_timesteps):
-            # Exact training-parity via residual accumulation
-            self._ckpt_update_residual += int(accumulated_timesteps)
-            num_update_iters = 0
-            while self._ckpt_update_residual >= self.train_freq:
-                self._ckpt_update_residual -= self.train_freq
-                num_update_iters += 1
-            if num_update_iters > 0:
-                total_updates = num_update_iters * self.gradient_steps
-                loss_local = self.train_step(step_val, total_updates)
-                self.lossque.append(loss_local)
-
         for steps in pbar:
             self.update_eps = self.exploration.value(steps)
             obs = self.env.current_obs()
@@ -581,7 +511,10 @@ class Q_Network_Family(object):
                 ckpt_results = []
                 for idx in done_idx:
                     ckpt_success = self._checkpoint_on_episode_end(
-                        steps, float(scores[idx]), int(eplens[idx]), _ckpt_train_and_reset
+                        steps,
+                        float(scores[idx]),
+                        int(eplens[idx]),
+                        self.checkpointing_adapter.train_and_reset,
                     )
                     ckpt_results.append((idx, ckpt_success))
                     scores[idx] = 0.0
@@ -688,7 +621,11 @@ class Q_Network_Family(object):
         def random_shift(obs, key):
             obs = jnp.pad(
                 obs,
-                ((self.shift_size, self.shift_size), (self.shift_size, self.shift_size), (0, 0)),
+                (
+                    (self.shift_size, self.shift_size),
+                    (self.shift_size, self.shift_size),
+                    (0, 0),
+                ),
                 mode="constant",
             )
             obs = pix.random_crop(

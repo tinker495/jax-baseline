@@ -9,11 +9,17 @@ from jax_baselines.common.losses import FQFQuantileLosses, QuantileHuberLosses
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
+from jax_baselines.DQN.lifecycle import QNetTrainResult
 
 
 class FQF(Q_Network_Family):
     def __init__(
-        self, env_builder: callable, model_builder_maker, n_support=32, delta=1.0, **kwargs
+        self,
+        env_builder: callable,
+        model_builder_maker,
+        n_support=32,
+        delta=1.0,
+        **kwargs,
     ):
 
         self.name = "FQF"
@@ -82,46 +88,37 @@ class FQF(Q_Network_Family):
         q = (tau[:, :, 1:] - tau[:, :, :-1]) * quanile_hat
         return jnp.sum(q, axis=2)
 
-    def train_step(self, steps, gradient_steps):
-        # FQF has a more complex structure, so we handle it specially
-        for _ in range(gradient_steps):
-            self.train_steps_count += 1
-            data = self._sample_batch()
+    def _train_on_batch(self, data, context):
+        (
+            self.params,
+            self.fqf_params,
+            self.target_params,
+            self.opt_state,
+            self.fqf_opt_state,
+            loss,
+            fqf_loss,
+            t_mean,
+            t_std,
+            tau,
+            new_priorities,
+        ) = self._train_step(
+            self.params,
+            self.fqf_params,
+            self.target_params,
+            self.opt_state,
+            self.fqf_opt_state,
+            context.train_steps_count,
+            next(self.key_seq),
+            **data,
+        )
 
-            (
-                self.params,
-                self.fqf_params,
-                self.target_params,
-                self.opt_state,
-                self.fqf_opt_state,
-                loss,
-                fqf_loss,
-                t_mean,
-                t_std,
-                tau,
-                new_priorities,
-            ) = self._train_step(
-                self.params,
-                self.fqf_params,
-                self.target_params,
-                self.opt_state,
-                self.fqf_opt_state,
-                self.train_steps_count,
-                next(self.key_seq),
-                **data
-            )
-
-            self._update_priorities(data, new_priorities)
-
-        if self.logger_run and (steps - self._last_log_step >= self.log_interval):
-            self._last_log_step = steps
-            self.logger_run.log_metric("loss/qloss", loss, steps)
-            self.logger_run.log_metric("loss/fqf_loss", fqf_loss, steps)
-            self.logger_run.log_metric("loss/targets", t_mean, steps)
-            self.logger_run.log_metric("loss/target_stds", t_std, steps)
-            self.logger_run.log_histogram("loss/tau", tau, steps)
-
-        return loss
+        return QNetTrainResult.from_values(
+            loss=loss,
+            target=t_mean,
+            replay_priorities=new_priorities,
+            metrics={"loss/fqf_loss": fqf_loss, "loss/target_stds": t_std},
+            histograms={"loss/tau": tau},
+        )
 
     def _train_step(
         self,
@@ -146,7 +143,15 @@ class FQF(Q_Network_Family):
         not_terminateds = 1.0 - terminateds
         (
             loss,
-            (abs_error, feature, taus, tau_hats, theta_loss_tile, targets, target_weights),
+            (
+                abs_error,
+                feature,
+                taus,
+                tau_hats,
+                theta_loss_tile,
+                targets,
+                target_weights,
+            ),
         ), grad = jax.value_and_grad(self._loss, has_aux=True,)(
             params,
             fqf_params,
