@@ -11,7 +11,6 @@ import numpy as np
 import optax
 
 cpu_jit = partial(jax.jit, backend="cpu")
-gpu_jit = partial(jax.jit, backend="gpu")
 
 PyTree = Any
 
@@ -223,15 +222,6 @@ def q_log_pi(q, entropy_tau):
     logsum = jax.nn.logsumexp(q_submax / entropy_tau, axis=1, keepdims=True)
     tau_log_pi = q_submax - entropy_tau * logsum
     return q_submax, tau_log_pi
-
-
-def discounted(rewards, gamma=0.99):  # lfilter([1],[1,-gamma],x[::-1])[::-1]
-    _gamma = 1
-    out = 0
-    for r in rewards:
-        out += r * _gamma
-        _gamma *= gamma
-    return out
 
 
 def discount_with_terminated(rewards, terminateds, truncateds, next_values, gamma):

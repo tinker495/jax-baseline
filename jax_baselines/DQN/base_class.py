@@ -1,8 +1,6 @@
 from copy import deepcopy
 
-import dm_pix as pix
 import jax
-import jax.numpy as jnp
 import numpy as np
 from tqdm.auto import trange
 
@@ -277,9 +275,7 @@ class Q_Network_Family(object):
 
         description += f"loss : {np.mean(self.lossque):.3f}"
 
-        if self.param_noise:
-            pass
-        else:
+        if not self.param_noise:
             description += f", epsilon : {self.update_eps:.3f}"
 
         if self.use_checkpointing and (self._last_ckpt_update_step is not None):
@@ -292,10 +288,10 @@ class Q_Network_Family(object):
             run_name = "M-" + run_name
         if (
             self.param_noise
-            & self.dueling_model
-            & self.double_q
-            & self.n_step_method
-            & self.prioritized_replay
+            and self.dueling_model
+            and self.double_q
+            and self.n_step_method
+            and self.prioritized_replay
         ):
             run_name = f"Rainbow({self.n_step} step)_" + run_name
         else:
@@ -461,42 +457,6 @@ class Q_Network_Family(object):
             return m
 
         return jax.vmap(project_one, in_axes=(0, 0, 0, 0))(next_distribution, C51_B, C51_L, C51_H)
-
-    def _augment_observation(self, obs, key):
-        def random_shift(obs, key):
-            obs = jnp.pad(
-                obs,
-                (
-                    (self.shift_size, self.shift_size),
-                    (self.shift_size, self.shift_size),
-                    (0, 0),
-                ),
-                mode="constant",
-            )
-            obs = pix.random_crop(
-                key,
-                obs,
-                (
-                    obs.shape[0] - self.shift_size * 2,
-                    obs.shape[1] - self.shift_size * 2,
-                    obs.shape[2],
-                ),
-            )
-            return obs
-
-        def Intensity(obs, key):
-            noise = (
-                1.0 + jnp.clip(jax.random.normal(key, (1, 1, 1)), -2.0, 2.0) * self.intensity_scale
-            )
-            return obs * noise
-
-        def augment(obs, key):
-            subkey1, subkey2 = jax.random.split(key)
-            obs = jax.vmap(random_shift)(obs, jax.random.split(subkey1, obs.shape[0]))
-            obs = jax.vmap(Intensity)(obs, jax.random.split(subkey2, obs.shape[0]))
-            return obs
-
-        return jax.vmap(augment)(obs, jax.random.split(key, obs.shape[0]))
 
     def _checkpoint_on_episode_end(
         self, steps, episode_return, episode_len, train_and_reset_callback=None

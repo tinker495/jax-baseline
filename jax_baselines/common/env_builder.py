@@ -37,14 +37,6 @@ def get_env_builder(env_name, **kwargs):
     return env_builder, env_info
 
 
-class ActionSpace:
-    pass
-
-
-class ObservationSpace:
-    pass
-
-
 class Env(ABC):
     class EnvInfo:
         env_type: str

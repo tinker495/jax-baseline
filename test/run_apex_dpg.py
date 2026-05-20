@@ -41,7 +41,6 @@ if __name__ == "__main__":
     parser.add_argument("--quantile_drop", type=float, default=0.1, help="quantile_drop ratio")
     parser.add_argument("--node", type=int, default=256, help="network node number")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
-    parser.add_argument("--action_noise", type=float, default=0.1, help="action_noise")
     parser.add_argument("--optimizer", type=str, default="adopt", help="optimaizer")
     parser.add_argument("--gradient_steps", type=int, default=1, help="gradient_steps")
     parser.add_argument("--critic_num", type=int, default=2, help="tqc critic number")
@@ -49,7 +48,6 @@ if __name__ == "__main__":
     parser.add_argument("--learning_starts", type=int, default=5000, help="learning start")
     parser.add_argument("--initial_eps", type=float, default=0.4, help="initial epsilon")
     parser.add_argument("--eps_decay", type=float, default=3, help="exploration fraction")
-    parser.add_argument("--cvar", type=float, default=1.0, help="cvar")
     parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
