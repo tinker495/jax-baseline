@@ -207,8 +207,8 @@ class QNetTrainingLifecycle:
 class QNetRolloutLifecycle:
     """Environment rollout lifecycle for the local Q-Net family.
 
-    This keeps the rollout/checkpoint loop Implementation in the family-local
-    lifecycle Module while the base class keeps the public learn_* Interface.
+    Keeps the rollout/checkpoint loop here so the base class only exposes
+    thin `learn_*` entry points.
     """
 
     def __init__(self, agent):
@@ -378,10 +378,7 @@ class QNetRolloutLifecycle:
                     eplens[idx] = 0
 
                 if self.agent._has_true_reset() and any(not success for _, success in ckpt_results):
-                    try:
-                        self.agent.env.true_reset()
-                    except Exception:
-                        self.agent.env.reset()
+                    self.agent.env.true_reset()
 
             if steps % self.agent.eval_freq == 0:
                 eval_result = self.agent.eval(steps)

@@ -154,12 +154,8 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         pbar = trange(total_trainstep, miniters=log_interval)
 
         self.logger_server = Logger_server.remote(self.log_dir, run_name)
-        try:
-            hparams = get_hyper_params(self)
-            # send serializable dict to the logger actor
-            self.logger_server.register_hparams.remote(hparams)
-        except Exception:
-            pass
+        hparams = get_hyper_params(self)
+        self.logger_server.register_hparams.remote(hparams)
 
         if self.env_type == "unity":
             self.learn_unity(pbar, callback, log_interval)

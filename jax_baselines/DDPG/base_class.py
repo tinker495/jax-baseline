@@ -513,28 +513,18 @@ class Deteministic_Policy_Gradient_Family(object):
             self.checkpoint_encoder_params = eval_state["encoder"]
 
         # If using SIMBA normalization, snapshot obs_rms as well for eval-time consistency
-        if getattr(self, "simba", False) and hasattr(self, "obs_rms"):
-            try:
-                # Use action_obs_rms if available; otherwise fallback to obs_rms
-                self.checkpoint_obs_rms = deepcopy(getattr(self, "action_obs_rms", self.obs_rms))
-            except Exception:
-                # Fallback: if deepcopy fails for any reason, skip without crashing
-                pass
+        if self.simba:
+            self.checkpoint_obs_rms = deepcopy(getattr(self, "action_obs_rms", self.obs_rms))
 
     def _log_ckpt_snapshot_update(self, steps):
         """Record that a checkpoint snapshot was updated and log it."""
         self._last_ckpt_update_step = int(steps)
         self._ckpt_update_count += self.checkpointing_enabled
-        if getattr(self, "logger_run", None) is not None:
-            try:
-                self.logger_run.log_metric(
-                    "ckpt/ckpt_baseline", float(self._ckpt_baseline), int(steps)
-                )
-                self.logger_run.log_metric(
-                    "ckpt/update_count", float(self._ckpt_update_count), int(steps)
-                )
-            except Exception:
-                pass
+        if self.logger_run is not None:
+            self.logger_run.log_metric("ckpt/ckpt_baseline", float(self._ckpt_baseline), int(steps))
+            self.logger_run.log_metric(
+                "ckpt/update_count", float(self._ckpt_update_count), int(steps)
+            )
 
     def _checkpoint_on_episode_end(
         self, steps, episode_return, episode_len, train_and_reset_callback=None

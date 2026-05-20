@@ -1,8 +1,8 @@
-"""Local DPG training lifecycle Interface.
+"""Local DPG training lifecycle.
 
-This Module keeps replay sampling, SIMBA normalization, PER priority updates,
-metric logging, and checkpoint training pulses behind one lifecycle Interface.
-Algorithm Implementations only provide the per-batch gradient update.
+Owns replay sampling, SIMBA normalization, PER priority updates, metric
+logging, and checkpoint training pulses. Algorithm subclasses only provide
+the per-batch gradient update via `_train_on_batch`.
 """
 
 from collections import deque
@@ -14,7 +14,7 @@ import numpy as np
 
 @dataclass(frozen=True)
 class DPGTrainContext:
-    """Context passed to an algorithm-specific DPG train Implementation."""
+    """Context passed to `_train_on_batch`."""
 
     steps: int
     train_steps_count: int
@@ -22,7 +22,7 @@ class DPGTrainContext:
 
 @dataclass
 class DPGTrainReport:
-    """Normalized report returned by a local DPG train Implementation."""
+    """Normalized report returned by `_train_on_batch`."""
 
     loss: object
     target: object = None
@@ -38,7 +38,7 @@ class DPGTrainReport:
 
 
 class DPGTrainingLifecycle:
-    """Replay-driven local DPG training lifecycle Module."""
+    """Replay-driven local DPG training lifecycle."""
 
     def __init__(self, agent):
         self.agent = agent
@@ -95,8 +95,8 @@ class DPGTrainingLifecycle:
 class DPGRolloutLifecycle:
     """Environment rollout lifecycle for the local DPG family.
 
-    This Module keeps DPG rollout/checkpoint loop Implementation family-local
-    and lets the base class expose thin learn_* Interface methods.
+    Keeps the rollout/checkpoint loop here so the base class only exposes
+    thin `learn_*` entry points.
     """
 
     def __init__(self, agent):
@@ -263,7 +263,7 @@ class DPGRolloutLifecycle:
 
 
 class DPGCheckpointingAdapter:
-    """Checkpoint training-pulse Adapter for the local DPG lifecycle."""
+    """Checkpoint training-pulse adapter for the local DPG lifecycle."""
 
     def __init__(self, agent):
         self.agent = agent
@@ -277,17 +277,11 @@ class DPGCheckpointingAdapter:
 
         if num_update_iters > 0:
             total_updates = num_update_iters * self.agent.gradient_steps
-            # Keep the public train_step Interface as the seam so excluded legacy
-            # Implementations can keep their overrides while local DPG variants
-            # inherit the unified lifecycle.
             loss = self.agent.train_step(step_val, total_updates)
             self.agent.lossque.append(loss)
 
         self._snapshot_action_normalizer()
 
     def _snapshot_action_normalizer(self):
-        if getattr(self.agent, "simba", False) and hasattr(self.agent, "obs_rms"):
-            try:
-                self.agent.action_obs_rms = deepcopy(self.agent.obs_rms)
-            except Exception:
-                pass
+        if self.agent.simba:
+            self.agent.action_obs_rms = deepcopy(self.agent.obs_rms)

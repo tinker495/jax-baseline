@@ -125,9 +125,7 @@ class HL_GAUSS_SPR(SPR):
 
     def _checkpoint_update_snapshot(self):
         """HL_GAUSS_SPR checkpoint snapshot strategy: snapshot eval parameters."""
-        # HL_GAUSS_SPR snapshots eval params for consistency
-        if hasattr(self, "params"):
-            self.checkpoint_params = deepcopy(self.get_eval_params())
+        self.checkpoint_params = deepcopy(self.get_eval_params())
 
     def get_behavior_params(self):
         """HL_GAUSS_SPR uses target_params if scaled_by_reset, otherwise params for behavior."""

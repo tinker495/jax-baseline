@@ -117,9 +117,7 @@ class HL_GAUSS_BBF(BBF):
 
     def _checkpoint_update_snapshot(self):
         """HL_GAUSS_BBF checkpoint snapshot strategy: snapshot eval parameters."""
-        # HL_GAUSS_BBF snapshots target_params for eval consistency
-        if hasattr(self, "params"):
-            self.checkpoint_params = deepcopy(self.get_eval_params())
+        self.checkpoint_params = deepcopy(self.get_eval_params())
 
     def get_behavior_params(self):
         """HL_GAUSS_BBF uses target_params for behavior (training-time actions)."""

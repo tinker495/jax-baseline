@@ -88,8 +88,4 @@ class Logger_server(object):
         and then `logger.register_hparams.remote(hparams)` to send it to this
         Ray actor.
         """
-        try:
-            self.writer.log_hparams(hparams)
-        except Exception:
-            # silently ignore logging errors
-            pass
+        self.writer.log_hparams(hparams)

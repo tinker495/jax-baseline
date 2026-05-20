@@ -126,9 +126,7 @@ class SPR(Q_Network_Family):
 
     def _checkpoint_update_snapshot(self):
         """SPR checkpoint snapshot strategy: snapshot eval parameters."""
-        # SPR snapshots eval params for consistency
-        if hasattr(self, "params"):
-            self.checkpoint_params = deepcopy(self.get_eval_params())
+        self.checkpoint_params = deepcopy(self.get_eval_params())
 
     def get_behavior_params(self):
         """SPR uses target_params if scaled_by_reset, otherwise params for behavior."""

@@ -198,8 +198,9 @@ Axes = Union[int, Sequence[int]]
 
 
 class BatchReNorm(Module):
-    """BatchReNorm Module, implemented based on the Batch Renormalization paper (https://arxiv.org/abs/1702.03275).
-    and adapted from Flax's BatchNorm implementation:
+    """Batch Renormalization (https://arxiv.org/abs/1702.03275).
+
+    Adapted from Flax's BatchNorm:
     https://github.com/google/flax/blob/ce8a3c74d8d1f4a7d8f14b9fb84b2cc76d7f8dbf/flax/linen/normalization.py#L228
 
 

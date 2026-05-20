@@ -116,9 +116,7 @@ class BBF(SPR):
 
     def _checkpoint_update_snapshot(self):
         """BBF checkpoint snapshot strategy: snapshot eval parameters."""
-        # BBF snapshots target_params for eval consistency
-        if hasattr(self, "params"):
-            self.checkpoint_params = deepcopy(self.get_eval_params())
+        self.checkpoint_params = deepcopy(self.get_eval_params())
 
     def get_behavior_params(self):
         """BBF uses target_params for behavior (training-time actions)."""

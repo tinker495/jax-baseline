@@ -424,29 +424,21 @@ class Q_Network_Family(object):
             self.checkpointing_enabled = True
 
     def _checkpoint_update_snapshot(self):
-        """Default checkpoint snapshot strategy for Q-Network family.
+        """Snapshot eval parameters into `checkpoint_params`.
 
-        This copies current network parameters into checkpoint snapshots.
-        Subclasses can override this for custom snapshot strategies.
+        Subclasses override to customise which parameters are snapshotted.
         """
-        # Default strategy: snapshot eval parameters (mirrors eval behavior)
-        if hasattr(self, "params"):
-            self.checkpoint_params = deepcopy(self.get_eval_params())
+        self.checkpoint_params = deepcopy(self.get_eval_params())
 
     def _log_ckpt_snapshot_update(self, steps):
         """Record that a checkpoint snapshot was updated and log it."""
         self._last_ckpt_update_step = int(steps)
         self._ckpt_update_count += self.checkpointing_enabled
-        if getattr(self, "logger_run", None) is not None:
-            try:
-                self.logger_run.log_metric(
-                    "ckpt/ckpt_baseline", float(self._ckpt_baseline), int(steps)
-                )
-                self.logger_run.log_metric(
-                    "ckpt/update_count", float(self._ckpt_update_count), int(steps)
-                )
-            except Exception:
-                pass
+        if self.logger_run is not None:
+            self.logger_run.log_metric("ckpt/ckpt_baseline", float(self._ckpt_baseline), int(steps))
+            self.logger_run.log_metric(
+                "ckpt/update_count", float(self._ckpt_update_count), int(steps)
+            )
 
     def _has_true_reset(self):
         return False
