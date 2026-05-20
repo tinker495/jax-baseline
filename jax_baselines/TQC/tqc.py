@@ -108,43 +108,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
         pi = jax.nn.tanh(mu + std * jax.random.normal(key, std.shape))
         return pi
 
-    def actions(self, obs, steps, eval=False):
-        if self.simba:
-            # During eval with checkpointing, normalize using snapshot obs_rms if available
-            rms = (
-                self.checkpoint_obs_rms
-                if (
-                    eval
-                    and self.use_checkpointing
-                    and self.checkpointing_enabled
-                    and hasattr(self, "checkpoint_obs_rms")
-                )
-                else self.action_obs_rms
-                if hasattr(self, "action_obs_rms")
-                else self.obs_rms
-            )
-            # Only update live obs_rms during training (not eval) and when steps is finite
-            if (not eval) and steps != np.inf:
-                self.obs_rms.update(obs)
-            obs = rms.normalize(obs)
-
-        if self.learning_starts < steps:
-            # Select params: during eval with checkpointing prefer snapshot
-            policy_params = (
-                self.checkpoint_policy_params
-                if (
-                    eval
-                    and self.use_checkpointing
-                    and self.checkpointing_enabled
-                    and hasattr(self, "checkpoint_policy_params")
-                )
-                else self.policy_params
-            )
-            actions = np.asarray(self._get_actions(policy_params, obs, next(self.key_seq)))
-        else:
-            actions = np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
-        return actions
-
     def train_step(self, steps, gradient_steps):
         # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
