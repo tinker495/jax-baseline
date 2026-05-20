@@ -18,7 +18,6 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="Pendulum-v0", help="environment")
-    parser.add_argument("--worker_id", type=int, default=0, help="unlty ml agent's worker id")
     parser.add_argument("--worker", type=int, default=1, help="gym_worker_size")
     parser.add_argument("--algo", type=str, default="DDPG", help="algo ID")
     parser.add_argument("--gamma", type=float, default=0.995, help="gamma")
@@ -35,7 +34,6 @@ if __name__ == "__main__":
         help="n step setting when n > 1 is n step td method",
     )
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
-    parser.add_argument("--verbose", type=int, default=0, help="verbose")
     parser.add_argument("--logdir", type=str, default="log/apex_dpg/", help="log file dir")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     parser.add_argument("--n_support", type=int, default=25, help="n_support for QRDQN,IQN,FQF")
@@ -58,9 +56,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     env_name = args.env
-    embedding_mode = "normal"
 
-    manger = mp.get_context().Manager()
+    manager = mp.get_context().Manager()
 
     ray.init(num_cpus=args.worker + 2, num_gpus=0)
 
@@ -70,7 +67,7 @@ if __name__ == "__main__":
     env_type = env_info["env_type"]
     env_name = env_info["env_id"]
 
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
+    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 
     if args.algo == "DDPG":
         if args.model_lib == "flax":
@@ -81,7 +78,7 @@ if __name__ == "__main__":
         agent = APE_X_DDPG(
             workers,
             model_builder_maker,
-            manger,
+            manager,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_num=args.batch_num,
@@ -107,7 +104,7 @@ if __name__ == "__main__":
         agent = APE_X_TD3(
             workers,
             model_builder_maker,
-            manger,
+            manager,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_num=args.batch_num,

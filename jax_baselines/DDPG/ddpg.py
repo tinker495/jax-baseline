@@ -58,15 +58,15 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             policy_params, key, self.preproc(policy_params, key, convert_jax(obses))
         )  #
 
-    def discription(self, eval_result=None):
-        discription = ""
+    def description(self, eval_result=None):
+        description = ""
         if eval_result is not None:
             for k, v in eval_result.items():
-                discription += f"{k} : {v:8.2f}, "
+                description += f"{k} : {v:8.2f}, "
 
-        discription += f"loss : {np.mean(self.lossque):.3f}"
-        discription += f"epsilon : {self.epsilon:.3f}"
-        return discription
+        description += f"loss : {np.mean(self.lossque):.3f}"
+        description += f"epsilon : {self.epsilon:.3f}"
+        return description
 
     def _policy_action_from_state(self, state, obs, eval, steps):
         return np.asarray(self._get_actions(state["policy"], obs, None))

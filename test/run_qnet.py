@@ -41,7 +41,6 @@ if __name__ == "__main__":
     parser.add_argument("--off_policy_fix", action="store_true")
     parser.add_argument("--munchausen", action="store_true")
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
-    parser.add_argument("--verbose", type=int, default=0, help="verbose")
     parser.add_argument("--logdir", type=str, default="log/qnet/", help="log file dir")
     parser.add_argument("--seed", type=int, default=0, help="random seed")
     parser.add_argument("--max", type=float, default=10, help="c51 max")
@@ -73,7 +72,6 @@ if __name__ == "__main__":
     parser.add_argument("--use_checkpointing", action="store_true")
     args = parser.parse_args()
     env_name = args.env
-    embedding_mode = "normal"
     env_builder, env_info = get_env_builder(
         env_name, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
     )

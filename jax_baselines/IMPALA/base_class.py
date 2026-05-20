@@ -207,7 +207,7 @@ class IMPALA_Family(object):
 
         return builder
 
-    def discription(self):
+    def description(self):
         return "loss : {:.3f} |".format(np.mean(self.lossque))
 
     def learn(
@@ -278,7 +278,7 @@ class IMPALA_Family(object):
             loss, rho = self.train_step(steps)
             self.lossque.append(loss)
             if steps % log_interval == 0:
-                pbar.set_description(self.discription())
+                pbar.set_description(self.description())
 
             if steps % self.update_freq == 0:
                 cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])

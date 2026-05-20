@@ -1,8 +1,6 @@
 import argparse
 import os
 
-import gymnasium as gym
-
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DDPG.ddpg import DDPG
@@ -21,7 +19,6 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="Pendulum-v0", help="environment")
-    parser.add_argument("--worker_id", type=int, default=0, help="unlty ml agent's worker id")
     parser.add_argument("--worker", type=int, default=1, help="gym_worker_size")
     parser.add_argument("--algo", type=str, default="DDPG", help="algo ID")
     parser.add_argument("--gamma", type=float, default=0.995, help="gamma")
@@ -41,7 +38,6 @@ if __name__ == "__main__":
     parser.add_argument("--simba", action="store_true")
     parser.add_argument("--simbav2", action="store_true")
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
-    parser.add_argument("--verbose", type=int, default=0, help="verbose")
     parser.add_argument("--logdir", type=str, default="log/dpg/", help="log file dir")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     parser.add_argument("--n_support", type=int, default=25, help="n_support for QRDQN,IQN,FQF")
@@ -68,14 +64,13 @@ if __name__ == "__main__":
 
     use_simba_features = args.simba or args.simbav2
     env_name = args.env
-    embedding_mode = "normal"
     env_builder, env_info = get_env_builder(
         env_name, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
     )
     env_name = env_info["env_id"]
     env_type = env_info["env_type"]
 
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
+    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 
     if args.algo == "DDPG":
         if args.model_lib == "flax":
@@ -198,9 +193,6 @@ if __name__ == "__main__":
                 )
             else:
                 from model_builder.flax.dpg.crossq_builder import model_builder_maker
-        elif args.model_lib == "haiku":
-            pass
-            # from model_builder.haiku.dpg.crossq_builder import model_builder_maker
         agent = CrossQ(
             env_builder,
             model_builder_maker,
@@ -276,7 +268,6 @@ if __name__ == "__main__":
                 from model_builder.flax.dpg.td7_builder import model_builder_maker
         elif args.model_lib == "haiku":
             from model_builder.haiku.dpg.td7_builder import model_builder_maker
-        eval_env = gym.make(env_name)
         agent = TD7(
             env_builder,
             model_builder_maker,

@@ -269,23 +269,23 @@ class Q_Network_Family(object):
             actions = np.random.choice(self.action_size[0], [self.worker_size, 1])
         return actions
 
-    def discription(self, eval_result=None):
-        discription = ""
+    def description(self, eval_result=None):
+        description = ""
         if eval_result is not None:
             for k, v in eval_result.items():
-                discription += f"{k} : {v:8.2f}, "
+                description += f"{k} : {v:8.2f}, "
 
-        discription += f"loss : {np.mean(self.lossque):.3f}"
+        description += f"loss : {np.mean(self.lossque):.3f}"
 
         if self.param_noise:
             pass
         else:
-            discription += f", epsilon : {self.update_eps:.3f}"
+            description += f", epsilon : {self.update_eps:.3f}"
 
         if self.use_checkpointing and (self._last_ckpt_update_step is not None):
-            discription += f", ckpt_upd_step : {int(self._last_ckpt_update_step)}"
+            description += f", ckpt_upd_step : {int(self._last_ckpt_update_step)}"
 
-        return discription
+        return description
 
     def run_name_update(self, run_name):
         if self.munchausen:

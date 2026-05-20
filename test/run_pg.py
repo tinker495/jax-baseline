@@ -16,7 +16,6 @@ if __name__ == "__main__":
     parser.add_argument("--experiment_name", type=str, default="PG", help="experiment name")
     parser.add_argument("--env", type=str, default="Pendulum-v1", help="environment")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
-    parser.add_argument("--worker_id", type=int, default=0, help="unlty ml agent's worker id")
     parser.add_argument("--worker", type=int, default=1, help="gym_worker_size")
     parser.add_argument("--algo", type=str, default="A2C", help="algo ID")
     parser.add_argument("--gamma", type=float, default=0.995, help="gamma")
@@ -24,7 +23,6 @@ if __name__ == "__main__":
     parser.add_argument("--batch", type=int, default=32, help="batch size")
     parser.add_argument("--mini_batch", type=int, default=32, help="batch size")
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
-    parser.add_argument("--verbose", type=int, default=0, help="verbose")
     parser.add_argument("--logdir", type=str, default="log/pg/", help="log file dir")
     parser.add_argument("--seed", type=int, default=0, help="random seed")
     parser.add_argument("--node", type=int, default=256, help="network node number")
@@ -45,13 +43,12 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     env_name = args.env
-    embedding_mode = "normal"
     env_builder, env_info = get_env_builder(
         env_name, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
     )
     env_name = env_info["env_id"]
     env_type = env_info["env_type"]
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
+    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 
     if args.model_lib == "flax":
         from model_builder.flax.ac.ac_builder import model_builder_maker

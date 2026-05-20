@@ -363,14 +363,14 @@ class TD7(Deteministic_Policy_Gradient_Family):
         )
         return rewards + not_terminateds * self.gamma * next_q
 
-    def discription(self, eval_result=None):
-        discription = ""
+    def description(self, eval_result=None):
+        description = ""
         if eval_result is not None:
             for k, v in eval_result.items():
-                discription += f"{k} : {v:8.2f}, "
+                description += f"{k} : {v:8.2f}, "
 
-        discription += f"loss : {np.mean(self.lossque):.3f}"
-        return discription
+        description += f"loss : {np.mean(self.lossque):.3f}"
+        return description
 
     def run_name_update(self, run_name):
         if self.simba:

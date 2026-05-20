@@ -37,7 +37,6 @@ if __name__ == "__main__":
     )
     parser.add_argument("--munchausen", action="store_true")
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
-    parser.add_argument("--verbose", type=int, default=0, help="verbose")
     parser.add_argument("--logdir", type=str, default="log/apex/", help="log file dir")
     parser.add_argument("--seed", type=int, default=0, help="random seed")
     parser.add_argument("--max", type=float, default=250, help="c51 max")
@@ -62,9 +61,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     env_name = args.env
-    embedding_mode = "normal"
 
-    manger = mp.get_context().Manager()
+    manager = mp.get_context().Manager()
 
     ray.init(num_cpus=args.worker + 2, num_gpus=0)
 
@@ -74,7 +72,7 @@ if __name__ == "__main__":
     env_type = env_info["env_type"]
     env_name = env_info["env_id"]
 
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
+    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 
     if args.algo == "DQN":
         if args.model_lib == "flax":
@@ -85,7 +83,7 @@ if __name__ == "__main__":
         agent = APE_X_DQN(
             workers,
             model_builder_maker,
-            manger,
+            manager,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_num=args.batch_num,
@@ -116,7 +114,7 @@ if __name__ == "__main__":
         agent = APE_X_C51(
             workers,
             model_builder_maker,
-            manger,
+            manager,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_num=args.batch_num,
@@ -149,7 +147,7 @@ if __name__ == "__main__":
         agent = APE_X_QRDQN(
             workers,
             model_builder_maker,
-            manger,
+            manager,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_num=args.batch_num,
@@ -182,7 +180,7 @@ if __name__ == "__main__":
         agent = APE_X_IQN(
             workers,
             model_builder_maker,
-            manger,
+            manager,
             gamma=args.gamma,
             learning_rate=args.learning_rate,
             batch_num=args.batch_num,

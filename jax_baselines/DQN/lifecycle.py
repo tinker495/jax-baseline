@@ -244,7 +244,7 @@ class QNetRolloutLifecycle:
                 and eval_result is not None
                 and len(self.agent.lossque) > 0
             ):
-                pbar.set_description(self.agent.discription(eval_result))
+                pbar.set_description(self.agent.description(eval_result))
 
     def learn_vectorized_env(self, pbar, callback=None, log_interval=1000):
         self.agent.lossque = deque(maxlen=10)
@@ -281,7 +281,7 @@ class QNetRolloutLifecycle:
                 and eval_result is not None
                 and len(self.agent.lossque) > 0
             ):
-                pbar.set_description(self.agent.discription(eval_result))
+                pbar.set_description(self.agent.description(eval_result))
 
     def learn_single_env_checkpointing(self, pbar, callback=None, log_interval=1000, obs=None):
         if obs is None:
@@ -332,7 +332,7 @@ class QNetRolloutLifecycle:
                 and eval_result is not None
                 and len(self.agent.lossque) > 0
             ):
-                pbar.set_description(self.agent.discription(eval_result))
+                pbar.set_description(self.agent.description(eval_result))
 
     def learn_vectorized_env_checkpointing(self, pbar, callback=None, log_interval=1000):
         self.agent.lossque = deque(maxlen=10)
@@ -391,7 +391,7 @@ class QNetRolloutLifecycle:
                 and eval_result is not None
                 and len(self.agent.lossque) > 0
             ):
-                pbar.set_description(self.agent.discription(eval_result))
+                pbar.set_description(self.agent.description(eval_result))
 
 
 class QNetCheckpointingAdapter:

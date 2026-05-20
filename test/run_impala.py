@@ -19,7 +19,6 @@ if __name__ == "__main__":
     parser.add_argument("--learning_rate", type=float, default=0.0002, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="BreakoutNoFrameskip-v4", help="environment")
-    parser.add_argument("--worker_id", type=int, default=0, help="unlty ml agent's worker id")
     parser.add_argument("--worker", type=int, default=16, help="gym_worker_size")
     parser.add_argument("--update_freq", type=int, default=100, help="update frequency")
     parser.add_argument("--algo", type=str, default="A2C", help="algo ID")
@@ -30,7 +29,6 @@ if __name__ == "__main__":
     parser.add_argument("--sample_size", type=int, default=1, help="sample_size")
     parser.add_argument("--batch", type=int, default=256, help="batch size")
     parser.add_argument("--steps", type=float, default=1e5, help="step size")
-    parser.add_argument("--verbose", type=int, default=0, help="verbose")
     parser.add_argument("--logdir", type=str, default="log/impala", help="log file dir")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     parser.add_argument("--node", type=int, default=256, help="network node number")
@@ -46,11 +44,8 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     env_name = args.env
-    embedding_mode = "normal"
-    # embedding_mode = "minimum"
-    # embedding_mode = "none"
 
-    manger = mp.get_context().Manager()
+    manager = mp.get_context().Manager()
 
     ray.init(num_cpus=args.worker + 4, num_gpus=0)
 
@@ -58,7 +53,7 @@ if __name__ == "__main__":
 
     env_type = "SingleEnv"
 
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": embedding_mode}
+    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 
     if args.model_lib == "flax":
         from model_builder.flax.ac.ac_builder import model_builder_maker
@@ -69,7 +64,7 @@ if __name__ == "__main__":
         agent = IMPALA(
             workers,
             model_builder_maker,
-            manger,
+            manager,
             gamma=args.gamma,
             lamda=args.lamda,
             learning_rate=args.learning_rate,
@@ -90,7 +85,7 @@ if __name__ == "__main__":
         agent = IMPALA_PPO(
             workers,
             model_builder_maker,
-            manger,
+            manager,
             gamma=args.gamma,
             lamda=args.lamda,
             learning_rate=args.learning_rate,
@@ -111,7 +106,7 @@ if __name__ == "__main__":
         agent = IMPALA_TPPO(
             workers,
             model_builder_maker,
-            manger,
+            manager,
             gamma=args.gamma,
             lamda=args.lamda,
             learning_rate=args.learning_rate,
@@ -132,7 +127,7 @@ if __name__ == "__main__":
         agent = IMPALA_SPO(
             workers,
             model_builder_maker,
-            manger,
+            manager,
             gamma=args.gamma,
             lamda=args.lamda,
             learning_rate=args.learning_rate,

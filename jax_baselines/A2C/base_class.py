@@ -181,15 +181,15 @@ class Actor_Critic_Policy_Gradient_Family(object):
     def _get_actions(self, params, obses) -> np.ndarray:
         pass
 
-    def discription(self, eval_result=None):
-        discription = ""
+    def description(self, eval_result=None):
+        description = ""
         if eval_result is not None:
             for k, v in eval_result.items():
-                discription += f"{k} : {v:8.2f}, "
+                description += f"{k} : {v:8.2f}, "
 
-        discription += f"loss : {np.mean(self.lossque):.3f}"
+        description += f"loss : {np.mean(self.lossque):.3f}"
 
-        return discription
+        return description
 
     def learn(
         self,
@@ -239,7 +239,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 eval_result = self.eval(steps)
 
             if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
-                pbar.set_description(self.discription(eval_result))
+                pbar.set_description(self.description(eval_result))
 
     def learn_VectorizedEnv(self, pbar, callback=None, log_interval=1000):
         self.lossque = deque(maxlen=10)
@@ -270,7 +270,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 eval_result = self.eval(steps)
 
             if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
-                pbar.set_description(self.discription(eval_result))
+                pbar.set_description(self.description(eval_result))
 
     def eval(self, steps):
         return evaluate_policy(

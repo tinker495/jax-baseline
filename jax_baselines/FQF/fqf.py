@@ -31,7 +31,7 @@ class FQF(Q_Network_Family):
         super().__init__(env_builder, model_builder_maker, **kwargs)
 
     def setup_model(self):
-        self.model_bulder = self.model_builder_maker(
+        self.model_builder = self.model_builder_maker(
             self.observation_space,
             self.action_size,
             self.dueling_model,
@@ -40,7 +40,7 @@ class FQF(Q_Network_Family):
             self.policy_kwargs,
         )
 
-        self.preproc, self.model, self.fpf, self.params, self.fqf_params = self.model_bulder(
+        self.preproc, self.model, self.fpf, self.params, self.fqf_params = self.model_builder(
             next(self.key_seq), print_model=True
         )
         self.target_params = deepcopy(self.params)

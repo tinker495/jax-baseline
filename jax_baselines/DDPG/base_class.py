@@ -376,16 +376,16 @@ class Deteministic_Policy_Gradient_Family(object):
     def _apply_action_noise(self, actions, steps, eval):
         return actions
 
-    def discription(self, eval_result=None):
-        discription = ""
+    def description(self, eval_result=None):
+        description = ""
         if eval_result is not None:
             for k, v in eval_result.items():
-                discription += f"{k} : {v:8.2f}, "
+                description += f"{k} : {v:8.2f}, "
 
-        discription += f"loss : {np.mean(self.lossque):.3f}"
+        description += f"loss : {np.mean(self.lossque):.3f}"
         if self.use_checkpointing and (self._last_ckpt_update_step is not None):
-            discription += f", ckpt_upd_step : {int(self._last_ckpt_update_step)}"
-        return discription
+            description += f", ckpt_upd_step : {int(self._last_ckpt_update_step)}"
+        return description
 
     def run_name_update(self, run_name):
         if self.simba_v2:

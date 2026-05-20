@@ -133,7 +133,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
     def _get_actions(self, params, obses) -> np.ndarray:
         pass
 
-    def discription(self):
+    def description(self):
         return "buffer len : {} loss : {:.3f} |".format(
             len(self.replay_buffer), np.mean(self.lossque)
         )
@@ -228,7 +228,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
             loss = self.train_step(steps, self.gradient_steps)
             self.lossque.append(loss)
             if steps % log_interval == 0:
-                pbar.set_description(self.discription())
+                pbar.set_description(self.description())
             if steps % self.param_broadcast_freq == 0:
                 cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
                 param_server.update_params.remote(cpu_param)
