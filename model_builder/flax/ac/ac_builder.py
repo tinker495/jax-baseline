@@ -23,9 +23,9 @@ class Actor(nn.Module):
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
         )(feature)
         if self.action_type == "discrete":
-            action_probs = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.01))(
-                mlp
-            )
+            action_probs = self.layer(
+                self.action_size[0], kernel_init=clip_factorized_uniform(0.01)
+            )(mlp)
             return action_probs
         elif self.action_type == "continuous":
             mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.01))(mlp)
