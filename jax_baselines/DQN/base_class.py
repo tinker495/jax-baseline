@@ -1,4 +1,3 @@
-from collections import deque
 from copy import deepcopy
 
 import dm_pix as pix
@@ -20,7 +19,11 @@ from jax_baselines.common.utils import (
     save,
     set_global_seeds,
 )
-from jax_baselines.DQN.lifecycle import QNetCheckpointingAdapter, QNetTrainingLifecycle
+from jax_baselines.DQN.lifecycle import (
+    QNetCheckpointingAdapter,
+    QNetRolloutLifecycle,
+    QNetTrainingLifecycle,
+)
 
 
 class Q_Network_Family(object):
@@ -162,6 +165,7 @@ class Q_Network_Family(object):
         # Logging throttle based on last log step
         self._last_log_step = 0
         self.training_lifecycle = QNetTrainingLifecycle(self)
+        self.rollout_lifecycle = QNetRolloutLifecycle(self)
         self.checkpointing_adapter = QNetCheckpointingAdapter(self)
 
         # Control model initialization timing across children
@@ -349,67 +353,10 @@ class Q_Network_Family(object):
             self.save_params(self.logger_run.get_local_path("params"))
 
     def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
-        obs, info = self.env.reset()
-        obs = [np.expand_dims(obs, axis=0)]
-        self.lossque = deque(maxlen=10)
-        eval_result = None
-
-        # Always run non-checkpointing flow; branching handled in learn()
-
-        for steps in pbar:
-            actions = self.actions(obs, self.update_eps)
-            next_obs, reward, terminated, truncated, info = self.env.step(actions[0][0])
-            next_obs = [np.expand_dims(next_obs, axis=0)]
-            self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
-            obs = next_obs
-
-            if terminated or truncated:
-                obs, info = self.env.reset()
-                obs = [np.expand_dims(obs, axis=0)]
-
-            if steps > self.learning_starts and steps % self.train_freq == 0:
-                self.update_eps = self.exploration.value(steps)
-                loss = self.train_step(steps, self.gradient_steps)
-                self.lossque.append(loss)
-
-            if steps % self.eval_freq == 0:
-                eval_result = self.eval(steps)
-
-            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
-                pbar.set_description(self.discription(eval_result))
+        return self.rollout_lifecycle.learn_single_env(pbar, callback, log_interval)
 
     def learn_VectorizedEnv(self, pbar, callback=None, log_interval=1000):
-        self.lossque = deque(maxlen=10)
-        eval_result = None
-
-        # Always run non-checkpointing flow; branching handled in learn()
-
-        for steps in pbar:
-            self.update_eps = self.exploration.value(steps)
-            obs = self.env.current_obs()
-            actions = self.actions([obs], self.update_eps)
-            self.env.step(actions)
-
-            if steps > self.learning_starts and steps % self.train_freq == 0:
-                for idx in range(self.worker_size):
-                    loss = self.train_step(steps + idx, self.gradient_steps)
-                    self.lossque.append(loss)
-
-            (
-                next_obses,
-                rewards,
-                terminateds,
-                truncateds,
-                infos,
-            ) = self.env.get_result()
-
-            self.replay_buffer.add([obs], actions, rewards, [next_obses], terminateds, truncateds)
-
-            if steps % self.eval_freq == 0:
-                eval_result = self.eval(steps)
-
-            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
-                pbar.set_description(self.discription(eval_result))
+        return self.rollout_lifecycle.learn_vectorized_env(pbar, callback, log_interval)
 
     def eval(self, steps):
         # Deterministic greedy evaluation using public actions() API.
@@ -430,113 +377,19 @@ class Q_Network_Family(object):
         )
 
     def learn_SingleEnv_checkpointing(self, pbar, callback=None, log_interval=1000, obs=None):
-        # Initialize required state if not provided
-        if obs is None:
-            obs, info = self.env.reset()
-            obs = [np.expand_dims(obs, axis=0)]
-        self.lossque = deque(maxlen=10)
-        eval_result = None
-
-        score = 0.0
-        eplen = 0
-
-        for steps in pbar:
-            eplen += 1
-            actions = self.actions(obs, self.update_eps)
-            next_obs, reward, terminated, truncated, info = self.env.step(actions[0][0])
-            next_obs = [np.expand_dims(next_obs, axis=0)]
-            self.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
-            score += float(reward)
-            obs = next_obs
-
-            if terminated or truncated:
-                if steps > self.learning_starts:
-                    ckpt_success = self._checkpoint_on_episode_end(
-                        steps,
-                        score,
-                        eplen,
-                        train_and_reset_callback=self.checkpointing_adapter.train_and_reset,
-                    )
-                else:
-                    ckpt_success = True  # No checkpointing yet, so consider it successful
-                score = 0.0
-                eplen = 0
-
-                # Use true_reset if checkpointing failed and true_reset is available
-                if not ckpt_success and self._has_true_reset():
-                    obs, info = self.env.true_reset()
-                else:
-                    obs, info = self.env.reset()
-                obs = [np.expand_dims(obs, axis=0)]
-
-            # Maintain epsilon schedule - only update on training steps for consistency with non-checkpointing flow
-            if steps > self.learning_starts and steps % self.train_freq == 0:
-                self.update_eps = self.exploration.value(steps)
-
-            if steps % self.eval_freq == 0:
-                eval_result = self.eval(steps)
-
-            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
-                pbar.set_description(self.discription(eval_result))
+        return self.rollout_lifecycle.learn_single_env_checkpointing(
+            pbar,
+            callback,
+            log_interval,
+            obs,
+        )
 
     def learn_VectorizedEnv_checkpointing(self, pbar, callback=None, log_interval=1000):
-        self.lossque = deque(maxlen=10)
-        eval_result = None
-
-        scores = np.zeros([self.worker_size], dtype=np.float64)
-        eplens = np.zeros([self.worker_size], dtype=np.int32)
-
-        for steps in pbar:
-            self.update_eps = self.exploration.value(steps)
-            obs = self.env.current_obs()
-            actions = self.actions([obs], self.update_eps)
-            self.env.step(actions)
-
-            (
-                next_obses,
-                rewards,
-                terminateds,
-                truncateds,
-                infos,
-            ) = self.env.get_result()
-
-            scores += rewards
-            eplens += 1
-
-            self.replay_buffer.add([obs], actions, rewards, [next_obses], terminateds, truncateds)
-
-            if steps > self.learning_starts:
-                done = np.logical_or(terminateds, truncateds)
-                done_idx = np.where(done)[0]
-                ckpt_results = []
-                for idx in done_idx:
-                    ckpt_success = self._checkpoint_on_episode_end(
-                        steps,
-                        float(scores[idx]),
-                        int(eplens[idx]),
-                        self.checkpointing_adapter.train_and_reset,
-                    )
-                    ckpt_results.append((idx, ckpt_success))
-                    scores[idx] = 0.0
-                    eplens[idx] = 0
-
-                # Check if any checkpointing failed and true_reset is available
-                # For vectorized environments, we apply true_reset to the entire environment
-                # if any worker had a checkpointing failure
-                if self._has_true_reset() and any(not success for _, success in ckpt_results):
-                    # Reset the entire vectorized environment with true_reset
-                    # This will affect all workers, but ensures consistency
-                    try:
-                        self.env.true_reset()
-                    except Exception:
-                        # Fallback to regular reset if true_reset fails
-                        self.env.reset()
-
-            if steps % self.eval_freq == 0:
-                eval_result = self.eval(steps)
-
-            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
-                pbar.set_description(self.discription(eval_result))
+        return self.rollout_lifecycle.learn_vectorized_env_checkpointing(
+            pbar,
+            callback,
+            log_interval,
+        )
 
     def test(self, episode=10):
         with self.logger as self.logger_run:

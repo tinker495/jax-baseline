@@ -6,8 +6,11 @@ keep their JIT-compiled tuple returns and translate them into a lifecycle
 result on the Python side via `_train_on_batch`.
 """
 
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Protocol
+
+import numpy as np
 
 
 @dataclass(frozen=True)
@@ -199,6 +202,196 @@ class QNetTrainingLifecycle:
             if hasattr(logger_run, "log_histogram"):
                 for histogram_name, histogram_value in report.histograms.items():
                     logger_run.log_histogram(histogram_name, histogram_value, steps)
+
+
+class QNetRolloutLifecycle:
+    """Environment rollout lifecycle for the local Q-Net family.
+
+    This keeps the rollout/checkpoint loop Implementation in the family-local
+    lifecycle Module while the base class keeps the public learn_* Interface.
+    """
+
+    def __init__(self, agent):
+        self.agent = agent
+
+    def learn_single_env(self, pbar, callback=None, log_interval=1000):
+        obs, info = self.agent.env.reset()
+        obs = [np.expand_dims(obs, axis=0)]
+        self.agent.lossque = deque(maxlen=10)
+        eval_result = None
+
+        for steps in pbar:
+            actions = self.agent.actions(obs, self.agent.update_eps)
+            next_obs, reward, terminated, truncated, info = self.agent.env.step(actions[0][0])
+            next_obs = [np.expand_dims(next_obs, axis=0)]
+            self.agent.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
+            obs = next_obs
+
+            if terminated or truncated:
+                obs, info = self.agent.env.reset()
+                obs = [np.expand_dims(obs, axis=0)]
+
+            if steps > self.agent.learning_starts and steps % self.agent.train_freq == 0:
+                self.agent.update_eps = self.agent.exploration.value(steps)
+                loss = self.agent.train_step(steps, self.agent.gradient_steps)
+                self.agent.lossque.append(loss)
+
+            if steps % self.agent.eval_freq == 0:
+                eval_result = self.agent.eval(steps)
+
+            if (
+                steps % log_interval == 0
+                and eval_result is not None
+                and len(self.agent.lossque) > 0
+            ):
+                pbar.set_description(self.agent.discription(eval_result))
+
+    def learn_vectorized_env(self, pbar, callback=None, log_interval=1000):
+        self.agent.lossque = deque(maxlen=10)
+        eval_result = None
+
+        for steps in pbar:
+            self.agent.update_eps = self.agent.exploration.value(steps)
+            obs = self.agent.env.current_obs()
+            actions = self.agent.actions([obs], self.agent.update_eps)
+            self.agent.env.step(actions)
+
+            if steps > self.agent.learning_starts and steps % self.agent.train_freq == 0:
+                for idx in range(self.agent.worker_size):
+                    loss = self.agent.train_step(steps + idx, self.agent.gradient_steps)
+                    self.agent.lossque.append(loss)
+
+            (
+                next_obses,
+                rewards,
+                terminateds,
+                truncateds,
+                infos,
+            ) = self.agent.env.get_result()
+
+            self.agent.replay_buffer.add(
+                [obs], actions, rewards, [next_obses], terminateds, truncateds
+            )
+
+            if steps % self.agent.eval_freq == 0:
+                eval_result = self.agent.eval(steps)
+
+            if (
+                steps % log_interval == 0
+                and eval_result is not None
+                and len(self.agent.lossque) > 0
+            ):
+                pbar.set_description(self.agent.discription(eval_result))
+
+    def learn_single_env_checkpointing(self, pbar, callback=None, log_interval=1000, obs=None):
+        if obs is None:
+            obs, info = self.agent.env.reset()
+            obs = [np.expand_dims(obs, axis=0)]
+        self.agent.lossque = deque(maxlen=10)
+        eval_result = None
+
+        score = 0.0
+        eplen = 0
+
+        for steps in pbar:
+            eplen += 1
+            actions = self.agent.actions(obs, self.agent.update_eps)
+            next_obs, reward, terminated, truncated, info = self.agent.env.step(actions[0][0])
+            next_obs = [np.expand_dims(next_obs, axis=0)]
+            self.agent.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
+            score += float(reward)
+            obs = next_obs
+
+            if terminated or truncated:
+                if steps > self.agent.learning_starts:
+                    ckpt_success = self.agent._checkpoint_on_episode_end(
+                        steps,
+                        score,
+                        eplen,
+                        train_and_reset_callback=self.agent.checkpointing_adapter.train_and_reset,
+                    )
+                else:
+                    ckpt_success = True
+                score = 0.0
+                eplen = 0
+
+                if not ckpt_success and self.agent._has_true_reset():
+                    obs, info = self.agent.env.true_reset()
+                else:
+                    obs, info = self.agent.env.reset()
+                obs = [np.expand_dims(obs, axis=0)]
+
+            if steps > self.agent.learning_starts and steps % self.agent.train_freq == 0:
+                self.agent.update_eps = self.agent.exploration.value(steps)
+
+            if steps % self.agent.eval_freq == 0:
+                eval_result = self.agent.eval(steps)
+
+            if (
+                steps % log_interval == 0
+                and eval_result is not None
+                and len(self.agent.lossque) > 0
+            ):
+                pbar.set_description(self.agent.discription(eval_result))
+
+    def learn_vectorized_env_checkpointing(self, pbar, callback=None, log_interval=1000):
+        self.agent.lossque = deque(maxlen=10)
+        eval_result = None
+
+        scores = np.zeros([self.agent.worker_size], dtype=np.float64)
+        eplens = np.zeros([self.agent.worker_size], dtype=np.int32)
+
+        for steps in pbar:
+            self.agent.update_eps = self.agent.exploration.value(steps)
+            obs = self.agent.env.current_obs()
+            actions = self.agent.actions([obs], self.agent.update_eps)
+            self.agent.env.step(actions)
+
+            (
+                next_obses,
+                rewards,
+                terminateds,
+                truncateds,
+                infos,
+            ) = self.agent.env.get_result()
+
+            scores += rewards
+            eplens += 1
+
+            self.agent.replay_buffer.add(
+                [obs], actions, rewards, [next_obses], terminateds, truncateds
+            )
+
+            if steps > self.agent.learning_starts:
+                done = np.logical_or(terminateds, truncateds)
+                done_idx = np.where(done)[0]
+                ckpt_results = []
+                for idx in done_idx:
+                    ckpt_success = self.agent._checkpoint_on_episode_end(
+                        steps,
+                        float(scores[idx]),
+                        int(eplens[idx]),
+                        self.agent.checkpointing_adapter.train_and_reset,
+                    )
+                    ckpt_results.append((idx, ckpt_success))
+                    scores[idx] = 0.0
+                    eplens[idx] = 0
+
+                if self.agent._has_true_reset() and any(not success for _, success in ckpt_results):
+                    try:
+                        self.agent.env.true_reset()
+                    except Exception:
+                        self.agent.env.reset()
+
+            if steps % self.agent.eval_freq == 0:
+                eval_result = self.agent.eval(steps)
+
+            if (
+                steps % log_interval == 0
+                and eval_result is not None
+                and len(self.agent.lossque) > 0
+            ):
+                pbar.set_description(self.agent.discription(eval_result))
 
 
 class QNetCheckpointingAdapter:

@@ -5,8 +5,11 @@ metric logging, and checkpoint training pulses behind one lifecycle Interface.
 Algorithm Implementations only provide the per-batch gradient update.
 """
 
+from collections import deque
 from copy import deepcopy
 from dataclasses import dataclass, field
+
+import numpy as np
 
 
 @dataclass(frozen=True)
@@ -87,6 +90,176 @@ class DPGTrainingLifecycle:
             self.agent._last_log_step = steps
             for metric_name, metric_value in report.metrics.items():
                 logger_run.log_metric(metric_name, metric_value, steps)
+
+
+class DPGRolloutLifecycle:
+    """Environment rollout lifecycle for the local DPG family.
+
+    This Module keeps DPG rollout/checkpoint loop Implementation family-local
+    and lets the base class expose thin learn_* Interface methods.
+    """
+
+    def __init__(self, agent):
+        self.agent = agent
+
+    def learn_single_env(self, pbar, callback=None, log_interval=1000):
+        obs, info = self.agent.env.reset()
+        obs = [np.expand_dims(obs, axis=0)]
+        self.agent.lossque = deque(maxlen=10)
+        eval_result = None
+
+        for steps in pbar:
+            actions = self.agent.actions(obs, steps)
+            next_obs, reward, terminated, truncated, info = self.agent.env.step(actions[0])
+            next_obs = [np.expand_dims(next_obs, axis=0)]
+            self.agent.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
+            obs = next_obs
+
+            if terminated or truncated:
+                obs, info = self.agent.env.reset()
+                obs = [np.expand_dims(obs, axis=0)]
+
+            if steps > self.agent.learning_starts and steps % self.agent.train_freq == 0:
+                loss = self.agent.train_step(steps, self.agent.gradient_steps)
+                self.agent.lossque.append(loss)
+
+            if steps % self.agent.eval_freq == 0:
+                eval_result = self.agent.eval(steps)
+
+            if (
+                steps % log_interval == 0
+                and eval_result is not None
+                and len(self.agent.lossque) > 0
+            ):
+                pbar.set_description(self.agent.discription(eval_result))
+
+    def learn_vectorized_env(self, pbar, callback=None, log_interval=1000):
+        self.agent.lossque = deque(maxlen=10)
+        eval_result = None
+
+        for steps in pbar:
+            obs = self.agent.env.current_obs()
+            actions = self.agent.actions([obs], steps)
+            self.agent.env.step(actions)
+
+            if steps > self.agent.learning_starts and steps % self.agent.train_freq == 0:
+                for idx in range(self.agent.worker_size):
+                    loss = self.agent.train_step(steps + idx, self.agent.gradient_steps)
+                    self.agent.lossque.append(loss)
+
+            (
+                next_obses,
+                rewards,
+                terminateds,
+                truncateds,
+                infos,
+            ) = self.agent.env.get_result()
+
+            self.agent.replay_buffer.add(
+                [obs], actions, rewards, [next_obses], terminateds, truncateds
+            )
+
+            if steps % self.agent.eval_freq == 0:
+                eval_result = self.agent.eval(steps)
+
+            if (
+                steps % log_interval == 0
+                and eval_result is not None
+                and len(self.agent.lossque) > 0
+            ):
+                pbar.set_description(self.agent.discription(eval_result))
+
+    def learn_single_env_checkpointing(self, pbar, callback=None, log_interval=1000, obs=None):
+        if obs is None:
+            obs, info = self.agent.env.reset()
+            obs = [np.expand_dims(obs, axis=0)]
+        self.agent.lossque = deque(maxlen=10)
+        eval_result = None
+
+        score = 0.0
+        eplen = 0
+
+        for steps in pbar:
+            eplen += 1
+            actions = self.agent.actions(obs, steps)
+            next_obs, reward, terminated, truncated, info = self.agent.env.step(actions[0])
+            next_obs = [np.expand_dims(next_obs, axis=0)]
+            self.agent.replay_buffer.add(obs, actions[0], reward, next_obs, terminated, truncated)
+            score += float(reward)
+            obs = next_obs
+
+            if terminated or truncated:
+                if steps > self.agent.learning_starts:
+                    self.agent._checkpoint_on_episode_end(
+                        steps,
+                        score,
+                        eplen,
+                        train_and_reset_callback=self.agent.checkpointing_adapter.train_and_reset,
+                    )
+                score = 0.0
+                eplen = 0
+                obs, info = self.agent.env.reset()
+                obs = [np.expand_dims(obs, axis=0)]
+
+            if steps % self.agent.eval_freq == 0:
+                eval_result = self.agent.eval(steps)
+
+            if (
+                steps % log_interval == 0
+                and eval_result is not None
+                and len(self.agent.lossque) > 0
+            ):
+                pbar.set_description(self.agent.discription(eval_result))
+
+    def learn_vectorized_env_checkpointing(self, pbar, callback=None, log_interval=1000):
+        self.agent.lossque = deque(maxlen=10)
+        eval_result = None
+
+        scores = np.zeros([self.agent.worker_size], dtype=np.float64)
+        eplens = np.zeros([self.agent.worker_size], dtype=np.int32)
+
+        for steps in pbar:
+            obs = self.agent.env.current_obs()
+            actions = self.agent.actions([obs], steps)
+            self.agent.env.step(actions)
+
+            (
+                next_obses,
+                rewards,
+                terminateds,
+                truncateds,
+                infos,
+            ) = self.agent.env.get_result()
+
+            scores += rewards
+            eplens += 1
+
+            self.agent.replay_buffer.add(
+                [obs], actions, rewards, [next_obses], terminateds, truncateds
+            )
+
+            if steps > self.agent.learning_starts:
+                done_mask = np.logical_or(terminateds, truncateds)
+                done_indices = np.where(done_mask)[0]
+                for idx in done_indices:
+                    self.agent._checkpoint_on_episode_end(
+                        steps,
+                        float(scores[idx]),
+                        int(eplens[idx]),
+                        self.agent.checkpointing_adapter.train_and_reset,
+                    )
+                    scores[idx] = 0.0
+                    eplens[idx] = 0
+
+            if steps % self.agent.eval_freq == 0:
+                eval_result = self.agent.eval(steps)
+
+            if (
+                steps % log_interval == 0
+                and eval_result is not None
+                and len(self.agent.lossque) > 0
+            ):
+                pbar.set_description(self.agent.discription(eval_result))
 
 
 class DPGCheckpointingAdapter:
