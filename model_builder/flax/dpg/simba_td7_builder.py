@@ -90,7 +90,7 @@ class Critic(nn.Module):
 
 def model_builder_maker(observation_space, action_size, policy_kwargs):
     policy_kwargs = {} if policy_kwargs is None else policy_kwargs
-    if "embedding_mode" in policy_kwargs.keys():
+    if "embedding_mode" in policy_kwargs:
         embedding_mode = policy_kwargs["embedding_mode"]
         del policy_kwargs["embedding_mode"]
     else:
@@ -155,7 +155,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                     encoder_params,
                     [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
                     method=encoder_model.feature_and_zs,
-                )
+                ),
             )
 
             critic_params = critic_model.init(
@@ -165,7 +165,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                     [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
                     np.zeros((1, *action_size), dtype=np.float32),
                 ),
-                np.zeros((1, *action_size), dtype=np.float32)
+                np.zeros((1, *action_size), dtype=np.float32),
             )
 
             if print_model:

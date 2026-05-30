@@ -18,7 +18,7 @@ class APE_X_C51(Ape_X_Family):
         categorial_bar_n=51,
         categorial_max=250,
         categorial_min=-250,
-        **kwargs
+        **kwargs,
     ):
 
         self.categorial_bar_n = categorial_bar_n

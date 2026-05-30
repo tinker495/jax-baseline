@@ -252,6 +252,3 @@ class Ape_X_Family(object):
         ray.wait(jobs, timeout=300)
         time.sleep(1)
         self.m.shutdown()
-
-
-# Param_server and Logger_server are provided by `jax_baselines.APE_X.common_servers`

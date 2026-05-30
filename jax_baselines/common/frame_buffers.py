@@ -71,24 +71,10 @@ class FrameStackReplayBuffer:
     def __len__(self) -> int:
         return min(self._count, self.max_size)
 
-    @property
-    def storage(self):
-        return self
-
-    @property
-    def buffer_size(self) -> int:
-        return self.max_size
-
     def _ready(self) -> int:
         # transitions whose full n-step window is observable: exclude the newest
         # (n_step-1) that may still be growing toward a boundary or full window.
         return max(0, min(self._count, self.max_size) - (self.n_step - 1) - 1)
-
-    def can_sample(self, n_samples: int) -> bool:
-        return self._ready() >= n_samples
-
-    def is_full(self) -> bool:
-        return self._count >= self.max_size
 
     def episode_end(self):
         # add() already advances the episode on terminated/truncated; kept for

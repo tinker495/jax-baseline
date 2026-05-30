@@ -125,7 +125,7 @@ class APE_X_IQN(Ape_X_Family):
                 self.opt_state,
                 steps,
                 next(self.key_seq) if self.param_noise else None,
-                **data
+                **data,
             )
 
             self.replay_buffer.update_priorities(data["indexes"], new_priorities)

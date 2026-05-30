@@ -24,7 +24,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         kl_range=0.008,
         kl_coef=5,
         value_clip=2.0,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(env_builder, model_builder_maker, **kwargs)
 

@@ -77,7 +77,7 @@ def model_builder_maker(
     observation_space, action_space, dueling_model, param_noise, categorial_bar_n, policy_kwargs
 ):
     policy_kwargs = {} if policy_kwargs is None else policy_kwargs
-    if "embedding_mode" in policy_kwargs.keys():
+    if "embedding_mode" in policy_kwargs:
         embedding_mode = policy_kwargs["embedding_mode"]
         del policy_kwargs["embedding_mode"]
     else:
@@ -92,7 +92,7 @@ def model_builder_maker(
                     dueling=dueling_model,
                     noisy=param_noise,
                     categorial_bar_n=categorial_bar_n,
-                    **policy_kwargs
+                    **policy_kwargs,
                 )
 
             def __call__(self, x):

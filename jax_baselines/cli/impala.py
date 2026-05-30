@@ -42,13 +42,12 @@ def main(argv=None):
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
     args = parser.parse_args(argv)
-    env_name = args.env
 
     manager = mp.get_context().Manager()
 
     ray.init(num_cpus=args.worker + 4, num_gpus=0)
 
-    workers = [Impala_Worker.remote(env_name, seed=args.seed + i) for i in range(args.worker)]
+    workers = [Impala_Worker.remote(args.env, seed=args.seed + i) for i in range(args.worker)]
 
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 

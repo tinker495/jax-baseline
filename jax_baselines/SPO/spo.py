@@ -18,7 +18,7 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
         epoch_num=4,
         value_clip=2.0,
         ppo_eps=0.2,
-        **kwargs
+        **kwargs,
     ):
 
         self.name = "SPO"

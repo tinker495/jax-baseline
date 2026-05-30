@@ -186,7 +186,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
                 key,
             )
 
-        (policy_params, critic_params, log_ent_coef, opt_policy_state, key,) = jax.lax.cond(
+        (policy_params, critic_params, log_ent_coef, opt_policy_state, key) = jax.lax.cond(
             step % self.policy_delay == 0,
             lambda x: _opt_actor(*x),
             lambda x: x,

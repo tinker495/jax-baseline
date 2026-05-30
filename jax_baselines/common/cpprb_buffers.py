@@ -170,20 +170,6 @@ class ReplayBuffer(object):
     def __len__(self) -> int:
         return self.buffer.get_stored_size()
 
-    @property
-    def storage(self):
-        return self.buffer
-
-    @property
-    def buffer_size(self) -> int:
-        return self.max_size
-
-    def can_sample(self, n_samples: int) -> bool:
-        return len(self) >= n_samples
-
-    def is_full(self) -> int:
-        return len(self) == self.max_size
-
     def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False):
         obsdict = dict(zip(self.obsdict.keys(), obs_t))
         nextobsdict = dict(zip(self.nextobsdict.keys(), nxtobs_t))
