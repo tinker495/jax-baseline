@@ -52,3 +52,6 @@ include = [
 
 [tool.uv]
 package = true
+
+[tool.uv.sources]
+cpprb = { git = "https://github.com/tinker495/cpprb" }
