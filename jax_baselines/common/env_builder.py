@@ -37,13 +37,6 @@ def get_env_builder(env_name, **kwargs):
 
 
 class Env(ABC):
-    class EnvInfo:
-        env_type: str
-        env_id: str
-        num_workers: int
-        observation_space: list[tuple[int, ...]]
-        action_space: list[tuple[int, ...]]
-
     @abstractmethod
     def __init__(self, **kwargs):
         pass
@@ -185,7 +178,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
             self.action_conv = lambda a: np.asarray(a)
 
         # Initialize environment
-        raw_obs, self._reset_info = self.env.reset()
+        raw_obs, _ = self.env.reset()
         self.obs = self._process_observations(raw_obs)
 
         # Storage for step/get_result pattern compatibility
@@ -373,7 +366,7 @@ class GymVectorizedEnv(VectorizedEnv):
             self.action_conv = lambda a: np.asarray(a)
 
         # Initialize
-        self.obs, self._reset_info = self.env.reset()
+        self.obs, _ = self.env.reset()
         self._pending_result = None
 
     def get_info(self):

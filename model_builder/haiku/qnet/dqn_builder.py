@@ -15,7 +15,6 @@ class Model(hk.Module):
         self.action_size = action_size
         self.node = node
         self.hidden_n = hidden_n
-        self.noisy = noisy
         self.dueling = dueling
         if not noisy:
             self.layer = hk.Linear

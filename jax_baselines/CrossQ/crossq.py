@@ -58,8 +58,8 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         else:
             try:
                 self.log_ent_coef = jnp.log(float(self._ent_coef))
-            except ValueError:
-                raise ValueError("Invalid value for ent_coef: {}".format(self._ent_coef))
+            except ValueError as err:
+                raise ValueError(f"Invalid value for ent_coef: {self._ent_coef}") from err
             self.auto_entropy = False
 
         self._get_actions = jax.jit(self._get_actions)

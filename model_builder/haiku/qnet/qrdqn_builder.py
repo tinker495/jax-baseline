@@ -17,7 +17,6 @@ class Model(hk.Module):
         self.action_size = action_size
         self.node = node
         self.hidden_n = hidden_n
-        self.noisy = noisy
         self.dueling = dueling
         self.support_n = support_n
         if not noisy:

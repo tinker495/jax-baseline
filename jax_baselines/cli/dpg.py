@@ -62,11 +62,9 @@ def main(argv=None):
         parser.error("--simba and --simbav2 cannot be used together")
 
     use_simba_features = args.simba or args.simbav2
-    env_name = args.env
-    env_builder, env_info = get_env_builder(
-        env_name, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
+    env_builder, _ = get_env_builder(
+        args.env, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
     )
-    env_name = env_info["env_id"]
 
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 

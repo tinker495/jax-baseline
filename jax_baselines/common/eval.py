@@ -39,7 +39,7 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
     total_truncated = np.zeros(eval_eps)
 
     # Prefer a true environment reset if available (e.g., Atari EpisodicLifeEnv)
-    if hasattr(eval_env, "true_reset") and callable(getattr(eval_env, "true_reset")):
+    if hasattr(eval_env, "true_reset") and callable(eval_env.true_reset):
         obs, info = eval_env.true_reset()
     else:
         obs, info = eval_env.reset()

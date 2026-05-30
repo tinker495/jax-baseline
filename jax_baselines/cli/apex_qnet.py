@@ -61,16 +61,13 @@ def main(argv=None):
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
     args = parser.parse_args(argv)
-    env_name = args.env
 
     manager = mp.get_context().Manager()
 
     ray.init(num_cpus=args.worker + 2, num_gpus=0)
 
-    env_builder, env_info = get_env_builder(env_name)
+    env_builder, _ = get_env_builder(args.env)
     workers = [Ape_X_Worker.remote(env_builder, seed=args.seed + i) for i in range(args.worker)]
-
-    env_name = env_info["env_id"]
 
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 

@@ -118,7 +118,6 @@ def scaled_by_reset(
         soft_reseted = jax.tree_util.tree_map(
             lambda new, old: tau * new + (1.0 - tau) * old, new_tensors, old_tensors
         )
-        # name dense is hardreset
         return soft_reseted, optimizer.init(soft_reseted)
 
     tensors, optimizer_state = jax.lax.cond(
@@ -143,7 +142,6 @@ def scaled_by_reset_with_filter(
         soft_reseted = jax.tree_util.tree_map(
             lambda new, old, tau: tau * new + (1.0 - tau) * old, new_tensors, old_tensors, taus
         )
-        # name dense is hardreset
         return soft_reseted, optimizer.init(soft_reseted)
 
     tensors, optimizer_state = jax.lax.cond(

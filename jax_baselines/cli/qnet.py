@@ -70,11 +70,9 @@ def main(argv=None):
     )
     parser.add_argument("--use_checkpointing", action="store_true")
     args = parser.parse_args(argv)
-    env_name = args.env
-    env_builder, env_info = get_env_builder(
-        env_name, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
+    env_builder, _ = get_env_builder(
+        args.env, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
     )
-    env_name = env_info["env_id"]
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n}
 
     if args.algo == "DQN":
