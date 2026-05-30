@@ -24,7 +24,6 @@ class Impala_Worker(object):
             self.env = make_wrap_atari(env_name_, clip_rewards=True)
         else:
             self.env = gym.make(env_name_)
-        self.base_seed = seed
         seed_prngs(seed)
         seed_env(self.env, seed)
 

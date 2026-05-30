@@ -135,7 +135,7 @@ class BBF(SPR):
             start_horizon + (end_horizon - start_horizon) * ratio
         )  # 0.97 ~ 0.997 increasing at 1/4
         gamma = 1 - 1 / horizon
-        return n_steps, gamma  # self.gamma
+        return n_steps, gamma
 
     def _train_step(
         self,
@@ -211,7 +211,7 @@ class BBF(SPR):
             transition_obses = [o[:, : (self.prediction_depth + 1)] for o in obses]
             transition_actions = actions[:, : self.prediction_depth]
             transition_filled = filled[:, : self.prediction_depth]
-            (loss, (centropy, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
+            (_, (centropy, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
                 params,
                 target_params,
                 transition_obses,

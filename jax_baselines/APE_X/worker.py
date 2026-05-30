@@ -19,7 +19,6 @@ class Ape_X_Worker(object):
         mp.current_process().authkey = base64.b64decode(self.encoded)
         from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
 
-        self.base_seed = seed
         seed_prngs(seed)
 
         # Accept either an env id (string) or an env_builder callable

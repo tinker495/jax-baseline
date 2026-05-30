@@ -272,10 +272,21 @@ class TQC(Deteministic_Policy_Gradient_Family):
         )
         return actor_loss, log_prob
 
-    def _target(self, params, target_params, rewards, nxtobses, not_terminateds, key, ent_coef):
-        next_feature = self.preproc(target_params, key, nxtobses)
-        policy, log_prob = self._get_pi_log_prob(params, self.preproc(params, key, nxtobses), key)
-        qnets_pi = self.critic(target_params, key, next_feature, policy)
+    def _target(
+        self,
+        policy_params,
+        target_critic_params,
+        rewards,
+        nxtobses,
+        not_terminateds,
+        key,
+        ent_coef,
+    ):
+        next_feature = self.preproc(target_critic_params, key, nxtobses)
+        policy, log_prob = self._get_pi_log_prob(
+            policy_params, self.preproc(policy_params, key, nxtobses), key
+        )
+        qnets_pi = self.critic(target_critic_params, key, next_feature, policy)
         if self.mixture_type == "min":
             next_q = jnp.min(jnp.stack(qnets_pi, axis=-1), axis=-1) - ent_coef * log_prob
         elif self.mixture_type == "truncated":

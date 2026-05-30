@@ -39,7 +39,6 @@ class Ape_X_Worker(object):
             self.env = gym.make(env_name_)
             self.env_id = env_name_
         seed_env(self.env, seed)
-        self.base_seed = seed
 
     def get_info(self):
         return {

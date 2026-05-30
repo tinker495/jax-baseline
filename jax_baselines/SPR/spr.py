@@ -325,7 +325,7 @@ class SPR(Q_Network_Family):
             transition_obses = [o[:, : (self.prediction_depth + 1)] for o in obses]
             transition_actions = actions[:, : self.prediction_depth]
             transition_filled = filled[:, : self.prediction_depth]
-            (loss, (centropy, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
+            (_, (centropy, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
                 params,
                 target_params,
                 transition_obses,
