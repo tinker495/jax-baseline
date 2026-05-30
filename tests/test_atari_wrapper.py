@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 import numpy as np
 
@@ -41,7 +42,7 @@ def main():
             obs_ep.append(env.step(env.action_space.sample())[0])
         obs.extend(obs_ep)
 
-    save_obs(obs, "test/test")
+    save_obs(obs, str(Path(__file__).resolve().parent / "test"))
 
 
 if __name__ == "__main__":

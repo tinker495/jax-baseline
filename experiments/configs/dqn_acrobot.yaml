@@ -1,0 +1,25 @@
+# translated from test/test_dqn_acrobot.sh
+family: qnet
+runtime:
+  device: 0
+base:
+  experiment_name: DQN_Acrobot-v1
+  env: Acrobot-v1
+  learning_rate: 0.0001
+  steps: 5e5
+  batch: 32
+  train_freq: 4
+  final_eps: 0.01
+  learning_starts: 20000
+  gamma: 0.99
+  buffer_size: 1e5
+  exploration_fraction: 0.2
+  use_checkpointing: true
+  node: 512
+  hidden_n: 1
+  optimizer: adamw
+  target_update: 100
+variants:
+  - {algo: DQN}
+  - {algo: IQN}
+  - {algo: FQF}

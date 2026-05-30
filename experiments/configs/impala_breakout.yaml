@@ -1,0 +1,23 @@
+# translated from test/test_impala_breakout.sh
+# Note: CUDA_VISIBLE_DEVICES changes mid-script. Active PPO run uses device=1.
+# Commented A2C would have used device=3; preserved as enabled: false.
+family: impala
+runtime:
+  device: 1
+base:
+  env: BreakoutNoFrameskip-v4
+  steps: 5e5
+  batch: 128
+  gamma: 0.99
+  worker: 16
+  ent_coef: 1e-2
+  node: 512
+  hidden_n: 1
+  sample_size: 32
+  update_freq: 100
+  val_coef: 0.6
+  buffer_size: 256
+  optimizer: rmsprop
+variants:
+  - {algo: PPO, learning_rate: 0.00003}
+  - {algo: A2C, learning_rate: 0.0003, enabled: false}

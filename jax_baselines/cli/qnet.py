@@ -5,6 +5,7 @@ from jax_baselines.BBF.bbf import BBF
 from jax_baselines.BBF.hl_gauss_bbf import HL_GAUSS_BBF
 from jax_baselines.C51.c51 import C51
 from jax_baselines.C51.hl_gauss_c51 import HL_GAUSS_C51
+from jax_baselines.cli._common import default_logdir
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.DQN.dqn import DQN
 from jax_baselines.FQF.fqf import FQF
@@ -17,7 +18,8 @@ os.environ["XLA_FLAGS"] = (
     "--xla_gpu_triton_gemm_any=True " "--xla_gpu_enable_latency_hiding_scheduler=true "
 )
 
-if __name__ == "__main__":
+
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--experiment_name", type=str, default="Q_network", help="experiment name")
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
@@ -41,7 +43,7 @@ if __name__ == "__main__":
     parser.add_argument("--off_policy_fix", action="store_true")
     parser.add_argument("--munchausen", action="store_true")
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
-    parser.add_argument("--logdir", type=str, default="log/qnet/", help="log file dir")
+    parser.add_argument("--logdir", type=str, default=default_logdir("qnet"), help="log file dir")
     parser.add_argument("--seed", type=int, default=0, help="random seed")
     parser.add_argument("--max", type=float, default=10, help="c51 max")
     parser.add_argument("--min", type=float, default=-10, help="c51 min")
@@ -70,13 +72,12 @@ if __name__ == "__main__":
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
     parser.add_argument("--use_checkpointing", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     env_name = args.env
     env_builder, env_info = get_env_builder(
         env_name, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
     )
     env_name = env_info["env_id"]
-    env_type = env_info["env_type"]
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n}
 
     if args.algo == "DQN":
@@ -385,3 +386,7 @@ if __name__ == "__main__":
     agent.learn(int(args.steps), experiment_name=args.experiment_name)
 
     agent.test()
+
+
+if __name__ == "__main__":
+    main()

@@ -5,6 +5,7 @@ import os
 import ray
 
 from jax_baselines.A2C.impala import IMPALA
+from jax_baselines.cli._common import default_logdir
 from jax_baselines.IMPALA.worker import Impala_Worker
 from jax_baselines.PPO.impala_ppo import IMPALA_PPO
 from jax_baselines.SPO.impala_spo import IMPALA_SPO
@@ -14,7 +15,8 @@ os.environ["XLA_FLAGS"] = (
     "--xla_gpu_triton_gemm_any=True " "--xla_gpu_enable_latency_hiding_scheduler=true "
 )
 
-if __name__ == "__main__":
+
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--learning_rate", type=float, default=0.0002, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
@@ -29,7 +31,7 @@ if __name__ == "__main__":
     parser.add_argument("--sample_size", type=int, default=1, help="sample_size")
     parser.add_argument("--batch", type=int, default=256, help="batch size")
     parser.add_argument("--steps", type=float, default=1e5, help="step size")
-    parser.add_argument("--logdir", type=str, default="log/impala", help="log file dir")
+    parser.add_argument("--logdir", type=str, default=default_logdir("impala"), help="log file dir")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     parser.add_argument("--node", type=int, default=256, help="network node number")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
@@ -42,7 +44,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     env_name = args.env
 
     manager = mp.get_context().Manager()
@@ -50,8 +52,6 @@ if __name__ == "__main__":
     ray.init(num_cpus=args.worker + 4, num_gpus=0)
 
     workers = [Impala_Worker.remote(env_name, seed=args.seed + i) for i in range(args.worker)]
-
-    env_type = "SingleEnv"
 
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 
@@ -145,3 +145,7 @@ if __name__ == "__main__":
         )
 
     agent.learn(int(args.steps))
+
+
+if __name__ == "__main__":
+    main()

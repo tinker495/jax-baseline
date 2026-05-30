@@ -5,6 +5,7 @@ import os
 import ray
 
 from jax_baselines.APE_X.dpg_worker import Ape_X_Worker
+from jax_baselines.cli._common import default_logdir
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.DDPG.apex_ddpg import APE_X_DDPG
 from jax_baselines.TD3.apex_td3 import APE_X_TD3
@@ -13,7 +14,8 @@ os.environ["XLA_FLAGS"] = (
     "--xla_gpu_triton_gemm_any=True " "--xla_gpu_enable_latency_hiding_scheduler=true "
 )
 
-if __name__ == "__main__":
+
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
@@ -34,7 +36,9 @@ if __name__ == "__main__":
         help="n step setting when n > 1 is n step td method",
     )
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
-    parser.add_argument("--logdir", type=str, default="log/apex_dpg/", help="log file dir")
+    parser.add_argument(
+        "--logdir", type=str, default=default_logdir("apex_dpg"), help="log file dir"
+    )
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     parser.add_argument("--n_support", type=int, default=25, help="n_support for QRDQN,IQN,FQF")
     parser.add_argument("--mixture", type=str, default="truncated", help="mixture type")
@@ -52,7 +56,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     env_name = args.env
 
     manager = mp.get_context().Manager()
@@ -62,7 +66,6 @@ if __name__ == "__main__":
     env_builder, env_info = get_env_builder(env_name)
     workers = [Ape_X_Worker.remote(env_builder, seed=args.seed + i) for i in range(args.worker)]
 
-    env_type = env_info["env_type"]
     env_name = env_info["env_id"]
 
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
@@ -121,3 +124,7 @@ if __name__ == "__main__":
         )
 
     agent.learn(int(args.steps))
+
+
+if __name__ == "__main__":
+    main()

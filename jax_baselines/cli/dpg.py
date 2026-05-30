@@ -1,6 +1,7 @@
 import argparse
 import os
 
+from jax_baselines.cli._common import default_logdir
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DDPG.ddpg import DDPG
@@ -13,7 +14,8 @@ os.environ["XLA_FLAGS"] = (
     "--xla_gpu_triton_gemm_any=True " "--xla_gpu_enable_latency_hiding_scheduler=true "
 )
 
-if __name__ == "__main__":
+
+def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--experiment_name", type=str, default="DPG", help="experiment name")
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
@@ -38,7 +40,7 @@ if __name__ == "__main__":
     parser.add_argument("--simba", action="store_true")
     parser.add_argument("--simbav2", action="store_true")
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
-    parser.add_argument("--logdir", type=str, default="log/dpg/", help="log file dir")
+    parser.add_argument("--logdir", type=str, default=default_logdir("dpg"), help="log file dir")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     parser.add_argument("--n_support", type=int, default=25, help="n_support for QRDQN,IQN,FQF")
     parser.add_argument("--mixture", type=str, default="truncated", help="mixture type")
@@ -57,7 +59,7 @@ if __name__ == "__main__":
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
     parser.add_argument("--use_checkpointing", action="store_true")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.simba and args.simbav2:
         parser.error("--simba and --simbav2 cannot be used together")
@@ -68,7 +70,6 @@ if __name__ == "__main__":
         env_name, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
     )
     env_name = env_info["env_id"]
-    env_type = env_info["env_type"]
 
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 
@@ -293,3 +294,7 @@ if __name__ == "__main__":
     agent.learn(int(args.steps), experiment_name=args.experiment_name)
 
     agent.test()
+
+
+if __name__ == "__main__":
+    main()
