@@ -303,7 +303,7 @@ class HL_GAUSS_BBF(BBF):
         )
         centropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
         mean_centropy = jnp.mean(centropy)
-        total_loss = mean_centropy + rprloss
+        total_loss = mean_centropy + self.spr_weight * rprloss
         return total_loss, (
             centropy,
             mean_centropy,

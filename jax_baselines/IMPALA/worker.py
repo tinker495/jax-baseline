@@ -82,7 +82,7 @@ class Impala_Worker(object):
                 if update.is_set():
                     params = ray.get(param_server.get_params.remote())
                     update.clear()
-                for i in range(local_size):
+                for _ in range(local_size):
                     eplen += 1
                     actions, log_prob = get_action_prob(params, obs)
                     next_obs, reward, terminated, truncated, info = self.env.step(

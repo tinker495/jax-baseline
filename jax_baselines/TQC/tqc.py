@@ -38,6 +38,10 @@ class TQC(Deteministic_Policy_Gradient_Family):
         self.delta = delta
         self.critic_num = critic_num
         self.quantile_drop = int(max(np.round(critic_num * n_support * quantile_drop), 1))
+        if mixture_type not in ("truncated", "min"):
+            raise ValueError(
+                f"Invalid mixture_type '{mixture_type}', expected 'truncated' or 'min'"
+            )
         self.mixture_type = mixture_type
         self.risk_avoidance = risk_avoidance
 
@@ -289,7 +293,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         qnets_pi = self.critic(target_critic_params, key, next_feature, policy)
         if self.mixture_type == "min":
             next_q = jnp.min(jnp.stack(qnets_pi, axis=-1), axis=-1) - ent_coef * log_prob
-        elif self.mixture_type == "truncated":
+        else:
             next_q = truncated_mixture(qnets_pi, self.quantile_drop) - ent_coef * log_prob
         return (not_terminateds * next_q * self._gamma) + rewards
 

@@ -75,7 +75,6 @@ def get_remote_env_info(workers, include_action_type=False):
         observation_space, action_size, env_type [, action_type]
     """
     import ray
-    from gymnasium import spaces
 
     if isinstance(workers, list):
         env_dict = ray.get(workers[0].get_info.remote())
