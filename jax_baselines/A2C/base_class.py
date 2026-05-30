@@ -178,9 +178,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
     def _loss_discrete(self):
         pass
 
-    def _get_actions(self, params, obses) -> np.ndarray:
-        pass
-
     def description(self, eval_result=None):
         description = ""
         if eval_result is not None:
@@ -294,20 +291,3 @@ class Actor_Critic_Policy_Gradient_Family(object):
             episode,
             conv_action=self.conv_action,
         )
-
-    def _compute_entropy_discrete(self, prob):
-        entropy_h = -jnp.sum(prob * jnp.log(jnp.maximum(prob, 1e-8)), axis=-1, keepdims=True)
-        return entropy_h
-
-    def _compute_entropy_continuous(self, mu, log_std):
-        dim = mu.shape[-1]
-        entropy_h = jnp.sum(log_std, axis=-1, keepdims=True) + 0.5 * dim * (
-            1.0 + jnp.log(2.0 * jnp.pi)
-        )
-        return entropy_h
-
-    def _apply_entropy_adv_shaping(self, entropy_h, adv):
-        psi_h = jnp.minimum(
-            self.ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa
-        )
-        return adv + psi_h

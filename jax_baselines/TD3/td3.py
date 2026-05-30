@@ -24,7 +24,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         self.name = "TD3"
         self.action_noise = action_noise
         self.target_action_noise = action_noise * target_action_noise_mul
-        self.action_noise_clamp = 0.5  # self.target_action_noise*1.5
+        self.action_noise_clamp = 0.5
         self.policy_delay = policy_delay
 
         super().__init__(env_builder, model_builder_maker, **kwargs)

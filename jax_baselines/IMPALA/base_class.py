@@ -111,12 +111,6 @@ class IMPALA_Family(object):
             else self.get_logprob_continuous
         )
 
-    def model_builder(self):
-        pass
-
-    def actor_builder(self):
-        pass
-
     def get_logprob_discrete(self, prob, action, key, out_prob=False):
         prob = jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0)
         action = action.astype(jnp.int32)

@@ -22,7 +22,7 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
 
         self.action_noise = self.exploration_initial_eps ** (1 + self.exploration_decay)
         self.target_action_noise = self.action_noise * target_action_noise_mul
-        self.action_noise_clamp = 0.5  # self.target_action_noise*1.5
+        self.action_noise_clamp = 0.5
         self.policy_delay = policy_delay
 
     def setup_model(self):

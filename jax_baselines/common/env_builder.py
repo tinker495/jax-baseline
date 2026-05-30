@@ -96,8 +96,7 @@ def _get_envpool_env_id(env_name: str) -> str:
     # Handle NoFrameskip Atari environments
     if "NoFrameskip" in env_name:
         # Convert "PongNoFrameskip-v4" to "Pong-v5"
-        base_name = env_name.replace("NoFrameskip", "").replace("-v4", "-v5")
-        return base_name
+        return env_name.replace("NoFrameskip", "").replace("-v4", "-v5")
 
     return env_name
 

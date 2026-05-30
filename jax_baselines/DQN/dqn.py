@@ -11,11 +11,8 @@ from jax_baselines.DQN.lifecycle import QNetTrainResult
 
 class DQN(Q_Network_Family):
     def __init__(self, env_builder: callable, model_builder_maker, **kwargs):
-
         self.name = "DQN"
         super().__init__(env_builder, model_builder_maker, **kwargs)
-
-        # Base class already handled conditional setup via self._init_setup_model
 
     def setup_model(self):
         model_builder = self.model_builder_maker(

@@ -5,7 +5,6 @@ class OUNoise(object):
     def __init__(self, sigma=0.2, theta=0.1, action_size=1, worker_size=1):
         self._theta = theta
         self._sigma = sigma
-        self.noise_prev = None
         self.action_size = action_size
         self.worker_size = worker_size
         self.noise_prev = np.random.normal(

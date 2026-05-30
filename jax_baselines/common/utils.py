@@ -260,8 +260,7 @@ def get_vtrace(rewards, rhos, c_ts, terminateds, truncateds, values, next_values
         (deltas, c_ts, terminateds, truncateds),
         reverse=True,
     )
-    v = A + values
-    return v
+    return A + values
 
 
 def kl_divergence_discrete(p, q, eps: float = 1e-8):

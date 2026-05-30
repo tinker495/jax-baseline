@@ -1,6 +1,5 @@
 from copy import deepcopy
 
-import dm_pix as pix
 import jax
 import jax.numpy as jnp
 import optax
@@ -13,10 +12,6 @@ from jax_baselines.common.utils import (
     soft_update,
 )
 from jax_baselines.DQN.lifecycle import QNetTrainResult
-from jax_baselines.SPR.efficent_buffer import (
-    PrioritizedTransitionReplayBuffer,
-    TransitionReplayBuffer,
-)
 from jax_baselines.SPR.spr import SPR
 
 
@@ -65,24 +60,6 @@ class HL_GAUSS_SPR(SPR):
 
         self._gamma = jnp.power(self.gamma, jnp.arange(self.n_step))
 
-    def get_memory_setup(self):
-        if self.prioritized_replay:
-            self.replay_buffer = PrioritizedTransitionReplayBuffer(
-                self.buffer_size,
-                self.observation_space,
-                1,
-                prediction_depth=max(self.prediction_depth, self.n_step),
-                alpha=self.prioritized_replay_alpha,
-                eps=self.prioritized_replay_eps,
-            )
-        else:
-            self.replay_buffer = TransitionReplayBuffer(
-                self.buffer_size,
-                self.observation_space,
-                1,
-                prediction_depth=max(self.prediction_depth, self.n_step),
-            )
-
     def setup_model(self):
         model_builder = self.model_builder_maker(
             self.observation_space,
@@ -123,42 +100,6 @@ class HL_GAUSS_SPR(SPR):
         # Use common JIT compilation
         self._compile_common_functions()
 
-    def _checkpoint_update_snapshot(self):
-        """HL_GAUSS_SPR checkpoint snapshot strategy: snapshot eval parameters."""
-        self.checkpoint_params = deepcopy(self.get_eval_params())
-
-    def get_behavior_params(self):
-        """HL_GAUSS_SPR uses target_params if scaled_by_reset, otherwise params for behavior."""
-        return self.target_params if self.scaled_by_reset else self.params
-
-    def get_q(self, params, obses, key=None) -> jnp.ndarray:
-        return self.model(params, key, self.preproc(params, key, obses))
-
-    def to_probs(self, target: jax.Array):
-        # target: [batch, 1]
-        def f(target):
-            cdf_evals = jax.scipy.special.erf((self.support - target) / (jnp.sqrt(2) * self.sigma))
-            z = cdf_evals[-1] - cdf_evals[0]
-            bin_probs = cdf_evals[1:] - cdf_evals[:-1]
-            return bin_probs / z
-
-        return jax.vmap(f)(target)
-
-    def to_scalar(self, probs: jax.Array):
-        # probs: [batch, n, support]
-        def f(probs):
-            centers = (self.support[:-1] + self.support[1:]) / 2
-            return jnp.sum(probs * centers)
-
-        return jax.vmap(jax.vmap(f))(probs)
-
-    def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        return jnp.argmax(
-            self.to_scalar(self.get_q(params, convert_jax(obses), key)),
-            axis=1,
-            keepdims=True,
-        )
-
     def _train_on_batch(self, data, context):
         (
             self.params,
@@ -184,53 +125,30 @@ class HL_GAUSS_SPR(SPR):
             metrics={"loss/rprloss": rprloss},
         )
 
-    def _image_augmentation(self, obs, key):
-        """Random augmentation for input images.
+    def to_probs(self, target: jax.Array):
+        # target: [batch, 1]
+        def f(target):
+            cdf_evals = jax.scipy.special.erf((self.support - target) / (jnp.sqrt(2) * self.sigma))
+            z = cdf_evals[-1] - cdf_evals[0]
+            bin_probs = cdf_evals[1:] - cdf_evals[:-1]
+            return bin_probs / z
 
-        Args:
-            obses (np.ndarray): input images  B x K x H x W x C
-            key (jax.random.PRNGKey): random key
+        return jax.vmap(f)(target)
 
-        Returns:
-            list(np.ndarray): augmented images
-        """
+    def to_scalar(self, probs: jax.Array):
+        # probs: [batch, n, support]
+        def f(probs):
+            centers = (self.support[:-1] + self.support[1:]) / 2
+            return jnp.sum(probs * centers)
 
-        def random_shift(obs, key):  # K x H x W x C
-            obs = jnp.pad(
-                obs,
-                (
-                    (self.shift_size, self.shift_size),
-                    (self.shift_size, self.shift_size),
-                    (0, 0),
-                ),
-                mode="constant",
-            )
-            obs = pix.random_crop(
-                key,
-                obs,
-                (
-                    obs.shape[0] - self.shift_size * 2,
-                    obs.shape[1] - self.shift_size * 2,
-                    obs.shape[2],
-                ),
-            )
-            return obs
+        return jax.vmap(jax.vmap(f))(probs)
 
-        def Intensity(obs, key):
-            noise = (
-                1.0 + jnp.clip(jax.random.normal(key, (1, 1, 1)), -2.0, 2.0) * self.intensity_scale
-            )
-            return obs * noise
-
-        def augment(obs, key):
-            subkey1, subkey2 = jax.random.split(key)
-            obs_len = obs.shape[0]
-            obs = jax.vmap(random_shift)(obs, jax.random.split(subkey1, obs_len))
-            obs = jax.vmap(Intensity)(obs, jax.random.split(subkey2, obs_len))
-            return obs
-
-        batch_size = obs.shape[0]
-        return jax.vmap(augment)(obs, jax.random.split(key, batch_size))
+    def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
+        return jnp.argmax(
+            self.to_scalar(self.get_q(params, convert_jax(obses), key)),
+            axis=1,
+            keepdims=True,
+        )
 
     def get_last_idx(self, params, obses, actions, filled, key):
         if self.n_step == 1:
@@ -399,32 +317,6 @@ class HL_GAUSS_SPR(SPR):
             rprloss,
         )
 
-    def _loss(
-        self,
-        params,
-        target_params,
-        obses,
-        actions,
-        filled,
-        parsed_obses,
-        parsed_actions,
-        target_distribution,
-        weights,
-        key,
-    ):
-        rprloss = self._represetation_loss(params, target_params, obses, actions, filled, key)
-        distribution = jnp.squeeze(
-            jnp.take_along_axis(self.get_q(params, parsed_obses, key), parsed_actions, axis=1)
-        )
-        centropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
-        mean_centropy = jnp.mean(centropy)
-        total_loss = mean_centropy + self.spr_weight * rprloss
-        return total_loss, (
-            centropy,
-            mean_centropy,
-            rprloss,
-        )
-
     def _target(
         self,
         params,
@@ -475,16 +367,6 @@ class HL_GAUSS_SPR(SPR):
         target_q = (next_vals * gammas) + rewards
         target_distribution = self.to_probs(target_q)
         return target_distribution
-
-    def run_name_update(self, run_name):
-        if self.scaled_by_reset:
-            run_name = "SR-" + run_name
-        if self.munchausen:
-            run_name = "M-" + run_name
-        if self.off_policy_fix:
-            n_step_str = "OF_"
-            run_name = n_step_str + run_name
-        return run_name
 
     def learn(
         self,

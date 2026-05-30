@@ -54,7 +54,7 @@ class EpochBuffer:
 
 @ray.remote(num_cpus=1)
 class Buffer_getter:
-    def __init__(self, queue, env_dict, actor_num, size, sample_size, seed=None):
+    def __init__(self, queue, size, sample_size, seed=None):
         self.queue = queue
         self.replay = size > 0
         self.sample_size = sample_size
@@ -69,7 +69,7 @@ class Buffer_getter:
         return self._sample()
 
     def queue_sample(self):
-        gets = [self.queue.get() for idx in range(self.sample_size)]
+        gets = [self.queue.get() for _ in range(self.sample_size)]
         transitions = batch(*zip(*gets))
         return transitions
 
@@ -130,9 +130,7 @@ class ImpalaBuffer:
 
         self.queue = Queue(maxsize=max(actor_num * 2, replay_size))
         getter_seed = None if seed is None else seed + 10_000
-        self.getter = Buffer_getter.remote(
-            self.queue, self.env_dict, actor_num, replay_size, sample_size, getter_seed
-        )
+        self.getter = Buffer_getter.remote(self.queue, replay_size, sample_size, getter_seed)
         self.get = self.getter.sample.remote()
 
     def queue_info(self):

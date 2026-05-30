@@ -27,7 +27,6 @@ class NoisyLinear(hk.Module):
         name: Optional[str] = None,
     ):
         super().__init__()
-        self.input_size = None
         self.output_size = output_size
         self.with_bias = with_bias
         self.w_init = w_init
@@ -43,13 +42,13 @@ class NoisyLinear(hk.Module):
         if not inputs.shape:
             raise ValueError("Input must not be scalar.")
 
-        input_size = self.input_size = inputs.shape[-1]
+        input_size = inputs.shape[-1]
         output_size = self.output_size
         dtype = inputs.dtype
 
         w_init = self.w_init
         if w_init is None:
-            stddev = 10.0 / np.sqrt(self.input_size)
+            stddev = 10.0 / np.sqrt(input_size)
             w_init = hk.initializers.TruncatedNormal(stddev=stddev)
         w_mu = hk.get_parameter("w_mu", [input_size, output_size], dtype, init=w_init)
         w_sigma = hk.get_parameter(

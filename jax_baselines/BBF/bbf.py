@@ -1,6 +1,3 @@
-from copy import deepcopy
-
-import dm_pix as pix
 import jax
 import jax.numpy as jnp
 import optax
@@ -9,16 +6,11 @@ from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.utils import (
     convert_jax,
     filter_like_tree,
-    q_log_pi,
     scaled_by_reset_with_filter,
     soft_update,
     tree_random_normal_like,
 )
 from jax_baselines.DQN.lifecycle import QNetTrainResult
-from jax_baselines.SPR.efficent_buffer import (
-    PrioritizedTransitionReplayBuffer,
-    TransitionReplayBuffer,
-)
 from jax_baselines.SPR.spr import SPR
 
 
@@ -56,24 +48,6 @@ class BBF(SPR):
 
         self.name = "BBF"
         super().__init__(env_builder, model_builder_maker, **bbf_kwargs)
-
-    def get_memory_setup(self):
-        if self.prioritized_replay:
-            self.replay_buffer = PrioritizedTransitionReplayBuffer(
-                self.buffer_size,
-                self.observation_space,
-                1,
-                prediction_depth=max(self.prediction_depth, self.n_step),
-                alpha=self.prioritized_replay_alpha,
-                eps=self.prioritized_replay_eps,
-            )
-        else:
-            self.replay_buffer = TransitionReplayBuffer(
-                self.buffer_size,
-                self.observation_space,
-                1,
-                prediction_depth=max(self.prediction_depth, self.n_step),
-            )
 
     def setup_model(self):
         model_builder = self.model_builder_maker(
@@ -114,28 +88,9 @@ class BBF(SPR):
         # Use common JIT compilation
         self._compile_common_functions()
 
-    def _checkpoint_update_snapshot(self):
-        """BBF checkpoint snapshot strategy: snapshot eval parameters."""
-        self.checkpoint_params = deepcopy(self.get_eval_params())
-
     def get_behavior_params(self):
         """BBF uses target_params for behavior (training-time actions)."""
         return self.target_params
-
-    def get_q(self, params, obses, key=None) -> jnp.ndarray:
-        return self.model(params, key, self.preproc(params, key, obses))
-
-    def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        return jnp.expand_dims(
-            jnp.argmax(
-                jnp.sum(
-                    self.get_q(params, convert_jax(obses), key) * self._categorial_bar,
-                    axis=2,
-                ),
-                axis=1,
-            ),
-            axis=1,
-        )
 
     def _train_on_batch(self, data, context):
         (
@@ -161,54 +116,6 @@ class BBF(SPR):
             replay_priorities=new_priorities,
             metrics={"loss/rprloss": rprloss},
         )
-
-    def _image_augmentation(self, obs, key):
-        """Random augmentation for input images.
-
-        Args:
-            obses (np.ndarray): input images  B x K x H x W x C
-            key (jax.random.PRNGKey): random key
-
-        Returns:
-            list(np.ndarray): augmented images
-        """
-
-        def random_shift(obs, key):  # K x H x W x C
-            obs = jnp.pad(
-                obs,
-                (
-                    (self.shift_size, self.shift_size),
-                    (self.shift_size, self.shift_size),
-                    (0, 0),
-                ),
-                mode="constant",
-            )
-            obs = pix.random_crop(
-                key,
-                obs,
-                (
-                    obs.shape[0] - self.shift_size * 2,
-                    obs.shape[1] - self.shift_size * 2,
-                    obs.shape[2],
-                ),
-            )
-            return obs
-
-        def Intensity(obs, key):
-            noise = (
-                1.0 + jnp.clip(jax.random.normal(key, (1, 1, 1)), -2.0, 2.0) * self.intensity_scale
-            )
-            return obs * noise
-
-        def augment(obs, key):
-            subkey1, subkey2 = jax.random.split(key)
-            obs_len = obs.shape[0]
-            obs = jax.vmap(random_shift)(obs, jax.random.split(subkey1, obs_len))
-            obs = jax.vmap(Intensity)(obs, jax.random.split(subkey2, obs_len))
-            return obs
-
-        batch_size = obs.shape[0]
-        return jax.vmap(augment)(obs, jax.random.split(key, batch_size))
 
     def get_last_idx(self, filled, n_step):
         parsed_filled = jnp.where(jnp.arange(self.n_step) < n_step, filled, 0)
@@ -369,117 +276,6 @@ class BBF(SPR):
             new_priorities,
             rprloss,
         )
-
-    def _loss(
-        self,
-        params,
-        target_params,
-        obses,
-        actions,
-        filled,
-        parsed_obses,
-        parsed_actions,
-        target_distribution,
-        weights,
-        key,
-    ):
-        rprloss = self._represetation_loss(params, target_params, obses, actions, filled, key)
-        distribution = jnp.squeeze(
-            jnp.take_along_axis(self.get_q(params, parsed_obses, key), parsed_actions, axis=1)
-        )
-        centropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
-        mean_centropy = jnp.mean(centropy)
-        total_loss = mean_centropy + self.spr_weight * rprloss
-        return total_loss, (
-            centropy,
-            mean_centropy,
-            rprloss,
-        )
-
-    def _target(
-        self,
-        params,
-        target_params,
-        obses,
-        actions,
-        rewards,
-        nxtobses,
-        not_terminateds,
-        gammas,
-        key,
-    ):
-        next_distributions = self.get_q(target_params, nxtobses, key)
-        if self.double_q:
-            next_action_q = jnp.sum(
-                self.get_q(params, nxtobses, key) * self._categorial_bar, axis=2
-            )
-        else:
-            next_action_q = jnp.sum(next_distributions * self._categorial_bar, axis=2)
-
-        def tdist(next_distribution, target_categorial):
-            Tz = jnp.clip(
-                target_categorial, self.categorial_min, self.categorial_max
-            )  # clip to range of bar
-            C51_B = ((Tz - self.categorial_min) / self.delta_bar).astype(
-                jnp.float32
-            )  # bar index as float
-            C51_L = jnp.floor(C51_B).astype(jnp.int32)  # bar lower index as int
-            C51_H = jnp.ceil(C51_B).astype(jnp.int32)  # bar higher index as int
-
-            def project_one(p, b, _l, _u):
-                exact = _l == _u
-                m = jnp.zeros((self.categorial_bar_n,), dtype=p.dtype)
-
-                w_l = jnp.where(exact, p, p * (_u.astype(jnp.float32) - b))
-                w_u = jnp.where(exact, jnp.zeros_like(p), p * (b - _l.astype(jnp.float32)))
-
-                m = m.at[_l].add(w_l)
-                m = m.at[_u].add(w_u)
-                return m
-
-            return jax.vmap(project_one, in_axes=(0, 0, 0, 0))(
-                next_distribution, C51_B, C51_L, C51_H
-            )
-
-        if self.munchausen:
-            next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
-            pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)  # [32, action_size]
-            next_categorials = self._categorial_bar - jnp.expand_dims(
-                tau_log_pi_next, axis=2
-            )  # [32, action_size, 51]
-
-            if self.double_q:
-                q_k_targets = jnp.sum(self.get_q(params, obses, key) * self.categorial_bar, axis=2)
-            else:
-                q_k_targets = jnp.sum(
-                    self.get_q(target_params, obses, key) * self.categorial_bar, axis=2
-                )
-            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
-            munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
-
-            rewards = rewards + self.munchausen_alpha * jnp.clip(
-                munchausen_addon, a_min=-1, a_max=0
-            )  # [32, 1]
-            target_categorials = jnp.expand_dims(
-                gammas * not_terminateds, axis=2
-            ) * next_categorials + jnp.expand_dims(
-                rewards, axis=2
-            )  # [32, action_size, 51]
-            target_distributions = jax.vmap(tdist, in_axes=(1, 1), out_axes=1)(
-                next_distributions, target_categorials
-            )
-            target_distribution = jnp.sum(
-                jnp.expand_dims(pi_next, axis=2) * target_distributions, axis=1
-            )
-        else:
-            next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
-            next_distribution = jnp.squeeze(
-                jnp.take_along_axis(next_distributions, next_actions, axis=1)
-            )
-            target_categorial = gammas * not_terminateds * self.categorial_bar + rewards  # [32, 51]
-            target_distribution = tdist(next_distribution, target_categorial)
-
-        return target_distribution
 
     def run_name_update(self, run_name):
         if self.munchausen:

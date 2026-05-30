@@ -12,7 +12,6 @@ from jax_baselines.common.utils import convert_jax, hard_update, key_gen, q_log_
 
 class APE_X_DQN(Ape_X_Family):
     def __init__(self, workers, model_builder_maker, **kwargs):
-        # No subclass-specific fields to pre-set; keep pattern consistent
         super().__init__(workers, model_builder_maker, **kwargs)
 
     def setup_model(self):
@@ -50,7 +49,6 @@ class APE_X_DQN(Ape_X_Family):
             if param_noise:
                 key_seq = key_gen(42)
             else:
-                # make repeat None
                 key_seq = repeat(None)
 
             def get_abs_td_error(
@@ -96,7 +94,6 @@ class APE_X_DQN(Ape_X_Family):
         return builder
 
     def train_step(self, steps, gradient_steps):
-        # Sample a batch from the replay buffer
         for _ in range(gradient_steps):
             self.train_steps_count += 1
             data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)

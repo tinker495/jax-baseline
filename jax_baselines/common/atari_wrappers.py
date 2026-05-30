@@ -53,7 +53,6 @@ class FireResetEnv(gym.Wrapper):
         gym.Wrapper.__init__(self, env)
         assert env.unwrapped.get_action_meanings()[1] == "FIRE"
         assert len(env.unwrapped.get_action_meanings()) >= 3
-        # self._action_space = gym.spaces.Discrete(self.action_space.n-1)
 
     def reset(self, **kwargs):
         self.env.reset(**kwargs)
@@ -102,12 +101,10 @@ class EpisodicLifeEnv(gym.Wrapper):
             info["lives"] = 0
         lives = info["lives"]
         if 0 < lives < self.lives:
-            # print("Lives lost: ", self.lives - lives)
             # for Qbert sometimes we stay in lives == 0 condtion for a few frames
             # so its important to keep lives > 0, so that we only reset once
             # the environment advertises terminated.
             terminated = True
-            # self.env.step(1)
         self.lives = lives
         return obs, reward, terminated, truncated, info
 
@@ -335,7 +332,6 @@ def wrap_deepmind(
 
 
 def make_wrap_atari(env_id="Breakout-v0", clip_rewards=False):
-    # env = gym.make(env_id)
     env = make_atari(env_id)
     env = gym.wrappers.TimeLimit(env, max_episode_steps=10000)
     env = wrap_deepmind(env, clip_rewards=clip_rewards, frame_stack=True)
@@ -347,7 +343,6 @@ def get_env_type(env_id):
 
     # Re-parse the gym registry, since we could have new envs since last time.
     for name, env in gym.envs.registry.items():
-        # print(env.entry_point, env.id)
         try:
             if "gymnasium" in env.entry_point:
                 env_type = env.entry_point.split(".")[2].split(":")[0]
