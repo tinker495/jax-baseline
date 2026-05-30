@@ -23,7 +23,6 @@ class Buffer(object):
         return buffer
 
     def get_stored_size(self):
-        # Fix: off-by-one bug - number of valid entries written so far
         return min(self._idx + 1, self.max_size)
 
     def update_idx(self):
@@ -138,8 +137,7 @@ class SumTree:
             self.n_entries += 1
 
     # update priority
-    def update(self, idx, p, minmax_decay=1e-4):
-        # Fix: Remove decay to prevent weight overflow and ensure true extrema
+    def update(self, idx, p):
         self.max_priority = max(p, self.max_priority)
         self.min_priority = min(p, self.min_priority)
         change = p - self.tree[idx]
@@ -189,8 +187,7 @@ class TransitionReplayBuffer(object):
         )
 
     def __len__(self) -> int:
-        # Fix: Use tree entries count instead of buffer storage size (includes sentinels)
-        return self.tree.n_entries
+        return self.buffer.get_stored_size()
 
     @property
     def storage(self):
@@ -201,8 +198,7 @@ class TransitionReplayBuffer(object):
         return self.max_size
 
     def can_sample(self, n_samples: int) -> bool:
-        # Fix: Use tree entries count to prevent overreporting availability
-        return self.tree.n_entries >= n_samples
+        return self.buffer.get_stored_size() >= n_samples
 
     def is_full(self) -> int:
         return len(self) == self.max_size
@@ -242,6 +238,12 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
         self.alpha = alpha
         self.eps = eps
 
+    def __len__(self) -> int:
+        return self.tree.n_entries
+
+    def can_sample(self, n_samples: int) -> bool:
+        return self.tree.n_entries >= n_samples
+
     def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False):
         idx = self.buffer.add(
             obs_t,
@@ -269,9 +271,8 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
         obs, data, terminated, filled, _ = self.buffer.sample(
             buffer_idxs, traj_len=self.prediction_depth
         )
-        # Fix: Use per-batch normalization to guarantee weights <= 1
         weight = np.power(self.tree.n_entries * priorities / self.tree.total(), -beta)
-        weight_max = np.max(weight)  # Per-batch maximum instead of global minimum
+        weight_max = np.max(weight)
         weights = weight / weight_max
         return {
             "obses": obs,
