@@ -598,20 +598,9 @@ wheels = [
 [[package]]
 name = "cpprb"
 version = "11.0.0"
-source = { registry = "https://pypi.org/simple" }
+source = { git = "https://github.com/tinker495/cpprb#2b14f4b479b5ece1c83a1cba661b73505ad698ab" }
 dependencies = [
     { name = "numpy" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/72/7f/fc5a23c7c72a1e2c0f4e7536d7a23c943badbeba9c50d5dbac7eb0980c72/cpprb-11.0.0.tar.gz", hash = "sha256:67ebfc61729610337619fcb8e809bc2863fc16f05e3432e21bf890a40cf5a0e3", size = 532024, upload-time = "2024-06-03T11:09:15.179Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7f/c8/7df3ed21dc61fba97543c1fb3d907f3fbe5fe38627a9c3adf17a3d8ba9c6/cpprb-11.0.0-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:7afbd93f434d87ee47511ef9ebf8732f178720af8c6844bc2c5c9c22779d75a5", size = 803993, upload-time = "2024-06-08T22:59:34.794Z" },
-    { url = "https://files.pythonhosted.org/packages/02/27/5bdae82c8e7759684c63be0a17d2da14cee720c9f00650ba4d35ff62765b/cpprb-11.0.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:b464dd7874ca70edd0ad83ae875c49a6f121ce1f72febae24482309dad85ab7b", size = 2770177, upload-time = "2024-06-03T11:34:54.616Z" },
-    { url = "https://files.pythonhosted.org/packages/04/86/5f47d254d69afabba611044f6cb8410d34fe4df76e3e2c61e7730ef64967/cpprb-11.0.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:79ed8f7cae7501f2012a18df7f1dda7c2173a85eb08df637c9e40ebcb804a43b", size = 2812597, upload-time = "2024-06-03T11:03:44.845Z" },
-    { url = "https://files.pythonhosted.org/packages/0c/df/de3373c936a1ef36fa365399a189cdbf4738fa3c291045d70225a303a8e8/cpprb-11.0.0-cp311-cp311-win_amd64.whl", hash = "sha256:e577715c478d25dab310d34211cfbc74f775d279c1f4d135dffa7982d56c21dd", size = 366601, upload-time = "2024-06-08T22:59:46.63Z" },
-    { url = "https://files.pythonhosted.org/packages/1e/73/504fa0222276017bc9bf85a28b22622698adc3cfe3fa7190ba6d8f640d6f/cpprb-11.0.0-cp312-cp312-macosx_10_9_universal2.whl", hash = "sha256:01523dd24ac9c9c119ccd695acf6ee145e4d6f6dc11a2620b2babe246007b608", size = 800034, upload-time = "2024-06-08T23:00:07.959Z" },
-    { url = "https://files.pythonhosted.org/packages/7b/28/41d47acdebdf0b253dbdd42fbbba57a11a3e8d57a9e82f093d0b3e9abb04/cpprb-11.0.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:cf2aca06d20b4c8dfd34d1fdc1a18ce9d73f2b8c0f326b3a4a1e3191690512e3", size = 2675078, upload-time = "2024-06-03T11:34:56.843Z" },
-    { url = "https://files.pythonhosted.org/packages/be/43/62d7cdb0e783362818e7d1af8d073373ad77962358bcfebd8a41fb12795c/cpprb-11.0.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:3fdc1d1a76304fce9f0eebcaff01b379ddd94dc61eb0c737db99c018fc7ce753", size = 2736805, upload-time = "2024-06-03T11:03:47.149Z" },
-    { url = "https://files.pythonhosted.org/packages/8a/b3/c284c5b1a792fba08893993d70575741bbc8787ec52b82f90d0dfeba0a73/cpprb-11.0.0-cp312-cp312-win_amd64.whl", hash = "sha256:beea414f7678e8d848295680e86ded95ed8935043eda891ffd60620d952faa1f", size = 352594, upload-time = "2024-06-08T23:00:15.306Z" },
 ]
 
 [[package]]
@@ -1272,6 +1261,15 @@ wheels = [
 ]
 
 [[package]]
+name = "iniconfig"
+version = "2.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/72/34/14ca021ce8e5dfedc35312d08ba8bf51fdd999c576889fc2c24cb97f4f10/iniconfig-2.3.0.tar.gz", hash = "sha256:c76315c77db068650d49c5b56314774a7804df16fee4402c1f19d6d15d8c4730", size = 20503, upload-time = "2025-10-18T21:55:43.219Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl", hash = "sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12", size = 7484, upload-time = "2025-10-18T21:55:41.639Z" },
+]
+
+[[package]]
 name = "jax"
 version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1319,6 +1317,7 @@ dependencies = [
     { name = "opencv-python" },
     { name = "optax" },
     { name = "protobuf" },
+    { name = "pyyaml" },
     { name = "ray", extra = ["default"] },
     { name = "requests" },
     { name = "scipy" },
@@ -1329,6 +1328,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "pre-commit" },
+    { name = "pytest" },
 ]
 
 [package.metadata]
@@ -1337,7 +1337,7 @@ requires-dist = [
     { name = "box2d" },
     { name = "box2d-kengz" },
     { name = "box2d-py" },
-    { name = "cpprb" },
+    { name = "cpprb", git = "https://github.com/tinker495/cpprb" },
     { name = "decorator" },
     { name = "dm-haiku" },
     { name = "dm-pix" },
@@ -1355,6 +1355,7 @@ requires-dist = [
     { name = "opencv-python" },
     { name = "optax" },
     { name = "protobuf" },
+    { name = "pyyaml" },
     { name = "ray", extras = ["default"] },
     { name = "requests" },
     { name = "scipy" },
@@ -1363,7 +1364,10 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pre-commit" }]
+dev = [
+    { name = "pre-commit" },
+    { name = "pytest" },
+]
 
 [[package]]
 name = "jax-cuda12-pjrt"
@@ -2534,6 +2538,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pluggy"
+version = "1.6.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/e2/3e91f31a7d2b083fe6ef3fa267035b518369d9511ffab804f839851d2779/pluggy-1.6.0.tar.gz", hash = "sha256:7dcc130b76258d33b90f61b658791dede3486c3e6bfb003ee5c9bfb396dd22f3", size = 69412, upload-time = "2025-05-15T12:30:07.975Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl", hash = "sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746", size = 20538, upload-time = "2025-05-15T12:30:06.134Z" },
+]
+
+[[package]]
 name = "pre-commit"
 version = "4.6.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2963,6 +2976,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/f3/91/9c6ee907786a473bf81c5f53cf703ba0957b23ab84c264080fb5a450416f/pyparsing-3.3.2.tar.gz", hash = "sha256:c777f4d763f140633dcb6d8a3eda953bf7a214dc4eff598413c070bcdc117cbc", size = 6851574, upload-time = "2026-01-21T03:57:59.36Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/10/bd/c038d7cc38edc1aa5bf91ab8068b63d4308c66c4c8bb3cbba7dfbc049f9c/pyparsing-3.3.2-py3-none-any.whl", hash = "sha256:850ba148bd908d7e2411587e247a1e4f0327839c40e2e5e6d05a007ecc69911d", size = 122781, upload-time = "2026-01-21T03:57:55.912Z" },
+]
+
+[[package]]
+name = "pytest"
+version = "9.0.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "iniconfig" },
+    { name = "packaging" },
+    { name = "pluggy" },
+    { name = "pygments" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7d/0d/549bd94f1a0a402dc8cf64563a117c0f3765662e2e668477624baeec44d5/pytest-9.0.3.tar.gz", hash = "sha256:b86ada508af81d19edeb213c681b1d48246c1a91d304c6c81a427674c17eb91c", size = 1572165, upload-time = "2026-04-07T17:16:18.027Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d4/24/a372aaf5c9b7208e7112038812994107bc65a84cd00e0354a88c2c77a617/pytest-9.0.3-py3-none-any.whl", hash = "sha256:2c5efc453d45394fdd706ade797c0a81091eccd1d6e4bccfcd476e2b8e0ab5d9", size = 375249, upload-time = "2026-04-07T17:16:16.13Z" },
 ]
 
 [[package]]

@@ -37,12 +37,26 @@ dependencies = [
     "decorator",
     "opencv-python",
     "envpool",
+    "pyyaml",
 ]
+
+[project.scripts]
+qnet = "jax_baselines.cli.qnet:main"
+dpg = "jax_baselines.cli.dpg:main"
+pg = "jax_baselines.cli.pg:main"
+impala = "jax_baselines.cli.impala:main"
+apex-qnet = "jax_baselines.cli.apex_qnet:main"
+apex-dpg = "jax_baselines.cli.apex_dpg:main"
+exp = "jax_baselines.cli.exp:main"
 
 [dependency-groups]
 dev = [
     "pre-commit",
+    "pytest",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
 include = [
@@ -52,3 +66,6 @@ include = [
 
 [tool.uv]
 package = true
+
+[tool.uv.sources]
+cpprb = { git = "https://github.com/tinker495/cpprb" }

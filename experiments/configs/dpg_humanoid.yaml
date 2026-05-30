@@ -1,0 +1,33 @@
+# translated from test/test_dpg_Humanoid.sh
+family: dpg
+runtime:
+  device: 0
+  xvfb: true
+base:
+  experiment_name: DPG_Humanoid
+  env: Humanoid-v5
+  learning_rate: 0.0003
+  steps: 5e6
+  buffer_size: 1e6
+  batch: 256
+  target_update_tau: 5e-3
+  learning_starts: 50000
+  use_checkpointing: true
+  node: 256
+  hidden_n: 2
+  logdir: log/
+  optimizer: adamw
+variants:
+  - {algo: TQC, simbav2: true}
+  - {algo: TQC, simba: true}
+  - {algo: TQC}
+  - {algo: CrossQ, enabled: false}
+  - {algo: SAC, enabled: false}
+  - {algo: TD3, simba: true, enabled: false}
+  - {algo: TD3, simbav2: true, enabled: false}
+  - {algo: SAC, enabled: false}
+  - {algo: SAC, simba: true, enabled: false}
+  - {algo: SAC, simbav2: true, enabled: false}
+  - {algo: TD7, enabled: false}
+  - {algo: TD7, simba: true, enabled: false}
+  - {algo: TD7, simbav2: true, enabled: false}

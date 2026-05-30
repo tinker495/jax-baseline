@@ -1,0 +1,23 @@
+# translated from test/test_pg_breakout.sh
+# Note: LR reassigned mid-script; each python line expanded with its effective value.
+# Commented A2C used LR=0.001; active runs use LR=0.0003.
+family: pg
+runtime:
+  device: 0
+base:
+  experiment_name: PG_Breakout
+  env: BreakoutNoFrameskip-v4
+  worker: 32
+  steps: 1e7
+  batch: 256
+  mini_batch: 256
+  gamma: 0.995
+  lamda: 0.95
+  node: 512
+  hidden_n: 1
+  optimizer: rmsprop
+variants:
+  - {algo: A2C, learning_rate: 0.001, ent_coef: 1e-6, enabled: false}
+  - {algo: SPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16}
+  - {algo: TPPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16}
+  - {algo: PPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16}

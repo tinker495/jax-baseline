@@ -1,0 +1,21 @@
+# translated from test/test_impala_breakout_ppo.sh
+family: impala
+runtime:
+  device: 1
+base:
+  env: BreakoutNoFrameskip-v4
+  learning_rate: 0.00003
+  steps: 1e5
+  batch: 32
+  gamma: 0.99
+  worker: 16
+  ent_coef: 1e-4
+  node: 512
+  hidden_n: 1
+  sample_size: 32
+  update_freq: 100
+  val_coef: 0.6
+  buffer_size: 256
+  optimizer: rmsprop
+variants:
+  - {algo: PPO}

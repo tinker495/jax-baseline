@@ -1,0 +1,17 @@
+# translated from test/test_dpg_walker2d.sh
+family: dpg
+runtime:
+  device: 2
+base:
+  env: Walker2d-v4
+  learning_rate: 0.0003
+  steps: 2e6
+  buffer_size: 1e6
+  batch: 256
+  target_update_tau: 1e-3
+  learning_starts: 50000
+  node: 512
+  hidden_n: 2
+  optimizer: adam
+variants:
+  - {algo: TD3}

@@ -1,0 +1,24 @@
+# translated from test/test_impala_bipedal.sh
+# Note: OPTIMIZER changes mid-script. Commented A2C uses rmsprop.
+# Active PPO runs: first with rmsprop, second with adam.
+family: impala
+runtime:
+  device: 0
+base:
+  env: BipedalWalker-v3
+  learning_rate: 0.00003
+  steps: 5e5
+  batch: 32
+  gamma: 0.995
+  worker: 8
+  ent_coef: 1e-3
+  node: 512
+  hidden_n: 2
+  sample_size: 8
+  update_freq: 100
+  val_coef: 0.6
+  buffer_size: 32
+variants:
+  - {algo: A2C, optimizer: rmsprop, enabled: false}
+  - {algo: PPO, optimizer: rmsprop}
+  - {algo: PPO, optimizer: adam}

@@ -1,0 +1,22 @@
+# translated from test/test_pg_lunarlander.sh
+# Note: LR and OPTIONS reassigned mid-script; each python line expanded with its effective value.
+# A2C uses LR=0.001, ent_coef=1e-6; PPO/TPPO use LR=0.0003, ent_coef=1e-3.
+family: pg
+runtime:
+  device: 0
+base:
+  experiment_name: PG_LunarLander
+  env: LunarLander-v3
+  worker: 32
+  steps: 1e6
+  batch: 128
+  mini_batch: 256
+  gamma: 0.995
+  lamda: 0.95
+  node: 128
+  hidden_n: 2
+  optimizer: rmsprop
+variants:
+  - {algo: A2C, learning_rate: 0.001, ent_coef: 1e-6}
+  - {algo: PPO, learning_rate: 0.0003, ent_coef: 1e-3}
+  - {algo: TPPO, learning_rate: 0.0003, ent_coef: 1e-3}

@@ -1,0 +1,22 @@
+# translated from test/test_apex_dpg.sh
+family: apex_dpg
+runtime:
+  device: 1
+base:
+  env: Walker2d-v4
+  learning_rate: 0.00005
+  steps: 1e4
+  batch_num: 16
+  batch_size: 512
+  target_update_tau: 5e-2
+  learning_starts: 100
+  gamma: 0.99
+  buffer_size: 1e7
+  worker: 8
+  node: 512
+  hidden_n: 2
+  initial_eps: 0.1
+  eps_decay: 0
+  optimizer: rmsprop
+variants:
+  - {algo: TD3}

@@ -29,9 +29,10 @@ Atari ROMs still require license acceptance through AutoROM before Atari runs:
 uv run AutoROM --accept-license
 ```
 
-Legacy pip setup is still possible when uv is unavailable:
+For pip-only environments, export a requirements file from the lock first:
 
 ```
+uv export --format requirements-txt > requirements.txt
 python -m pip install -r requirements.txt
 python -m pip install -e .
 ```
@@ -91,12 +92,16 @@ python -m pip install -e .
 - [DQN 100K](docs/dqn_100k.md)
 - [DPG](docs/dpg_comparison.md)
 
-## Test
+## Run experiments
 
-To test Atari with DQN (or C51, QRDQN, IQN, FQF):
+Runs work from any directory via the `uv run *` console scripts.
+Predefined sweeps live in `experiments/configs/` (run with
+`uv run exp <config>`, or add `--dry-run` to preview the commands).
+
+To run Q-Net on Atari (DQN, or C51/QRDQN/IQN/FQF):
 
 ```
-python test/run_qnet.py --algo DQN --env BreakoutNoFrameskip-v4 --learning_rate 0.0002 \
+uv run qnet --algo DQN --env BreakoutNoFrameskip-v4 --learning_rate 0.0002 \
 		--steps 5e5 --batch 32 --train_freq 1 --target_update 1000 --node 512 \
 		--hidden_n 1 --final_eps 0.01 --learning_starts 20000 --gamma 0.995 --clip_rewards
 ```

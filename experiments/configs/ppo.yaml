@@ -1,0 +1,19 @@
+# translated from test/test_ppo.sh
+family: pg
+runtime:
+  device: 0
+base:
+  env: BreakoutNoFrameskip-v4
+  learning_rate: 0.00003
+  steps: 2e6
+  worker: 32
+  batch: 32
+  mini_batch: 256
+  gamma: 0.995
+  lamda: 0.95
+  ent_coef: 1e-3
+  node: 512
+  hidden_n: 1
+  optimizer: rmsprop
+variants:
+  - {algo: PPO}
