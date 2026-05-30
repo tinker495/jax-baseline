@@ -1,33 +1,60 @@
+import warnings
+
 import cpprb
 import numpy as np
+
+
+def _obs_spec(shape):
+    """uint8 spec for image-like (>=3 dims) features, float32 otherwise."""
+    return (
+        {"shape": shape, "dtype": np.uint8}
+        if len(shape) >= 3
+        else {"shape": shape, "dtype": np.float32}
+    )
+
+
+def _build_obs_dicts(observation_space):
+    """Build the ``obs{i}`` / ``next_obs{i}`` cpprb env_dict fragments."""
+    obsdict = {f"obs{idx}": _obs_spec(o) for idx, o in enumerate(observation_space)}
+    nextobsdict = {f"next_obs{idx}": _obs_spec(o) for idx, o in enumerate(observation_space)}
+    return obsdict, nextobsdict
+
+
+def _compress_config(obsdict, nextobsdict, compress_memory, n_step):
+    """Resolve cpprb memory-compression settings for image observations.
+
+    Returns ``(env_nextobsdict, cpprb_kwargs)`` where ``env_nextobsdict`` is the
+    next-observation portion to declare in the cpprb ``env_dict`` and
+    ``cpprb_kwargs`` carries ``next_of`` / ``stack_compress``. The wrapper always
+    keeps the full ``next_obs`` keys for ``add`` / ``sample`` iteration; only the
+    env_dict declaration is pruned, because ``next_of`` makes cpprb recreate the
+    compressed ``next_obs`` automatically.
+
+    Verified cpprb behaviour (cpprb 10.x, see tests/test_cpprb_compress.py):
+      * ``next_of`` shares next-observation memory with the observation but is
+        incompatible with ``Nstep`` (the moved ``next_*`` field disappears from
+        ``sample``), so it is only used on the single-step path.
+      * ``stack_compress`` drops the duplicated frames of a frame-stacked
+        observation and reconstructs them from sequentially stored rows. It must
+        not cover the n-step ``next_obs`` (its rows are n steps apart, breaking
+        reconstruction); on the n-step path ``next_obs`` stays fully stored so
+        ``Nstep`` can move it.
+    """
+    image_keys = [k for k in obsdict if len(obsdict[k]["shape"]) >= 3]
+    if not compress_memory or not image_keys:
+        return dict(nextobsdict), {}
+    if n_step > 1:
+        return dict(nextobsdict), {"stack_compress": image_keys}
+    env_nextobsdict = {
+        k: v for k, v in nextobsdict.items() if k.removeprefix("next_") not in image_keys
+    }
+    return env_nextobsdict, {"next_of": image_keys, "stack_compress": image_keys}
 
 
 class EpochBuffer(object):
     def __init__(self, epoch_size: int, observation_space: list, worker_size=1, action_space=1):
         self.epoch_size = epoch_size
-        self.obsdict = dict(
-            (
-                "obs{}".format(idx),
-                (
-                    {"shape": o, "dtype": np.uint8}
-                    if len(o) >= 3
-                    else {"shape": o, "dtype": np.float32}
-                ),
-            )
-            for idx, o in enumerate(observation_space)
-        )
-        self.nextobsdict = dict(
-            (
-                "next_obs{}".format(idx),
-                (
-                    {"shape": o, "dtype": np.uint8}
-                    if len(o) >= 3
-                    else {"shape": o, "dtype": np.float32}
-                ),
-            )
-            for idx, o in enumerate(observation_space)
-        )
-        self.obscompress = None
+        self.obsdict, self.nextobsdict = _build_obs_dicts(observation_space)
         self.worker_size = worker_size
         self.local_buffers = [
             cpprb.ReplayBuffer(
@@ -92,52 +119,27 @@ class ReplayBuffer(object):
     ):
         self.max_size = size
         if env_dict is None:
-            self.obsdict = dict(
-                (
-                    "obs{}".format(idx),
-                    (
-                        {"shape": o, "dtype": np.uint8}
-                        if len(o) >= 3
-                        else {"shape": o, "dtype": np.float32}
-                    ),
-                )
-                for idx, o in enumerate(observation_space)
+            self.obsdict, self.nextobsdict = _build_obs_dicts(observation_space)
+            env_nextobsdict, comp_kw = _compress_config(
+                self.obsdict, self.nextobsdict, compress_memory, n_step=1
             )
-            self.nextobsdict = dict(
-                (
-                    "next_obs{}".format(idx),
-                    (
-                        {"shape": o, "dtype": np.uint8}
-                        if len(o) >= 3
-                        else {"shape": o, "dtype": np.float32}
-                    ),
-                )
-                for idx, o in enumerate(observation_space)
-            )
-            self.obscompress = None
-            if compress_memory:
-                self.obscompress = []
-                for k in self.obsdict:
-                    if len(self.obsdict[k]["shape"]) >= 3:
-                        self.obscompress.append(k)
-                        del self.nextobsdict[f"next_{k}"]
-
             self.buffer = cpprb.ReplayBuffer(
                 size,
                 env_dict={
                     **self.obsdict,
                     "action": {"shape": action_space},
                     "reward": {},
-                    **self.nextobsdict,
+                    **env_nextobsdict,
                     "done": {},
                 },
-                next_of=self.obscompress,
-                stack_compress=self.obscompress,
+                **comp_kw,
             )
+            self._compress_active = bool(comp_kw)
         else:
             self.obsdict = dict((o, None) for o in env_dict.keys() if o.startswith("obs"))
             self.nextobsdict = dict((o, None) for o in env_dict.keys() if o.startswith("next_obs"))
             self.buffer = cpprb.ReplayBuffer(size, env_dict=env_dict, Nstep=n_s)
+            self._compress_active = False
 
     def __len__(self) -> int:
         return self.buffer.get_stored_size()
@@ -160,6 +162,11 @@ class ReplayBuffer(object):
         obsdict = dict(zip(self.obsdict.keys(), obs_t))
         nextobsdict = dict(zip(self.nextobsdict.keys(), nxtobs_t))
         self.buffer.add(**obsdict, action=action, reward=reward, **nextobsdict, done=terminated)
+        # next_of / stack_compress reconstruct observations from sequentially
+        # stored rows, so the episode boundary must be marked or the terminal
+        # frame window would bleed into the next episode.
+        if self._compress_active and (terminated or truncated):
+            self.buffer.on_episode_end()
 
     def episode_end(self):
         self.buffer.on_episode_end()
@@ -202,36 +209,13 @@ class NstepReplayBuffer(ReplayBuffer):
         compress_memory=False,
     ):
         self.max_size = size
-        self.obsdict = dict(
-            (
-                "obs{}".format(idx),
-                (
-                    {"shape": o, "dtype": np.uint8}
-                    if len(o) >= 3
-                    else {"shape": o, "dtype": np.float32}
-                ),
-            )
-            for idx, o in enumerate(observation_space)
+        self.obsdict, self.nextobsdict = _build_obs_dicts(observation_space)
+        env_nextobsdict, comp_kw = _compress_config(
+            self.obsdict, self.nextobsdict, compress_memory, n_step=n_step
         )
-        self.nextobsdict = dict(
-            (
-                "next_obs{}".format(idx),
-                (
-                    {"shape": o, "dtype": np.uint8}
-                    if len(o) >= 3
-                    else {"shape": o, "dtype": np.float32}
-                ),
-            )
-            for idx, o in enumerate(observation_space)
-        )
-        self.obscompress = None
-        if compress_memory:
-            self.obscompress = []
-            for k in self.obsdict:
-                if len(self.obsdict[k]["shape"]) >= 3:
-                    self.obscompress.append(k)
-                    del self.nextobsdict[f"next_{k}"]
-
+        # The n-step add() marks episode boundaries itself; keep the base add()
+        # from doing it a second time.
+        self._compress_active = False
         self.worker_size = worker_size
         n_s = {
             "size": n_step,
@@ -239,49 +223,30 @@ class NstepReplayBuffer(ReplayBuffer):
             "gamma": gamma,
             "next": list(self.nextobsdict.keys()),
         }
+        central_env_dict = {
+            **self.obsdict,
+            "action": {"shape": action_space},
+            "reward": {},
+            **env_nextobsdict,
+            "done": {},
+        }
+        local_env_dict = {
+            **self.obsdict,
+            "action": {"shape": action_space},
+            "reward": {},
+            **self.nextobsdict,
+            "done": {},
+        }
 
         if worker_size > 1:
-            self.buffer = cpprb.ReplayBuffer(
-                size,
-                env_dict={
-                    **self.obsdict,
-                    "action": {"shape": action_space},
-                    "reward": {},
-                    **self.nextobsdict,
-                    "done": {},
-                },
-                next_of=self.obscompress,
-                stack_compress=self.obscompress,
-            )
+            self.buffer = cpprb.ReplayBuffer(size, env_dict=central_env_dict, **comp_kw)
             self.local_buffers = [
-                cpprb.ReplayBuffer(
-                    2000,
-                    env_dict={
-                        **self.obsdict,
-                        "action": {"shape": action_space},
-                        "reward": {},
-                        **self.nextobsdict,
-                        "done": {},
-                    },
-                    Nstep=n_s,
-                )
+                cpprb.ReplayBuffer(2000, env_dict=local_env_dict, Nstep=n_s)
                 for _ in range(worker_size)
             ]
             self.add = self.multiworker_add
         else:
-            self.buffer = cpprb.ReplayBuffer(
-                size,
-                env_dict={
-                    **self.obsdict,
-                    "action": {"shape": action_space},
-                    "reward": {},
-                    **self.nextobsdict,
-                    "done": {},
-                },
-                Nstep=n_s,
-                next_of=self.obscompress,
-                stack_compress=self.obscompress,
-            )
+            self.buffer = cpprb.ReplayBuffer(size, env_dict=central_env_dict, Nstep=n_s, **comp_kw)
 
     def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False):
         super().add(obs_t, action, reward, nxtobs_t, terminated, truncated)
@@ -302,6 +267,9 @@ class NstepReplayBuffer(ReplayBuffer):
             if terminated[w] or truncated[w]:
                 self.local_buffers[w].on_episode_end()
                 self.buffer.add(**self.local_buffers[w].get_all_transitions())
+                # Mark the episode boundary so stack_compress reconstructs each
+                # worker's frame window without bleeding across episodes.
+                self.buffer.on_episode_end()
                 self.local_buffers[w].clear()
 
 
@@ -316,49 +284,23 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         eps=1e-4,
     ):
         self.max_size = size
-        self.obsdict = dict(
-            (
-                "obs{}".format(idx),
-                (
-                    {"shape": o, "dtype": np.uint8}
-                    if len(o) >= 3
-                    else {"shape": o, "dtype": np.float32}
-                ),
-            )
-            for idx, o in enumerate(observation_space)
+        self.obsdict, self.nextobsdict = _build_obs_dicts(observation_space)
+        env_nextobsdict, comp_kw = _compress_config(
+            self.obsdict, self.nextobsdict, compress_memory, n_step=1
         )
-        self.nextobsdict = dict(
-            (
-                "next_obs{}".format(idx),
-                (
-                    {"shape": o, "dtype": np.uint8}
-                    if len(o) >= 3
-                    else {"shape": o, "dtype": np.float32}
-                ),
-            )
-            for idx, o in enumerate(observation_space)
-        )
-        self.obscompress = None
-        if compress_memory:
-            self.obscompress = []
-            for k in self.obsdict:
-                if len(self.obsdict[k]["shape"]) >= 3:
-                    self.obscompress.append(k)
-                    del self.nextobsdict[f"next_{k}"]
-
+        self._compress_active = bool(comp_kw)
         self.buffer = cpprb.PrioritizedReplayBuffer(
             size,
             env_dict={
                 **self.obsdict,
                 "action": {"shape": action_space},
                 "reward": {},
-                **self.nextobsdict,
+                **env_nextobsdict,
                 "done": {},
             },
             alpha=alpha,
             eps=eps,
-            next_of=self.obscompress,
-            stack_compress=self.obscompress,
+            **comp_kw,
         )
 
     def sample(self, batch_size: int, beta=0.5):
@@ -391,36 +333,13 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
         eps=1e-4,
     ):
         self.max_size = size
-        self.obsdict = dict(
-            (
-                "obs{}".format(idx),
-                (
-                    {"shape": o, "dtype": np.uint8}
-                    if len(o) >= 3
-                    else {"shape": o, "dtype": np.float32}
-                ),
-            )
-            for idx, o in enumerate(observation_space)
+        self.obsdict, self.nextobsdict = _build_obs_dicts(observation_space)
+        env_nextobsdict, comp_kw = _compress_config(
+            self.obsdict, self.nextobsdict, compress_memory, n_step=n_step
         )
-        self.nextobsdict = dict(
-            (
-                "next_obs{}".format(idx),
-                (
-                    {"shape": o, "dtype": np.uint8}
-                    if len(o) >= 3
-                    else {"shape": o, "dtype": np.float32}
-                ),
-            )
-            for idx, o in enumerate(observation_space)
-        )
-        self.obscompress = None
-        if compress_memory:
-            self.obscompress = []
-            for k in self.obsdict:
-                if len(self.obsdict[k]["shape"]) >= 3:
-                    self.obscompress.append(k)
-                    del self.nextobsdict[f"next_{k}"]
-
+        # The n-step add() marks episode boundaries itself; keep the base add()
+        # from doing it a second time.
+        self._compress_active = False
         self.worker_size = worker_size
         n_s = {
             "size": n_step,
@@ -428,52 +347,33 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
             "gamma": gamma,
             "next": list(self.nextobsdict.keys()),
         }
+        central_env_dict = {
+            **self.obsdict,
+            "action": {"shape": action_space},
+            "reward": {},
+            **env_nextobsdict,
+            "done": {},
+        }
+        local_env_dict = {
+            **self.obsdict,
+            "action": {"shape": action_space},
+            "reward": {},
+            **self.nextobsdict,
+            "done": {},
+        }
 
         if worker_size > 1:
             self.buffer = cpprb.PrioritizedReplayBuffer(
-                size,
-                env_dict={
-                    **self.obsdict,
-                    "action": {"shape": action_space},
-                    "reward": {},
-                    **self.nextobsdict,
-                    "done": {},
-                },
-                alpha=alpha,
-                eps=eps,
-                next_of=self.obscompress,
-                stack_compress=self.obscompress,
+                size, env_dict=central_env_dict, alpha=alpha, eps=eps, **comp_kw
             )
             self.local_buffers = [
-                cpprb.ReplayBuffer(
-                    2000,
-                    env_dict={
-                        **self.obsdict,
-                        "action": {"shape": action_space},
-                        "reward": {},
-                        **self.nextobsdict,
-                        "done": {},
-                    },
-                    Nstep=n_s,
-                )
+                cpprb.ReplayBuffer(2000, env_dict=local_env_dict, Nstep=n_s)
                 for _ in range(worker_size)
             ]
             self.add = self.multiworker_add
         else:
             self.buffer = cpprb.PrioritizedReplayBuffer(
-                size,
-                env_dict={
-                    **self.obsdict,
-                    "action": {"shape": action_space},
-                    "reward": {},
-                    **self.nextobsdict,
-                    "done": {},
-                },
-                alpha=alpha,
-                eps=eps,
-                Nstep=n_s,
-                next_of=self.obscompress,
-                stack_compress=self.obscompress,
+                size, env_dict=central_env_dict, alpha=alpha, eps=eps, Nstep=n_s, **comp_kw
             )
 
     def sample(self, batch_size: int, beta=0.5):
@@ -506,35 +406,17 @@ class MultiPrioritizedReplayBuffer:
         eps=1e-4,
     ):
         self.max_size = size
-        self.obsdict = dict(
-            (
-                "obs{}".format(idx),
-                (
-                    {"shape": o, "dtype": np.uint8}
-                    if len(o) >= 3
-                    else {"shape": o, "dtype": np.float32}
-                ),
+        self.obsdict, self.nextobsdict = _build_obs_dicts(observation_space)
+        if compress_memory and any(len(spec["shape"]) >= 3 for spec in self.obsdict.values()):
+            warnings.warn(
+                "compress_memory is unsupported for the distributed APE-X buffer: "
+                "the shared central buffer is fed shuffled, batched n-step "
+                "transitions, which violates the sequential sliding-window "
+                "assumption of cpprb stack/next compression. Image observations "
+                "are still stored as uint8; the flag is ignored.",
+                RuntimeWarning,
+                stacklevel=2,
             )
-            for idx, o in enumerate(observation_space)
-        )
-        self.nextobsdict = dict(
-            (
-                "next_obs{}".format(idx),
-                (
-                    {"shape": o, "dtype": np.uint8}
-                    if len(o) >= 3
-                    else {"shape": o, "dtype": np.float32}
-                ),
-            )
-            for idx, o in enumerate(observation_space)
-        )
-        self.obscompress = None
-        if compress_memory:
-            self.obscompress = []
-            for k in self.obsdict:
-                if len(self.obsdict[k]["shape"]) >= 3:
-                    self.obscompress.append(k)
-                    del self.nextobsdict[f"next_{k}"]
 
         self.env_dict = {
             **self.obsdict,

@@ -12,7 +12,8 @@ base:
   final_eps: 0.01
   learning_starts: 20000
   gamma: 0.99
-  buffer_size: 5e5
+  buffer_size: 1e6
+  compress_memory: true
   exploration_fraction: 0.2
   use_checkpointing: true
   node: 512

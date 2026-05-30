@@ -13,6 +13,24 @@ from jax_baselines.common.cpprb_buffers import (
     PrioritizedReplayBuffer,
     ReplayBuffer,
 )
+from jax_baselines.common.frame_buffers import (
+    FrameStackReplayBuffer,
+    PrioritizedFrameStackReplayBuffer,
+)
+
+
+def _frame_compress_applicable(observation_space, worker_size, n_step, n_frames):
+    """Frame-level n-step compaction needs a single frame-stacked image modality,
+    a single worker (contiguous transition stream), and a real n-step horizon.
+    cpprb's stack_compress cannot compact the n-step next_obs, so this is the only
+    way to get the full ~8x saving for n-step image replay."""
+    return (
+        worker_size == 1
+        and n_step > 1
+        and len(observation_space) == 1
+        and len(observation_space[0]) >= 3
+        and observation_space[0][-1] % n_frames == 0
+    )
 
 
 def make_replay_buffer(
@@ -26,14 +44,36 @@ def make_replay_buffer(
     alpha: float = 0.6,
     eps: float = 1e-3,
     compress_memory: bool = False,
+    n_frames: int = 4,
 ):
     """Create an appropriate replay buffer based on flags.
 
+    - compress_memory + n_step + single-worker image -> Frame(Prioritized)StackReplayBuffer
+      (stores one frame per observation; reconstructs the stack and the n-step
+      next_obs by index, so 1e6 Atari n-step replay costs ~7GB instead of ~35GB)
     - For prioritized + n_step -> PrioritizedNstepReplayBuffer
     - For prioritized only -> PrioritizedReplayBuffer
     - For n_step only -> NstepReplayBuffer
     - Otherwise -> ReplayBuffer
     """
+    if compress_memory and _frame_compress_applicable(
+        observation_space, worker_size, n_step, n_frames
+    ):
+        if prioritized:
+            return PrioritizedFrameStackReplayBuffer(
+                buffer_size,
+                observation_space,
+                action_shape_or_n,
+                n_step,
+                gamma,
+                alpha,
+                eps,
+                n_frames,
+            )
+        return FrameStackReplayBuffer(
+            buffer_size, observation_space, action_shape_or_n, n_step, gamma, n_frames
+        )
+
     if prioritized:
         if n_step > 1:
             return PrioritizedNstepReplayBuffer(
@@ -44,20 +84,26 @@ def make_replay_buffer(
                 n_step,
                 gamma,
                 alpha,
-                False,
+                compress_memory,
                 eps,
             )
         else:
             return PrioritizedReplayBuffer(
-                buffer_size, observation_space, alpha, action_shape_or_n, False, eps
+                buffer_size, observation_space, alpha, action_shape_or_n, compress_memory, eps
             )
     else:
         if n_step > 1:
             return NstepReplayBuffer(
-                buffer_size, observation_space, action_shape_or_n, worker_size, n_step, gamma
+                buffer_size,
+                observation_space,
+                action_shape_or_n,
+                worker_size,
+                n_step,
+                gamma,
+                compress_memory,
             )
         else:
-            return ReplayBuffer(buffer_size, observation_space, action_shape_or_n)
+            return ReplayBuffer(buffer_size, observation_space, action_shape_or_n, compress_memory)
 
 
 def make_multi_prioritized_buffer(
