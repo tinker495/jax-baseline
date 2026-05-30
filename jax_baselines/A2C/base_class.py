@@ -228,7 +228,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 obs, info = self.env.reset()
                 obs = [np.expand_dims(obs, axis=0)]
 
-            if (steps + 1) % self.batch_size == 0:  # train in step the environments
+            if (steps + 1) % self.batch_size == 0:
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
 
@@ -257,9 +257,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
 
             self.buffer.add([obs], actions, rewards, [next_obses], terminateds, truncateds)
 
-            if (steps + self.worker_size) % (
-                self.batch_size * self.worker_size
-            ) == 0:  # train in step the environments
+            if (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0:
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
 

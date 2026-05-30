@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Optional, Sequence, Tuple, Union
+from typing import Any, Callable, List, Optional, Tuple
 
 import flax
 import flax.linen as nn
@@ -194,7 +194,6 @@ PRNGKey = Any
 Array = Any
 Shape = Tuple[int, ...]
 Dtype = Any  # this could be a real type?
-Axes = Union[int, Sequence[int]]
 
 
 class BatchReNorm(Module):

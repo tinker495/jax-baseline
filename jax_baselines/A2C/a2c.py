@@ -26,7 +26,6 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         self._train_step = jax.jit(self._train_step)
 
     def train_step(self, steps):
-        # Sample a batch from the replay buffer
         data = self.buffer.get_buffer()
 
         (

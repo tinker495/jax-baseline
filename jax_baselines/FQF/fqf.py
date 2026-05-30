@@ -152,7 +152,7 @@ class FQF(Q_Network_Family):
                 targets,
                 target_weights,
             ),
-        ), grad = jax.value_and_grad(self._loss, has_aux=True,)(
+        ), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params,
             fqf_params,
             target_params,

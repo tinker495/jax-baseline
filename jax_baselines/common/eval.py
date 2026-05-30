@@ -44,8 +44,8 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
     else:
         obs, info = eval_env.reset()
     obs = [np.expand_dims(obs, axis=0)]
-    have_original_reward = "original_reward" in info.keys()
-    have_lives = "lives" in info.keys()
+    have_original_reward = "original_reward" in info
+    have_lives = "lives" in info
     if have_original_reward:
         original_reward = info["original_reward"]
     terminated = False

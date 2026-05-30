@@ -354,7 +354,7 @@ def get_env_type(env_id):
         except Exception:
             pass
 
-    if env_id in _game_envs.keys():
+    if env_id in _game_envs:
         env_type = env_id
         env_id = [g for g in _game_envs[env_type]][0]
     else:

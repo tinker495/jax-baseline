@@ -53,11 +53,7 @@ class Critic(hk.Module):
 
 def model_builder_maker(observation_space, action_size, support_n, policy_kwargs):
     policy_kwargs = {} if policy_kwargs is None else policy_kwargs
-    if "embedding_mode" in policy_kwargs:
-        embedding_mode = policy_kwargs["embedding_mode"]
-        del policy_kwargs["embedding_mode"]
-    else:
-        embedding_mode = "normal"
+    embedding_mode = policy_kwargs.pop("embedding_mode", "normal")
 
     def _model_builder(key=None, print_model=False):
         preproc = hk.transform(

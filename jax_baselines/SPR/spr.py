@@ -1,5 +1,3 @@
-from copy import deepcopy
-
 import dm_pix as pix
 import jax
 import jax.numpy as jnp
@@ -124,10 +122,6 @@ class SPR(Q_Network_Family):
         # Use common JIT compilation
         self._compile_common_functions()
 
-    def _checkpoint_update_snapshot(self):
-        """SPR checkpoint snapshot strategy: snapshot eval parameters."""
-        self.checkpoint_params = deepcopy(self.get_eval_params())
-
     def get_behavior_params(self):
         """SPR uses target_params if scaled_by_reset, otherwise params for behavior."""
         return self.target_params if self.scaled_by_reset else self.params
@@ -183,15 +177,7 @@ class SPR(Q_Network_Family):
         )
 
     def _image_augmentation(self, obs, key):
-        """Random augmentation for input images.
-
-        Args:
-            obses (np.ndarray): input images  B x K x H x W x C
-            key (jax.random.PRNGKey): random key
-
-        Returns:
-            list(np.ndarray): augmented images
-        """
+        """Random shift + intensity augmentation for B x K x H x W x C images."""
 
         def random_shift(obs, key):  # K x H x W x C
             obs = jnp.pad(

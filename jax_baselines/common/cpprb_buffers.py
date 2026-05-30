@@ -99,8 +99,8 @@ class EpochBuffer(object):
 
     def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated):
         for w in range(self.worker_size):
-            obsdict = dict(zip(self.obsdict.keys(), [o[w] for o in obs_t]))
-            nextobsdict = dict(zip(self.nextobsdict.keys(), [no[w] for no in nxtobs_t]))
+            obsdict = dict(zip(self.obsdict, [o[w] for o in obs_t]))
+            nextobsdict = dict(zip(self.nextobsdict, [no[w] for no in nxtobs_t]))
             self.local_buffers[w].add(
                 **obsdict,
                 action=action[w],
@@ -123,10 +123,10 @@ class EpochBuffer(object):
         }
         for w in range(self.worker_size):
             trans = self.local_buffers[w].get_all_transitions()
-            transitions["obses"].append([trans[o] for o in self.obsdict.keys()])
+            transitions["obses"].append([trans[o] for o in self.obsdict])
             transitions["actions"].append(trans["action"])
             transitions["rewards"].append(trans["reward"])
-            transitions["nxtobses"].append([trans[o] for o in self.nextobsdict.keys()])
+            transitions["nxtobses"].append([trans[o] for o in self.nextobsdict])
             transitions["terminateds"].append(trans["terminated"])
             transitions["truncateds"].append(trans["truncated"])
             self.local_buffers[w].clear()
@@ -162,8 +162,8 @@ class ReplayBuffer(object):
             )
             self._compress_active = bool(comp_kw)
         else:
-            self.obsdict = dict((o, None) for o in env_dict.keys() if o.startswith("obs"))
-            self.nextobsdict = dict((o, None) for o in env_dict.keys() if o.startswith("next_obs"))
+            self.obsdict = {o: None for o in env_dict if o.startswith("obs")}
+            self.nextobsdict = {o: None for o in env_dict if o.startswith("next_obs")}
             self.buffer = cpprb.ReplayBuffer(size, env_dict=env_dict, Nstep=n_s)
             self._compress_active = False
 
@@ -171,8 +171,8 @@ class ReplayBuffer(object):
         return self.buffer.get_stored_size()
 
     def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False):
-        obsdict = dict(zip(self.obsdict.keys(), obs_t))
-        nextobsdict = dict(zip(self.nextobsdict.keys(), nxtobs_t))
+        obsdict = dict(zip(self.obsdict, obs_t))
+        nextobsdict = dict(zip(self.nextobsdict, nxtobs_t))
         self.buffer.add(**obsdict, action=action, reward=reward, **nextobsdict, done=terminated)
         # next_of / stack_compress reconstruct observations from sequentially
         # stored rows, so the episode boundary must be marked or the terminal
@@ -186,10 +186,10 @@ class ReplayBuffer(object):
     def sample(self, batch_size: int):
         smpl = self.buffer.sample(batch_size)
         return {
-            "obses": [smpl[o] for o in self.obsdict.keys()],
+            "obses": [smpl[o] for o in self.obsdict],
             "actions": smpl["action"],
             "rewards": smpl["reward"],
-            "nxtobses": [smpl[no] for no in self.nextobsdict.keys()],
+            "nxtobses": [smpl[no] for no in self.nextobsdict],
             "terminateds": smpl["done"],
         }
 
@@ -198,10 +198,10 @@ class ReplayBuffer(object):
 
     def conv_transitions(self, transitions):
         return {
-            "obses": [transitions[o] for o in self.obsdict.keys()],
+            "obses": [transitions[o] for o in self.obsdict],
             "actions": transitions["action"],
             "rewards": transitions["reward"],
-            "nxtobses": [transitions[no] for no in self.nextobsdict.keys()],
+            "nxtobses": [transitions[no] for no in self.nextobsdict],
             "terminateds": transitions["done"],
         }
 
@@ -250,8 +250,8 @@ class NstepReplayBuffer(ReplayBuffer):
 
     def multiworker_add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False):
         for w in range(self.worker_size):
-            obsdict = dict(zip(self.obsdict.keys(), [o[w] for o in obs_t]))
-            nextobsdict = dict(zip(self.nextobsdict.keys(), [no[w] for no in nxtobs_t]))
+            obsdict = dict(zip(self.obsdict, [o[w] for o in obs_t]))
+            nextobsdict = dict(zip(self.nextobsdict, [no[w] for no in nxtobs_t]))
             self.local_buffers[w].add(
                 **obsdict,
                 action=action[w],
@@ -301,10 +301,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
     def sample(self, batch_size: int, beta=0.5):
         smpl = self.buffer.sample(batch_size, beta)
         return {
-            "obses": [smpl[o] for o in self.obsdict.keys()],
+            "obses": [smpl[o] for o in self.obsdict],
             "actions": smpl["action"],
             "rewards": smpl["reward"],
-            "nxtobses": [smpl[no] for no in self.nextobsdict.keys()],
+            "nxtobses": [smpl[no] for no in self.nextobsdict],
             "terminateds": smpl["done"],
             "weights": smpl["weights"],
             "indexes": smpl["indexes"],
@@ -357,10 +357,10 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
     def sample(self, batch_size: int, beta=0.5):
         smpl = self.buffer.sample(batch_size, beta)
         return {
-            "obses": [smpl[o] for o in self.obsdict.keys()],
+            "obses": [smpl[o] for o in self.obsdict],
             "actions": smpl["action"],
             "rewards": smpl["reward"],
-            "nxtobses": [smpl[no] for no in self.nextobsdict.keys()],
+            "nxtobses": [smpl[no] for no in self.nextobsdict],
             "terminateds": smpl["done"],
             "weights": smpl["weights"],
             "indexes": smpl["indexes"],
@@ -431,10 +431,10 @@ class MultiPrioritizedReplayBuffer:
     def sample(self, batch_size: int, beta=0.5):
         smpl = self.buffer.sample(batch_size, beta)
         return {
-            "obses": [smpl[o] for o in self.obsdict.keys()],
+            "obses": [smpl[o] for o in self.obsdict],
             "actions": smpl["action"],
             "rewards": smpl["reward"],
-            "nxtobses": [smpl[no] for no in self.nextobsdict.keys()],
+            "nxtobses": [smpl[no] for no in self.nextobsdict],
             "terminateds": smpl["done"],
             "weights": smpl["weights"],
             "indexes": smpl["indexes"],

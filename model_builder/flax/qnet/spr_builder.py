@@ -53,7 +53,7 @@ class Transition(nn.Module):
     @nn.compact
     def __call__(self, feature: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
         concat = jnp.concatenate([feature, action], axis=-1)
-        x = nn.Sequential([self.layer(self.node) for i in range(self.hidden_n)])(concat)
+        x = nn.Sequential([self.layer(self.node) for _ in range(self.hidden_n)])(concat)
         feature = self.last(feature.shape[-1])(x)
         return feature
 
