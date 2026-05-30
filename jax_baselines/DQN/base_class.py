@@ -439,25 +439,6 @@ class Q_Network_Family(object):
     def _has_true_reset(self):
         return False
 
-    def _categorical_projection(self, next_distribution, target_categorial):
-        Tz = jax.numpy.clip(target_categorial, self.categorial_min, self.categorial_max)
-        C51_B = ((Tz - self.categorial_min) / self.delta_bar).astype(jax.numpy.float32)
-        C51_L = jax.numpy.floor(C51_B).astype(jax.numpy.int32)
-        C51_H = jax.numpy.ceil(C51_B).astype(jax.numpy.int32)
-
-        def project_one(p, b, _l, _u):
-            exact = _l == _u
-            m = jax.numpy.zeros((self.categorial_bar_n,), dtype=p.dtype)
-            w_l = jax.numpy.where(exact, p, p * (_u.astype(jax.numpy.float32) - b))
-            w_u = jax.numpy.where(
-                exact, jax.numpy.zeros_like(p), p * (b - _l.astype(jax.numpy.float32))
-            )
-            m = m.at[_l].add(w_l)
-            m = m.at[_u].add(w_u)
-            return m
-
-        return jax.vmap(project_one, in_axes=(0, 0, 0, 0))(next_distribution, C51_B, C51_L, C51_H)
-
     def _checkpoint_on_episode_end(
         self, steps, episode_return, episode_len, train_and_reset_callback=None
     ):

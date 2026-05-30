@@ -189,7 +189,7 @@ class Deteministic_Policy_Gradient_Family(object):
                 state[attr] = value
 
         if hasattr(self, "log_ent_coef"):
-            state["log_ent_coef"] = getattr(self, "log_ent_coef")
+            state["log_ent_coef"] = self.log_ent_coef
 
         state["train_steps_count"] = np.asarray(self.train_steps_count, dtype=np.int64)
         state["checkpointing_enabled"] = np.asarray(self.checkpointing_enabled, dtype=np.bool_)

@@ -10,9 +10,9 @@ class Buffer(object):
         self.ep_idx = 0
         self.obs_dict = obs_dict
         self.env_dict = env_dict
-        self.buffer = self.creat_buffer(size, obs_dict, env_dict)
+        self.buffer = self.create_buffer(size, obs_dict, env_dict)
 
-    def creat_buffer(self, size: int, obs_dict: dict, env_dict: dict):
+    def create_buffer(self, size: int, obs_dict: dict, env_dict: dict):
         buffer = {}
         for name, data in obs_dict.items():
             buffer[name] = np.zeros((size, *data["shape"]), dtype=data["dtype"])
@@ -287,38 +287,3 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
         priorities = np.power(priorities + self.eps, self.alpha)
         for idx, p in zip(indexes, priorities):
             self.tree.update(idx, p)
-
-
-if __name__ == "__main__":
-    buffer = PrioritizedTransitionReplayBuffer(
-        20, observation_space=[(4,)], action_space=1, prediction_depth=5, alpha=0.6, eps=1e-6
-    )
-    for idx in range(10):
-        buffer.add(
-            [np.arange(idx, idx + 4)],
-            idx + 1,
-            idx + 1,
-            [np.arange(idx + 1, idx + 5)],
-            False,
-            truncated=False,
-        )
-    sample = buffer.sample(1)
-    print("shape : ")
-    for k, v in sample.items():
-        if v is not None and isinstance(v, list):
-            for idx, a in enumerate(v):
-                print(k + str(idx), a.shape)
-        else:
-            print(k, v.shape)
-
-    print("sample : ", sample)
-    buffer.add(
-        [np.arange(idx, idx + 4)],
-        idx + 1,
-        idx + 1,
-        [np.arange(idx + 1, idx + 5)],
-        True,
-        truncated=True,
-    )
-
-    buffer.update_priorities(sample["indexes"], np.random.rand(5))

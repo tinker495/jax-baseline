@@ -51,9 +51,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         self._train_step = jax.jit(self._train_step)
 
     def _get_actions(self, policy_params, obses, key=None) -> jnp.ndarray:
-        return self.actor(
-            policy_params, key, self.preproc(policy_params, key, convert_jax(obses))
-        )  #
+        return self.actor(policy_params, key, self.preproc(policy_params, key, convert_jax(obses)))
 
     def _policy_action_from_state(self, state, obs, eval, steps):
         return np.asarray(self._get_actions(state["policy"], obs, None))

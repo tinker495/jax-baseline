@@ -1,5 +1,6 @@
 import glob
 import os
+from typing import Any, Optional
 
 from tensorboardX import SummaryWriter
 from tensorboardX.summary import hparams
@@ -88,7 +89,7 @@ class TensorboardContext:
 
 
 class TensorboardLogger:
-    def __init__(self, run_name: str, experiment_name: str, local_dir: str, agent: any):
+    def __init__(self, run_name: str, experiment_name: str, local_dir: str, agent: Optional[Any]):
         """
         Create a TensorBoard logger and optionally log hyperparameters from `agent`.
 

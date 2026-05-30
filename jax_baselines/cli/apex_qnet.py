@@ -1,20 +1,17 @@
 import argparse
 import multiprocessing as mp
-import os
 
 import ray
 
 from jax_baselines.APE_X.worker import Ape_X_Worker
 from jax_baselines.C51.apex_c51 import APE_X_C51
-from jax_baselines.cli._common import default_logdir
+from jax_baselines.cli._common import default_logdir, set_default_xla_flags
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.DQN.apex_dqn import APE_X_DQN
 from jax_baselines.IQN.apex_iqn import APE_X_IQN
 from jax_baselines.QRDQN.apex_qrdqn import APE_X_QRDQN
 
-os.environ["XLA_FLAGS"] = (
-    "--xla_gpu_triton_gemm_any=True " "--xla_gpu_enable_latency_hiding_scheduler=true "
-)
+set_default_xla_flags()
 
 
 def main(argv=None):

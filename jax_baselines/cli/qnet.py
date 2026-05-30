@@ -1,11 +1,10 @@
 import argparse
-import os
 
 from jax_baselines.BBF.bbf import BBF
 from jax_baselines.BBF.hl_gauss_bbf import HL_GAUSS_BBF
 from jax_baselines.C51.c51 import C51
 from jax_baselines.C51.hl_gauss_c51 import HL_GAUSS_C51
-from jax_baselines.cli._common import default_logdir
+from jax_baselines.cli._common import default_logdir, set_default_xla_flags
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.DQN.dqn import DQN
 from jax_baselines.FQF.fqf import FQF
@@ -14,9 +13,7 @@ from jax_baselines.QRDQN.qrdqn import QRDQN
 from jax_baselines.SPR.hl_gauss_spr import HL_GAUSS_SPR
 from jax_baselines.SPR.spr import SPR
 
-os.environ["XLA_FLAGS"] = (
-    "--xla_gpu_triton_gemm_any=True " "--xla_gpu_enable_latency_hiding_scheduler=true "
-)
+set_default_xla_flags()
 
 
 def main(argv=None):

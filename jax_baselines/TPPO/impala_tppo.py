@@ -96,7 +96,7 @@ class IMPALA_TPPO(IMPALA_Family):
         rewards,
         nxtobses,
         terminateds,
-        truncteds,
+        truncateds,
     ):
         # ((b x h x w x c), (b x n)) x worker -> (worker x b x h x w x c), (worker x b x n)
         obses = [jnp.stack(zo) for zo in zip(*obses)]
@@ -105,7 +105,7 @@ class IMPALA_TPPO(IMPALA_Family):
         mu_log_prob = jnp.stack(mu_log_prob)
         rewards = jnp.stack(rewards)
         terminateds = jnp.stack(terminateds)
-        truncteds = jnp.stack(truncteds)
+        truncateds = jnp.stack(truncateds)
         obses = jax.vmap(convert_jax)(obses)
         nxtobses = jax.vmap(convert_jax)(nxtobses)
         feature = jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, obses)
@@ -125,16 +125,15 @@ class IMPALA_TPPO(IMPALA_Family):
         rho = jnp.minimum(rho_raw, self.rho_max)
         c_t = self.lamda * jnp.minimum(rho, self.cut_max)
         vs = jax.vmap(get_vtrace, in_axes=(0, 0, 0, 0, 0, 0, 0, None))(
-            rewards, rho, c_t, terminateds, truncteds, value, next_value, self.gamma
+            rewards, rho, c_t, terminateds, truncateds, value, next_value, self.gamma
         )
         vs_t_plus_1 = jax.vmap(
             lambda v, nv, t: jnp.where(
                 t == 1, nv, jnp.concatenate([v[1:], jnp.expand_dims(nv[-1], axis=-1)])
             ),
             in_axes=(0, 0, 0),
-        )(vs, next_value, truncteds)
+        )(vs, next_value, truncateds)
         adv = rewards + self.gamma * (1.0 - terminateds) * vs_t_plus_1 - value
-        # adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
         adv = rho * adv
         obses = [jnp.vstack(o) for o in obses]
         actions = jnp.vstack(actions)
@@ -164,7 +163,7 @@ class IMPALA_TPPO(IMPALA_Family):
         rewards,
         nxtobses,
         terminateds,
-        truncteds,
+        truncateds,
     ):
         obses, actions, vs, old_prob, old_act_prob, rho, adv = self.preprocess(
             params,
@@ -175,7 +174,7 @@ class IMPALA_TPPO(IMPALA_Family):
             rewards,
             nxtobses,
             terminateds,
-            truncteds,
+            truncateds,
         )
 
         def i_f(idx, vals):

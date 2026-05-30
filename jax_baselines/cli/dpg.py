@@ -1,7 +1,6 @@
 import argparse
-import os
 
-from jax_baselines.cli._common import default_logdir
+from jax_baselines.cli._common import default_logdir, set_default_xla_flags
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DDPG.ddpg import DDPG
@@ -10,9 +9,7 @@ from jax_baselines.TD3.td3 import TD3
 from jax_baselines.TD7.td7 import TD7
 from jax_baselines.TQC.tqc import TQC
 
-os.environ["XLA_FLAGS"] = (
-    "--xla_gpu_triton_gemm_any=True " "--xla_gpu_enable_latency_hiding_scheduler=true "
-)
+set_default_xla_flags()
 
 
 def main(argv=None):

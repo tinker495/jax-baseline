@@ -17,13 +17,9 @@ def save_obs(obs, path):
             os.remove(os.path.join(path, f))
     for i in tqdm(range(len(obs))):
         img = np.asarray(obs[i])
-        # img = np.mean(img, axis=-1, keepdims=True)
-        # resize 512 512
-        # img = cv2.resize(img, (512, 512), interpolation=cv2.INTER_AREA)
         print(img.shape)
         for j in range(4):
             cv2.imwrite(os.path.join(path, f"{i}_{j}.png"), img[:, :, j])
-        # cv2.imwrite(os.path.join(path, f'{i}.png'), obs[i])
 
 
 def main():

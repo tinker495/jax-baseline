@@ -1,19 +1,16 @@
 import argparse
 import multiprocessing as mp
-import os
 
 import ray
 
 from jax_baselines.A2C.impala import IMPALA
-from jax_baselines.cli._common import default_logdir
+from jax_baselines.cli._common import default_logdir, set_default_xla_flags
 from jax_baselines.IMPALA.worker import Impala_Worker
 from jax_baselines.PPO.impala_ppo import IMPALA_PPO
 from jax_baselines.SPO.impala_spo import IMPALA_SPO
 from jax_baselines.TPPO.impala_tppo import IMPALA_TPPO
 
-os.environ["XLA_FLAGS"] = (
-    "--xla_gpu_triton_gemm_any=True " "--xla_gpu_enable_latency_hiding_scheduler=true "
-)
+set_default_xla_flags()
 
 
 def main(argv=None):

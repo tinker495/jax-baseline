@@ -32,8 +32,6 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
 
         self.target_entropy = 0.5 * np.prod(self.action_size).astype(np.float32)
 
-        # Base already handled conditional setup
-
     def setup_model(self):
         model_builder = self.model_builder_maker(
             self.observation_space,

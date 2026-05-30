@@ -22,7 +22,7 @@ class Actor(nn.Module):
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray, training: bool = True) -> jnp.ndarray:
-        for i in range(self.hidden_n):
+        for _ in range(self.hidden_n):
             feature = Dense(self.node)(feature)
             feature = BatchReNorm(use_running_average=not training)(feature)
             feature = jax.nn.relu(feature)
@@ -52,7 +52,7 @@ class Critic(nn.Module):
     ) -> jnp.ndarray:
         actions_norm = BatchReNorm(use_running_average=not training)(actions)
         feature = jnp.concatenate([feature, actions_norm], axis=1)
-        for i in range(self.hidden_n):
+        for _ in range(self.hidden_n):
             feature = Dense(self.node * 8)(feature)
             feature = BatchReNorm(use_running_average=not training)(feature)
             feature = jax.nn.tanh(feature)

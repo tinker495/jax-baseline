@@ -113,7 +113,6 @@ class IMPALA(IMPALA_Family):
             in_axes=(0, 0, 0),
         )(vs, next_value, truncateds)
         adv = rewards + self.gamma * (1.0 - terminateds) * vs_t_plus_1 - value
-        # adv = (adv - jnp.mean(adv,keepdims=True)) / (jnp.std(adv,keepdims=True) + 1e-6)
         adv = rho * adv
         obses = [jnp.vstack(o) for o in obses]
         actions = jnp.vstack(actions)

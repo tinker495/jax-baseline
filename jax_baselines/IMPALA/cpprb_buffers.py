@@ -16,8 +16,6 @@ batch = namedtuple(
 
 class EpochBuffer:
     def __init__(self, size: int, env_dict: dict):
-        self.max_size = size
-        self.env_dict = env_dict
         self.obsdict = dict((o, s) for o, s in env_dict.items() if o.startswith("obs"))
         self.nextobsdict = dict((o, s) for o, s in env_dict.items() if o.startswith("next_obs"))
         self.buffer = cpprb.ReplayBuffer(size, env_dict=env_dict)
@@ -58,9 +56,6 @@ class EpochBuffer:
 class Buffer_getter:
     def __init__(self, queue, env_dict, actor_num, size, sample_size, seed=None):
         self.queue = queue
-        self.env_dict = env_dict
-        self.actor_num = actor_num
-        self.size = size
         self.replay = size > 0
         self.sample_size = sample_size
         seed_prngs(seed)
@@ -99,7 +94,6 @@ class ImpalaBuffer:
         sample_size=32,
         seed=None,
     ):
-        self.max_size = replay_size
         self.actor_num = actor_num
         self.obsdict = dict(
             (
