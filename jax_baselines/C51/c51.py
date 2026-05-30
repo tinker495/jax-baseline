@@ -215,7 +215,7 @@ class C51(Q_Network_Family):
             munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(
-                munchausen_addon, a_min=-1, a_max=0
+                munchausen_addon, min=-1, max=0
             )  # [32, 1]
             target_categorials = jnp.expand_dims(
                 self._gamma * not_terminateds, axis=2

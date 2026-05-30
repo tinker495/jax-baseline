@@ -11,8 +11,11 @@ from jax_baselines.DQN.lifecycle import QNetTrainResult
 
 class DQN(Q_Network_Family):
     def __init__(self, env_builder: callable, model_builder_maker, **kwargs):
+
         self.name = "DQN"
         super().__init__(env_builder, model_builder_maker, **kwargs)
+
+        # Base class already handled conditional setup via self._init_setup_model
 
     def setup_model(self):
         model_builder = self.model_builder_maker(
@@ -139,9 +142,7 @@ class DQN(Q_Network_Family):
             _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             munchausen_addon = jnp.take_along_axis(tau_log_pi, actions, axis=1)
 
-            rewards = rewards + self.munchausen_alpha * jnp.clip(
-                munchausen_addon, a_min=-1, a_max=0
-            )
+            rewards = rewards + self.munchausen_alpha * jnp.clip(munchausen_addon, min=-1, max=0)
         else:
             if self.double_q:
                 next_actions = jnp.argmax(self.get_q(params, nxtobses, key), axis=1, keepdims=True)

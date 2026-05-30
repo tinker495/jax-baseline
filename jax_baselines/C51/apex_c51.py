@@ -309,9 +309,7 @@ class APE_X_C51(Ape_X_Family):
             log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
             munchausen_addon = jnp.take_along_axis(log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
-            rewards = rewards + self.munchausen_alpha * jnp.clip(
-                munchausen_addon, a_min=-1, a_max=0
-            )
+            rewards = rewards + self.munchausen_alpha * jnp.clip(munchausen_addon, min=-1, max=0)
         else:
             next_categorial = not_terminateds * self.categorial_bar
         target_categorial = (next_categorial * self._gamma) + rewards  # [32, 51]

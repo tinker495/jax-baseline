@@ -1,3 +1,4 @@
+import random
 from copy import deepcopy
 
 import jax
@@ -53,8 +54,6 @@ class APE_X_IQN(Ape_X_Family):
         n_support = self.n_support
 
         def builder():
-            import random
-
             key_seq = key_gen(random.randint(0, 1000000))
 
             def get_abs_td_error(
@@ -207,9 +206,7 @@ class APE_X_IQN(Ape_X_Family):
             log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
             munchausen_addon = jnp.take_along_axis(log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
-            rewards = rewards + self.munchausen_alpha * jnp.clip(
-                munchausen_addon, a_min=-1, a_max=0
-            )
+            rewards = rewards + self.munchausen_alpha * jnp.clip(munchausen_addon, min=-1, max=0)
         else:
             if self.double_q:
                 next_actions = jnp.argmax(
