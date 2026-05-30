@@ -174,7 +174,7 @@ class IMPALA(IMPALA_Family):
             )
             adv += psi_h
         adv = jax.lax.stop_gradient(adv)
-        actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
+        actor_loss = -jnp.mean(log_prob * adv)
 
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
@@ -202,7 +202,7 @@ class IMPALA(IMPALA_Family):
             )
             adv += psi_h
         adv = jax.lax.stop_gradient(adv)
-        actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
+        actor_loss = -jnp.mean(log_prob * adv)
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
         else:

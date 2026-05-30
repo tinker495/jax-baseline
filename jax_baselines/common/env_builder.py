@@ -62,12 +62,6 @@ class Env(ABC):
         pass
 
 
-class SingleEnv(Env):
-
-    env_info = None
-    num_workers = 1
-
-
 class VectorizedEnv(Env):
 
     env_info = None

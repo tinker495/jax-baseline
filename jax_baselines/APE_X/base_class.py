@@ -136,9 +136,6 @@ class Ape_X_Family(object):
     def _train_step(self, steps):
         pass
 
-    def _get_actions(self, params, obses) -> np.ndarray:
-        pass
-
     def description(self):
         return "buffer len : {} loss : {:.3f} |".format(
             len(self.replay_buffer), np.mean(self.lossque)

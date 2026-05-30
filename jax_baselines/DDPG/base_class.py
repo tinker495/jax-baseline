@@ -323,9 +323,6 @@ class Deteministic_Policy_Gradient_Family(object):
     def setup_model(self):
         pass
 
-    def _train_step(self, steps):
-        pass
-
     def train_step(self, steps, gradient_steps):
         return self.training_lifecycle.train(steps, gradient_steps)
 
