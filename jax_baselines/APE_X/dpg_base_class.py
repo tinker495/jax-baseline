@@ -211,7 +211,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
             time.sleep(1)
             if stop.is_set():
                 print("Stop Training")
-                _, still_running = ray.wait(jobs, timeout=300)
+                ray.wait(jobs, timeout=300)
                 self.m.shutdown()
                 return
 
@@ -232,7 +232,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
                     u.set()
         self.logger_server.last_update.remote()
         stop.set()
-        _, still_running = ray.wait(jobs, timeout=300)
+        ray.wait(jobs, timeout=300)
         time.sleep(1)
         self.m.shutdown()
 

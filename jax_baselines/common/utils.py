@@ -1,7 +1,6 @@
 import os
 import pickle
 import random
-from functools import partial
 from typing import Any, Callable, Optional
 
 import gymnasium as gym
@@ -9,8 +8,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
-
-cpu_jit = partial(jax.jit, backend="cpu")
 
 PyTree = Any
 
@@ -206,11 +203,6 @@ def truncated_mixture(quantiles, cut):
     quantiles = jnp.concatenate(quantiles, axis=1)
     sorted = jnp.sort(quantiles, axis=1)
     return sorted[:, :-cut]
-
-
-@cpu_jit
-def convert_states(obs: list):
-    return [(o * 255.0).astype(np.uint8) if len(o.shape) >= 4 else o for o in obs]
 
 
 def convert_jax(obs: list):

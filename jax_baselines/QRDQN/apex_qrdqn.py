@@ -238,10 +238,6 @@ class APE_X_QRDQN(Ape_X_Family):
             ).squeeze()
             next_vals = sampled_q * not_terminateds
 
-            if self.double_q:
-                q_k_targets = jnp.mean(self.get_q(params, obses, key), axis=2)
-            else:
-                q_k_targets = jnp.mean(self.get_q(target_params, obses, key), axis=2)
             q_k_targets = jnp.mean(self.get_q(target_params, obses, key), axis=2)
             q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi

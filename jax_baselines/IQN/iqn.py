@@ -43,8 +43,6 @@ class IQN(Q_Network_Family):
 
         self.opt_state = self.optimizer.init(self.params)
 
-        self.tile_n = self.n_support
-
         # Use common JIT compilation
         self._compile_common_functions()
 

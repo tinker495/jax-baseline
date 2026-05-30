@@ -394,7 +394,7 @@ class BBF(SPR):
             centropy,
             mean_centropy,
             rprloss,
-        )  # jnp.sum(jnp.abs(error) * filled, axis=-1) / jnp.sum(filled, axis=-1)
+        )
 
     def _target(
         self,

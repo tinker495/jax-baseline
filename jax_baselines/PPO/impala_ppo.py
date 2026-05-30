@@ -214,10 +214,6 @@ class IMPALA_PPO(IMPALA_Family):
     def _loss_discrete(self, params, obses, actions, old_value, vs, mu_prob, pi_prob, adv, key):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
-        # vals_clip = old_value + jnp.clip(vals - old_value, -self.ppo_eps, self.ppo_eps)
-        # vf1 = jnp.square(jnp.squeeze(vals - vs))
-        # vf2 = jnp.square(jnp.squeeze(vals_clip - vs))
-        # critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(vals - vs)))
 
         logit = self.actor(params, key, feature)
@@ -247,10 +243,6 @@ class IMPALA_PPO(IMPALA_Family):
     def _loss_continuous(self, params, obses, actions, old_value, vs, mu_prob, adv, key):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
-        # vals_clip = old_value + jnp.clip(vals - old_value, -self.ppo_eps, self.ppo_eps)
-        # vf1 = jnp.square(jnp.squeeze(vals - vs))
-        # vf2 = jnp.square(jnp.squeeze(vals_clip - vs))
-        # critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(vals - vs)))
 
         prob = self.actor(params, key, feature)

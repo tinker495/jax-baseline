@@ -51,6 +51,32 @@ def _compress_config(obsdict, nextobsdict, compress_memory, n_step):
     return env_nextobsdict, {"next_of": image_keys, "stack_compress": image_keys}
 
 
+def _nstep_env_dicts(obsdict, nextobsdict, env_nextobsdict, action_space, n_step, gamma):
+    """Build the cpprb ``Nstep`` config and the central / local ``env_dict`` pair
+    shared by the (Prioritized)NstepReplayBuffer constructors."""
+    n_s = {
+        "size": n_step,
+        "rew": "reward",
+        "gamma": gamma,
+        "next": list(nextobsdict.keys()),
+    }
+    central_env_dict = {
+        **obsdict,
+        "action": {"shape": action_space},
+        "reward": {},
+        **env_nextobsdict,
+        "done": {},
+    }
+    local_env_dict = {
+        **obsdict,
+        "action": {"shape": action_space},
+        "reward": {},
+        **nextobsdict,
+        "done": {},
+    }
+    return n_s, central_env_dict, local_env_dict
+
+
 class EpochBuffer(object):
     def __init__(self, epoch_size: int, observation_space: list, worker_size=1, action_space=1):
         self.epoch_size = epoch_size
@@ -217,26 +243,9 @@ class NstepReplayBuffer(ReplayBuffer):
         # from doing it a second time.
         self._compress_active = False
         self.worker_size = worker_size
-        n_s = {
-            "size": n_step,
-            "rew": "reward",
-            "gamma": gamma,
-            "next": list(self.nextobsdict.keys()),
-        }
-        central_env_dict = {
-            **self.obsdict,
-            "action": {"shape": action_space},
-            "reward": {},
-            **env_nextobsdict,
-            "done": {},
-        }
-        local_env_dict = {
-            **self.obsdict,
-            "action": {"shape": action_space},
-            "reward": {},
-            **self.nextobsdict,
-            "done": {},
-        }
+        n_s, central_env_dict, local_env_dict = _nstep_env_dicts(
+            self.obsdict, self.nextobsdict, env_nextobsdict, action_space, n_step, gamma
+        )
 
         if worker_size > 1:
             self.buffer = cpprb.ReplayBuffer(size, env_dict=central_env_dict, **comp_kw)
@@ -341,26 +350,9 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
         # from doing it a second time.
         self._compress_active = False
         self.worker_size = worker_size
-        n_s = {
-            "size": n_step,
-            "rew": "reward",
-            "gamma": gamma,
-            "next": list(self.nextobsdict.keys()),
-        }
-        central_env_dict = {
-            **self.obsdict,
-            "action": {"shape": action_space},
-            "reward": {},
-            **env_nextobsdict,
-            "done": {},
-        }
-        local_env_dict = {
-            **self.obsdict,
-            "action": {"shape": action_space},
-            "reward": {},
-            **self.nextobsdict,
-            "done": {},
-        }
+        n_s, central_env_dict, local_env_dict = _nstep_env_dicts(
+            self.obsdict, self.nextobsdict, env_nextobsdict, action_space, n_step, gamma
+        )
 
         if worker_size > 1:
             self.buffer = cpprb.PrioritizedReplayBuffer(

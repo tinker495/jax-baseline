@@ -11,10 +11,6 @@ def hubberloss(x, delta):
     return 0.5 * quadratic**2 + delta * linear
 
 
-def log_cosh(x):
-    return jnp.logaddexp(x, -x) - jnp.log(2.0).astype(x.dtype)
-
-
 def QuantileHuberLosses(target_tile, q_tile, quantile, delta, target_tile_weight=None):
     """Compute the quantile huber loss for quantile regression.
 

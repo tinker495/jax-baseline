@@ -97,7 +97,7 @@ def model_builder_maker(
                 dueling=dueling_model,
                 noisy=param_noise,
                 categorial_bar_n=categorial_bar_n,
-                **policy_kwargs
+                **policy_kwargs,
             )(x)
         )
         preproc_fn = get_apply_fn_haiku_module(preproc)

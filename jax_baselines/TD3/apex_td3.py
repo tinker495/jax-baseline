@@ -90,7 +90,7 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
                 q1, q2 = critic(params, key, next_feature, next_action)
                 next_q = jnp.minimum(q1, q2)
                 feature = preproc(params, key, convert_jax(obses))
-                q_values1, q_values2 = critic(params, key, feature, actions)
+                q_values1, _ = critic(params, key, feature, actions)
                 target = rewards + gamma * (1.0 - terminateds) * next_q
                 td1_error = jnp.abs(q_values1 - target)
                 return jnp.squeeze(td1_error)

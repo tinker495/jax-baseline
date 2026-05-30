@@ -430,7 +430,7 @@ class SPR(Q_Network_Family):
             centropy,
             mean_centropy,
             rprloss,
-        )  # jnp.sum(jnp.abs(error) * filled, axis=-1) / jnp.sum(filled, axis=-1)
+        )
 
     def _represetation_loss(self, params, target_params, obses, actions, filled, key):
         initial_obs = [o[:, 0] for o in obses]  # B x H x W x C

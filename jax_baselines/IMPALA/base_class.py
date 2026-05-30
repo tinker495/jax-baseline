@@ -228,7 +228,6 @@ class IMPALA_Family(object):
         if self.env_type == "SingleEnv":
             self.learn_SingleEnv(pbar, callback, log_interval)
 
-        # add_hparams(self, self.logger_server, ["score", "loss"])
         self.save_params(ray.get(self.logger_server.get_log_dir.remote()))
 
     def learn_unity(self, pbar, callback, log_interval):
@@ -265,7 +264,7 @@ class IMPALA_Family(object):
             time.sleep(1)
             if stop.is_set():
                 print("Stop Training")
-                _, still_running = ray.wait(jobs, timeout=300)
+                ray.wait(jobs, timeout=300)
                 self.m.shutdown()
                 return
 
@@ -289,7 +288,7 @@ class IMPALA_Family(object):
         stop.set()
         while not self.buffer.queue.empty():
             self.buffer.queue.get()
-        _, still_running = ray.wait(jobs, timeout=300)
+        ray.wait(jobs, timeout=300)
         time.sleep(1)
         self.m.shutdown()
 

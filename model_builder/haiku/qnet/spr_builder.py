@@ -174,7 +174,7 @@ def model_builder_maker(
                 dueling=dueling_model,
                 noisy=param_noise,
                 categorial_bar_n=categorial_bar_n,
-                **policy_kwargs
+                **policy_kwargs,
             )(x)
         )
         transition = hk.transform(lambda x, y: Transition()(x, y))

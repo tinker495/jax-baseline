@@ -18,7 +18,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         epoch_num=4,
         ppo_eps=0.2,
         value_clip=2.0,
-        **kwargs
+        **kwargs,
     ):
 
         self.name = "PPO"
@@ -28,7 +28,6 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         self.value_clip = value_clip
         self.minibatch_size = minibatch_size
         # batch_size depends on worker_size which is set in super(); postpone adjustment until after
-        self._post_init_adjust_batch = True
         self._post_init_minibatch_size = minibatch_size
         self.epoch_num = epoch_num
 
