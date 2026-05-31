@@ -8,6 +8,12 @@ from jax_baselines.common.eval import evaluate_policy, record_and_test
 from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.replay_factory import make_replay_buffer
+from jax_baselines.common.rollout import (
+    ActionSelection,
+    CheckpointTrainPulse,
+    RolloutEngine,
+    RolloutSpec,
+)
 from jax_baselines.common.utils import (
     RunningMeanStd,
     compute_ckpt_window_stat,
@@ -16,11 +22,7 @@ from jax_baselines.common.utils import (
     save,
     set_global_seeds,
 )
-from jax_baselines.DDPG.lifecycle import (
-    DPGCheckpointingAdapter,
-    DPGRolloutLifecycle,
-    DPGTrainingLifecycle,
-)
+from jax_baselines.DDPG.training import DPGTrainingLifecycle
 
 
 class Deteministic_Policy_Gradient_Family(object):
@@ -152,8 +154,6 @@ class Deteministic_Policy_Gradient_Family(object):
         # Logging throttle based on last log step
         self._last_log_step = 0
         self.training_lifecycle = DPGTrainingLifecycle(self)
-        self.rollout_lifecycle = DPGRolloutLifecycle(self)
-        self.checkpointing_adapter = DPGCheckpointingAdapter(self)
 
     def save_params(self, path):
         state = self._gather_checkpoint_state()
@@ -443,11 +443,62 @@ class Deteministic_Policy_Gradient_Family(object):
 
             self.save_params(self.logger_run.get_local_path("params"))
 
+    # -------------------------------
+    # Rollout seam (RolloutSpec wiring)
+    # -------------------------------
+    def _bind_loss_window(self, window):
+        self.lossque = window
+
+    def _single_action_selection(self, obs, steps):
+        actions = self.actions(obs, steps)
+        return ActionSelection(env_action=actions[0], store_action=actions[0])
+
+    def _vector_action_selection(self, obs, steps):
+        actions = self.actions([obs], steps)
+        return ActionSelection(env_action=actions, store_action=actions)
+
+    def _snapshot_action_normalizer(self):
+        if self.simba:
+            self.action_obs_rms = deepcopy(self.obs_rms)
+
+    def _make_rollout_spec(self):
+        pulse = CheckpointTrainPulse(
+            train_freq=self.train_freq,
+            gradient_steps=self.gradient_steps,
+            train=self.train_step,
+            record_loss=lambda loss: self.lossque.append(loss),
+            read_residual=lambda: self._ckpt_update_residual,
+            write_residual=lambda value: setattr(self, "_ckpt_update_residual", value),
+            post_pulse=self._snapshot_action_normalizer,
+        )
+        return RolloutSpec(
+            env=self.env,
+            replay_buffer=self.replay_buffer,
+            learning_starts=self.learning_starts,
+            train_freq=self.train_freq,
+            gradient_steps=self.gradient_steps,
+            eval_freq=self.eval_freq,
+            worker_size=self.worker_size,
+            single_action=self._single_action_selection,
+            vector_action=self._vector_action_selection,
+            refresh_exploration=lambda steps: None,
+            has_true_reset=lambda: False,
+            train=self.train_step,
+            evaluate=self.eval,
+            describe=self.description,
+            bind_loss_window=self._bind_loss_window,
+            checkpoint_on_episode_end=self._checkpoint_on_episode_end,
+            checkpoint_pulse=pulse,
+        )
+
+    def _rollout(self):
+        return RolloutEngine(self._make_rollout_spec())
+
     def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
-        return self.rollout_lifecycle.learn_single_env(pbar, callback, log_interval)
+        return self._rollout().learn_single_env(pbar, callback, log_interval)
 
     def learn_VectorizedEnv(self, pbar, callback=None, log_interval=1000):
-        return self.rollout_lifecycle.learn_vectorized_env(pbar, callback, log_interval)
+        return self._rollout().learn_vectorized_env(pbar, callback, log_interval)
 
     def eval(self, steps):
         # Evaluation should use the public actions() API with eval=True so that
@@ -584,16 +635,7 @@ class Deteministic_Policy_Gradient_Family(object):
             self._ckpt_returns_window = []
 
     def learn_SingleEnv_checkpointing(self, pbar, callback=None, log_interval=1000, obs=None):
-        return self.rollout_lifecycle.learn_single_env_checkpointing(
-            pbar,
-            callback,
-            log_interval,
-            obs,
-        )
+        return self._rollout().learn_single_env_checkpointing(pbar, callback, log_interval, obs)
 
     def learn_VectorizedEnv_checkpointing(self, pbar, callback=None, log_interval=1000):
-        return self.rollout_lifecycle.learn_vectorized_env_checkpointing(
-            pbar,
-            callback,
-            log_interval,
-        )
+        return self._rollout().learn_vectorized_env_checkpointing(pbar, callback, log_interval)

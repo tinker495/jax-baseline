@@ -4,8 +4,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from jax_baselines.DQN.lifecycle import (
-    QNetCheckpointingAdapter,
+from jax_baselines.DQN.training import (
     QNetTrainingLifecycle,
     QNetTrainReport,
     QNetTrainResult,
@@ -197,39 +196,6 @@ def test_qnet_training_lifecycle_rejects_partial_chunked_pulses():
 
     with pytest.raises(ValueError, match="divisible"):
         lifecycle.train(steps=10, gradient_steps=3)
-
-
-class FakeCheckpointTrainingLifecycle:
-    def __init__(self):
-        self.calls = []
-
-    def train(self, step_val, gradient_steps):
-        self.calls.append((step_val, gradient_steps))
-        return 7.0
-
-
-class FakeCheckpointAgent:
-    def __init__(self, training_lifecycle):
-        self.training_lifecycle = training_lifecycle
-        self._ckpt_update_residual = 0
-        self.train_freq = 3
-        self.gradient_steps = 2
-        self.lossque = []
-
-    def train_step(self, steps, gradient_steps):
-        return self.training_lifecycle.train(steps, gradient_steps)
-
-
-def test_qnet_checkpointing_adapter_converts_episode_timesteps_to_training_pulse():
-    training_lifecycle = FakeCheckpointTrainingLifecycle()
-    agent = FakeCheckpointAgent(training_lifecycle)
-    adapter = QNetCheckpointingAdapter(agent)
-
-    adapter.train_and_reset(step_val=50, accumulated_timesteps=7)
-
-    assert training_lifecycle.calls == [(50, 4)]
-    assert agent._ckpt_update_residual == 1
-    assert agent.lossque == [7.0]
 
 
 def test_local_qnet_algorithms_use_train_on_batch_and_inherit_train_step():

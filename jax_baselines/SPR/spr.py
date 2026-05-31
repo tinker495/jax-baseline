@@ -12,7 +12,7 @@ from jax_baselines.common.utils import (
     tree_random_normal_like,
 )
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.DQN.lifecycle import QNetTrainReport, QNetTrainResult
+from jax_baselines.DQN.training import QNetTrainReport, QNetTrainResult
 from jax_baselines.SPR.efficent_buffer import (
     PrioritizedTransitionReplayBuffer,
     TransitionReplayBuffer,

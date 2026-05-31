@@ -10,7 +10,7 @@ from jax_baselines.common.utils import (
     soft_update,
     tree_random_normal_like,
 )
-from jax_baselines.DQN.lifecycle import QNetTrainResult
+from jax_baselines.DQN.training import QNetTrainResult
 from jax_baselines.SPR.spr import SPR
 
 

@@ -11,7 +11,7 @@ from jax_baselines.common.utils import (
     scaled_by_reset_with_filter,
     soft_update,
 )
-from jax_baselines.DQN.lifecycle import QNetTrainResult
+from jax_baselines.DQN.training import QNetTrainResult
 from jax_baselines.SPR.spr import SPR
 
 

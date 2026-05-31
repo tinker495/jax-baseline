@@ -1,10 +1,6 @@
 import numpy as np
 
-from jax_baselines.DDPG.lifecycle import (
-    DPGCheckpointingAdapter,
-    DPGTrainingLifecycle,
-    DPGTrainReport,
-)
+from jax_baselines.DDPG.training import DPGTrainingLifecycle, DPGTrainReport
 
 
 class FakeReplayBuffer:
@@ -85,40 +81,3 @@ def test_dpg_training_lifecycle_samples_normalizes_updates_priorities_and_logs()
         ("loss/qloss", 2.0, 10),
         ("loss/targets", 22.0, 10),
     ]
-
-
-class FakeCheckpointTrainingLifecycle:
-    def __init__(self):
-        self.calls = []
-
-    def train(self, step_val, gradient_steps):
-        self.calls.append((step_val, gradient_steps))
-        return 7.0
-
-
-class FakeCheckpointAgent:
-    def __init__(self, training_lifecycle):
-        self.training_lifecycle = training_lifecycle
-        self._ckpt_update_residual = 0
-        self.train_freq = 3
-        self.gradient_steps = 2
-        self.lossque = []
-        self.simba = True
-        self.obs_rms = {"mean": 1.0}
-
-    def train_step(self, steps, gradient_steps):
-        return self.training_lifecycle.train(steps, gradient_steps)
-
-
-def test_checkpointing_adapter_converts_episode_timesteps_to_training_pulse():
-    training_lifecycle = FakeCheckpointTrainingLifecycle()
-    agent = FakeCheckpointAgent(training_lifecycle)
-    adapter = DPGCheckpointingAdapter(agent)
-
-    adapter.train_and_reset(step_val=50, accumulated_timesteps=7)
-
-    assert training_lifecycle.calls == [(50, 4)]
-    assert agent._ckpt_update_residual == 1
-    assert agent.lossque == [7.0]
-    assert agent.action_obs_rms == {"mean": 1.0}
-    assert agent.action_obs_rms is not agent.obs_rms

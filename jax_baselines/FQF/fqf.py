@@ -9,7 +9,7 @@ from jax_baselines.common.losses import FQFQuantileLosses, QuantileHuberLosses
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.DQN.lifecycle import QNetTrainResult
+from jax_baselines.DQN.training import QNetTrainResult
 
 
 class FQF(Q_Network_Family):

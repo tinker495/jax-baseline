@@ -13,7 +13,7 @@ from jax_baselines.common.utils import (
     truncated_mixture,
 )
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from jax_baselines.DDPG.lifecycle import DPGTrainReport
+from jax_baselines.DDPG.training import DPGTrainReport
 
 
 class TQC(Deteministic_Policy_Gradient_Family):

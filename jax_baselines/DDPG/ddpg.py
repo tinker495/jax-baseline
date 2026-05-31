@@ -8,8 +8,8 @@ import optax
 from jax_baselines.common.schedules import LinearSchedule
 from jax_baselines.common.utils import convert_jax, scaled_by_reset, soft_update
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from jax_baselines.DDPG.lifecycle import DPGTrainReport
 from jax_baselines.DDPG.ou_noise import OUNoise
+from jax_baselines.DDPG.training import DPGTrainReport
 
 
 class DDPG(Deteministic_Policy_Gradient_Family):

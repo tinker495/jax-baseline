@@ -5,7 +5,7 @@ import optax
 
 from jax_baselines.common.utils import convert_jax, scaled_by_reset
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from jax_baselines.DDPG.lifecycle import DPGTrainReport
+from jax_baselines.DDPG.training import DPGTrainReport
 
 
 class CrossQ(Deteministic_Policy_Gradient_Family):
