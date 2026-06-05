@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import optax
 
 from jax_baselines.BBF.bbf import BBF
+from jax_baselines.common.hl_gauss import HLGaussTransform
 from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.param_updates import (
     filter_like_tree,
@@ -31,7 +32,6 @@ class HL_GAUSS_BBF(BBF):
         self.prediction_depth = 5
         self.off_policy_fix = off_policy_fix
         self.intensity_scale = 0.05
-        self.sigma = 0.75
         self.spr_weight = float(spr_weight)
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = float(categorial_max)
@@ -78,14 +78,9 @@ class HL_GAUSS_BBF(BBF):
         self.optimizer = optax.adamw(learning_rate=self.learning_rate, weight_decay=0.1)
         self.opt_state = self.optimizer.init(self.params)
 
-        self.support = jnp.linspace(
-            self.categorial_min,
-            self.categorial_max,
-            self.categorial_bar_n + 1,
-            dtype=jnp.float32,
+        self.hl_gauss = HLGaussTransform.build(
+            self.categorial_min, self.categorial_max, self.categorial_bar_n
         )
-        bin_width = self.support[1] - self.support[0]
-        self.sigma = self.sigma * bin_width
 
         # Use common JIT compilation
         self._compile_common_functions()
@@ -115,27 +110,9 @@ class HL_GAUSS_BBF(BBF):
             metrics={"loss/rprloss": rprloss},
         )
 
-    def to_probs(self, target: jax.Array):
-        # target: [batch, 1]
-        def f(target):
-            cdf_evals = jax.scipy.special.erf((self.support - target) / (jnp.sqrt(2) * self.sigma))
-            z = cdf_evals[-1] - cdf_evals[0]
-            bin_probs = cdf_evals[1:] - cdf_evals[:-1]
-            return bin_probs / z
-
-        return jax.vmap(f)(target)
-
-    def to_scalar(self, probs: jax.Array):
-        # probs: [batch, n, support]
-        def f(probs):
-            centers = (self.support[:-1] + self.support[1:]) / 2
-            return jnp.sum(probs * centers)
-
-        return jax.vmap(jax.vmap(f))(probs)
-
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         return jnp.argmax(
-            self.to_scalar(self.get_q(params, convert_jax(obses), key)),
+            self.hl_gauss.to_scalar(self.get_q(params, convert_jax(obses), key)),
             axis=1,
             keepdims=True,
         )
@@ -245,7 +222,7 @@ class HL_GAUSS_BBF(BBF):
                 self.soft_reset_freq,
                 self.reset_hardsoft,
             )
-            target_q = self.to_scalar(jnp.expand_dims(target_distribution, 1)).mean()
+            target_q = self.hl_gauss.to_scalar(jnp.expand_dims(target_distribution, 1)).mean()
             return (params, target_params, opt_state, subkey), (
                 centropy,
                 qloss,
@@ -323,11 +300,11 @@ class HL_GAUSS_BBF(BBF):
         key,
     ):
         next_prob = self.get_q(target_params, nxtobses, key)
-        next_q = self.to_scalar(next_prob)
+        next_q = self.hl_gauss.to_scalar(next_prob)
         if self.munchausen:
             if self.double_q:
                 next_action_probs = self.get_q(params, nxtobses, key)
-                next_action_q = self.to_scalar(next_action_probs)
+                next_action_q = self.hl_gauss.to_scalar(next_action_probs)
                 next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
             else:
                 next_sub_q, tau_log_pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
@@ -339,26 +316,24 @@ class HL_GAUSS_BBF(BBF):
 
             if self.double_q:
                 q_k_targets = self.get_q(params, obses, key)
-                q_k_targets = self.to_scalar(q_k_targets)
+                q_k_targets = self.hl_gauss.to_scalar(q_k_targets)
             else:
                 q_k_targets = self.get_q(target_params, obses, key)
-                q_k_targets = self.to_scalar(q_k_targets)
+                q_k_targets = self.hl_gauss.to_scalar(q_k_targets)
             _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
             munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=1), axis=1)
 
-            rewards = rewards + self.munchausen_alpha * jnp.clip(
-                munchausen_addon, a_min=-1, a_max=0
-            )
+            rewards = rewards + self.munchausen_alpha * jnp.clip(munchausen_addon, min=-1, max=0)
         else:
             if self.double_q:
                 next_action_probs = self.get_q(params, nxtobses, key)
-                next_action_q = self.to_scalar(next_action_probs)
+                next_action_q = self.hl_gauss.to_scalar(next_action_probs)
                 next_actions = jnp.argmax(next_action_q, axis=1, keepdims=True)
             else:
                 next_actions = jnp.argmax(next_q, axis=1, keepdims=True)
             next_vals = not_terminateds * jnp.take_along_axis(next_q, next_actions, axis=1)
         target_q = (next_vals * gammas) + rewards
-        target_distribution = self.to_probs(target_q)
+        target_distribution = self.hl_gauss.to_probs(target_q)
         return target_distribution
 
     def learn(
