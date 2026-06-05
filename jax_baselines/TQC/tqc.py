@@ -5,13 +5,10 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.losses import QuantileHuberLosses
-from jax_baselines.common.utils import (
-    convert_jax,
-    scaled_by_reset,
-    soft_update,
-    truncated_mixture,
-)
+from jax_baselines.common.param_updates import scaled_by_reset, soft_update
+from jax_baselines.common.policy_math import truncated_mixture
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.training import DPGTrainReport
 

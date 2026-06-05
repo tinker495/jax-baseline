@@ -4,7 +4,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 
-from jax_baselines.common.utils import seed_env
+from jax_baselines.common.seeding import seed_env
 
 
 def get_env_builder(env_name, **kwargs):

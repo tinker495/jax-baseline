@@ -8,15 +8,11 @@ from tqdm.auto import trange
 from jax_baselines.common.cpprb_buffers import EpochBuffer
 from jax_baselines.common.env_info import get_local_env_info, infer_action_meta
 from jax_baselines.common.eval import evaluate_policy, record_and_test
+from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.optimizer import select_optimizer
-from jax_baselines.common.utils import (
-    convert_jax,
-    key_gen,
-    restore,
-    save,
-    set_global_seeds,
-)
+from jax_baselines.common.seeding import key_gen, set_global_seeds
+from jax_baselines.common.serialization import restore, save
 
 
 class Actor_Critic_Policy_Gradient_Family(object):

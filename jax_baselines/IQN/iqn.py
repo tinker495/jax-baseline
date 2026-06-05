@@ -5,8 +5,10 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.losses import QuantileHuberLosses
-from jax_baselines.common.utils import convert_jax, hard_update, q_log_pi
+from jax_baselines.common.param_updates import hard_update
+from jax_baselines.common.policy_math import q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import QNetTrainResult
 

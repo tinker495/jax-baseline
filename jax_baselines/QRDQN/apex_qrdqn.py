@@ -7,8 +7,11 @@ import numpy as np
 import optax
 
 from jax_baselines.APE_X.base_class import Ape_X_Family
+from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.losses import QuantileHuberLosses
-from jax_baselines.common.utils import convert_jax, hard_update, key_gen, q_log_pi
+from jax_baselines.common.param_updates import hard_update
+from jax_baselines.common.policy_math import q_log_pi
+from jax_baselines.common.seeding import key_gen
 
 
 class APE_X_QRDQN(Ape_X_Family):

@@ -6,7 +6,7 @@ import numpy as np
 import ray
 from ray.util.queue import Queue
 
-from jax_baselines.common.utils import seed_prngs
+from jax_baselines.common.seeding import seed_prngs
 
 batch = namedtuple(
     "batch_tuple",

@@ -6,7 +6,9 @@ import numpy as np
 import optax
 
 from jax_baselines.APE_X.dpg_base_class import Ape_X_Deteministic_Policy_Gradient_Family
-from jax_baselines.common.utils import convert_jax, key_gen, soft_update
+from jax_baselines.common.jax_utils import convert_jax
+from jax_baselines.common.param_updates import soft_update
+from jax_baselines.common.seeding import key_gen
 
 
 class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):

@@ -4,13 +4,13 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.common.utils import (
-    convert_jax,
+from jax_baselines.common.jax_utils import convert_jax
+from jax_baselines.common.param_updates import (
     filter_like_tree,
-    q_log_pi,
     scaled_by_reset_with_filter,
     soft_update,
 )
+from jax_baselines.common.policy_math import q_log_pi
 from jax_baselines.DQN.training import QNetTrainResult
 from jax_baselines.SPR.spr import SPR
 

@@ -1,4 +1,4 @@
-"""Regression coverage for pure-numpy utilities in jax_baselines.common.utils.
+"""Regression coverage for pure-numpy utilities in jax_baselines.common.statistics.
 
 RunningMeanStd (Welford online stats) and compute_ckpt_window_stat are public
 contracts consumed by the DQN/DDPG base classes (obs normalization and
@@ -8,7 +8,7 @@ checkpoint-gating). They had no direct test; these lock their behavior.
 import numpy as np
 import pytest
 
-from jax_baselines.common.utils import RunningMeanStd, compute_ckpt_window_stat
+from jax_baselines.common.statistics import RunningMeanStd, compute_ckpt_window_stat
 
 
 def test_running_mean_std_matches_batch_statistics():

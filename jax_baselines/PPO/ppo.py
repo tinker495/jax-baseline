@@ -4,7 +4,8 @@ import numpy as np
 import optax
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
-from jax_baselines.common.utils import convert_jax, get_gaes
+from jax_baselines.common.jax_utils import convert_jax
+from jax_baselines.common.returns import get_gaes
 
 
 class PPO(Actor_Critic_Policy_Gradient_Family):

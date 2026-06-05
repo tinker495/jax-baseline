@@ -10,14 +10,10 @@ from tqdm.auto import trange
 
 from jax_baselines.APE_X.common_servers import Logger_server, Param_server
 from jax_baselines.common.env_info import get_remote_env_info
+from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.optimizer import select_optimizer
-from jax_baselines.common.utils import (
-    convert_jax,
-    key_gen,
-    restore,
-    save,
-    set_global_seeds,
-)
+from jax_baselines.common.seeding import key_gen, set_global_seeds
+from jax_baselines.common.serialization import restore, save
 from jax_baselines.IMPALA.cpprb_buffers import ImpalaBuffer
 
 
