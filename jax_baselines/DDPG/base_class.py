@@ -3,6 +3,7 @@ from copy import deepcopy
 import numpy as np
 from tqdm.auto import trange
 
+from jax_baselines.common.checkpoint import CheckpointController
 from jax_baselines.common.env_info import get_local_env_info
 from jax_baselines.common.eval import evaluate_policy, record_and_test
 from jax_baselines.common.logger import TensorboardLogger
@@ -16,7 +17,7 @@ from jax_baselines.common.rollout import (
 )
 from jax_baselines.common.seeding import key_gen, set_global_seeds
 from jax_baselines.common.serialization import restore, save
-from jax_baselines.common.statistics import RunningMeanStd, compute_ckpt_window_stat
+from jax_baselines.common.statistics import RunningMeanStd
 from jax_baselines.DDPG.training import DPGTrainingLifecycle
 
 
@@ -109,23 +110,14 @@ class Deteministic_Policy_Gradient_Family(object):
 
         # Generic checkpointing scaffolding (used by algorithms that opt-in)
         self.use_checkpointing = use_checkpointing
-        self.checkpointing_enabled = False  # becomes True after steps_before_checkpointing
         self.steps_before_checkpointing = min(int(steps_before_checkpointing), learning_starts * 2)
         self.max_eps_before_checkpointing = int(max_eps_before_checkpointing)
         self.initial_checkpoint_window = int(initial_checkpoint_window)
-        self._ckpt_eps_since_update = 0
-        self._ckpt_timesteps_since_update = 0
-        self._ckpt_max_eps_before_update = self.initial_checkpoint_window
 
         # Robust checkpointing controls
         self.ckpt_quantile = 0.2  # q-quantile statistic instead of strict min
         self.use_ckpt_return_standardization = False  # compare windows in absolute return space
-        self._ckpt_returns_window = []  # recent episode returns in current window
-        self._ckpt_baseline = -1e8  # window-stat baseline (initialized on first window)
-        self._ckpt_update_residual = 0  # exact training-parity residual accumulator
-        # Track snapshot updates for logging and progress description
-        self._last_ckpt_update_step = None
-        self._ckpt_update_count = 0
+        self._ckpt_update_residual = 0  # training-parity residual accumulator (pulse-owned)
 
         # Checkpoint baseline mode configuration
         self.ckpt_baseline_mode = ckpt_baseline_mode
@@ -145,6 +137,22 @@ class Deteministic_Policy_Gradient_Family(object):
             self.ckpt_gate_q = self.ckpt_baseline_q
         else:
             self.ckpt_gate_q = self.ckpt_quantile
+
+        self._checkpoint = CheckpointController(
+            use_checkpointing=self.use_checkpointing,
+            steps_before_checkpointing=self.steps_before_checkpointing,
+            max_eps_before_checkpointing=self.max_eps_before_checkpointing,
+            initial_window=self.initial_checkpoint_window,
+            baseline_q=self.ckpt_baseline_q,
+            baseline_mode=self.ckpt_baseline_mode,
+            use_return_standardization=self.use_ckpt_return_standardization,
+            snapshot=self._checkpoint_update_snapshot,
+            log_metric=lambda key, value, step: (
+                self.logger_run.log_metric(key, value, step)
+                if self.logger_run is not None
+                else None
+            ),
+        )
 
         # Logging throttle based on last log step
         self._last_log_step = 0
@@ -187,23 +195,8 @@ class Deteministic_Policy_Gradient_Family(object):
             state["log_ent_coef"] = self.log_ent_coef
 
         state["train_steps_count"] = np.asarray(self.train_steps_count, dtype=np.int64)
-        state["checkpointing_enabled"] = np.asarray(self.checkpointing_enabled, dtype=np.bool_)
-        state["_ckpt_eps_since_update"] = np.asarray(self._ckpt_eps_since_update, dtype=np.int32)
-        state["_ckpt_timesteps_since_update"] = np.asarray(
-            self._ckpt_timesteps_since_update, dtype=np.int64
-        )
         state["_ckpt_update_residual"] = np.asarray(self._ckpt_update_residual, dtype=np.float32)
-        state["_ckpt_baseline"] = np.asarray(self._ckpt_baseline, dtype=np.float32)
-        state["_ckpt_update_count"] = np.asarray(self._ckpt_update_count, dtype=np.int32)
-        state["_ckpt_max_eps_before_update"] = np.asarray(
-            self._ckpt_max_eps_before_update, dtype=np.int32
-        )
-        state["_last_ckpt_update_step"] = (
-            np.asarray(self._last_ckpt_update_step, dtype=np.int64)
-            if self._last_ckpt_update_step is not None
-            else np.asarray(-1, dtype=np.int64)
-        )
-        state["_ckpt_returns_window"] = np.asarray(self._ckpt_returns_window, dtype=np.float32)
+        state.update(self._checkpoint.to_state())
 
         if getattr(self, "simba", False) and hasattr(self, "obs_rms"):
             state["obs_rms_state"] = self.obs_rms.to_state()
@@ -239,38 +232,10 @@ class Deteministic_Policy_Gradient_Family(object):
         if "train_steps_count" in state:
             self.train_steps_count = int(np.asarray(state["train_steps_count"]).item())
 
-        if "checkpointing_enabled" in state:
-            self.checkpointing_enabled = bool(np.asarray(state["checkpointing_enabled"]).item())
-
-        if "_ckpt_eps_since_update" in state:
-            self._ckpt_eps_since_update = int(np.asarray(state["_ckpt_eps_since_update"]).item())
-
-        if "_ckpt_timesteps_since_update" in state:
-            self._ckpt_timesteps_since_update = int(
-                np.asarray(state["_ckpt_timesteps_since_update"]).item()
-            )
-
         if "_ckpt_update_residual" in state:
             self._ckpt_update_residual = float(np.asarray(state["_ckpt_update_residual"]).item())
 
-        if "_ckpt_baseline" in state:
-            self._ckpt_baseline = float(np.asarray(state["_ckpt_baseline"]).item())
-
-        if "_ckpt_update_count" in state:
-            self._ckpt_update_count = int(np.asarray(state["_ckpt_update_count"]).item())
-
-        if "_ckpt_max_eps_before_update" in state:
-            self._ckpt_max_eps_before_update = int(
-                np.asarray(state["_ckpt_max_eps_before_update"]).item()
-            )
-
-        if "_last_ckpt_update_step" in state:
-            last_update = int(np.asarray(state["_last_ckpt_update_step"]).item())
-            self._last_ckpt_update_step = None if last_update < 0 else last_update
-
-        if "_ckpt_returns_window" in state:
-            returns_window = np.asarray(state["_ckpt_returns_window"])
-            self._ckpt_returns_window = returns_window.tolist()
+        self._checkpoint.from_state(state)
 
         if getattr(self, "simba", False):
             if "obs_rms_state" in state:
@@ -356,7 +321,7 @@ class Deteministic_Policy_Gradient_Family(object):
         if (
             eval
             and self.use_checkpointing
-            and self.checkpointing_enabled
+            and self._checkpoint.enabled
             and getattr(self, "checkpoint_state", None) is not None
         ):
             return self.checkpoint_state
@@ -375,8 +340,8 @@ class Deteministic_Policy_Gradient_Family(object):
                 description += f"{k} : {v:8.2f}, "
 
         description += f"loss : {np.mean(self.lossque):.3f}"
-        if self.use_checkpointing and (self._last_ckpt_update_step is not None):
-            description += f", ckpt_upd_step : {int(self._last_ckpt_update_step)}"
+        if self.use_checkpointing and (self._checkpoint.last_update_step is not None):
+            description += f", ckpt_upd_step : {int(self._checkpoint.last_update_step)}"
         return description
 
     def run_name_update(self, run_name):
@@ -397,7 +362,7 @@ class Deteministic_Policy_Gradient_Family(object):
                 if (
                     eval
                     and self.use_checkpointing
-                    and self.checkpointing_enabled
+                    and self._checkpoint.enabled
                     and hasattr(self, "checkpoint_obs_rms")
                 )
                 else (self.action_obs_rms if hasattr(self, "action_obs_rms") else self.obs_rms)
@@ -482,7 +447,7 @@ class Deteministic_Policy_Gradient_Family(object):
             evaluate=self.eval,
             describe=self.description,
             bind_loss_window=self._bind_loss_window,
-            checkpoint_on_episode_end=self._checkpoint_on_episode_end,
+            checkpoint_on_episode_end=self._checkpoint.on_episode_end,
             checkpoint_pulse=pulse,
         )
 
@@ -529,16 +494,6 @@ class Deteministic_Policy_Gradient_Family(object):
     # -------------------------------
     # Checkpointing scaffolding hooks
     # -------------------------------
-    def _maybe_enable_checkpointing(self, steps):
-        if (
-            self.use_checkpointing
-            and (not self.checkpointing_enabled)
-            and steps > self.steps_before_checkpointing
-        ):
-            # Relax the threshold slightly when entering checkpointing mode
-            self._ckpt_max_eps_before_update = self.max_eps_before_checkpointing
-            self.checkpointing_enabled = True
-
     def _checkpoint_update_snapshot(self):
         """Default checkpoint snapshot strategy for DPG family.
 
@@ -558,76 +513,6 @@ class Deteministic_Policy_Gradient_Family(object):
         # If using SIMBA normalization, snapshot obs_rms as well for eval-time consistency
         if self.simba:
             self.checkpoint_obs_rms = deepcopy(getattr(self, "action_obs_rms", self.obs_rms))
-
-    def _log_ckpt_snapshot_update(self, steps):
-        """Record that a checkpoint snapshot was updated and log it."""
-        self._last_ckpt_update_step = int(steps)
-        self._ckpt_update_count += self.checkpointing_enabled
-        if self.logger_run is not None:
-            self.logger_run.log_metric("ckpt/ckpt_baseline", float(self._ckpt_baseline), int(steps))
-            self.logger_run.log_metric(
-                "ckpt/update_count", float(self._ckpt_update_count), int(steps)
-            )
-
-    def _checkpoint_on_episode_end(
-        self, steps, episode_return, episode_len, train_and_reset_callback=None
-    ):
-        """Generic per-episode checkpointing state update.
-
-        Subclasses can call this at the end of an episode to drive a TD7-like
-        checkpoint schedule. If a callback is provided, it will be called when
-        it's time to perform a training/reset pulse.
-        """
-        if not self.use_checkpointing:
-            return
-
-        # Update runtime counters and statistics
-        self._ckpt_eps_since_update += 1
-        self._ckpt_timesteps_since_update += int(episode_len)
-        self._ckpt_returns_window.append(float(episode_return))
-
-        # Enable checkpointing mode once enough steps have elapsed
-        self._maybe_enable_checkpointing(steps)
-
-        # Compute robust window statistic (quantile on standardized returns if enabled)
-        window_stat = compute_ckpt_window_stat(
-            self._ckpt_returns_window,
-            self.ckpt_baseline_q,
-            self.use_ckpt_return_standardization,
-            self.ckpt_baseline_mode,
-        )
-        if window_stat is None:
-            return
-        self.logger_run.log_metric("ckpt/window_stat", float(window_stat), int(steps))
-
-        # Pre-enable phase: warm-up baseline/snapshot, no training pulses by default
-        if not self.checkpointing_enabled:
-            self._checkpoint_update_snapshot()
-            if callable(train_and_reset_callback):
-                train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
-            self._ckpt_eps_since_update = 0
-            self._ckpt_timesteps_since_update = 0
-            self._ckpt_returns_window = []
-
-        if window_stat < self._ckpt_baseline:
-            # If window is not yet full, gate early termination by predictive probability
-            if callable(train_and_reset_callback):
-                train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
-            self._ckpt_eps_since_update = 0
-            self._ckpt_timesteps_since_update = 0
-            self._ckpt_returns_window = []
-            return
-
-        # Enabled phase: end-of-window refresh with training pulse
-        if self._ckpt_eps_since_update >= self._ckpt_max_eps_before_update:
-            self._checkpoint_update_snapshot()
-            self._ckpt_baseline = window_stat
-            self._log_ckpt_snapshot_update(steps)
-            if callable(train_and_reset_callback):
-                train_and_reset_callback(steps, self._ckpt_timesteps_since_update)
-            self._ckpt_eps_since_update = 0
-            self._ckpt_timesteps_since_update = 0
-            self._ckpt_returns_window = []
 
     def learn_SingleEnv_checkpointing(self, pbar, callback=None, log_interval=1000, obs=None):
         return self._rollout().learn_single_env_checkpointing(pbar, callback, log_interval, obs)
