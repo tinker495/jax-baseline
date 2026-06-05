@@ -3,6 +3,11 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from jax_baselines.common.distributional import (
+    CategoricalBackend,
+    MunchausenSpec,
+    distributional_td_target,
+)
 from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.param_updates import (
     filter_like_tree,
@@ -10,7 +15,6 @@ from jax_baselines.common.param_updates import (
     soft_update,
     tree_random_normal_like,
 )
-from jax_baselines.common.policy_math import q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import QNetTrainReport, QNetTrainResult
 from jax_baselines.SPR.efficent_buffer import (
@@ -469,78 +473,37 @@ class SPR(Q_Network_Family):
         gammas,
         key,
     ):
-        next_distributions = self.get_q(target_params, nxtobses, key)
-        if self.double_q:
-            next_action_q = jnp.sum(
-                self.get_q(params, nxtobses, key) * self._categorial_bar, axis=2
-            )
-        else:
-            next_action_q = jnp.sum(next_distributions * self._categorial_bar, axis=2)
+        next_dists = self.get_q(target_params, nxtobses, key)
+        online_next_dists = self.get_q(params, nxtobses, key) if self.double_q else None
 
-        def tdist(next_distribution, target_categorial):
-            Tz = jnp.clip(
-                target_categorial, self.categorial_min, self.categorial_max
-            )  # clip to range of bar
-            C51_B = ((Tz - self.categorial_min) / self.delta_bar).astype(
-                jnp.float32
-            )  # bar index as float
-            C51_L = jnp.floor(C51_B).astype(jnp.int32)  # bar lower index as int
-            C51_H = jnp.ceil(C51_B).astype(jnp.int32)  # bar higher index as int
-
-            def project_one(p, b, _l, _u):
-                exact = _l == _u
-                m = jnp.zeros((self.categorial_bar_n,), dtype=p.dtype)
-
-                w_l = jnp.where(exact, p, p * (_u.astype(jnp.float32) - b))
-                w_u = jnp.where(exact, jnp.zeros_like(p), p * (b - _l.astype(jnp.float32)))
-
-                m = m.at[_l].add(w_l)
-                m = m.at[_u].add(w_u)
-                return m
-
-            return jax.vmap(project_one, in_axes=(0, 0, 0, 0))(
-                next_distribution, C51_B, C51_L, C51_H
-            )
+        backend = CategoricalBackend(
+            support=self.categorial_bar[0],
+            support_min=self.categorial_min,
+            support_max=self.categorial_max,
+            delta=self.delta_bar,
+            n_bins=self.categorial_bar_n,
+        )
 
         if self.munchausen:
-            next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
-            pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)  # [32, action_size]
-            next_categorials = self._categorial_bar - jnp.expand_dims(
-                tau_log_pi_next, axis=2
-            )  # [32, action_size, 51]
-
-            if self.double_q:
-                q_k_targets = jnp.sum(self.get_q(params, obses, key) * self.categorial_bar, axis=2)
-            else:
-                q_k_targets = jnp.sum(
-                    self.get_q(target_params, obses, key) * self.categorial_bar, axis=2
-                )
-            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
-            munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
-
-            rewards = rewards + self.munchausen_alpha * jnp.clip(
-                munchausen_addon, a_min=-1, a_max=0
-            )  # [32, 1]
-            target_categorials = jnp.expand_dims(
-                gammas * not_terminateds, axis=2
-            ) * next_categorials + jnp.expand_dims(
-                rewards, axis=2
-            )  # [32, action_size, 51]
-            target_distributions = jax.vmap(tdist, in_axes=(1, 1), out_axes=1)(
-                next_distributions, target_categorials
-            )
-            target_distribution = jnp.sum(
-                jnp.expand_dims(pi_next, axis=2) * target_distributions, axis=1
+            behavior_dists = self.get_q(params if self.double_q else target_params, obses, key)
+            munchausen = MunchausenSpec(
+                alpha=self.munchausen_alpha, tau=self.munchausen_entropy_tau
             )
         else:
-            next_actions = jnp.expand_dims(jnp.argmax(next_action_q, axis=1), axis=(1, 2))
-            next_distribution = jnp.squeeze(
-                jnp.take_along_axis(next_distributions, next_actions, axis=1)
-            )
-            target_categorial = gammas * not_terminateds * self.categorial_bar + rewards  # [32, 51]
-            target_distribution = tdist(next_distribution, target_categorial)
+            behavior_dists = None
+            munchausen = None
 
-        return target_distribution
+        return distributional_td_target(
+            next_dists=next_dists,
+            actions=jnp.squeeze(actions, axis=2),
+            reward=rewards,
+            not_terminated=not_terminateds,
+            gamma=gammas,
+            backend=backend,
+            online_next_dists=online_next_dists,
+            behavior_dists=behavior_dists,
+            munchausen=munchausen,
+        )
 
     def run_name_update(self, run_name):
         if self.scaled_by_reset:

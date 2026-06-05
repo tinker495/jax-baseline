@@ -3,7 +3,12 @@ import jax.numpy as jnp
 import optax
 
 from jax_baselines.BBF.bbf import BBF
-from jax_baselines.common.hl_gauss import HLGaussTransform
+from jax_baselines.common.distributional import (
+    HLGaussBackend,
+    HLGaussTransform,
+    MunchausenSpec,
+    distributional_td_target,
+)
 from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.param_updates import (
     filter_like_tree,
@@ -11,7 +16,6 @@ from jax_baselines.common.param_updates import (
     soft_update,
     tree_random_normal_like,
 )
-from jax_baselines.common.policy_math import q_log_pi
 from jax_baselines.DQN.training import QNetTrainResult
 
 
@@ -299,42 +303,33 @@ class HL_GAUSS_BBF(BBF):
         gammas,
         key,
     ):
-        next_prob = self.get_q(target_params, nxtobses, key)
-        next_q = self.hl_gauss.to_scalar(next_prob)
-        if self.munchausen:
-            if self.double_q:
-                next_action_probs = self.get_q(params, nxtobses, key)
-                next_action_q = self.hl_gauss.to_scalar(next_action_probs)
-                next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
-            else:
-                next_sub_q, tau_log_pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
-            pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
-            next_vals = (
-                jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True)
-                * not_terminateds
+        next_dists = self.get_q(target_params, nxtobses, key)
+        online_next_dists = self.get_q(params, nxtobses, key) if self.double_q else None
+        munchausen = (
+            MunchausenSpec(alpha=self.munchausen_alpha, tau=self.munchausen_entropy_tau)
+            if self.munchausen
+            else None
+        )
+        behavior_dists = (
+            (
+                self.get_q(params, obses, key)
+                if self.double_q
+                else self.get_q(target_params, obses, key)
             )
-
-            if self.double_q:
-                q_k_targets = self.get_q(params, obses, key)
-                q_k_targets = self.hl_gauss.to_scalar(q_k_targets)
-            else:
-                q_k_targets = self.get_q(target_params, obses, key)
-                q_k_targets = self.hl_gauss.to_scalar(q_k_targets)
-            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
-            munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=1), axis=1)
-
-            rewards = rewards + self.munchausen_alpha * jnp.clip(munchausen_addon, min=-1, max=0)
-        else:
-            if self.double_q:
-                next_action_probs = self.get_q(params, nxtobses, key)
-                next_action_q = self.hl_gauss.to_scalar(next_action_probs)
-                next_actions = jnp.argmax(next_action_q, axis=1, keepdims=True)
-            else:
-                next_actions = jnp.argmax(next_q, axis=1, keepdims=True)
-            next_vals = not_terminateds * jnp.take_along_axis(next_q, next_actions, axis=1)
-        target_q = (next_vals * gammas) + rewards
-        target_distribution = self.hl_gauss.to_probs(target_q)
-        return target_distribution
+            if self.munchausen
+            else None
+        )
+        return distributional_td_target(
+            next_dists=next_dists,
+            actions=jnp.squeeze(actions, axis=1),
+            reward=rewards,
+            not_terminated=not_terminateds,
+            gamma=gammas,
+            backend=HLGaussBackend(self.hl_gauss),
+            online_next_dists=online_next_dists,
+            behavior_dists=behavior_dists,
+            munchausen=munchausen,
+        )
 
     def learn(
         self,
