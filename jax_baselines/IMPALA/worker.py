@@ -7,7 +7,7 @@ import jax
 import numpy as np
 import ray
 
-from jax_baselines.common.utils import seed_env, seed_prngs
+from jax_baselines.common.seeding import seed_env, seed_prngs
 from jax_baselines.IMPALA.cpprb_buffers import EpochBuffer
 
 

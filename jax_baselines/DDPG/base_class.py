@@ -14,14 +14,9 @@ from jax_baselines.common.rollout import (
     RolloutEngine,
     RolloutSpec,
 )
-from jax_baselines.common.utils import (
-    RunningMeanStd,
-    compute_ckpt_window_stat,
-    key_gen,
-    restore,
-    save,
-    set_global_seeds,
-)
+from jax_baselines.common.seeding import key_gen, set_global_seeds
+from jax_baselines.common.serialization import restore, save
+from jax_baselines.common.statistics import RunningMeanStd, compute_ckpt_window_stat
 from jax_baselines.DDPG.training import DPGTrainingLifecycle
 
 

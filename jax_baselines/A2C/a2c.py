@@ -3,7 +3,8 @@ import jax.numpy as jnp
 import optax
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
-from jax_baselines.common.utils import convert_jax, discount_with_terminated
+from jax_baselines.common.jax_utils import convert_jax
+from jax_baselines.common.returns import discount_with_terminated
 
 
 class A2C(Actor_Critic_Policy_Gradient_Family):

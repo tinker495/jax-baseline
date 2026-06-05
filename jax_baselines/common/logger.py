@@ -5,7 +5,7 @@ from typing import Any, Optional
 from tensorboardX import SummaryWriter
 from tensorboardX.summary import hparams
 
-from jax_baselines.common.utils import add_hparams
+from jax_baselines.common.hparams import add_hparams
 
 
 def _get_latest_run_id(local_dir, experiment_name, run_name):

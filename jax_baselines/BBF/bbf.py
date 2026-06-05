@@ -2,9 +2,9 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.optimizer import select_optimizer
-from jax_baselines.common.utils import (
-    convert_jax,
+from jax_baselines.common.param_updates import (
     filter_like_tree,
     scaled_by_reset_with_filter,
     soft_update,

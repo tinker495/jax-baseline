@@ -2,12 +2,12 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.common.utils import (
-    convert_jax,
-    get_vtrace,
+from jax_baselines.common.jax_utils import convert_jax
+from jax_baselines.common.policy_math import (
     kl_divergence_continuous,
     kl_divergence_discrete,
 )
+from jax_baselines.common.returns import get_vtrace
 from jax_baselines.IMPALA.base_class import IMPALA_Family
 
 
