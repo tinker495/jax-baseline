@@ -142,11 +142,11 @@ class Ape_X_Worker(object):
                         key=next(key_seq),
                     )
                     gloabal_buffer.add(**transition, priorities=abs_td_error)
-        except Exception as e:
+        except Exception:
             print(
                 "------------------------------Exception in worker----------------------------------"
             )
-            traceback.print_exc(e)
+            traceback.print_exc()
             print(
                 "---------------------------------------------------------------------------------"
             )

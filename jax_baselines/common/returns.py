@@ -8,7 +8,7 @@ def discount_with_terminated(rewards, terminateds, truncateds, next_values, gamm
         ret = reward + gamma * (ret * (1.0 - trunc) + nextval * (1.0 - term) * trunc)
         return ret, ret
 
-    truncateds.at[-1].set(jnp.ones((1,), dtype=jnp.float32))
+    truncateds = truncateds.at[-1].set(jnp.ones((1,), dtype=jnp.float32))
     _, discounted = jax.lax.scan(
         f,
         jnp.zeros((1,), dtype=jnp.float32),

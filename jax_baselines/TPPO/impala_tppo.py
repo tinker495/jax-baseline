@@ -51,7 +51,7 @@ class IMPALA_TPPO(IMPALA_Family):
         )
 
     def train_step(self, steps):
-        data = self.buffer.sample(self.sample_size)
+        data = self.buffer.sample()
 
         (
             self.params,

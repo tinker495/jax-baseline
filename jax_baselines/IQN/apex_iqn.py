@@ -46,8 +46,8 @@ class APE_X_IQN(Ape_X_Family):
         self._target = jax.jit(self._target)
         self._train_step = jax.jit(self._train_step)
 
-    def get_q(self, params, obses, key=None) -> jnp.ndarray:
-        return self.model(params, key, self.preproc(params, key, obses))
+    def get_q(self, params, obses, tau, key=None) -> jnp.ndarray:
+        return self.model(params, key, self.preproc(params, key, obses), tau)
 
     def get_actor_builder(self):
         gamma = self._gamma

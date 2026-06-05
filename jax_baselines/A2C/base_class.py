@@ -211,6 +211,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         obs, info = self.env.reset()
         obs = [np.expand_dims(obs, axis=0)]
         self.lossque = deque(maxlen=10)
+        eval_result = None
         for steps in pbar:
             actions = self.actions(obs)[0]
             next_obs, reward, terminated, truncated, info = self.env.step(

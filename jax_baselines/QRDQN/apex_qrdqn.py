@@ -226,18 +226,19 @@ class APE_X_QRDQN(Ape_X_Family):
             else:
                 next_q_mean = jnp.mean(next_q, axis=2)
             next_sub_q, tau_log_pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
-            pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau, axis=1)
-            p_cuml = jnp.expand_dims(jnp.cumsum(pi_next, axis=1), axis=2).tile(32)
-            r = jax.random.uniform(key, (32, 1, 32), dtype=p_cuml.dtype)
-            ind = jnp.swapaxes(
-                jax.vmap(jax.vmap(lambda p, r: jnp.searchsorted(p, r), in_axes=(1, 1)))(p_cuml, r),
-                1,
-                2,
-            )
-            sampled_q = jnp.take_along_axis(
-                next_q - jnp.expand_dims(tau_log_pi_next, axis=2), ind, axis=1
-            ).squeeze()
-            next_vals = sampled_q * not_terminateds
+            pi_next = jnp.expand_dims(
+                jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau), axis=2
+            )  # batch x actions x 1
+            next_vals = next_q - jnp.expand_dims(
+                tau_log_pi_next, axis=2
+            )  # batch x actions x support
+            sample_pi = jax.random.categorical(
+                key, jnp.tile(pi_next, (1, 1, self.n_support)), 1
+            )  # batch x 1 x support
+            next_vals = jnp.take_along_axis(
+                next_vals, jnp.expand_dims(sample_pi, axis=1), axis=1
+            )  # batch x 1 x support
+            next_vals = not_terminateds * jnp.squeeze(next_vals, axis=1)
 
             q_k_targets = jnp.mean(self.get_q(target_params, obses, key), axis=2)
             q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)

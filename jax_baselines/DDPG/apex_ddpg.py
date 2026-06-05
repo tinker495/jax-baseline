@@ -113,7 +113,6 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
     ):
         obses = convert_jax(obses)
         nxtobses = convert_jax(nxtobses)
-        actions = actions.astype(jnp.int32)
         not_terminateds = 1.0 - terminateds
         batch_idxes = jnp.arange(self.batch_size).reshape(-1, self.mini_batch_size)
         obses_batch = [o[batch_idxes] for o in obses]

@@ -153,7 +153,7 @@ def visual_embedding(
             ]
         )
     elif mode == "none":
-        net = flatten
+        net = flatten_fn if flatten else lambda x: x
     return net
 
 
