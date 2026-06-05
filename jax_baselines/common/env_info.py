@@ -50,7 +50,7 @@ def get_local_env_info(env_builder, num_workers=1, seed=None):
 
         worker_size = env.worker_num
         env_type = "VectorizedEnv"
-    elif isinstance(env, gym.Env) or isinstance(env, gym.Wrapper):
+    elif isinstance(env, (gym.Env, gym.Wrapper)):
         action_space = env.action_space
         observation_space = [list(env.observation_space.shape)]
         action_size = [

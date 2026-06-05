@@ -137,7 +137,7 @@ class ReplayBuffer(object):
     def __init__(
         self,
         size: int,
-        observation_space: list = [],
+        observation_space: list = None,
         action_space=1,
         compress_memory=False,
         env_dict=None,
@@ -145,7 +145,7 @@ class ReplayBuffer(object):
     ):
         self.max_size = size
         if env_dict is None:
-            self.obsdict, self.nextobsdict = _build_obs_dicts(observation_space)
+            self.obsdict, self.nextobsdict = _build_obs_dicts(observation_space or [])
             env_nextobsdict, comp_kw = _compress_config(
                 self.obsdict, self.nextobsdict, compress_memory, n_step=1
             )

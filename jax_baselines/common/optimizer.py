@@ -91,10 +91,7 @@ def scale_by_adopt(
             )
         mu = otu.tree_update_moment(mu_updates, state.mu, b1_, 1)
         count_inc = optax._src.numerics.safe_increment(state.count)
-        if nesterov:
-            mu_ = otu.tree_update_moment(mu_updates, mu, b1_, 1)
-        else:
-            mu_ = mu
+        mu_ = otu.tree_update_moment(mu_updates, mu, b1_, 1) if nesterov else mu
         updates = mu_
         mu = otu.tree_cast(mu, mu_dtype)
         return updates, optax.ScaleByAdamState(count=count_inc, mu=mu, nu=nu)

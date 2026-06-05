@@ -64,7 +64,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                 description += f"{k} : {v:8.2f}, "
 
         description += f"loss : {np.mean(self.lossque):.3f}"
-        description += f"epsilon : {self.epsilon:.3f}"
+        description += f", epsilon : {self.epsilon:.3f}"
         return description
 
     def _policy_action_from_state(self, state, obs, eval, steps):

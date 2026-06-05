@@ -48,7 +48,7 @@ class Model(hk.Module):
                     ]
                 )(mul_embedding)
             if not self.dueling:
-                q_net = hk.Sequential(
+                return hk.Sequential(
                     [
                         self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                         for i in range(2 * self.hidden_n)
@@ -59,28 +59,25 @@ class Model(hk.Module):
                         )
                     ]
                 )(mul_embedding)
-                return q_net
-            else:
-                v = hk.Sequential(
-                    [
-                        self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                        for i in range(2 * self.hidden_n)
-                    ]
-                    + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
-                )(mul_embedding)
-                a = hk.Sequential(
-                    [
-                        self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                        for i in range(2 * self.hidden_n)
-                    ]
-                    + [
-                        self.layer(
-                            self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
-                        )
-                    ]
-                )(mul_embedding)
-                q = v + a - jnp.max(a, axis=(1), keepdims=True)
-                return q
+            v = hk.Sequential(
+                [
+                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
+                    for i in range(2 * self.hidden_n)
+                ]
+                + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
+            )(mul_embedding)
+            a = hk.Sequential(
+                [
+                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
+                    for i in range(2 * self.hidden_n)
+                ]
+                + [
+                    self.layer(
+                        self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
+                    )
+                ]
+            )(mul_embedding)
+            return v + a - jnp.max(a, axis=(1), keepdims=True)
 
         out = jax.vmap(qnet, in_axes=(None, 2), out_axes=2)(
             feature, costau
@@ -160,7 +157,6 @@ def model_builder_maker(
                 print_param("model", model_param)
                 print("-------------------------------------------------------")
             return preproc_fn, model_fn, fqf_fn, params, fqf_param
-        else:
-            return preproc_fn, model_fn, fqf_fn
+        return preproc_fn, model_fn, fqf_fn
 
     return _model_builder

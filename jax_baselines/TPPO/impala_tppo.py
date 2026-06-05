@@ -29,7 +29,6 @@ class IMPALA_TPPO(IMPALA_Family):
         self.kl_range = kl_range
         self.kl_coef = kl_coef
         super().__init__(workers, model_builder_maker, **kwargs)
-        self.get_memory_setup()
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
@@ -106,8 +105,8 @@ class IMPALA_TPPO(IMPALA_Family):
         rewards = jnp.stack(rewards)
         terminateds = jnp.stack(terminateds)
         truncateds = jnp.stack(truncateds)
-        obses = jax.vmap(convert_jax)(obses)
-        nxtobses = jax.vmap(convert_jax)(nxtobses)
+        obses = convert_jax(obses)
+        nxtobses = convert_jax(nxtobses)
         feature = jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, obses)
         value = jax.vmap(self.critic, in_axes=(None, None, 0))(params, key, feature)
         next_value = jax.vmap(self.critic, in_axes=(None, None, 0))(

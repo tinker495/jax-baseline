@@ -22,8 +22,7 @@ class Projection(hk.Module):
         projection = hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
         )(feature)
-        projection = self.layer(self.embed_size)(projection)
-        return projection
+        return self.layer(self.embed_size)(projection)
 
 
 class Transition(hk.Module):
@@ -61,8 +60,7 @@ class Transition(hk.Module):
         x = hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
         )(concat)
-        feature = self.layer(feature.shape[-1])(x)
-        return feature
+        return self.layer(feature.shape[-1])(x)
 
 
 class Prediction(hk.Module):
@@ -76,8 +74,7 @@ class Prediction(hk.Module):
         x = hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
         )(feature)
-        feature = self.layer(feature.shape[-1])(x)
-        return feature
+        return self.layer(feature.shape[-1])(x)
 
 
 class Model(hk.Module):
@@ -118,34 +115,27 @@ class Model(hk.Module):
                 ]
             )(feature)
             return jax.nn.softmax(q, axis=2)
-        else:
-            v = hk.Sequential(
-                [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [
-                    self.layer(
-                        self.categorial_bar_n, w_init=hk.initializers.RandomUniform(-0.03, 0.03)
-                    ),
-                    hk.Reshape((1, self.categorial_bar_n)),
-                ]
-            )(feature)
-            a = hk.Sequential(
-                [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [
-                    self.layer(
-                        self.action_size[0] * self.categorial_bar_n,
-                        w_init=hk.initializers.RandomUniform(-0.03, 0.03),
-                    ),
-                    hk.Reshape((self.action_size[0], self.categorial_bar_n)),
-                ]
-            )(feature)
-            q = v + a - jnp.mean(a, axis=1, keepdims=True)
-            return jax.nn.softmax(q, axis=2)
+        v = hk.Sequential(
+            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            + [
+                self.layer(
+                    self.categorial_bar_n, w_init=hk.initializers.RandomUniform(-0.03, 0.03)
+                ),
+                hk.Reshape((1, self.categorial_bar_n)),
+            ]
+        )(feature)
+        a = hk.Sequential(
+            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            + [
+                self.layer(
+                    self.action_size[0] * self.categorial_bar_n,
+                    w_init=hk.initializers.RandomUniform(-0.03, 0.03),
+                ),
+                hk.Reshape((self.action_size[0], self.categorial_bar_n)),
+            ]
+        )(feature)
+        q = v + a - jnp.mean(a, axis=1, keepdims=True)
+        return jax.nn.softmax(q, axis=2)
 
 
 def model_builder_maker(
@@ -208,7 +198,6 @@ def model_builder_maker(
                 print_param("prediction", prediction_param)
                 print("-------------------------------------------------------")
             return preproc_fn, model_fn, transition_fn, projection_fn, prediction_fn, params
-        else:
-            return preproc_fn, model_fn, transition_fn, projection_fn, prediction_fn
+        return preproc_fn, model_fn, transition_fn, projection_fn, prediction_fn
 
     return _model_builder

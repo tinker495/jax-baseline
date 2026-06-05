@@ -38,13 +38,12 @@ class Action_Encoder(hk.Module):
 
     def __call__(self, zs: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
         concat = jnp.concatenate([zs, action], axis=1)
-        zsa = hk.Sequential(
+        return hk.Sequential(
             [
                 self.layer(self.node) if i % 2 == 0 else jax.nn.elu
                 for i in range(2 * self.hidden_n - 1)
             ]
         )(concat)
-        return zsa
 
 
 class Actor(hk.Module):
@@ -58,14 +57,13 @@ class Actor(hk.Module):
     def __call__(self, feature: jnp.ndarray, zs: jnp.ndarray) -> jnp.ndarray:
         a0 = avgl1norm(self.layer(self.node)(feature))
         embed_concat = jnp.concatenate([a0, zs], axis=1)
-        action = hk.Sequential(
+        return hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [
                 self.layer(self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)),
                 jax.nn.tanh,
             ]
         )(embed_concat)
-        return action
 
 
 class Critic(hk.Module):
@@ -82,11 +80,10 @@ class Critic(hk.Module):
         embedding = jnp.concatenate([zs, zsa], axis=1)
         q0 = avgl1norm(self.layer(self.node)(concat))
         embed_concat = jnp.concatenate([q0, embedding], axis=1)
-        q_net = hk.Sequential(
+        return hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.elu for i in range(2 * self.hidden_n)]
             + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
         )(embed_concat)
-        return q_net
 
 
 def model_builder_maker(observation_space, action_size, policy_kwargs):
@@ -156,7 +153,6 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 encoder_params,
                 params,
             )
-        else:
-            return preproc_fn, encoder_fn, action_encoder_fn, actor_fn, critic_fn
+        return preproc_fn, encoder_fn, action_encoder_fn, actor_fn, critic_fn
 
     return _model_builder

@@ -6,7 +6,7 @@ import numpy as np
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense, ResidualBlock
-from model_builder.flax.Module import PreProcess
+from model_builder.flax.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import print_param
 
 LOG_STD_MAX = 2
@@ -68,12 +68,7 @@ class Critic(nn.Module):
 
 
 def model_builder_maker(observation_space, action_size, support_n, policy_kwargs):
-    policy_kwargs = {} if policy_kwargs is None else policy_kwargs
-    if "embedding_mode" in policy_kwargs:
-        embedding_mode = policy_kwargs["embedding_mode"]
-        del policy_kwargs["embedding_mode"]
-    else:
-        embedding_mode = "normal"
+    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
 
     def model_builder(key=None, print_model=False):
         class Merged_Actor(nn.Module):

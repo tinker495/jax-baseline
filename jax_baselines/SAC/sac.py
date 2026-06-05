@@ -235,15 +235,9 @@ class SAC(Deteministic_Policy_Gradient_Family):
         key,
         ent_coef,
     ):
-        policy, log_prob = self._get_pi_log_prob(
-            policy_params, self.preproc(policy_params, key, nxtobses), key
-        )
-        q1_pi, q2_pi = self.critic(
-            target_critic_params,
-            key,
-            self.preproc(policy_params, key, nxtobses),
-            policy,
-        )
+        next_feature = self.preproc(policy_params, key, nxtobses)
+        policy, log_prob = self._get_pi_log_prob(policy_params, next_feature, key)
+        q1_pi, q2_pi = self.critic(target_critic_params, key, next_feature, policy)
         next_q = jnp.minimum(q1_pi, q2_pi) - ent_coef * log_prob
         return (not_terminateds * next_q * self._gamma) + rewards
 

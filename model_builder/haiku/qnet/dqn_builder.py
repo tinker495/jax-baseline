@@ -23,7 +23,7 @@ class Model(hk.Module):
 
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         if not self.dueling:
-            q_net = hk.Sequential(
+            return hk.Sequential(
                 [
                     self.layer(self.node) if i % 2 == 0 else jax.nn.relu
                     for i in range(2 * self.hidden_n)
@@ -34,27 +34,15 @@ class Model(hk.Module):
                     )
                 ]
             )(feature)
-            return q_net
-        else:
-            v = hk.Sequential(
-                [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
-            )(feature)
-            a = hk.Sequential(
-                [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [
-                    self.layer(
-                        self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
-                    )
-                ]
-            )(feature)
-            return v + a - jnp.max(a, axis=1, keepdims=True)
+        v = hk.Sequential(
+            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
+        )(feature)
+        a = hk.Sequential(
+            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            + [self.layer(self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
+        )(feature)
+        return v + a - jnp.max(a, axis=1, keepdims=True)
 
 
 def model_builder_maker(observation_space, action_space, dueling_model, param_noise, policy_kwargs):
@@ -93,7 +81,6 @@ def model_builder_maker(observation_space, action_space, dueling_model, param_no
                 print_param("model", model_param)
                 print("-------------------------------------------------------")
             return preproc_fn, model_fn, params
-        else:
-            return preproc_fn, model_fn
+        return preproc_fn, model_fn
 
     return _model_builder

@@ -55,10 +55,7 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
     for ep in range(eval_eps):
         while not terminated and not truncated:
             actions = act_eval_fn(obs)
-            if conv_action is not None:
-                step_action = conv_action(actions)
-            else:
-                step_action = actions
+            step_action = conv_action(actions) if conv_action is not None else actions
 
             # Normalize action so env.step receives a proper scalar when applicable
             action_to_step = _normalize_action_for_step(step_action)
@@ -123,7 +120,7 @@ def record_and_test(env_builder, logger_run, actions_eval_fn, episode, conv_acti
     Render_env = RecordEpisodeStatistics(Render_env)
     total_rewards = []
     with Render_env:
-        for i in range(episode):
+        for _ in range(episode):
             obs, info = Render_env.reset()
             obs = [np.expand_dims(obs, axis=0)]
             terminated = False

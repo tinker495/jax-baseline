@@ -265,32 +265,6 @@ class HL_GAUSS_BBF(BBF):
             rprloss,
         )
 
-    def _loss(
-        self,
-        params,
-        target_params,
-        obses,
-        actions,
-        filled,
-        parsed_obses,
-        parsed_actions,
-        target_distribution,
-        weights,
-        key,
-    ):
-        rprloss = self._represetation_loss(params, target_params, obses, actions, filled, key)
-        distribution = jnp.squeeze(
-            jnp.take_along_axis(self.get_q(params, parsed_obses, key), parsed_actions, axis=1)
-        )
-        centropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
-        mean_centropy = jnp.mean(centropy)
-        total_loss = mean_centropy + self.spr_weight * rprloss
-        return total_loss, (
-            centropy,
-            mean_centropy,
-            rprloss,
-        )
-
     def _target(
         self,
         params,

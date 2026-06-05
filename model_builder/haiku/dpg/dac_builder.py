@@ -43,11 +43,10 @@ class Critic(hk.Module):
 
     def __call__(self, feature: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
         concat = jnp.concatenate([feature, actions], axis=1)
-        q_net = hk.Sequential(
+        return hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
         )(concat)
-        return q_net
 
 
 def model_builder_maker(observation_space, action_size, policy_kwargs):
@@ -90,7 +89,6 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 print_param("critic", critic_param)
                 print("-------------------------------------------------------")
             return preproc_fn, actor_fn, critic_fn, params
-        else:
-            return preproc_fn, actor_fn, critic_fn
+        return preproc_fn, actor_fn, critic_fn
 
     return _model_builder

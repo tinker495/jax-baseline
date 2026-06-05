@@ -287,8 +287,8 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         total_timesteps,
         callback=None,
         log_interval=1000,
-        run_name="TPPO",
         experiment_name="TPPO",
+        run_name="TPPO",
     ):
         super().learn(
             total_timesteps,

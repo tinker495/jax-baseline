@@ -55,7 +55,6 @@ class APE_X_C51(Ape_X_Family):
             jnp.linspace(self.categorial_min, self.categorial_max, self.categorial_bar_n),
             axis=0,
         )  # [1, 51]
-        self._categorial_bar = jnp.expand_dims(self.categorial_bar, axis=0)  # [1, 1, 51]
         self.delta_bar = jax.device_put(
             (self.categorial_max - self.categorial_min) / (self.categorial_bar_n - 1)
         )

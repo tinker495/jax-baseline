@@ -1,5 +1,6 @@
 import base64
 import multiprocessing as mp
+import traceback
 from functools import partial
 
 import gymnasium as gym
@@ -125,8 +126,14 @@ class Impala_Worker(object):
                         obs, info = self.env.reset()
                         obs = [np.expand_dims(obs, axis=0)]
                 queue.put(local_buffer.get_buffer())
-        except Exception as e:
-            print(f"worker {mp.current_process().name} error : {e}")
+        except Exception:
+            print(
+                "------------------------------Exception in worker----------------------------------"
+            )
+            traceback.print_exc()
+            print(
+                "---------------------------------------------------------------------------------"
+            )
         finally:
             if stop.is_set():
                 print("worker stoped")

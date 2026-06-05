@@ -134,7 +134,7 @@ class MaxAndSkipEnv(gym.Wrapper):
         gym.Wrapper.__init__(self, env)
         # most recent raw observations (for max pooling across time steps)
         self._obs_buffer = np.zeros(
-            (2,) + env.observation_space.shape, dtype=env.observation_space.dtype
+            (2, *env.observation_space.shape), dtype=env.observation_space.dtype
         )
         self._skip = skip
 
@@ -342,7 +342,7 @@ def get_env_type(env_id):
     _game_envs = defaultdict(set)
 
     # Re-parse the gym registry, since we could have new envs since last time.
-    for name, env in gym.envs.registry.items():
+    for env in gym.envs.registry.values():
         try:
             if "gymnasium" in env.entry_point:
                 env_type = env.entry_point.split(".")[2].split(":")[0]
@@ -356,7 +356,7 @@ def get_env_type(env_id):
 
     if env_id in _game_envs:
         env_type = env_id
-        env_id = [g for g in _game_envs[env_type]][0]
+        env_id = next(iter(_game_envs[env_type]))
     else:
         env_type = None
         for g, e in _game_envs.items():

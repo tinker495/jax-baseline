@@ -177,7 +177,7 @@ class APE_X_IQN(Ape_X_Family):
         )  # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets, axis=2)  # batch x support x 1
         loss = QuantileHuberLosses(
-            theta_loss_tile, logit_valid_tile, jnp.expand_dims(tau, axis=1), self.delta
+            logit_valid_tile, theta_loss_tile, jnp.expand_dims(tau, axis=1), self.delta
         )
         return jnp.mean(loss * weights), loss
 

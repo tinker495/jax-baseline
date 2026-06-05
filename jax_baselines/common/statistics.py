@@ -45,8 +45,10 @@ def compute_ckpt_window_stat(
 class RunningMeanStd:
     """Tracks the mean, variance and count of values."""
 
-    def __init__(self, epsilon=1e-4, shapes: list = [()], dtype=np.float64):
+    def __init__(self, epsilon=1e-4, shapes: list = None, dtype=np.float64):
         """Tracks the mean, variance and count of values."""
+        if shapes is None:
+            shapes = [()]
         self.dtype = np.dtype(dtype)
         self.means = [np.zeros(shape, dtype=self.dtype) for shape in shapes]
         self.vars = [np.ones(shape, dtype=self.dtype) for shape in shapes]
