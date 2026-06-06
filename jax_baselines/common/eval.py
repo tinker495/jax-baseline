@@ -4,27 +4,20 @@ import numpy as np
 def _normalize_action_for_step(step_action):
     """Convert model output to an env.step-compatible action.
 
-    - If it's effectively a single scalar (including shapes like (1,), (1,1)),
-      return a native Python scalar via .item(). This is required by some envs
-      such as ALE which expect an integer index.
-    - If it's a vector (e.g., continuous control), keep it as a 1-D numpy array.
-    - If it's a batched action (leading dimension as batch), reduce the batch
-      dimension if it's size 1.
+    Discrete action spaces produce an integer index, and several envs (e.g. ALE)
+    require a native Python int, so a single integer action is returned as a
+    Python scalar. Continuous (Box) action spaces produce float actions and the
+    env expects an array even for a one-element Box: Pendulum indexes its action
+    as ``np.clip(u, ...)[0]``, which fails on a Python float. Float actions are
+    therefore always returned as a 1-D array. A leading batch dim of size 1
+    (single-env rollout) is squeezed in both cases.
     """
     arr = np.asarray(step_action)
-    # Single value anywhere: convert to Python scalar
-    if arr.size == 1:
-        return arr.reshape(-1)[0].item()
-
-    # If there is a leading batch dim of size 1, squeeze it
     if arr.ndim >= 2 and arr.shape[0] == 1:
         arr = np.asarray(arr[0])
-        if arr.size == 1:
-            return arr.reshape(-1)[0].item()
-        return arr
-
-    # Otherwise, return as-is (e.g., a proper action vector)
-    return arr
+    if np.issubdtype(arr.dtype, np.integer) and arr.size == 1:
+        return arr.reshape(-1)[0].item()
+    return np.reshape(arr, (-1,))
 
 
 def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, conv_action=None):
