@@ -1,0 +1,92 @@
+"""Shared ``learn()`` lifecycle for the training families.
+
+The session sits one seam *above* the rollout loop. Where
+:mod:`jax_baselines.common.rollout` owns the per-step environment loop, the
+session owns the run *lifecycle* that wrapped it: run-name tagging, schedule
+setup, ``eval_freq``, the ``pbar``, the logger lifecycle, and the closing
+eval + save.
+
+The session is **loop-agnostic** — :meth:`TrainingSession.run` never touches a
+:class:`~jax_baselines.common.rollout.RolloutEngine`; it only calls
+``agent.run_training_loop(ctx)``. The coupling to the rollout engine lives
+solely in :func:`off_policy_loop`, the off-policy rollout dispatch that the
+Q-Net and DPG families delegate to from their ``run_training_loop``. That keeps
+the door open for the on-policy A2C family to reuse the same session through its
+own (non-``RolloutEngine``) ``run_training_loop`` later.
+
+Per-run state travels to the agent explicitly in a :class:`RunContext`, never
+read back off ``self``. ``ctx.logger_run`` is valid only inside the session's
+``with logger`` block; the agent must not retain ``ctx`` past ``run()``.
+"""
+
+from dataclasses import dataclass
+
+from tqdm.auto import trange
+
+from jax_baselines.common.logger import TensorboardLogger
+from jax_baselines.common.rollout import RolloutEngine
+
+
+@dataclass(frozen=True)
+class RunContext:
+    """Per-run state the session threads to the agent as an argument.
+
+    ``logger_run`` is valid only inside the session's ``with logger`` block.
+    """
+
+    logger_run: object
+    eval_freq: int
+    pbar: object
+    log_interval: int
+
+
+class TrainingSession:
+    """Owns the ``learn()`` lifecycle shared across the training families."""
+
+    def run(
+        self,
+        agent,
+        total_timesteps,
+        callback,
+        log_interval,
+        experiment_name,
+        run_name,
+        logger_factory=TensorboardLogger,
+    ):
+        run_name = agent.run_name_update(run_name)
+        agent.log_interval = log_interval
+        agent.prepare_run(total_timesteps)
+        eval_freq = ((total_timesteps // 100) // agent.worker_size) * agent.worker_size
+        pbar = trange(0, total_timesteps, agent.worker_size, miniters=log_interval)
+        logger = logger_factory(run_name, experiment_name, agent.log_dir, agent)
+        # ``test()`` is a separate entry point that re-enters the run's logger, so the
+        # agent keeps a reference to it (matching the pre-refactor learn() contract).
+        agent.logger = logger
+        with logger as logger_run:
+            # Bridge for callbacks built at __init__ time: the CheckpointController's
+            # log_metric closure reads ``agent.logger_run``. Per-run state otherwise
+            # travels through ``ctx``, not ``self``.
+            agent.logger_run = logger_run
+            ctx = RunContext(logger_run, eval_freq, pbar, log_interval)
+            agent.run_training_loop(ctx)
+            agent.eval(ctx, total_timesteps)
+            agent.save_params(logger_run.get_local_path("params"))
+
+
+def off_policy_loop(agent, ctx):
+    """Off-policy rollout dispatch: the seam between the session and the engine.
+
+    Owns the 4-way ``env_type`` x ``use_checkpointing`` dispatch for the Q-Net
+    and DPG families; each family's ``run_training_loop`` delegates here.
+    """
+    engine = RolloutEngine(agent.make_rollout_spec(ctx))
+    single = agent.env_type == "SingleEnv"
+    ckpt = agent.use_checkpointing
+    if single and ckpt:
+        engine.learn_single_env_checkpointing(ctx.pbar, None, ctx.log_interval)
+    elif single:
+        engine.learn_single_env(ctx.pbar, None, ctx.log_interval)
+    elif ckpt:
+        engine.learn_vectorized_env_checkpointing(ctx.pbar, None, ctx.log_interval)
+    else:
+        engine.learn_vectorized_env(ctx.pbar, None, ctx.log_interval)

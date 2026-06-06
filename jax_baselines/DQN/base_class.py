@@ -2,23 +2,21 @@ from copy import deepcopy
 
 import jax
 import numpy as np
-from tqdm.auto import trange
 
-from jax_baselines.common.checkpoint import CheckpointController
+from jax_baselines.common.checkpoint import make_checkpoint_controller
 from jax_baselines.common.env_info import get_local_env_info
 from jax_baselines.common.eval import evaluate_policy, record_and_test
-from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.replay_factory import make_replay_buffer
 from jax_baselines.common.rollout import (
     ActionSelection,
     CheckpointTrainPulse,
-    RolloutEngine,
     RolloutSpec,
 )
 from jax_baselines.common.schedules import ConstantSchedule, LinearSchedule
 from jax_baselines.common.seeding import key_gen, set_global_seeds
 from jax_baselines.common.serialization import restore, save
+from jax_baselines.common.training_session import TrainingSession, off_policy_loop
 from jax_baselines.DQN.training import QNetTrainingLifecycle
 
 
@@ -125,38 +123,17 @@ class Q_Network_Family(object):
         self.max_eps_before_checkpointing = int(max_eps_before_checkpointing)
         self.initial_checkpoint_window = int(initial_checkpoint_window)
 
-        # Robust checkpointing controls
-        self.ckpt_quantile = 0.2  # q-quantile statistic instead of strict min
-        self.use_ckpt_return_standardization = False  # compare windows in absolute return space
-        self._ckpt_update_residual = 0  # training-parity residual accumulator (pulse-owned)
-
-        # Checkpoint baseline mode configuration
-        self.ckpt_baseline_mode = ckpt_baseline_mode
-        self.ckpt_baseline_q = (
-            ckpt_baseline_q if ckpt_baseline_q is not None else self.ckpt_quantile
-        )
-
-        # Checkpoint gating mode configuration
-        self.ckpt_gate_mode = (
-            ckpt_gate_mode if ckpt_gate_mode is not None else self.ckpt_baseline_mode
-        )
-        if ckpt_gate_q is not None:
-            self.ckpt_gate_q = ckpt_gate_q
-        elif self.ckpt_gate_mode == "median":
-            self.ckpt_gate_q = 0.5
-        elif self.ckpt_gate_mode in ["quantile", "min", "mean"]:
-            self.ckpt_gate_q = self.ckpt_baseline_q
-        else:
-            self.ckpt_gate_q = self.ckpt_quantile
-
-        self._checkpoint = CheckpointController(
+        self.logger_run = None
+        self._ckpt_update_residual = 0
+        setup = make_checkpoint_controller(
             use_checkpointing=self.use_checkpointing,
             steps_before_checkpointing=self.steps_before_checkpointing,
             max_eps_before_checkpointing=self.max_eps_before_checkpointing,
-            initial_window=self.initial_checkpoint_window,
-            baseline_q=self.ckpt_baseline_q,
-            baseline_mode=self.ckpt_baseline_mode,
-            use_return_standardization=self.use_ckpt_return_standardization,
+            initial_checkpoint_window=self.initial_checkpoint_window,
+            ckpt_baseline_mode=ckpt_baseline_mode,
+            ckpt_baseline_q=ckpt_baseline_q,
+            ckpt_gate_mode=ckpt_gate_mode,
+            ckpt_gate_q=ckpt_gate_q,
             snapshot=self._checkpoint_update_snapshot,
             log_metric=lambda key, value, step: (
                 self.logger_run.log_metric(key, value, step)
@@ -164,6 +141,13 @@ class Q_Network_Family(object):
                 else None
             ),
         )
+        self._checkpoint = setup.controller
+        self.ckpt_quantile = setup.quantile
+        self.use_ckpt_return_standardization = setup.use_return_standardization
+        self.ckpt_baseline_mode = setup.baseline_mode
+        self.ckpt_baseline_q = setup.baseline_q
+        self.ckpt_gate_mode = setup.gate_mode
+        self.ckpt_gate_q = setup.gate_q
 
         # Logging throttle based on last log step
         self._last_log_step = 0
@@ -318,10 +302,11 @@ class Q_Network_Family(object):
         experiment_name="Q_network",
         run_name="Q_network",
     ):
-        run_name = self.run_name_update(run_name)
-        # Update log_interval to match the method parameter for consistency
-        self.log_interval = log_interval
+        return TrainingSession().run(
+            self, total_timesteps, callback, log_interval, experiment_name, run_name
+        )
 
+    def prepare_run(self, total_timesteps):
         if self.param_noise:
             self.exploration = ConstantSchedule(0)
         else:
@@ -331,25 +316,9 @@ class Q_Network_Family(object):
                 final_p=self.exploration_final_eps,
             )
         self.update_eps = 1.0
-        self.eval_freq = ((total_timesteps // 100) // self.worker_size) * self.worker_size
 
-        pbar = trange(0, total_timesteps, self.worker_size, miniters=log_interval)
-        self.logger = TensorboardLogger(run_name, experiment_name, self.log_dir, self)
-        with self.logger as self.logger_run:
-            if self.env_type == "SingleEnv":
-                if self.use_checkpointing:
-                    self.learn_SingleEnv_checkpointing(pbar, callback, log_interval)
-                else:
-                    self.learn_SingleEnv(pbar, callback, log_interval)
-            if self.env_type == "VectorizedEnv":
-                if self.use_checkpointing:
-                    self.learn_VectorizedEnv_checkpointing(pbar, callback, log_interval)
-                else:
-                    self.learn_VectorizedEnv(pbar, callback, log_interval)
-
-            self.eval(total_timesteps)
-
-            self.save_params(self.logger_run.get_local_path("params"))
+    def run_training_loop(self, ctx):
+        off_policy_loop(self, ctx)
 
     # -------------------------------
     # Rollout seam (RolloutSpec wiring)
@@ -368,7 +337,7 @@ class Q_Network_Family(object):
     def _refresh_exploration(self, steps):
         self.update_eps = self.exploration.value(steps)
 
-    def _make_rollout_spec(self):
+    def make_rollout_spec(self, ctx):
         pulse = CheckpointTrainPulse(
             train_freq=self.train_freq,
             gradient_steps=self.gradient_steps,
@@ -383,30 +352,21 @@ class Q_Network_Family(object):
             learning_starts=self.learning_starts,
             train_freq=self.train_freq,
             gradient_steps=self.gradient_steps,
-            eval_freq=self.eval_freq,
+            eval_freq=ctx.eval_freq,
             worker_size=self.worker_size,
             single_action=self._single_action_selection,
             vector_action=self._vector_action_selection,
             refresh_exploration=self._refresh_exploration,
             has_true_reset=self._has_true_reset,
             train=self.train_step,
-            evaluate=self.eval,
+            evaluate=lambda steps: self.eval(ctx, steps),
             describe=self.description,
             bind_loss_window=self._bind_loss_window,
             checkpoint_on_episode_end=self._checkpoint.on_episode_end,
             checkpoint_pulse=pulse,
         )
 
-    def _rollout(self):
-        return RolloutEngine(self._make_rollout_spec())
-
-    def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
-        return self._rollout().learn_single_env(pbar, callback, log_interval)
-
-    def learn_VectorizedEnv(self, pbar, callback=None, log_interval=1000):
-        return self._rollout().learn_vectorized_env(pbar, callback, log_interval)
-
-    def eval(self, steps):
+    def eval(self, ctx, steps):
         # Deterministic greedy evaluation using public actions() API.
         def eval_action_fn(obs):
             a = self.actions(obs, 0.0, eval_mode=True)
@@ -420,15 +380,9 @@ class Q_Network_Family(object):
             self.eval_env,
             self.eval_eps,
             eval_action_fn,
-            logger_run=self.logger_run,
+            logger_run=ctx.logger_run,
             steps=steps,
         )
-
-    def learn_SingleEnv_checkpointing(self, pbar, callback=None, log_interval=1000, obs=None):
-        return self._rollout().learn_single_env_checkpointing(pbar, callback, log_interval, obs)
-
-    def learn_VectorizedEnv_checkpointing(self, pbar, callback=None, log_interval=1000):
-        return self._rollout().learn_vectorized_env_checkpointing(pbar, callback, log_interval)
 
     def test(self, episode=10):
         with self.logger as self.logger_run:
