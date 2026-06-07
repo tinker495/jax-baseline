@@ -1,7 +1,6 @@
-import argparse
-
 from jax_baselines.A2C.a2c import A2C
 from jax_baselines.cli._common import default_logdir, set_default_xla_flags
+from jax_baselines.cli._run import AlgoSpec, FamilyRunner, run_family
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.PPO.ppo import PPO
 from jax_baselines.SPO.spo import SPO
@@ -10,8 +9,7 @@ from jax_baselines.TPPO.tppo import TPPO
 set_default_xla_flags()
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser()
+def add_args(parser):
     parser.add_argument("--experiment_name", type=str, default="PG", help="experiment name")
     parser.add_argument("--env", type=str, default="Pendulum-v1", help="environment")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
@@ -40,93 +38,58 @@ def main(argv=None):
     )
     parser.set_defaults(gae_normalize=False)
 
-    args = parser.parse_args(argv)
+
+def build_env(args):
     env_builder, _ = get_env_builder(
         args.env, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
     )
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
+    return env_builder, policy_kwargs
 
-    if args.model_lib == "flax":
-        from model_builder.flax.ac.ac_builder import model_builder_maker
-    elif args.model_lib == "haiku":
-        from model_builder.haiku.ac.ac_builder import model_builder_maker
 
-    if args.algo == "A2C":
-        agent = A2C(
-            env_builder,
-            model_builder_maker=model_builder_maker,
-            num_workers=args.worker,
-            gamma=args.gamma,
-            batch_size=args.batch,
-            val_coef=args.val_coef,
-            ent_coef=args.ent_coef,
-            use_entropy_adv_shaping=args.use_entropy_adv_shaping,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            seed=args.seed,
-        )
-    if args.algo == "PPO":
-        agent = PPO(
-            env_builder,
-            model_builder_maker=model_builder_maker,
-            num_workers=args.worker,
-            gamma=args.gamma,
-            lamda=args.lamda,
-            gae_normalize=args.gae_normalize,
-            batch_size=args.batch,
-            minibatch_size=args.mini_batch,
-            val_coef=args.val_coef,
-            ent_coef=args.ent_coef,
-            use_entropy_adv_shaping=args.use_entropy_adv_shaping,
-            epoch_num=args.epoch_num,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            seed=args.seed,
-        )
-    if args.algo == "TPPO":
-        agent = TPPO(
-            env_builder,
-            model_builder_maker=model_builder_maker,
-            num_workers=args.worker,
-            gamma=args.gamma,
-            lamda=args.lamda,
-            gae_normalize=args.gae_normalize,
-            batch_size=args.batch,
-            minibatch_size=args.mini_batch,
-            val_coef=args.val_coef,
-            ent_coef=args.ent_coef,
-            use_entropy_adv_shaping=args.use_entropy_adv_shaping,
-            epoch_num=args.epoch_num,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            seed=args.seed,
-        )
-    if args.algo == "SPO":
-        agent = SPO(
-            env_builder,
-            model_builder_maker=model_builder_maker,
-            num_workers=args.worker,
-            gamma=args.gamma,
-            lamda=args.lamda,
-            gae_normalize=args.gae_normalize,
-            batch_size=args.batch,
-            minibatch_size=args.mini_batch,
-            val_coef=args.val_coef,
-            ent_coef=args.ent_coef,
-            use_entropy_adv_shaping=args.use_entropy_adv_shaping,
-            epoch_num=args.epoch_num,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            seed=args.seed,
-        )
+def _common(a):
+    return {
+        "num_workers": a.worker,
+        "gamma": a.gamma,
+        "batch_size": a.batch,
+        "val_coef": a.val_coef,
+        "ent_coef": a.ent_coef,
+        "use_entropy_adv_shaping": a.use_entropy_adv_shaping,
+        "log_dir": a.logdir,
+        "optimizer": a.optimizer,
+        "seed": a.seed,
+    }
 
-    agent.learn(int(args.steps), experiment_name=args.experiment_name)
 
-    agent.test()
+def _ppo_like(a):
+    return {
+        **_common(a),
+        "lamda": a.lamda,
+        "gae_normalize": a.gae_normalize,
+        "minibatch_size": a.mini_batch,
+        "epoch_num": a.epoch_num,
+    }
+
+
+ALGOS = {
+    "A2C": AlgoSpec(A2C, "ac", _common),
+    "PPO": AlgoSpec(PPO, "ac", _ppo_like),
+    "TPPO": AlgoSpec(TPPO, "ac", _ppo_like),
+    "SPO": AlgoSpec(SPO, "ac", _ppo_like),
+}
+
+
+PG_RUNNER = FamilyRunner(
+    add_args=add_args,
+    build_env=build_env,
+    algos=ALGOS,
+    maker_pkg="model_builder.{lib}.ac",
+    variant=lambda _args: "",
+)
+
+
+def main(argv=None):
+    return run_family(PG_RUNNER, argv)
 
 
 if __name__ == "__main__":

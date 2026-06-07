@@ -1,11 +1,11 @@
-import argparse
-import multiprocessing as mp
-
-import ray
-
 from jax_baselines.APE_X.worker import Ape_X_Worker
 from jax_baselines.C51.apex_c51 import APE_X_C51
 from jax_baselines.cli._common import default_logdir, set_default_xla_flags
+from jax_baselines.cli._run import (
+    AlgoSpec,
+    DistributedFamilyRunner,
+    run_distributed_family,
+)
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.DQN.apex_dqn import APE_X_DQN
 from jax_baselines.IQN.apex_iqn import APE_X_IQN
@@ -14,8 +14,7 @@ from jax_baselines.QRDQN.apex_qrdqn import APE_X_QRDQN
 set_default_xla_flags()
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser()
+def add_args(parser):
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="Cartpole-v1", help="environment")
@@ -60,150 +59,74 @@ def main(argv=None):
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
-    args = parser.parse_args(argv)
 
-    manager = mp.get_context().Manager()
 
-    ray.init(num_cpus=args.worker + 2, num_gpus=0)
-
+def make_workers(args):
     env_builder, _ = get_env_builder(args.env)
-    workers = [Ape_X_Worker.remote(env_builder, seed=args.seed + i) for i in range(args.worker)]
+    return [Ape_X_Worker.remote(env_builder, seed=args.seed + i) for i in range(args.worker)]
 
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 
-    if args.algo == "DQN":
-        if args.model_lib == "flax":
-            from model_builder.flax.qnet.dqn_builder import model_builder_maker
-        elif args.model_lib == "haiku":
-            from model_builder.haiku.qnet.dqn_builder import model_builder_maker
+def policy_kwargs(args):
+    return {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 
-        agent = APE_X_DQN(
-            workers,
-            model_builder_maker,
-            manager,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_num=args.batch_num,
-            mini_batch_size=args.batch_size,
-            buffer_size=int(args.buffer_size),
-            target_network_update_freq=args.target_update,
-            double_q=args.double,
-            dueling_model=args.dueling,
-            exploration_initial_eps=args.initial_eps,
-            exploration_decay=args.eps_decay,
-            param_noise=args.noisynet,
-            n_step=args.n_step,
-            munchausen=args.munchausen,
-            gradient_steps=args.gradient_steps,
-            learning_starts=args.learning_starts,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            compress_memory=args.compress_memory,
-            seed=args.seed,
-        )
-    elif args.algo == "C51":
-        if args.model_lib == "flax":
-            from model_builder.flax.qnet.c51_builder import model_builder_maker
-        elif args.model_lib == "haiku":
-            from model_builder.haiku.qnet.c51_builder import model_builder_maker
 
-        agent = APE_X_C51(
-            workers,
-            model_builder_maker,
-            manager,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_num=args.batch_num,
-            mini_batch_size=args.batch_size,
-            buffer_size=int(args.buffer_size),
-            target_network_update_freq=args.target_update,
-            double_q=args.double,
-            dueling_model=args.dueling,
-            exploration_initial_eps=args.initial_eps,
-            exploration_decay=args.eps_decay,
-            param_noise=args.noisynet,
-            n_step=args.n_step,
-            munchausen=args.munchausen,
-            gradient_steps=args.gradient_steps,
-            learning_starts=args.learning_starts,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            compress_memory=args.compress_memory,
-            categorial_max=args.max,
-            categorial_min=args.min,
-            seed=args.seed,
-        )
-    elif args.algo == "QRDQN":
-        if args.model_lib == "flax":
-            from model_builder.flax.qnet.qrdqn_builder import model_builder_maker
-        elif args.model_lib == "haiku":
-            from model_builder.haiku.qnet.qrdqn_builder import model_builder_maker
+def _common(a):
+    return {
+        "gamma": a.gamma,
+        "learning_rate": a.learning_rate,
+        "batch_num": a.batch_num,
+        "mini_batch_size": a.batch_size,
+        "buffer_size": int(a.buffer_size),
+        "target_network_update_freq": a.target_update,
+        "double_q": a.double,
+        "dueling_model": a.dueling,
+        "exploration_initial_eps": a.initial_eps,
+        "exploration_decay": a.eps_decay,
+        "param_noise": a.noisynet,
+        "n_step": a.n_step,
+        "munchausen": a.munchausen,
+        "gradient_steps": a.gradient_steps,
+        "learning_starts": a.learning_starts,
+        "log_dir": a.logdir,
+        "optimizer": a.optimizer,
+        "compress_memory": a.compress_memory,
+        "seed": a.seed,
+    }
 
-        agent = APE_X_QRDQN(
-            workers,
-            model_builder_maker,
-            manager,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_num=args.batch_num,
-            mini_batch_size=args.batch_size,
-            buffer_size=int(args.buffer_size),
-            target_network_update_freq=args.target_update,
-            double_q=args.double,
-            dueling_model=args.dueling,
-            exploration_initial_eps=args.initial_eps,
-            exploration_decay=args.eps_decay,
-            param_noise=args.noisynet,
-            n_step=args.n_step,
-            munchausen=args.munchausen,
-            gradient_steps=args.gradient_steps,
-            learning_starts=args.learning_starts,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            compress_memory=args.compress_memory,
-            n_support=args.n_support,
-            delta=args.delta,
-            seed=args.seed,
-        )
-    elif args.algo == "IQN":
-        if args.model_lib == "flax":
-            from model_builder.flax.qnet.iqn_builder import model_builder_maker
-        elif args.model_lib == "haiku":
-            from model_builder.haiku.qnet.iqn_builder import model_builder_maker
 
-        agent = APE_X_IQN(
-            workers,
-            model_builder_maker,
-            manager,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_num=args.batch_num,
-            mini_batch_size=args.batch_size,
-            buffer_size=int(args.buffer_size),
-            target_network_update_freq=args.target_update,
-            double_q=args.double,
-            dueling_model=args.dueling,
-            exploration_initial_eps=args.initial_eps,
-            exploration_decay=args.eps_decay,
-            param_noise=args.noisynet,
-            n_step=args.n_step,
-            munchausen=args.munchausen,
-            gradient_steps=args.gradient_steps,
-            learning_starts=args.learning_starts,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            compress_memory=args.compress_memory,
-            n_support=args.n_support,
-            delta=args.delta,
-            CVaR=args.CVaR,
-            seed=args.seed,
-        )
+ALGOS = {
+    "DQN": AlgoSpec(APE_X_DQN, "dqn", _common),
+    "C51": AlgoSpec(
+        APE_X_C51,
+        "c51",
+        lambda a: {**_common(a), "categorial_max": a.max, "categorial_min": a.min},
+    ),
+    "QRDQN": AlgoSpec(
+        APE_X_QRDQN,
+        "qrdqn",
+        lambda a: {**_common(a), "n_support": a.n_support, "delta": a.delta},
+    ),
+    "IQN": AlgoSpec(
+        APE_X_IQN,
+        "iqn",
+        lambda a: {**_common(a), "n_support": a.n_support, "delta": a.delta, "CVaR": a.CVaR},
+    ),
+}
 
-    agent.learn(int(args.steps))
+
+APEX_QNET_RUNNER = DistributedFamilyRunner(
+    add_args=add_args,
+    make_workers=make_workers,
+    policy_kwargs=policy_kwargs,
+    algos=ALGOS,
+    maker_pkg="model_builder.{lib}.qnet",
+    variant=lambda _args: "",
+    ray_cpu_headroom=2,
+)
+
+
+def main(argv=None):
+    return run_distributed_family(APEX_QNET_RUNNER, argv)
 
 
 if __name__ == "__main__":

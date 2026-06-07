@@ -1,10 +1,10 @@
-import argparse
-import multiprocessing as mp
-
-import ray
-
 from jax_baselines.A2C.impala import IMPALA
 from jax_baselines.cli._common import default_logdir, set_default_xla_flags
+from jax_baselines.cli._run import (
+    AlgoSpec,
+    DistributedFamilyRunner,
+    run_distributed_family,
+)
 from jax_baselines.IMPALA.worker import Impala_Worker
 from jax_baselines.PPO.impala_ppo import IMPALA_PPO
 from jax_baselines.SPO.impala_spo import IMPALA_SPO
@@ -13,8 +13,7 @@ from jax_baselines.TPPO.impala_tppo import IMPALA_TPPO
 set_default_xla_flags()
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser()
+def add_args(parser):
     parser.add_argument("--learning_rate", type=float, default=0.0002, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="BreakoutNoFrameskip-v4", help="environment")
@@ -41,106 +40,55 @@ def main(argv=None):
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
-    args = parser.parse_args(argv)
 
-    manager = mp.get_context().Manager()
 
-    ray.init(num_cpus=args.worker + 4, num_gpus=0)
+def make_workers(args):
+    return [Impala_Worker.remote(args.env, seed=args.seed + i) for i in range(args.worker)]
 
-    workers = [Impala_Worker.remote(args.env, seed=args.seed + i) for i in range(args.worker)]
 
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
+def policy_kwargs(args):
+    return {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 
-    if args.model_lib == "flax":
-        from model_builder.flax.ac.ac_builder import model_builder_maker
-    elif args.model_lib == "haiku":
-        from model_builder.haiku.ac.ac_builder import model_builder_maker
 
-    if args.algo == "A2C":
-        agent = IMPALA(
-            workers,
-            model_builder_maker,
-            manager,
-            gamma=args.gamma,
-            lamda=args.lamda,
-            learning_rate=args.learning_rate,
-            update_freq=args.update_freq,
-            batch_size=args.batch,
-            sample_size=args.sample_size,
-            buffer_size=int(args.buffer_size),
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            val_coef=args.val_coef,
-            ent_coef=args.ent_coef,
-            rho_max=args.rho_max,
-            log_dir=args.logdir,
-            seed=args.seed,
-        )
+def _common(a):
+    return {
+        "gamma": a.gamma,
+        "lamda": a.lamda,
+        "learning_rate": a.learning_rate,
+        "update_freq": a.update_freq,
+        "batch_size": a.batch,
+        "sample_size": a.sample_size,
+        "buffer_size": int(a.buffer_size),
+        "optimizer": a.optimizer,
+        "val_coef": a.val_coef,
+        "ent_coef": a.ent_coef,
+        "rho_max": a.rho_max,
+        "log_dir": a.logdir,
+        "seed": a.seed,
+    }
 
-    elif args.algo == "PPO":
-        agent = IMPALA_PPO(
-            workers,
-            model_builder_maker,
-            manager,
-            gamma=args.gamma,
-            lamda=args.lamda,
-            learning_rate=args.learning_rate,
-            update_freq=args.update_freq,
-            batch_size=args.batch,
-            sample_size=args.sample_size,
-            buffer_size=int(args.buffer_size),
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            val_coef=args.val_coef,
-            ent_coef=args.ent_coef,
-            rho_max=args.rho_max,
-            log_dir=args.logdir,
-            seed=args.seed,
-        )
 
-    elif args.algo == "TPPO":
-        agent = IMPALA_TPPO(
-            workers,
-            model_builder_maker,
-            manager,
-            gamma=args.gamma,
-            lamda=args.lamda,
-            learning_rate=args.learning_rate,
-            update_freq=args.update_freq,
-            batch_size=args.batch,
-            sample_size=args.sample_size,
-            buffer_size=int(args.buffer_size),
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            val_coef=args.val_coef,
-            ent_coef=args.ent_coef,
-            rho_max=args.rho_max,
-            log_dir=args.logdir,
-            seed=args.seed,
-        )
+ALGOS = {
+    "A2C": AlgoSpec(IMPALA, "ac", _common),
+    "PPO": AlgoSpec(IMPALA_PPO, "ac", _common),
+    "TPPO": AlgoSpec(IMPALA_TPPO, "ac", _common),
+    "SPO": AlgoSpec(IMPALA_SPO, "ac", _common),
+}
 
-    elif args.algo == "SPO":
-        agent = IMPALA_SPO(
-            workers,
-            model_builder_maker,
-            manager,
-            gamma=args.gamma,
-            lamda=args.lamda,
-            learning_rate=args.learning_rate,
-            update_freq=args.update_freq,
-            batch_size=args.batch,
-            sample_size=args.sample_size,
-            buffer_size=int(args.buffer_size),
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            val_coef=args.val_coef,
-            ent_coef=args.ent_coef,
-            rho_max=args.rho_max,
-            log_dir=args.logdir,
-            seed=args.seed,
-        )
 
-    agent.learn(int(args.steps))
+IMPALA_RUNNER = DistributedFamilyRunner(
+    add_args=add_args,
+    make_workers=make_workers,
+    policy_kwargs=policy_kwargs,
+    algos=ALGOS,
+    maker_pkg="model_builder.{lib}.ac",
+    variant=lambda _args: "",
+    ray_cpu_headroom=4,
+)
+
+
+def main(argv=None):
+    return run_distributed_family(IMPALA_RUNNER, argv)
 
 
 if __name__ == "__main__":

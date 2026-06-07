@@ -1,6 +1,5 @@
-import argparse
-
 from jax_baselines.cli._common import default_logdir, set_default_xla_flags
+from jax_baselines.cli._run import AlgoSpec, FamilyRunner, run_family
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DDPG.ddpg import DDPG
@@ -12,8 +11,7 @@ from jax_baselines.TQC.tqc import TQC
 set_default_xla_flags()
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser()
+def add_args(parser):
     parser.add_argument("--experiment_name", type=str, default="DPG", help="experiment name")
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
@@ -34,8 +32,9 @@ def main(argv=None):
         help="n step setting when n > 1 is n step td method",
     )
     parser.add_argument("--scaled_by_reset", action="store_true")
-    parser.add_argument("--simba", action="store_true")
-    parser.add_argument("--simbav2", action="store_true")
+    simba_group = parser.add_mutually_exclusive_group()
+    simba_group.add_argument("--simba", action="store_true")
+    simba_group.add_argument("--simbav2", action="store_true")
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
     parser.add_argument("--logdir", type=str, default=default_logdir("dpg"), help="log file dir")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
@@ -56,239 +55,129 @@ def main(argv=None):
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
     parser.add_argument("--use_checkpointing", action="store_true")
-    args = parser.parse_args(argv)
 
-    if args.simba and args.simbav2:
-        parser.error("--simba and --simbav2 cannot be used together")
 
-    use_simba_features = args.simba or args.simbav2
+def build_env(args):
     env_builder, _ = get_env_builder(
         args.env, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
     )
-
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
+    return env_builder, policy_kwargs
 
-    if args.algo == "DDPG":
-        if args.model_lib == "flax":
-            if args.simbav2:
-                from model_builder.flax.dpg.simbav2_ddpg_builder import (
-                    model_builder_maker,
-                )
-            elif args.simba:
-                from model_builder.flax.dpg.simba_ddpg_builder import (
-                    model_builder_maker,
-                )
-            else:
-                from model_builder.flax.dpg.ddpg_builder import model_builder_maker
-        elif args.model_lib == "haiku":
-            from model_builder.haiku.dpg.ddpg_builder import model_builder_maker
-        agent = DDPG(
-            env_builder,
-            model_builder_maker,
-            num_workers=args.worker,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_size=args.batch,
-            buffer_size=int(args.buffer_size),
-            target_network_update_tau=args.target_update_tau,
-            learning_starts=args.learning_starts,
-            prioritized_replay=args.per,
-            scaled_by_reset=args.scaled_by_reset,
-            simba=use_simba_features,
-            simba_v2=args.simbav2,
-            n_step=args.n_step,
-            train_freq=args.train_freq,
-            seed=args.seed,
-            gradient_steps=args.gradient_steps,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            use_checkpointing=args.use_checkpointing,
-        )
-    if args.algo == "TD3":
-        if args.model_lib == "flax":
-            if args.simbav2:
-                from model_builder.flax.dpg.simbav2_td3_builder import (
-                    model_builder_maker,
-                )
-            elif args.simba:
-                from model_builder.flax.dpg.simba_td3_builder import model_builder_maker
-            else:
-                from model_builder.flax.dpg.td3_builder import model_builder_maker
-        elif args.model_lib == "haiku":
-            from model_builder.haiku.dpg.td3_builder import model_builder_maker
-        agent = TD3(
-            env_builder,
-            model_builder_maker,
-            num_workers=args.worker,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_size=args.batch,
-            buffer_size=int(args.buffer_size),
-            target_network_update_tau=args.target_update_tau,
-            learning_starts=args.learning_starts,
-            prioritized_replay=args.per,
-            scaled_by_reset=args.scaled_by_reset,
-            simba=use_simba_features,
-            simba_v2=args.simbav2,
-            action_noise=args.action_noise,
-            n_step=args.n_step,
-            train_freq=args.train_freq,
-            seed=args.seed,
-            gradient_steps=args.gradient_steps,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            use_checkpointing=args.use_checkpointing,
-        )
-    if args.algo == "SAC":
-        if args.model_lib == "flax":
-            if args.simbav2:
-                from model_builder.flax.dpg.simbav2_sac_builder import (
-                    model_builder_maker,
-                )
-            elif args.simba:
-                from model_builder.flax.dpg.simba_sac_builder import model_builder_maker
-            else:
-                from model_builder.flax.dpg.sac_builder import model_builder_maker
-        elif args.model_lib == "haiku":
-            from model_builder.haiku.dpg.sac_builder import model_builder_maker
-        agent = SAC(
-            env_builder,
-            model_builder_maker,
-            num_workers=args.worker,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_size=args.batch,
-            buffer_size=int(args.buffer_size),
-            target_network_update_tau=args.target_update_tau,
-            learning_starts=args.learning_starts,
-            prioritized_replay=args.per,
-            scaled_by_reset=args.scaled_by_reset,
-            simba=use_simba_features,
-            simba_v2=args.simbav2,
-            n_step=args.n_step,
-            train_freq=args.train_freq,
-            ent_coef=args.ent_coef,
-            seed=args.seed,
-            gradient_steps=args.gradient_steps,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            use_checkpointing=args.use_checkpointing,
-        )
-    if args.algo == "CrossQ":
-        if args.model_lib == "flax":
-            if args.simbav2:
-                from model_builder.flax.dpg.simbav2_crossq_builder import (
-                    model_builder_maker,
-                )
-            elif args.simba:
-                from model_builder.flax.dpg.simba_crossq_builder import (
-                    model_builder_maker,
-                )
-            else:
-                from model_builder.flax.dpg.crossq_builder import model_builder_maker
-        agent = CrossQ(
-            env_builder,
-            model_builder_maker,
-            num_workers=args.worker,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_size=args.batch,
-            buffer_size=int(args.buffer_size),
-            learning_starts=args.learning_starts,
-            prioritized_replay=args.per,
-            scaled_by_reset=args.scaled_by_reset,
-            simba=use_simba_features,
-            simba_v2=args.simbav2,
-            n_step=args.n_step,
-            train_freq=args.train_freq,
-            ent_coef=args.ent_coef,
-            seed=args.seed,
-            gradient_steps=args.gradient_steps,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            use_checkpointing=args.use_checkpointing,
-        )
-    if args.algo == "TQC":
-        if args.model_lib == "flax":
-            if args.simbav2:
-                from model_builder.flax.dpg.simbav2_tqc_builder import (
-                    model_builder_maker,
-                )
-            elif args.simba:
-                from model_builder.flax.dpg.simba_tqc_builder import model_builder_maker
-            else:
-                from model_builder.flax.dpg.tqc_builder import model_builder_maker
-        elif args.model_lib == "haiku":
-            from model_builder.haiku.dpg.tqc_builder import model_builder_maker
-        agent = TQC(
-            env_builder,
-            model_builder_maker,
-            num_workers=args.worker,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_size=args.batch,
-            buffer_size=int(args.buffer_size),
-            target_network_update_tau=args.target_update_tau,
-            learning_starts=args.learning_starts,
-            quantile_drop=args.quantile_drop,
-            prioritized_replay=args.per,
-            scaled_by_reset=args.scaled_by_reset,
-            simba=use_simba_features,
-            simba_v2=args.simbav2,
-            n_step=args.n_step,
-            train_freq=args.train_freq,
-            ent_coef=args.ent_coef,
-            seed=args.seed,
-            gradient_steps=args.gradient_steps,
-            n_support=args.n_support,
-            critic_num=args.critic_num,
-            mixture_type=args.mixture,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-            use_checkpointing=args.use_checkpointing,
-        )
-    if args.algo == "TD7":
-        if args.model_lib == "flax":
-            if args.simbav2:
-                from model_builder.flax.dpg.simbav2_td7_builder import (
-                    model_builder_maker,
-                )
-            elif args.simba:
-                from model_builder.flax.dpg.simba_td7_builder import model_builder_maker
-            else:
-                from model_builder.flax.dpg.td7_builder import model_builder_maker
-        elif args.model_lib == "haiku":
-            from model_builder.haiku.dpg.td7_builder import model_builder_maker
-        agent = TD7(
-            env_builder,
-            model_builder_maker,
-            num_workers=args.worker,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_size=args.batch,
-            buffer_size=int(args.buffer_size),
-            target_network_update_freq=250,
-            learning_starts=args.learning_starts,
-            action_noise=args.action_noise,
-            train_freq=args.train_freq,
-            scaled_by_reset=args.scaled_by_reset,
-            simba=use_simba_features,
-            simba_v2=args.simbav2,
-            seed=args.seed,
-            gradient_steps=args.gradient_steps,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-        )
 
-    agent.learn(int(args.steps), experiment_name=args.experiment_name)
+def _variant(args):
+    return "simbav2_" if args.simbav2 else "simba_" if args.simba else ""
 
-    agent.test()
+
+def _simba(args):
+    return args.simba or args.simbav2
+
+
+def _common(a):
+    return {
+        "num_workers": a.worker,
+        "gamma": a.gamma,
+        "learning_rate": a.learning_rate,
+        "batch_size": a.batch,
+        "buffer_size": int(a.buffer_size),
+        "learning_starts": a.learning_starts,
+        "prioritized_replay": a.per,
+        "scaled_by_reset": a.scaled_by_reset,
+        "simba": _simba(a),
+        "simba_v2": a.simbav2,
+        "n_step": a.n_step,
+        "train_freq": a.train_freq,
+        "seed": a.seed,
+        "gradient_steps": a.gradient_steps,
+        "log_dir": a.logdir,
+        "optimizer": a.optimizer,
+        "use_checkpointing": a.use_checkpointing,
+    }
+
+
+ALGOS = {
+    "DDPG": AlgoSpec(
+        DDPG,
+        "ddpg",
+        lambda a: {**_common(a), "target_network_update_tau": a.target_update_tau},
+    ),
+    "TD3": AlgoSpec(
+        TD3,
+        "td3",
+        lambda a: {
+            **_common(a),
+            "target_network_update_tau": a.target_update_tau,
+            "action_noise": a.action_noise,
+        },
+    ),
+    "SAC": AlgoSpec(
+        SAC,
+        "sac",
+        lambda a: {
+            **_common(a),
+            "target_network_update_tau": a.target_update_tau,
+            "ent_coef": a.ent_coef,
+        },
+    ),
+    "CrossQ": AlgoSpec(
+        CrossQ,
+        "crossq",
+        lambda a: {**_common(a), "ent_coef": a.ent_coef},
+    ),
+    "TQC": AlgoSpec(
+        TQC,
+        "tqc",
+        lambda a: {
+            **_common(a),
+            "target_network_update_tau": a.target_update_tau,
+            "ent_coef": a.ent_coef,
+            "quantile_drop": a.quantile_drop,
+            "n_support": a.n_support,
+            "critic_num": a.critic_num,
+            "mixture_type": a.mixture,
+        },
+    ),
+    # TD7 intentionally does NOT reuse _common(): TD7.__init__ forces
+    # n_step=1, target_network_update_tau=0, prioritized_replay=True and
+    # use_checkpointing=True via td7_kwargs, where caller kwargs win over those
+    # defaults. Passing the CLI defaults that _common() carries would silently
+    # override TD7's required settings, so this dict must omit those keys.
+    "TD7": AlgoSpec(
+        TD7,
+        "td7",
+        lambda a: {
+            "num_workers": a.worker,
+            "gamma": a.gamma,
+            "learning_rate": a.learning_rate,
+            "batch_size": a.batch,
+            "buffer_size": int(a.buffer_size),
+            "target_network_update_freq": 250,
+            "learning_starts": a.learning_starts,
+            "action_noise": a.action_noise,
+            "train_freq": a.train_freq,
+            "scaled_by_reset": a.scaled_by_reset,
+            "simba": _simba(a),
+            "simba_v2": a.simbav2,
+            "seed": a.seed,
+            "gradient_steps": a.gradient_steps,
+            "log_dir": a.logdir,
+            "optimizer": a.optimizer,
+        },
+    ),
+}
+
+
+DPG_RUNNER = FamilyRunner(
+    add_args=add_args,
+    build_env=build_env,
+    algos=ALGOS,
+    maker_pkg="model_builder.{lib}.dpg",
+    variant=_variant,
+)
+
+
+def main(argv=None):
+    return run_family(DPG_RUNNER, argv)
 
 
 if __name__ == "__main__":

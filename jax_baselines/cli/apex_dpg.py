@@ -1,10 +1,10 @@
-import argparse
-import multiprocessing as mp
-
-import ray
-
 from jax_baselines.APE_X.dpg_worker import Ape_X_Worker
 from jax_baselines.cli._common import default_logdir, set_default_xla_flags
+from jax_baselines.cli._run import (
+    AlgoSpec,
+    DistributedFamilyRunner,
+    run_distributed_family,
+)
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.DDPG.apex_ddpg import APE_X_DDPG
 from jax_baselines.TD3.apex_td3 import APE_X_TD3
@@ -12,8 +12,7 @@ from jax_baselines.TD3.apex_td3 import APE_X_TD3
 set_default_xla_flags()
 
 
-def main(argv=None):
-    parser = argparse.ArgumentParser()
+def add_args(parser):
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="Pendulum-v0", help="environment")
@@ -53,71 +52,55 @@ def main(argv=None):
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )
-    args = parser.parse_args(argv)
 
-    manager = mp.get_context().Manager()
 
-    ray.init(num_cpus=args.worker + 2, num_gpus=0)
-
+def make_workers(args):
     env_builder, _ = get_env_builder(args.env)
-    workers = [Ape_X_Worker.remote(env_builder, seed=args.seed + i) for i in range(args.worker)]
+    return [Ape_X_Worker.remote(env_builder, seed=args.seed + i) for i in range(args.worker)]
 
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 
-    if args.algo == "DDPG":
-        if args.model_lib == "flax":
-            from model_builder.flax.dpg.ddpg_builder import model_builder_maker
-        elif args.model_lib == "haiku":
-            from model_builder.haiku.dpg.ddpg_builder import model_builder_maker
+def policy_kwargs(args):
+    return {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
 
-        agent = APE_X_DDPG(
-            workers,
-            model_builder_maker,
-            manager,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_num=args.batch_num,
-            mini_batch_size=args.batch_size,
-            buffer_size=int(args.buffer_size),
-            target_network_update_tau=args.target_update_tau,
-            learning_starts=args.learning_starts,
-            exploration_initial_eps=args.initial_eps,
-            exploration_decay=args.eps_decay,
-            n_step=args.n_step,
-            seed=args.seed,
-            gradient_steps=args.gradient_steps,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-        )
-    elif args.algo == "TD3":
-        if args.model_lib == "flax":
-            from model_builder.flax.dpg.td3_builder import model_builder_maker
-        elif args.model_lib == "haiku":
-            from model_builder.haiku.dpg.td3_builder import model_builder_maker
 
-        agent = APE_X_TD3(
-            workers,
-            model_builder_maker,
-            manager,
-            gamma=args.gamma,
-            learning_rate=args.learning_rate,
-            batch_num=args.batch_num,
-            mini_batch_size=args.batch_size,
-            buffer_size=int(args.buffer_size),
-            target_network_update_tau=args.target_update_tau,
-            learning_starts=args.learning_starts,
-            exploration_initial_eps=args.initial_eps,
-            exploration_decay=args.eps_decay,
-            n_step=args.n_step,
-            seed=args.seed,
-            gradient_steps=args.gradient_steps,
-            log_dir=args.logdir,
-            policy_kwargs=policy_kwargs,
-            optimizer=args.optimizer,
-        )
+def _common(a):
+    return {
+        "gamma": a.gamma,
+        "learning_rate": a.learning_rate,
+        "batch_num": a.batch_num,
+        "mini_batch_size": a.batch_size,
+        "buffer_size": int(a.buffer_size),
+        "target_network_update_tau": a.target_update_tau,
+        "learning_starts": a.learning_starts,
+        "exploration_initial_eps": a.initial_eps,
+        "exploration_decay": a.eps_decay,
+        "n_step": a.n_step,
+        "seed": a.seed,
+        "gradient_steps": a.gradient_steps,
+        "log_dir": a.logdir,
+        "optimizer": a.optimizer,
+    }
 
-    agent.learn(int(args.steps))
+
+ALGOS = {
+    "DDPG": AlgoSpec(APE_X_DDPG, "ddpg", _common),
+    "TD3": AlgoSpec(APE_X_TD3, "td3", _common),
+}
+
+
+APEX_DPG_RUNNER = DistributedFamilyRunner(
+    add_args=add_args,
+    make_workers=make_workers,
+    policy_kwargs=policy_kwargs,
+    algos=ALGOS,
+    maker_pkg="model_builder.{lib}.dpg",
+    variant=lambda _args: "",
+    ray_cpu_headroom=2,
+)
+
+
+def main(argv=None):
+    return run_distributed_family(APEX_DPG_RUNNER, argv)
 
 
 if __name__ == "__main__":
