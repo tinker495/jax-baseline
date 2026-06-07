@@ -1,14 +1,24 @@
 from copy import deepcopy
+from typing import Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+from flax import struct
 
 from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.param_updates import scaled_by_reset, soft_update
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.training import DPGTrainReport
+
+
+@struct.dataclass
+class TD3CheckpointParams:
+    policy_params: Any
+    critic_params: Any
+    target_policy_params: Any
+    target_critic_params: Any
 
 
 class TD3(Deteministic_Policy_Gradient_Family):
@@ -50,6 +60,20 @@ class TD3(Deteministic_Policy_Gradient_Family):
         self.opt_critic_state = self.optimizer.init(self.critic_params)
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
+
+    def checkpoint_params(self):
+        return TD3CheckpointParams(
+            policy_params=self.policy_params,
+            critic_params=self.critic_params,
+            target_policy_params=self.target_policy_params,
+            target_critic_params=self.target_critic_params,
+        )
+
+    def load_checkpoint_params(self, bundle):
+        self.policy_params = bundle.policy_params
+        self.critic_params = bundle.critic_params
+        self.target_policy_params = bundle.target_policy_params
+        self.target_critic_params = bundle.target_critic_params
 
     def _get_actions(self, policy_params, obses, key=None) -> jnp.ndarray:
         return self.actor(policy_params, key, self.preproc(policy_params, key, convert_jax(obses)))

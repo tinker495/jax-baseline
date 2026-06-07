@@ -1,14 +1,24 @@
 from copy import deepcopy
+from typing import Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+from flax import struct
 
 from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.param_updates import scaled_by_reset, soft_update
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.training import DPGTrainReport
+
+
+@struct.dataclass
+class SACCheckpointParams:
+    policy_params: Any
+    critic_params: Any
+    target_critic_params: Any
+    log_ent_coef: Any
 
 
 class SAC(Deteministic_Policy_Gradient_Family):
@@ -56,6 +66,20 @@ class SAC(Deteministic_Policy_Gradient_Family):
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
         self._train_ent_coef = jax.jit(self._train_ent_coef)
+
+    def checkpoint_params(self):
+        return SACCheckpointParams(
+            policy_params=self.policy_params,
+            critic_params=self.critic_params,
+            target_critic_params=self.target_critic_params,
+            log_ent_coef=self.log_ent_coef,
+        )
+
+    def load_checkpoint_params(self, bundle):
+        self.policy_params = bundle.policy_params
+        self.critic_params = bundle.critic_params
+        self.target_critic_params = bundle.target_critic_params
+        self.log_ent_coef = bundle.log_ent_coef
 
     def _get_pi_log_prob(self, params, feature, key=None) -> jnp.ndarray:
         mu, log_std = self.actor(params, None, feature)

@@ -3,6 +3,7 @@ from copy import deepcopy
 import numpy as np
 
 from jax_baselines.common.checkpoint import make_checkpoint_controller
+from jax_baselines.common.checkpoint_state import CheckpointState
 from jax_baselines.common.env_info import get_local_env_info
 from jax_baselines.common.eval import evaluate_policy, record_and_test
 from jax_baselines.common.optimizer import select_optimizer
@@ -90,8 +91,6 @@ class Deteministic_Policy_Gradient_Family(object):
         self.reset_freq = 500000
         self.simba = simba or simba_v2
         self.simba_v2 = simba_v2
-        self.params = None
-        self.target_params = None
         self.save_path = None
         self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-3 / self.batch_size)
 
@@ -103,8 +102,11 @@ class Deteministic_Policy_Gradient_Family(object):
         if self._init_setup_model:
             self.setup_model()
 
+        self.eval_snapshot = None
         if self.simba:
             self.obs_rms = RunningMeanStd(shapes=self.observation_space, dtype=np.float64)
+            self.action_obs_rms = None
+            self.checkpoint_obs_rms = None
 
         # Generic checkpointing scaffolding (used by algorithms that opt-in)
         self.use_checkpointing = use_checkpointing
@@ -143,97 +145,66 @@ class Deteministic_Policy_Gradient_Family(object):
         self.training_lifecycle = DPGTrainingLifecycle(self)
 
     def save_params(self, path):
-        state = self._gather_checkpoint_state()
-        self.params = state
-        save(path, state)
+        save(path, self._build_checkpoint_state())
 
     def load_params(self, path):
-        state = restore(path)
-        self._apply_checkpoint_state(state)
-        self.params = state
-        self.target_params = state
+        self._restore_checkpoint_state(restore(path))
 
-    def _gather_checkpoint_state(self):
-        """Collect train/eval state required to resume or evaluate the agent."""
-        state = {}
+    # -------------------------------
+    # Checkpoint contract (per-algorithm bundle = the real seam)
+    # -------------------------------
+    def checkpoint_params(self):
+        """Return this algorithm's typed checkpoint param bundle (a flax.struct).
 
-        param_attrs = [
-            "policy_params",
-            "critic_params",
-            "target_policy_params",
-            "target_critic_params",
-            "encoder_params",
-            "fixed_encoder_params",
-            "fixed_encoder_target_params",
-            "checkpoint_state",
-            "checkpoint_policy_params",
-            "checkpoint_encoder_params",
-            "target_encoder_params",
-        ]
-        for attr in param_attrs:
-            value = getattr(self, attr, None)
-            if value is not None:
-                state[attr] = value
+        Each concrete algorithm owns the bundle type and the fields it carries;
+        the base composes the family-wide spine around it without naming them.
+        """
+        raise NotImplementedError
 
-        if hasattr(self, "log_ent_coef"):
-            state["log_ent_coef"] = self.log_ent_coef
+    def load_checkpoint_params(self, bundle):
+        """Restore this algorithm's network params from its bundle."""
+        raise NotImplementedError
 
-        state["train_steps_count"] = np.asarray(self.train_steps_count, dtype=np.int64)
-        state["_ckpt_update_residual"] = np.asarray(self._ckpt_update_residual, dtype=np.float32)
-        state.update(self._checkpoint.to_state())
+    def _build_checkpoint_state(self) -> CheckpointState:
+        return CheckpointState(
+            params=self.checkpoint_params(),
+            train_steps_count=np.asarray(self.train_steps_count, dtype=np.int64),
+            ckpt_residual=np.asarray(self._ckpt_update_residual, dtype=np.float32),
+            controller_state=self._checkpoint.to_state(),
+            eval_snapshot=self.eval_snapshot,
+            obs_rms_state=self.obs_rms.to_state() if self.simba else None,
+            action_obs_rms_state=(
+                self.action_obs_rms.to_state()
+                if (self.simba and self.action_obs_rms is not None)
+                else None
+            ),
+            checkpoint_obs_rms_state=(
+                self.checkpoint_obs_rms.to_state()
+                if (self.simba and self.checkpoint_obs_rms is not None)
+                else None
+            ),
+        )
 
-        if getattr(self, "simba", False) and hasattr(self, "obs_rms"):
-            state["obs_rms_state"] = self.obs_rms.to_state()
-            if hasattr(self, "action_obs_rms"):
-                state["action_obs_rms_state"] = self.action_obs_rms.to_state()
-            if hasattr(self, "checkpoint_obs_rms"):
-                state["checkpoint_obs_rms_state"] = self.checkpoint_obs_rms.to_state()
+    def _restore_checkpoint_state(self, state: CheckpointState):
+        self.load_checkpoint_params(state.params)
+        self.train_steps_count = int(np.asarray(state.train_steps_count).item())
+        self._ckpt_update_residual = float(np.asarray(state.ckpt_residual).item())
+        self._checkpoint.from_state(state.controller_state)
+        self.eval_snapshot = state.eval_snapshot
 
-        return state
-
-    def _apply_checkpoint_state(self, state):
-        """Restore state captured by _gather_checkpoint_state."""
-        param_attrs = [
-            "policy_params",
-            "critic_params",
-            "target_policy_params",
-            "target_critic_params",
-            "encoder_params",
-            "fixed_encoder_params",
-            "fixed_encoder_target_params",
-            "checkpoint_state",
-            "checkpoint_policy_params",
-            "checkpoint_encoder_params",
-            "target_encoder_params",
-        ]
-        for attr in param_attrs:
-            if attr in state:
-                setattr(self, attr, state[attr])
-
-        if "log_ent_coef" in state:
-            self.log_ent_coef = state["log_ent_coef"]
-
-        if "train_steps_count" in state:
-            self.train_steps_count = int(np.asarray(state["train_steps_count"]).item())
-
-        if "_ckpt_update_residual" in state:
-            self._ckpt_update_residual = float(np.asarray(state["_ckpt_update_residual"]).item())
-
-        self._checkpoint.from_state(state)
-
-        if getattr(self, "simba", False):
-            if "obs_rms_state" in state:
-                self.obs_rms = RunningMeanStd.from_state(state["obs_rms_state"])
-            elif not hasattr(self, "obs_rms"):
-                self.obs_rms = RunningMeanStd(shapes=self.observation_space, dtype=np.float64)
-
-            if "action_obs_rms_state" in state:
-                self.action_obs_rms = RunningMeanStd.from_state(state["action_obs_rms_state"])
-
-            if "checkpoint_obs_rms_state" in state:
-                self.checkpoint_obs_rms = RunningMeanStd.from_state(
-                    state["checkpoint_obs_rms_state"]
-                )
+        if self.simba:
+            if state.obs_rms_state is not None:
+                self.obs_rms = RunningMeanStd.from_state(state.obs_rms_state)
+            self.action_obs_rms = (
+                RunningMeanStd.from_state(state.action_obs_rms_state)
+                if state.action_obs_rms_state is not None
+                else None
+            )
+            self.checkpoint_obs_rms = (
+                RunningMeanStd.from_state(state.checkpoint_obs_rms_state)
+                if state.checkpoint_obs_rms_state is not None
+                else None
+            )
 
     def get_env_setup(self):
         # Use common helper to standardize environment info
@@ -312,9 +283,9 @@ class Deteministic_Policy_Gradient_Family(object):
             eval
             and self.use_checkpointing
             and self._checkpoint.enabled
-            and getattr(self, "checkpoint_state", None) is not None
+            and self.eval_snapshot is not None
         ):
-            return self.checkpoint_state
+            return self.eval_snapshot
         return self.get_behavior_state()
 
     def _policy_action_from_state(self, state, obs, eval, steps):
@@ -353,9 +324,9 @@ class Deteministic_Policy_Gradient_Family(object):
                     eval
                     and self.use_checkpointing
                     and self._checkpoint.enabled
-                    and hasattr(self, "checkpoint_obs_rms")
+                    and self.checkpoint_obs_rms is not None
                 )
-                else (self.action_obs_rms if hasattr(self, "action_obs_rms") else self.obs_rms)
+                else (self.action_obs_rms if self.action_obs_rms is not None else self.obs_rms)
             )
             if (not eval) and steps != np.inf:
                 self.obs_rms.update(obs)
@@ -459,19 +430,12 @@ class Deteministic_Policy_Gradient_Family(object):
     def _checkpoint_update_snapshot(self):
         """Default checkpoint snapshot strategy for DPG family.
 
-        This copies current policy and encoder parameters into checkpoint snapshots.
-        Subclasses can override this for custom snapshot strategies.
+        Snapshots the eval behaviour-state (mirrors eval action selection).
+        Subclasses can override for custom snapshot strategies.
         """
-        # Default strategy: snapshot eval state (mirrors eval behavior)
-        eval_state = self.get_eval_state()
-        self.checkpoint_state = deepcopy(eval_state)
+        self.eval_snapshot = deepcopy(self.get_eval_state())
 
-        # Keep legacy fields for backward compatibility
-        if eval_state.get("policy"):
-            self.checkpoint_policy_params = eval_state["policy"]
-        if eval_state.get("encoder"):
-            self.checkpoint_encoder_params = eval_state["encoder"]
-
-        # If using SIMBA normalization, snapshot obs_rms as well for eval-time consistency
+        # If using SIMBA normalization, snapshot obs_rms for eval-time consistency.
         if self.simba:
-            self.checkpoint_obs_rms = deepcopy(getattr(self, "action_obs_rms", self.obs_rms))
+            source = self.action_obs_rms if self.action_obs_rms is not None else self.obs_rms
+            self.checkpoint_obs_rms = deepcopy(source)

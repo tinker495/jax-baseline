@@ -1,15 +1,28 @@
 from copy import deepcopy
+from typing import Any
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+from flax import struct
 
 from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.losses import hubberloss
 from jax_baselines.common.param_updates import hard_update, scaled_by_reset
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.training import DPGTrainReport
+
+
+@struct.dataclass
+class TD7CheckpointParams:
+    encoder_params: Any
+    policy_params: Any
+    critic_params: Any
+    fixed_encoder_params: Any
+    fixed_encoder_target_params: Any
+    target_policy_params: Any
+    target_critic_params: Any
 
 
 class TD7(Deteministic_Policy_Gradient_Family):
@@ -63,8 +76,6 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.fixed_encoder_target_params = deepcopy(self.encoder_params)
         self.target_policy_params = deepcopy(self.policy_params)
         self.target_critic_params = deepcopy(self.critic_params)
-        self.checkpoint_encoder_params = deepcopy(self.encoder_params)
-        self.checkpoint_policy_params = deepcopy(self.policy_params)
 
         self.critic_params["values"] = {
             "min_value": jnp.array([np.inf], dtype=jnp.float32),
@@ -81,14 +92,34 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
 
+    def checkpoint_params(self):
+        return TD7CheckpointParams(
+            encoder_params=self.encoder_params,
+            policy_params=self.policy_params,
+            critic_params=self.critic_params,
+            fixed_encoder_params=self.fixed_encoder_params,
+            fixed_encoder_target_params=self.fixed_encoder_target_params,
+            target_policy_params=self.target_policy_params,
+            target_critic_params=self.target_critic_params,
+        )
+
+    def load_checkpoint_params(self, bundle):
+        self.encoder_params = bundle.encoder_params
+        self.policy_params = bundle.policy_params
+        self.critic_params = bundle.critic_params
+        self.fixed_encoder_params = bundle.fixed_encoder_params
+        self.fixed_encoder_target_params = bundle.fixed_encoder_target_params
+        self.target_policy_params = bundle.target_policy_params
+        self.target_critic_params = bundle.target_critic_params
+
     def _get_actions(self, encoder_params, policy_params, obses, key=None) -> jnp.ndarray:
         feature = self.preproc(encoder_params, key, convert_jax(obses))
         zs = self.encoder(encoder_params, key, feature)
         return self.actor(policy_params, key, feature, zs)
 
     def _select_action_state(self, eval, steps):
-        if eval and self.use_checkpointing and getattr(self, "checkpoint_state", None) is not None:
-            return self.checkpoint_state
+        if eval and self.use_checkpointing and self.eval_snapshot is not None:
+            return self.eval_snapshot
         return self.get_behavior_state()
 
     def _policy_action_from_state(self, state, obs, eval, steps):
