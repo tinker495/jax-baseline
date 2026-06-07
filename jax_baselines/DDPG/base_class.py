@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import numpy as np
 
-from jax_baselines.common.checkpoint import make_checkpoint_controller
+from jax_baselines.common.checkpoint import make_checkpoint_scaffold
 from jax_baselines.common.checkpoint_state import CheckpointState
 from jax_baselines.common.env_info import get_local_env_info
 from jax_baselines.common.eval import evaluate_policy, record_and_test
@@ -114,7 +114,7 @@ class Deteministic_Policy_Gradient_Family(object):
 
         self.logger_run = None
         self._ckpt_update_residual = 0
-        setup = make_checkpoint_controller(
+        self.ckpt = make_checkpoint_scaffold(
             use_checkpointing=self.use_checkpointing,
             steps_before_checkpointing=self.steps_before_checkpointing,
             max_eps_before_checkpointing=self.max_eps_before_checkpointing,
@@ -128,11 +128,6 @@ class Deteministic_Policy_Gradient_Family(object):
                 else None
             ),
         )
-        self._checkpoint = setup.controller
-        self.ckpt_quantile = setup.quantile
-        self.use_ckpt_return_standardization = setup.use_return_standardization
-        self.ckpt_baseline_mode = setup.baseline_mode
-        self.ckpt_baseline_q = setup.baseline_q
 
         # Logging throttle based on last log step
         self._last_log_step = 0
@@ -164,7 +159,7 @@ class Deteministic_Policy_Gradient_Family(object):
             params=self.checkpoint_params(),
             train_steps_count=np.asarray(self.train_steps_count, dtype=np.int64),
             ckpt_residual=np.asarray(self._ckpt_update_residual, dtype=np.float32),
-            controller_state=self._checkpoint.to_state(),
+            controller_state=self.ckpt.to_state(),
             eval_snapshot=self.eval_snapshot,
             obs_rms_state=self.obs_rms.to_state() if self.simba else None,
             action_obs_rms_state=(
@@ -183,7 +178,7 @@ class Deteministic_Policy_Gradient_Family(object):
         self.load_checkpoint_params(state.params)
         self.train_steps_count = int(np.asarray(state.train_steps_count).item())
         self._ckpt_update_residual = float(np.asarray(state.ckpt_residual).item())
-        self._checkpoint.from_state(state.controller_state)
+        self.ckpt.from_state(state.controller_state)
         self.eval_snapshot = state.eval_snapshot
 
         if self.simba:
@@ -273,12 +268,7 @@ class Deteministic_Policy_Gradient_Family(object):
         return np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
 
     def _select_action_state(self, eval, steps):
-        if (
-            eval
-            and self.use_checkpointing
-            and self._checkpoint.enabled
-            and self.eval_snapshot is not None
-        ):
+        if eval and self.use_checkpointing and self.ckpt.enabled and self.eval_snapshot is not None:
             return self.eval_snapshot
         return self.get_behavior_state()
 
@@ -295,8 +285,8 @@ class Deteministic_Policy_Gradient_Family(object):
                 description += f"{k} : {v:8.2f}, "
 
         description += f"loss : {np.mean(self.lossque):.3f}"
-        if self.use_checkpointing and (self._checkpoint.last_update_step is not None):
-            description += f", ckpt_upd_step : {int(self._checkpoint.last_update_step)}"
+        if self.use_checkpointing and (self.ckpt.last_update_step is not None):
+            description += f", ckpt_upd_step : {int(self.ckpt.last_update_step)}"
         return description
 
     def run_name_update(self, run_name):
@@ -317,7 +307,7 @@ class Deteministic_Policy_Gradient_Family(object):
                 if (
                     eval
                     and self.use_checkpointing
-                    and self._checkpoint.enabled
+                    and self.ckpt.enabled
                     and self.checkpoint_obs_rms is not None
                 )
                 else (self.action_obs_rms if self.action_obs_rms is not None else self.obs_rms)
@@ -383,7 +373,7 @@ class Deteministic_Policy_Gradient_Family(object):
             evaluate=lambda steps: self.eval(ctx, steps),
             describe=self.description,
             bind_loss_window=self._bind_loss_window,
-            checkpoint_on_episode_end=self._checkpoint.on_episode_end,
+            checkpoint_on_episode_end=self.ckpt.on_episode_end,
             checkpoint_pulse=pulse,
         )
 
