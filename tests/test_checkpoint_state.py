@@ -49,8 +49,6 @@ def _controller():
         initial_checkpoint_window=1,
         ckpt_baseline_mode="min",
         ckpt_baseline_q=None,
-        ckpt_gate_mode=None,
-        ckpt_gate_q=None,
         snapshot=lambda: None,
         log_metric=lambda *a, **k: None,
     ).controller

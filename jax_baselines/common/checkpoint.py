@@ -48,8 +48,6 @@ class CheckpointSetup:
     use_return_standardization: bool
     baseline_mode: str
     baseline_q: float
-    gate_mode: str
-    gate_q: float
 
 
 def make_checkpoint_controller(
@@ -60,8 +58,6 @@ def make_checkpoint_controller(
     initial_checkpoint_window: int,
     ckpt_baseline_mode: str,
     ckpt_baseline_q: Optional[float],
-    ckpt_gate_mode: Optional[str],
-    ckpt_gate_q: Optional[float],
     snapshot: Callable[[], None],
     log_metric: Callable[[str, float, int], None],
 ) -> CheckpointSetup:
@@ -83,10 +79,6 @@ def make_checkpoint_controller(
         ckpt_baseline_mode: Statistic used to build the rolling baseline.
         ckpt_baseline_q: Quantile for baseline computation; defaults to the
             canonical ``quantile`` (0.2) when ``None``.
-        ckpt_gate_mode: Statistic used for gating; defaults to
-            ``ckpt_baseline_mode`` when ``None``.
-        ckpt_gate_q: Explicit gate quantile; resolved from ``ckpt_gate_mode``
-            when ``None``.
         snapshot: Callable that captures the current policy parameters.
         log_metric: Callable ``(key, value, step)`` forwarded to the run
             logger.
@@ -99,16 +91,6 @@ def make_checkpoint_controller(
     use_return_standardization: bool = False
 
     resolved_baseline_q: float = ckpt_baseline_q if ckpt_baseline_q is not None else quantile
-    resolved_gate_mode: str = ckpt_gate_mode if ckpt_gate_mode is not None else ckpt_baseline_mode
-
-    if ckpt_gate_q is not None:
-        resolved_gate_q: float = ckpt_gate_q
-    elif resolved_gate_mode == "median":
-        resolved_gate_q = 0.5
-    elif resolved_gate_mode in ("quantile", "min", "mean"):
-        resolved_gate_q = resolved_baseline_q
-    else:
-        resolved_gate_q = quantile
 
     controller = CheckpointController(
         use_checkpointing=use_checkpointing,
@@ -128,8 +110,6 @@ def make_checkpoint_controller(
         use_return_standardization=use_return_standardization,
         baseline_mode=ckpt_baseline_mode,
         baseline_q=resolved_baseline_q,
-        gate_mode=resolved_gate_mode,
-        gate_q=resolved_gate_q,
     )
 
 

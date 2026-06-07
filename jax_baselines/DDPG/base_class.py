@@ -56,8 +56,6 @@ class Deteministic_Policy_Gradient_Family(object):
         initial_checkpoint_window=1,
         ckpt_baseline_mode="min",
         ckpt_baseline_q=None,
-        ckpt_gate_mode=None,
-        ckpt_gate_q=None,
     ):
         self.name = "Deteministic_Policy_Gradient_Family"
         self.env_builder = env_builder
@@ -123,8 +121,6 @@ class Deteministic_Policy_Gradient_Family(object):
             initial_checkpoint_window=self.initial_checkpoint_window,
             ckpt_baseline_mode=ckpt_baseline_mode,
             ckpt_baseline_q=ckpt_baseline_q,
-            ckpt_gate_mode=ckpt_gate_mode,
-            ckpt_gate_q=ckpt_gate_q,
             snapshot=self._checkpoint_update_snapshot,
             log_metric=lambda key, value, step: (
                 self.logger_run.log_metric(key, value, step)
@@ -137,8 +133,6 @@ class Deteministic_Policy_Gradient_Family(object):
         self.use_ckpt_return_standardization = setup.use_return_standardization
         self.ckpt_baseline_mode = setup.baseline_mode
         self.ckpt_baseline_q = setup.baseline_q
-        self.ckpt_gate_mode = setup.gate_mode
-        self.ckpt_gate_q = setup.gate_q
 
         # Logging throttle based on last log step
         self._last_log_step = 0
