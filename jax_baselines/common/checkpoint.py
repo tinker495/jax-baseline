@@ -26,7 +26,6 @@ save/load). The training-cadence residual is *not* owned here — it belongs to
 :class:`~jax_baselines.common.rollout.CheckpointTrainPulse`.
 """
 
-from dataclasses import dataclass
 from typing import Callable, Optional
 
 import numpy as np
@@ -34,25 +33,66 @@ import numpy as np
 from jax_baselines.common.statistics import compute_ckpt_window_stat
 
 
-@dataclass(frozen=True)
-class CheckpointSetup:
-    """Resolved checkpoint configuration and constructed controller.
+class CheckpointScaffold:
+    """Runtime handle the off-policy base holds as ``self.ckpt``.
 
-    Returned by :func:`make_checkpoint_controller` so callers can assign the
-    resolved config values as instance attributes in a single unpacking step,
-    without repeating the resolution ladder.
+    Owns the :class:`CheckpointController` and the resolved live config, and
+    delegates the five schedule methods the base needs (``enabled``,
+    ``last_update_step``, ``on_episode_end``, ``to_state``, ``from_state``) so
+    the base never references the controller directly. Exposes :meth:`hparams`
+    for the hparam-provider protocol. The controller itself is delegate-only:
+    there is no public ``.controller`` accessor.
     """
 
-    controller: "CheckpointController"
-    quantile: float
-    use_return_standardization: bool
-    baseline_mode: str
-    baseline_q: float
-    gate_mode: str
-    gate_q: float
+    def __init__(
+        self,
+        *,
+        controller: "CheckpointController",
+        use_checkpointing: bool,
+        steps_before_checkpointing: int,
+        max_eps_before_checkpointing: int,
+        baseline_mode: str,
+        baseline_q: float,
+    ):
+        self._controller = controller
+        self.use_checkpointing = use_checkpointing
+        self.steps_before_checkpointing = steps_before_checkpointing
+        self.max_eps_before_checkpointing = max_eps_before_checkpointing
+        self.baseline_mode = baseline_mode
+        self.baseline_q = baseline_q
+
+    # -- schedule delegation (the base sees these, never the controller) --
+
+    @property
+    def enabled(self) -> bool:
+        return self._controller.enabled
+
+    @property
+    def last_update_step(self) -> Optional[int]:
+        return self._controller.last_update_step
+
+    def on_episode_end(self, *args, **kwargs):
+        return self._controller.on_episode_end(*args, **kwargs)
+
+    def to_state(self) -> dict:
+        return self._controller.to_state()
+
+    def from_state(self, state):
+        return self._controller.from_state(state)
+
+    # -- hparam provider protocol --
+
+    def hparams(self) -> dict:
+        return {
+            "use_checkpointing": self.use_checkpointing,
+            "steps_before_checkpointing": self.steps_before_checkpointing,
+            "max_eps_before_checkpointing": self.max_eps_before_checkpointing,
+            "baseline_mode": self.baseline_mode,
+            "baseline_q": self.baseline_q,
+        }
 
 
-def make_checkpoint_controller(
+def make_checkpoint_scaffold(
     *,
     use_checkpointing: bool,
     steps_before_checkpointing: int,
@@ -60,18 +100,20 @@ def make_checkpoint_controller(
     initial_checkpoint_window: int,
     ckpt_baseline_mode: str,
     ckpt_baseline_q: Optional[float],
-    ckpt_gate_mode: Optional[str],
-    ckpt_gate_q: Optional[float],
     snapshot: Callable[[], None],
     log_metric: Callable[[str, float, int], None],
-) -> CheckpointSetup:
-    """Resolve checkpoint config and construct a :class:`CheckpointController`.
+) -> CheckpointScaffold:
+    """Resolve checkpoint config and build the :class:`CheckpointScaffold` handle.
 
     Encapsulates the resolution ladder that was duplicated verbatim in the DQN
-    and DDPG base-class constructors.  The caller is responsible for assigning
-    the returned :class:`CheckpointSetup` fields as instance attributes and for
-    initialising ``_ckpt_update_residual = 0`` separately (it is mutable
-    per-run state, not config).
+    and DDPG base-class constructors. The base assigns the returned scaffold as
+    ``self.ckpt`` in one line and initialises ``_ckpt_update_residual = 0``
+    separately (it is mutable per-run state, not config).
+
+    ``quantile`` (0.2) and ``use_return_standardization`` (False) are hardcoded
+    constants local to this factory: ``quantile`` is the default for
+    ``baseline_q`` and ``use_return_standardization`` is forwarded to the
+    controller. Neither is a scaffold attribute or an hparam.
 
     Args:
         use_checkpointing: Enable the TD7-style checkpoint schedule.
@@ -83,32 +125,17 @@ def make_checkpoint_controller(
         ckpt_baseline_mode: Statistic used to build the rolling baseline.
         ckpt_baseline_q: Quantile for baseline computation; defaults to the
             canonical ``quantile`` (0.2) when ``None``.
-        ckpt_gate_mode: Statistic used for gating; defaults to
-            ``ckpt_baseline_mode`` when ``None``.
-        ckpt_gate_q: Explicit gate quantile; resolved from ``ckpt_gate_mode``
-            when ``None``.
         snapshot: Callable that captures the current policy parameters.
         log_metric: Callable ``(key, value, step)`` forwarded to the run
             logger.
 
     Returns:
-        A frozen :class:`CheckpointSetup` with the constructed controller and
-        all resolved config values.
+        The :class:`CheckpointScaffold` handle the base holds as ``self.ckpt``.
     """
     quantile: float = 0.2
     use_return_standardization: bool = False
 
     resolved_baseline_q: float = ckpt_baseline_q if ckpt_baseline_q is not None else quantile
-    resolved_gate_mode: str = ckpt_gate_mode if ckpt_gate_mode is not None else ckpt_baseline_mode
-
-    if ckpt_gate_q is not None:
-        resolved_gate_q: float = ckpt_gate_q
-    elif resolved_gate_mode == "median":
-        resolved_gate_q = 0.5
-    elif resolved_gate_mode in ("quantile", "min", "mean"):
-        resolved_gate_q = resolved_baseline_q
-    else:
-        resolved_gate_q = quantile
 
     controller = CheckpointController(
         use_checkpointing=use_checkpointing,
@@ -122,14 +149,13 @@ def make_checkpoint_controller(
         log_metric=log_metric,
     )
 
-    return CheckpointSetup(
+    return CheckpointScaffold(
         controller=controller,
-        quantile=quantile,
-        use_return_standardization=use_return_standardization,
+        use_checkpointing=use_checkpointing,
+        steps_before_checkpointing=steps_before_checkpointing,
+        max_eps_before_checkpointing=max_eps_before_checkpointing,
         baseline_mode=ckpt_baseline_mode,
         baseline_q=resolved_baseline_q,
-        gate_mode=resolved_gate_mode,
-        gate_q=resolved_gate_q,
     )
 
 

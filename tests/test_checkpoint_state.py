@@ -13,7 +13,7 @@ import jax
 import numpy as np
 import pytest
 
-from jax_baselines.common.checkpoint import make_checkpoint_controller
+from jax_baselines.common.checkpoint import make_checkpoint_scaffold
 from jax_baselines.common.statistics import RunningMeanStd
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DDPG.ddpg import DDPG
@@ -41,19 +41,17 @@ ALGO_FIELDS = {
 }
 
 
-def _controller():
-    return make_checkpoint_controller(
+def _scaffold():
+    return make_checkpoint_scaffold(
         use_checkpointing=True,
         steps_before_checkpointing=10,
         max_eps_before_checkpointing=5,
         initial_checkpoint_window=1,
         ckpt_baseline_mode="min",
         ckpt_baseline_q=None,
-        ckpt_gate_mode=None,
-        ckpt_gate_q=None,
         snapshot=lambda: None,
         log_metric=lambda *a, **k: None,
-    ).controller
+    )
 
 
 def _tree(scale):
@@ -81,30 +79,30 @@ def test_checkpoint_round_trip(cls):
 
     src = cls.__new__(cls)
     src.simba = False
-    src._checkpoint = _controller()
+    src.ckpt = _scaffold()
     src.train_steps_count = 11
     src._ckpt_update_residual = 2.5
     src.eval_snapshot = {"encoder": _tree(7.0), "policy": _tree(8.0)}
     for i, name in enumerate(fields):
         setattr(src, name, _field_value(name, i))
     # Make the schedule state non-default so the spine must carry it.
-    src._checkpoint._enabled = True
-    src._checkpoint._update_count = 4
-    src._checkpoint._baseline = 1.25
+    src.ckpt._controller._enabled = True
+    src.ckpt._controller._update_count = 4
+    src.ckpt._controller._baseline = 1.25
 
     with tempfile.TemporaryDirectory() as d:
         src.save_params(d)
         dst = cls.__new__(cls)
         dst.simba = False
-        dst._checkpoint = _controller()
+        dst.ckpt = _scaffold()
         dst.load_params(d)
 
     # spine
     assert dst.train_steps_count == 11
     assert abs(dst._ckpt_update_residual - 2.5) < 1e-6
-    assert dst._checkpoint._enabled is True
-    assert dst._checkpoint._update_count == 4
-    assert abs(dst._checkpoint._baseline - 1.25) < 1e-6
+    assert dst.ckpt._controller._enabled is True
+    assert dst.ckpt._controller._update_count == 4
+    assert abs(dst.ckpt._controller._baseline - 1.25) < 1e-6
     _assert_tree_equal(src.eval_snapshot, dst.eval_snapshot)
 
     # per-algorithm bundle
@@ -120,7 +118,7 @@ def test_simba_obs_rms_round_trip():
     fields = ALGO_FIELDS[DDPG]
 
     src = DDPG.__new__(DDPG)
-    src._checkpoint = _controller()
+    src.ckpt = _scaffold()
     src.train_steps_count = 3
     src._ckpt_update_residual = 0.0
     src.eval_snapshot = None
@@ -136,7 +134,7 @@ def test_simba_obs_rms_round_trip():
         src.save_params(d)
         dst = DDPG.__new__(DDPG)
         dst.simba = True
-        dst._checkpoint = _controller()
+        dst.ckpt = _scaffold()
         dst.load_params(d)
 
     assert dst.obs_rms is not None

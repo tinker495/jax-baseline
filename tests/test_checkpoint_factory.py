@@ -1,14 +1,16 @@
-"""Contract tests for make_checkpoint_controller / CheckpointSetup.
+"""Contract tests for make_checkpoint_scaffold / CheckpointScaffold.
 
-Verifies the gate_q resolution ladder exactly, baseline_q default,
-gate_mode default, and explicit pass-through values.  No JAX import needed —
-checkpoint.py is pure Python + numpy.
+Verifies the baseline_q default and explicit pass-through values, that the
+controller is wired with the resolved values (white-box, since the scaffold
+delegates and exposes no public ``.controller``), the hparams() contract, and
+the schedule delegation. No JAX import needed -- checkpoint.py is pure Python +
+numpy.
 """
 
 from jax_baselines.common.checkpoint import (
     CheckpointController,
-    CheckpointSetup,
-    make_checkpoint_controller,
+    CheckpointScaffold,
+    make_checkpoint_scaffold,
 )
 
 
@@ -17,7 +19,7 @@ def _noop(*_):
 
 
 def _make(**overrides):
-    """Call make_checkpoint_controller with minimal defaults + overrides."""
+    """Call make_checkpoint_scaffold with minimal defaults + overrides."""
     defaults = dict(
         use_checkpointing=False,
         steps_before_checkpointing=0,
@@ -25,135 +27,109 @@ def _make(**overrides):
         initial_checkpoint_window=1,
         ckpt_baseline_mode="mean",
         ckpt_baseline_q=None,
-        ckpt_gate_mode=None,
-        ckpt_gate_q=None,
         snapshot=_noop,
         log_metric=_noop,
     )
     defaults.update(overrides)
-    return make_checkpoint_controller(**defaults)
+    return make_checkpoint_scaffold(**defaults)
 
 
 # -- return type --
 
 
-def test_returns_checkpoint_setup():
-    setup = _make()
-    assert isinstance(setup, CheckpointSetup)
-    assert isinstance(setup.controller, CheckpointController)
+def test_returns_checkpoint_scaffold():
+    scaffold = _make()
+    assert isinstance(scaffold, CheckpointScaffold)
+    assert isinstance(scaffold._controller, CheckpointController)
 
 
-# -- quantile default --
+# -- baseline_q resolution (observed via hparams) --
 
 
-def test_quantile_is_0_2():
-    setup = _make()
-    assert setup.quantile == 0.2
-
-
-# -- use_return_standardization default --
-
-
-def test_use_return_standardization_is_false():
-    setup = _make()
-    assert setup.use_return_standardization is False
-
-
-# -- baseline_q resolution --
-
-
-def test_baseline_q_defaults_to_quantile_when_none():
-    setup = _make(ckpt_baseline_q=None)
-    assert setup.baseline_q == setup.quantile  # 0.2
+def test_baseline_q_defaults_to_0_2_when_none():
+    scaffold = _make(ckpt_baseline_q=None)
+    assert scaffold.hparams()["baseline_q"] == 0.2
 
 
 def test_baseline_q_explicit_passes_through():
-    setup = _make(ckpt_baseline_q=0.7)
-    assert setup.baseline_q == 0.7
+    scaffold = _make(ckpt_baseline_q=0.7)
+    assert scaffold.hparams()["baseline_q"] == 0.7
 
 
-# -- gate_mode resolution --
-
-
-def test_gate_mode_defaults_to_baseline_mode_when_none():
-    setup = _make(ckpt_baseline_mode="min", ckpt_gate_mode=None)
-    assert setup.gate_mode == "min"
-
-
-def test_gate_mode_explicit_passes_through():
-    setup = _make(ckpt_baseline_mode="min", ckpt_gate_mode="mean")
-    assert setup.gate_mode == "mean"
-
-
-# -- gate_q resolution ladder --
-
-
-def test_gate_q_explicit_overrides_everything():
-    setup = _make(ckpt_gate_mode="median", ckpt_gate_q=0.9)
-    assert setup.gate_q == 0.9
-
-
-def test_gate_q_median_mode_gives_0_5():
-    setup = _make(ckpt_baseline_mode="median", ckpt_gate_mode=None, ckpt_gate_q=None)
-    assert setup.gate_mode == "median"
-    assert setup.gate_q == 0.5
-
-
-def test_gate_q_median_explicit_mode_gives_0_5():
-    setup = _make(ckpt_gate_mode="median", ckpt_gate_q=None)
-    assert setup.gate_q == 0.5
-
-
-def test_gate_q_quantile_mode_gives_baseline_q():
-    baseline_q = 0.3
-    setup = _make(ckpt_baseline_q=baseline_q, ckpt_gate_mode="quantile", ckpt_gate_q=None)
-    assert setup.gate_q == baseline_q
-
-
-def test_gate_q_min_mode_gives_baseline_q():
-    baseline_q = 0.4
-    setup = _make(ckpt_baseline_q=baseline_q, ckpt_gate_mode="min", ckpt_gate_q=None)
-    assert setup.gate_q == baseline_q
-
-
-def test_gate_q_mean_mode_gives_baseline_q():
-    baseline_q = 0.6
-    setup = _make(ckpt_baseline_q=baseline_q, ckpt_gate_mode="mean", ckpt_gate_q=None)
-    assert setup.gate_q == baseline_q
-
-
-def test_gate_q_unknown_mode_gives_quantile():
-    setup = _make(ckpt_gate_mode="unknown_mode", ckpt_gate_q=None)
-    assert setup.gate_q == setup.quantile  # 0.2
-
-
-def test_gate_q_unknown_mode_with_custom_baseline_q_still_gives_quantile():
-    # gate_q falls back to quantile (0.2), NOT baseline_q, for unrecognised modes
-    setup = _make(ckpt_baseline_q=0.8, ckpt_gate_mode="custom", ckpt_gate_q=None)
-    assert setup.gate_q == 0.2
-
-
-# -- baseline_mode preserved on setup --
+# -- baseline_mode preserved (observed via hparams) --
 
 
 def test_baseline_mode_preserved():
-    setup = _make(ckpt_baseline_mode="quantile")
-    assert setup.baseline_mode == "quantile"
+    scaffold = _make(ckpt_baseline_mode="quantile")
+    assert scaffold.hparams()["baseline_mode"] == "quantile"
 
 
-# -- controller wired with resolved values --
+# -- controller wired with resolved values (white-box wiring contract) --
 
 
 def test_controller_receives_resolved_baseline_q():
-    setup = _make(ckpt_baseline_q=None)  # should resolve to 0.2
-    assert setup.controller._baseline_q == 0.2
+    scaffold = _make(ckpt_baseline_q=None)  # should resolve to 0.2
+    assert scaffold._controller._baseline_q == 0.2
 
 
 def test_controller_receives_explicit_baseline_q():
-    setup = _make(ckpt_baseline_q=0.55)
-    assert setup.controller._baseline_q == 0.55
+    scaffold = _make(ckpt_baseline_q=0.55)
+    assert scaffold._controller._baseline_q == 0.55
 
 
 def test_controller_receives_baseline_mode():
-    setup = _make(ckpt_baseline_mode="min")
-    assert setup.controller._baseline_mode == "min"
+    scaffold = _make(ckpt_baseline_mode="min")
+    assert scaffold._controller._baseline_mode == "min"
+
+
+# -- hparams provider contract --
+
+
+def test_hparams_contract():
+    scaffold = _make(
+        use_checkpointing=True,
+        steps_before_checkpointing=123,
+        max_eps_before_checkpointing=7,
+        ckpt_baseline_mode="median",
+        ckpt_baseline_q=0.3,
+    )
+    hp = scaffold.hparams()
+    assert set(hp) == {
+        "use_checkpointing",
+        "steps_before_checkpointing",
+        "max_eps_before_checkpointing",
+        "baseline_mode",
+        "baseline_q",
+    }
+    assert hp == {
+        "use_checkpointing": True,
+        "steps_before_checkpointing": 123,
+        "max_eps_before_checkpointing": 7,
+        "baseline_mode": "median",
+        "baseline_q": 0.3,
+    }
+
+
+# -- schedule delegation to the controller --
+
+
+def test_delegates_to_controller():
+    scaffold = _make(use_checkpointing=True)
+
+    # read-only views forward
+    assert scaffold.enabled == scaffold._controller.enabled
+    assert scaffold.last_update_step == scaffold._controller.last_update_step
+
+    # from_state mutates the controller; enabled reflects it through delegation
+    scaffold.from_state({"checkpointing_enabled": True})
+    assert scaffold._controller.enabled is True
+    assert scaffold.enabled is True
+
+    # to_state forwards the controller's serialized schedule state (keys + the
+    # enabled flag we just set; dict == dict is avoided -- values are np arrays)
+    state = scaffold.to_state()
+    assert state.keys() == scaffold._controller.to_state().keys()
+    assert bool(state["checkpointing_enabled"]) is True
+
+    # on_episode_end forwards to the controller and returns its bool result.
+    assert scaffold.on_episode_end(0, 1.0, 1) is True

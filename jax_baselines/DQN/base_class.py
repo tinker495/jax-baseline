@@ -3,7 +3,7 @@ from copy import deepcopy
 import jax
 import numpy as np
 
-from jax_baselines.common.checkpoint import make_checkpoint_controller
+from jax_baselines.common.checkpoint import make_checkpoint_scaffold
 from jax_baselines.common.env_info import get_local_env_info
 from jax_baselines.common.eval import evaluate_policy, record_and_test
 from jax_baselines.common.optimizer import select_optimizer
@@ -63,8 +63,6 @@ class Q_Network_Family(object):
         initial_checkpoint_window=1,
         ckpt_baseline_mode="median",
         ckpt_baseline_q=None,
-        ckpt_gate_mode=None,
-        ckpt_gate_q=None,
     ):
         self.name = "Q_Network_Family"
         self.env_builder = env_builder
@@ -125,15 +123,13 @@ class Q_Network_Family(object):
 
         self.logger_run = None
         self._ckpt_update_residual = 0
-        setup = make_checkpoint_controller(
+        self.ckpt = make_checkpoint_scaffold(
             use_checkpointing=self.use_checkpointing,
             steps_before_checkpointing=self.steps_before_checkpointing,
             max_eps_before_checkpointing=self.max_eps_before_checkpointing,
             initial_checkpoint_window=self.initial_checkpoint_window,
             ckpt_baseline_mode=ckpt_baseline_mode,
             ckpt_baseline_q=ckpt_baseline_q,
-            ckpt_gate_mode=ckpt_gate_mode,
-            ckpt_gate_q=ckpt_gate_q,
             snapshot=self._checkpoint_update_snapshot,
             log_metric=lambda key, value, step: (
                 self.logger_run.log_metric(key, value, step)
@@ -141,13 +137,6 @@ class Q_Network_Family(object):
                 else None
             ),
         )
-        self._checkpoint = setup.controller
-        self.ckpt_quantile = setup.quantile
-        self.use_ckpt_return_standardization = setup.use_return_standardization
-        self.ckpt_baseline_mode = setup.baseline_mode
-        self.ckpt_baseline_q = setup.baseline_q
-        self.ckpt_gate_mode = setup.gate_mode
-        self.ckpt_gate_q = setup.gate_q
 
         # Logging throttle based on last log step
         self._last_log_step = 0
@@ -241,7 +230,7 @@ class Q_Network_Family(object):
     def actions(self, obs, epsilon, eval_mode=False):
         # Select params: during eval with checkpointing prefer snapshot
         params_to_use = self.get_behavior_params()
-        if eval_mode and self.use_checkpointing and self._checkpoint.enabled:
+        if eval_mode and self.use_checkpointing and self.ckpt.enabled:
             params_to_use = self.checkpoint_params
 
         if epsilon <= np.random.uniform(0, 1):
@@ -265,8 +254,8 @@ class Q_Network_Family(object):
         if not self.param_noise:
             description += f", epsilon : {self.update_eps:.3f}"
 
-        if self.use_checkpointing and (self._checkpoint.last_update_step is not None):
-            description += f", ckpt_upd_step : {int(self._checkpoint.last_update_step)}"
+        if self.use_checkpointing and (self.ckpt.last_update_step is not None):
+            description += f", ckpt_upd_step : {int(self.ckpt.last_update_step)}"
 
         return description
 
@@ -362,7 +351,7 @@ class Q_Network_Family(object):
             evaluate=lambda steps: self.eval(ctx, steps),
             describe=self.description,
             bind_loss_window=self._bind_loss_window,
-            checkpoint_on_episode_end=self._checkpoint.on_episode_end,
+            checkpoint_on_episode_end=self.ckpt.on_episode_end,
             checkpoint_pulse=pulse,
         )
 
