@@ -186,9 +186,6 @@ class Q_Network_Family(object):
     def setup_model(self):
         pass
 
-    def _train_step(self, steps):
-        pass
-
     def train_step(self, steps, gradient_steps):
         return self.training_lifecycle.train(steps, gradient_steps)
 
@@ -379,15 +376,10 @@ class Q_Network_Family(object):
 
     def test_eval_env(self, episode):
         # record_and_test expects (env_builder, logger_run, actions_eval_fn, episode, conv_action=None)
-        actions_fn = (
-            self.test_action
-            if hasattr(self, "test_action")
-            else (lambda obs: self.actions(obs, 0.0))
-        )
         return record_and_test(
             self.env_builder,
             self.logger_run,
-            actions_fn,
+            lambda obs: self.actions(obs, 0.0),
             episode,
             conv_action=None,
         )

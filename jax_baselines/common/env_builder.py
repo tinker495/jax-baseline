@@ -63,9 +63,7 @@ class Env(ABC):
 
 
 class VectorizedEnv(Env):
-
     env_info = None
-    num_workers = None
 
 
 def _get_envpool_env_id(env_name: str) -> str:

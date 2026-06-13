@@ -63,9 +63,9 @@ class Ape_X_Worker(object):
     ):
         try:
             seed_prngs(seed)
-            gloabal_buffer, env_dict, n_s = buffer_info
+            global_buffer, env_dict, n_s = buffer_info
             local_buffer = ReplayBuffer(local_size, env_dict=env_dict, n_s=n_s)
-            preproc, actor_model, cricit_model = model_builder()
+            preproc, actor_model, critic_model = model_builder()
             (
                 get_abs_td_error,
                 actor,
@@ -76,7 +76,7 @@ class Ape_X_Worker(object):
             ) = actor_builder()
 
             get_abs_td_error = jax.jit(
-                partial(get_abs_td_error, actor_model, cricit_model, preproc)
+                partial(get_abs_td_error, actor_model, critic_model, preproc)
             )
             actor = jax.jit(partial(actor, actor_model, preproc))
             _get_action = partial(get_action, actor)
@@ -141,7 +141,7 @@ class Ape_X_Worker(object):
                         **local_buffer.conv_transitions(transition),
                         key=next(key_seq),
                     )
-                    gloabal_buffer.add(**transition, priorities=abs_td_error)
+                    global_buffer.add(**transition, priorities=abs_td_error)
         except Exception:
             print(
                 "------------------------------Exception in worker----------------------------------"

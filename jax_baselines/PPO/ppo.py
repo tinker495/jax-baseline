@@ -259,7 +259,7 @@ class PPO(Actor_Critic_Policy_Gradient_Family):
         experiment_name="PPO",
         run_name="PPO",
     ):
-        super().learn(
+        return super().learn(
             total_timesteps,
             callback,
             log_interval,

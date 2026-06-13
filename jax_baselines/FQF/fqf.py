@@ -33,7 +33,7 @@ class FQF(Q_Network_Family):
         super().__init__(env_builder, model_builder_maker, **kwargs)
 
     def setup_model(self):
-        self.model_builder = self.model_builder_maker(
+        model_builder = self.model_builder_maker(
             self.observation_space,
             self.action_size,
             self.dueling_model,
@@ -42,7 +42,7 @@ class FQF(Q_Network_Family):
             self.policy_kwargs,
         )
 
-        self.preproc, self.model, self.fpf, self.params, self.fqf_params = self.model_builder(
+        self.preproc, self.model, self.fpf, self.params, self.fqf_params = model_builder(
             next(self.key_seq), print_model=True
         )
         self.target_params = deepcopy(self.params)
@@ -58,10 +58,13 @@ class FQF(Q_Network_Family):
         self._compile_common_functions()
 
     def actions(self, obs, epsilon, eval_mode=False):
+        params_to_use = self.get_behavior_params()
+        if eval_mode and self.use_checkpointing and self.ckpt.enabled:
+            params_to_use = self.checkpoint_params
         if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(
                 self._get_actions(
-                    self.params,
+                    params_to_use,
                     self.fqf_params,
                     obs,
                     next(self.key_seq) if self.param_noise else None,
@@ -85,10 +88,7 @@ class FQF(Q_Network_Family):
         return jnp.sum(q, axis=2)
 
     def get_q(self, params, feature, tau, tau_hat, key=None) -> jnp.ndarray:
-        quantile_hat = self.model(params, key, feature, tau_hat)
-        tau = jnp.expand_dims(tau, axis=1)
-        q = (tau[:, :, 1:] - tau[:, :, :-1]) * quantile_hat
-        return jnp.sum(q, axis=2)
+        return self.quantiles_to_q(self.get_quantile(params, feature, tau_hat, key), tau)
 
     def _train_on_batch(self, data, context):
         (
@@ -148,7 +148,6 @@ class FQF(Q_Network_Family):
             (
                 abs_error,
                 feature,
-                taus,
                 tau_hats,
                 theta_loss_tile,
                 targets,
@@ -241,7 +240,6 @@ class FQF(Q_Network_Family):
         return jnp.mean(hubber * weights), (
             hubber,
             feature,
-            taus,
             tau_hats,
             theta_loss_tile,
             targets,

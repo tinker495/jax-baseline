@@ -34,7 +34,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
         critic_num=2,
         quantile_drop=0.05,
         mixture_type="truncated",
-        risk_avoidance=0.0,
         **kwargs,
     ):
 
@@ -50,7 +49,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
                 f"Invalid mixture_type '{mixture_type}', expected 'truncated' or 'min'"
             )
         self.mixture_type = mixture_type
-        self.risk_avoidance = risk_avoidance
 
         super().__init__(env_builder, model_builder_maker, **kwargs)
 
@@ -74,19 +72,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         self.opt_policy_state = self.optimizer.init(self.policy_params)
         self.opt_critic_state = self.optimizer.init(self.critic_params)
 
-        if isinstance(self._ent_coef, str) and self._ent_coef.startswith("auto"):
-            init_value = np.log(1e-1)
-            if "_" in self._ent_coef:
-                init_value = np.log(float(self._ent_coef.split("_")[1]))
-                assert init_value > 0.0, "The initial value of ent_coef must be greater than 0"
-            self.log_ent_coef = jax.device_put(init_value)
-            self.auto_entropy = True
-        else:
-            try:
-                self.log_ent_coef = jnp.log(float(self._ent_coef))
-            except ValueError as err:
-                raise ValueError(f"Invalid value for ent_coef: {self._ent_coef}") from err
-            self.auto_entropy = False
+        self._setup_entropy_coef()
 
         self.quantile = (
             jnp.linspace(0.0, 1.0, self.n_support + 1, dtype=jnp.float32)[1:]
@@ -159,11 +145,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
             loss=loss,
             target=t_mean,
             new_priorities=new_priorities,
-            metrics={
-                "loss/qloss": loss,
-                "loss/targets": t_mean,
-                "loss/ent_coef": np.exp(self.log_ent_coef),
-            },
+            metrics={"loss/ent_coef": np.exp(self.log_ent_coef)},
         )
 
     def _train_step(
@@ -256,15 +238,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
             new_priorities,
         )
 
-    def _train_ent_coef(self, log_coef, log_prob):
-        def loss(log_ent_coef, log_prob):
-            ent_coef = jnp.exp(log_ent_coef)
-            return jnp.mean(ent_coef * (self.target_entropy - log_prob))
-
-        grad = jax.grad(loss)(log_coef, log_prob)
-        log_coef = log_coef - self.ent_coef_learning_rate * grad
-        return log_coef
-
     def _critic_loss(self, critic_params, policy_params, obses, actions, targets, weights, key):
         feature = self.preproc(policy_params, key, obses)
         qnets = self.critic(critic_params, key, feature, actions)
@@ -331,8 +304,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
             run_name = run_name + "_truncated({:d})".format(self.quantile_drop)
         else:
             run_name = run_name + "_min"
-        if self.risk_avoidance != 0.0:
-            run_name = run_name + "_riskavoid{:.2f}".format(self.risk_avoidance)
         super().learn(
             total_timesteps,
             callback,

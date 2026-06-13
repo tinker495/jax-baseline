@@ -46,19 +46,13 @@ def add_args(parser):
     parser.add_argument("--CVaR", type=float, default=1.0, help="IQN risk avoiding factor")
     parser.add_argument("--node", type=int, default=256, help="network node number")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
-    parser.add_argument("--final_eps", type=float, default=0.1, help="final epsilon")
     parser.add_argument("--worker", type=int, default=1, help="gym_worker_size")
     parser.add_argument("--optimizer", type=str, default="adamw", help="optimaizer")
     parser.add_argument("--gradient_steps", type=int, default=1, help="gradient steps")
     parser.add_argument("--learning_starts", type=int, default=5000, help="learning start")
     parser.add_argument("--initial_eps", type=float, default=0.4, help="initial epsilon")
     parser.add_argument("--eps_decay", type=float, default=3, help="exploration fraction")
-    parser.add_argument("--clip_rewards", action="store_true")
     parser.add_argument("--compress_memory", action="store_true")
-    parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
-    parser.add_argument(
-        "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
-    )
 
 
 def make_workers(args):

@@ -106,11 +106,7 @@ class TensorboardLogger:
         # allow deferred logging if agent is None
         if agent is not None:
             try:
-                # if agent is a dict of hparams
-                if isinstance(agent, dict):
-                    self.run.log_param(agent)
-                else:
-                    add_hparams(agent, self.run)
+                self.log_hparams(agent)
             except Exception:
                 # be permissive; logging hparams should not break the run
                 pass

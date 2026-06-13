@@ -79,6 +79,8 @@ def visual_embedding(mode="simple"):
 
     elif mode == "none":
         net_fn = hk.Flatten()
+    else:
+        raise ValueError(f"Unknown visual_embedding mode: {mode!r}")
     return net_fn
 
 

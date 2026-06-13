@@ -77,7 +77,7 @@ class Ape_X_Worker(object):
     ):
         try:
             seed_prngs(seed)
-            gloabal_buffer, env_dict, n_s = buffer_info
+            global_buffer, env_dict, n_s = buffer_info
             local_buffer = ReplayBuffer(local_size, env_dict=env_dict, n_s=n_s)
             preproc, model = model_builder()
             (
@@ -169,7 +169,7 @@ class Ape_X_Worker(object):
                         **local_buffer.conv_transitions(transition),
                         key=next(key_seq),
                     )
-                    gloabal_buffer.add(**transition, priorities=abs_td_error)
+                    global_buffer.add(**transition, priorities=abs_td_error)
         finally:
             if stop.is_set():
                 print("worker stoped")

@@ -185,8 +185,6 @@ class TD7(Deteministic_Policy_Gradient_Family):
             target=mean_target,
             metrics={
                 "loss/encoder_loss": mean_repr_loss,
-                "loss/qloss": mean_loss,
-                "loss/targets": mean_target,
                 "loss/min_value": self.critic_params["values"]["min_value"],
                 "loss/max_value": self.critic_params["values"]["max_value"],
             },

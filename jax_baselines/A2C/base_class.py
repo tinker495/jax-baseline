@@ -3,16 +3,15 @@ from collections import deque
 import jax
 import jax.numpy as jnp
 import numpy as np
-from tqdm.auto import trange
 
 from jax_baselines.common.cpprb_buffers import EpochBuffer
 from jax_baselines.common.env_info import get_local_env_info, infer_action_meta
 from jax_baselines.common.eval import evaluate_policy, record_and_test
 from jax_baselines.common.jax_utils import convert_jax
-from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.seeding import key_gen, set_global_seeds
 from jax_baselines.common.serialization import restore, save
+from jax_baselines.common.training_session import TrainingSession
 
 
 class Actor_Critic_Policy_Gradient_Family(object):
@@ -184,6 +183,18 @@ class Actor_Critic_Policy_Gradient_Family(object):
 
         return description
 
+    def run_name_update(self, run_name):
+        return run_name
+
+    def prepare_run(self, total_timesteps):
+        pass
+
+    def run_training_loop(self, ctx):
+        if self.env_type == "SingleEnv":
+            self.learn_SingleEnv(ctx)
+        if self.env_type == "VectorizedEnv":
+            self.learn_VectorizedEnv(ctx)
+
     def learn(
         self,
         total_timesteps,
@@ -192,27 +203,16 @@ class Actor_Critic_Policy_Gradient_Family(object):
         experiment_name="A2C",
         run_name="A2C",
     ):
-        self.update_eps = 1.0
-        self.eval_freq = ((total_timesteps // 100) // self.worker_size) * self.worker_size
+        return TrainingSession().run(
+            self, total_timesteps, callback, log_interval, experiment_name, run_name
+        )
 
-        pbar = trange(0, total_timesteps, self.worker_size, miniters=log_interval)
-        self.logger = TensorboardLogger(run_name, experiment_name, self.log_dir, self)
-        with self.logger as self.logger_run:
-            if self.env_type == "SingleEnv":
-                self.learn_SingleEnv(pbar, callback, log_interval)
-            if self.env_type == "VectorizedEnv":
-                self.learn_VectorizedEnv(pbar, callback, log_interval)
-
-            self.eval(total_timesteps)
-
-            self.save_params(self.logger_run.get_local_path("params"))
-
-    def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
+    def learn_SingleEnv(self, ctx):
         obs, info = self.env.reset()
         obs = [np.expand_dims(obs, axis=0)]
         self.lossque = deque(maxlen=10)
         eval_result = None
-        for steps in pbar:
+        for steps in ctx.pbar:
             actions = self.actions(obs)[0]
             next_obs, reward, terminated, truncated, info = self.env.step(
                 self.conv_action(actions)[0]
@@ -229,17 +229,17 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
 
-            if steps % self.eval_freq == 0:
-                eval_result = self.eval(steps)
+            if steps % ctx.eval_freq == 0:
+                eval_result = self.eval(ctx, steps)
 
-            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
-                pbar.set_description(self.description(eval_result))
+            if steps % ctx.log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+                ctx.pbar.set_description(self.description(eval_result))
 
-    def learn_VectorizedEnv(self, pbar, callback=None, log_interval=1000):
+    def learn_VectorizedEnv(self, ctx):
         self.lossque = deque(maxlen=10)
         eval_result = None
 
-        for steps in pbar:
+        for steps in ctx.pbar:
             obs = self.env.current_obs()
             actions = self.actions([obs])
             self.env.step(actions)
@@ -258,18 +258,18 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 loss = self.train_step(steps)
                 self.lossque.append(loss)
 
-            if steps % self.eval_freq == 0:
-                eval_result = self.eval(steps)
+            if steps % ctx.eval_freq == 0:
+                eval_result = self.eval(ctx, steps)
 
-            if steps % log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
-                pbar.set_description(self.description(eval_result))
+            if steps % ctx.log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+                ctx.pbar.set_description(self.description(eval_result))
 
-    def eval(self, steps):
+    def eval(self, ctx, steps):
         return evaluate_policy(
             self.eval_env,
             self.eval_eps,
             self.actions,
-            logger_run=self.logger_run,
+            logger_run=ctx.logger_run,
             steps=steps,
             conv_action=self.conv_action,
         )

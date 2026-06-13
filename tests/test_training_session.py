@@ -13,6 +13,7 @@ Behaviors pinned:
 - ``save_params`` is called once with the logger's local path.
 """
 
+from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.common.training_session import RunContext, TrainingSession
 
 
@@ -126,3 +127,97 @@ def test_run_executes_without_env_buffer_or_model():
     assert agent.log_interval == 1000
     assert ("run_training_loop",) in rec
     assert isinstance(RunContext("lr", 96, "pbar", 1000), RunContext)
+
+
+class FakeOnPolicySession(TrainingSession):
+    def run(self, agent, total_timesteps, callback, log_interval, experiment_name, run_name):
+        agent.session_args = (
+            total_timesteps,
+            callback,
+            log_interval,
+            experiment_name,
+            run_name,
+        )
+        return "session-result"
+
+
+class FakeOnPolicyAgent(Actor_Critic_Policy_Gradient_Family):
+    def __init__(self, env_type="SingleEnv"):
+        self.env_type = env_type
+        self.calls = []
+        self.eval_env = "eval-env"
+        self.eval_eps = 3
+        self.actions = "actions"
+        self.conv_action = "conv-action"
+
+    def learn_SingleEnv(self, ctx):
+        self.calls.append(("single", ctx))
+
+    def learn_VectorizedEnv(self, ctx):
+        self.calls.append(("vector", ctx))
+
+
+def test_on_policy_learn_delegates_to_training_session(monkeypatch):
+    monkeypatch.setattr(
+        "jax_baselines.A2C.base_class.TrainingSession",
+        FakeOnPolicySession,
+    )
+    agent = FakeOnPolicyAgent()
+    callback = object()
+
+    result = agent.learn(
+        1234,
+        callback=callback,
+        log_interval=7,
+        experiment_name="exp",
+        run_name="run",
+    )
+
+    assert result == "session-result"
+    assert agent.session_args == (1234, callback, 7, "exp", "run")
+
+
+def test_on_policy_session_contract_hooks_are_minimal():
+    agent = FakeOnPolicyAgent()
+
+    assert agent.run_name_update("run") == "run"
+    assert agent.prepare_run(100) is None
+    assert not hasattr(agent, "update_eps")
+
+
+def test_on_policy_run_training_loop_dispatches_single_env():
+    agent = FakeOnPolicyAgent(env_type="SingleEnv")
+    ctx = RunContext("logger-run", 10, "pbar", 5)
+
+    agent.run_training_loop(ctx)
+
+    assert agent.calls == [("single", ctx)]
+
+
+def test_on_policy_run_training_loop_dispatches_vectorized_env():
+    agent = FakeOnPolicyAgent(env_type="VectorizedEnv")
+    ctx = RunContext("logger-run", 10, "pbar", 5)
+
+    agent.run_training_loop(ctx)
+
+    assert agent.calls == [("vector", ctx)]
+
+
+def test_on_policy_eval_uses_run_context_logger(monkeypatch):
+    rec = []
+
+    def fake_evaluate_policy(eval_env, eval_eps, actions, logger_run, steps, conv_action):
+        rec.append((eval_env, eval_eps, actions, logger_run, steps, conv_action))
+        return {"score": 1.0}
+
+    monkeypatch.setattr(
+        "jax_baselines.A2C.base_class.evaluate_policy",
+        fake_evaluate_policy,
+    )
+    agent = FakeOnPolicyAgent()
+    ctx = RunContext("ctx-logger", 10, "pbar", 5)
+
+    result = agent.eval(ctx, 42)
+
+    assert result == {"score": 1.0}
+    assert rec == [("eval-env", 3, "actions", "ctx-logger", 42, "conv-action")]

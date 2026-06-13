@@ -4,14 +4,15 @@ import jax.numpy as jnp
 import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
-from model_builder.flax.layers import SimbaV2Block, SimbaV2Embedding, SimbaV2Head
+from model_builder.flax.layers import (
+    LOG_STD_MEAN,
+    LOG_STD_SCALE,
+    SimbaV2Block,
+    SimbaV2Embedding,
+    SimbaV2Head,
+)
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import print_param
-
-LOG_STD_MAX = 2
-LOG_STD_MIN = -20
-LOG_STD_SCALE = (LOG_STD_MAX - LOG_STD_MIN) / 2.0
-LOG_STD_MEAN = (LOG_STD_MAX + LOG_STD_MIN) / 2.0
 
 
 class Actor(nn.Module):

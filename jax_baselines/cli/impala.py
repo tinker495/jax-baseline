@@ -34,12 +34,6 @@ def add_args(parser):
     parser.add_argument("--optimizer", type=str, default="rmsprop", help="optimaizer")
     parser.add_argument("--ent_coef", type=float, default=0.1, help="entropy coefficient")
     parser.add_argument("--val_coef", type=float, default=0.6, help="val coefficient")
-    parser.add_argument("--gae_normalize", dest="gae_normalize", action="store_true")
-    parser.add_argument("--no_gae_normalize", dest="gae_normalize", action="store_false")
-    parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
-    parser.add_argument(
-        "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
-    )
 
 
 def make_workers(args):

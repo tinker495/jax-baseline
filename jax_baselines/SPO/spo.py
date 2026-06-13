@@ -260,7 +260,7 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
         experiment_name="SPO",
         run_name="SPO",
     ):
-        super().learn(
+        return super().learn(
             total_timesteps,
             callback,
             log_interval,

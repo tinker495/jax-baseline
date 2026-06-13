@@ -5,13 +5,9 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
-from model_builder.flax.layers import Dense
+from model_builder.flax.layers import Dense, avgl1norm
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import print_param
-
-
-def avgl1norm(x, epsilon=1e-6):
-    return x / (jnp.abs(x).mean(axis=-1, keepdims=True) + epsilon)
 
 
 class Encoder(nn.Module):

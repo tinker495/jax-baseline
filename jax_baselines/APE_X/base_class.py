@@ -210,8 +210,8 @@ class Ape_X_Family(object):
                     self.logger_server,
                     update[idx],
                     stop,
-                    self.seed + idx,
-                    eps,
+                    eps=eps,
+                    seed=self.seed + idx,
                 )
             )
             time.sleep(0.1)

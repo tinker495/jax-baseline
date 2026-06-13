@@ -290,7 +290,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         experiment_name="TPPO",
         run_name="TPPO",
     ):
-        super().learn(
+        return super().learn(
             total_timesteps,
             callback,
             log_interval,

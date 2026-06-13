@@ -58,7 +58,6 @@ def add_args(parser):
     parser.add_argument(
         "--exploration_fraction", type=float, default=0.3, help="exploration fraction"
     )
-    parser.add_argument("--clip_rewards", action="store_true")
     parser.add_argument("--compress_memory", action="store_true")
     parser.add_argument("--hl_gauss", action="store_true")
     parser.add_argument("--scaled_by_reset", action="store_true")

@@ -121,13 +121,12 @@ class IMPALA_PPO(IMPALA_Family):
         adv = rho * adv
         obses = [jnp.vstack(o) for o in obses]
         actions = jnp.vstack(actions)
-        old_value = jnp.vstack(value)
         vs = jnp.vstack(vs)
         mu_prob = jnp.vstack(mu_log_prob)
         pi_prob = jnp.vstack(pi_prob)
         rho = jnp.vstack(rho)
         adv = jnp.vstack(adv)
-        return obses, actions, old_value, vs, mu_prob, pi_prob, rho, adv
+        return obses, actions, vs, mu_prob, pi_prob, rho, adv
 
     def _train_step(
         self,
@@ -142,7 +141,7 @@ class IMPALA_PPO(IMPALA_Family):
         terminateds,
         truncateds,
     ):
-        obses, actions, old_values, vs, mu_prob, pi_prob, rho, adv = self.preprocess(
+        obses, actions, vs, mu_prob, pi_prob, rho, adv = self.preprocess(
             params,
             key,
             obses,
@@ -162,7 +161,6 @@ class IMPALA_PPO(IMPALA_Family):
             )
             obses_batch = [o[batch_idxes] for o in obses]
             actions_batch = actions[batch_idxes]
-            old_values_batch = old_values[batch_idxes]
             vs_batch = vs[batch_idxes]
             mu_prob_batch = mu_prob[batch_idxes]
             pi_prob_batch = pi_prob[batch_idxes]
@@ -170,11 +168,11 @@ class IMPALA_PPO(IMPALA_Family):
 
             def f(updates, input):
                 params, opt_state, key = updates
-                obs, act, oldv, vs, mu_prob, pi_prob, adv = input
+                obs, act, vs, mu_prob, pi_prob, adv = input
                 use_key, key = jax.random.split(key)
                 (total_loss, (critic_loss, actor_loss, entropy_loss),), grad = jax.value_and_grad(
                     self._loss, has_aux=True
-                )(params, obs, act, oldv, vs, mu_prob, pi_prob, adv, use_key)
+                )(params, obs, act, vs, mu_prob, pi_prob, adv, use_key)
                 updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
                 params = optax.apply_updates(params, updates)
                 return (params, opt_state, key), (critic_loss, actor_loss, entropy_loss)
@@ -185,7 +183,6 @@ class IMPALA_PPO(IMPALA_Family):
                 (
                     obses_batch,
                     actions_batch,
-                    old_values_batch,
                     vs_batch,
                     mu_prob_batch,
                     pi_prob_batch,
@@ -211,7 +208,7 @@ class IMPALA_PPO(IMPALA_Family):
             jnp.mean(vs),
         )
 
-    def _loss_discrete(self, params, obses, actions, old_value, vs, mu_prob, pi_prob, adv, key):
+    def _loss_discrete(self, params, obses, actions, vs, mu_prob, pi_prob, adv, key):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(vals - vs)))
@@ -240,7 +237,7 @@ class IMPALA_PPO(IMPALA_Family):
             total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
-    def _loss_continuous(self, params, obses, actions, old_value, vs, mu_prob, pi_prob, adv, key):
+    def _loss_continuous(self, params, obses, actions, vs, mu_prob, pi_prob, adv, key):
         # pi_prob is accepted for a uniform scan-call signature with _loss_discrete;
         # the continuous IS ratio uses mu_prob only.
         feature = self.preproc(params, key, obses)

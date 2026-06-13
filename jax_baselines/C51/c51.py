@@ -38,7 +38,7 @@ class C51(Q_Network_Family):
     def setup_model(self):
         self.policy_kwargs = {} if self.policy_kwargs is None else self.policy_kwargs
 
-        self.model_builder = self.model_builder_maker(
+        model_builder = self.model_builder_maker(
             self.observation_space,
             self.action_size,
             self.dueling_model,
@@ -47,9 +47,7 @@ class C51(Q_Network_Family):
             self.policy_kwargs,
         )
 
-        self.preproc, self.model, self.params = self.model_builder(
-            next(self.key_seq), print_model=True
-        )
+        self.preproc, self.model, self.params = model_builder(next(self.key_seq), print_model=True)
         self.target_params = deepcopy(self.params)
 
         self.opt_state = self.optimizer.init(self.params)
