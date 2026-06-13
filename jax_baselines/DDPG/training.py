@@ -82,7 +82,7 @@ class DPGTrainingLifecycle:
             self.agent.replay_buffer.update_priorities(data["indexes"], report.new_priorities)
 
     def _log_report(self, report, steps):
-        logger_run = getattr(self.agent, "logger_run", None)
+        logger_run = self.agent.logger_run
         if logger_run and (steps - self.agent._last_log_step >= self.agent.log_interval):
             self.agent._last_log_step = steps
             for metric_name, metric_value in report.metrics.items():

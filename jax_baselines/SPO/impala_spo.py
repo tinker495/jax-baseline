@@ -240,7 +240,9 @@ class IMPALA_SPO(IMPALA_Family):
             total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
-    def _loss_continuous(self, params, obses, actions, old_value, vs, mu_prob, adv, key):
+    def _loss_continuous(self, params, obses, actions, old_value, vs, mu_prob, pi_prob, adv, key):
+        # pi_prob is accepted for a uniform scan-call signature with _loss_discrete;
+        # the continuous IS ratio uses mu_prob only.
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(vals - vs)))

@@ -32,9 +32,7 @@ class Actor(nn.Module):
             ]
         )(x)
         mu, log_std = jnp.split(linear, 2, axis=-1)
-        return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(
-            log_std / LOG_STD_SCALE
-        )  # jnp.clip(log_std,LOG_STD_MIN,LOG_STD_MAX)
+        return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(log_std / LOG_STD_SCALE)
 
 
 class Critic(nn.Module):

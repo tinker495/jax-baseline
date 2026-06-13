@@ -37,9 +37,7 @@ class Actor(nn.Module):
         )(
             feature
         )  # initialize std with high values
-        return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(
-            log_std / LOG_STD_SCALE
-        )  # jnp.clip(log_std,LOG_STD_MIN,LOG_STD_MAX)
+        return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(log_std / LOG_STD_SCALE)
 
 
 class Critic(nn.Module):
