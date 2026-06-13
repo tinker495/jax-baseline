@@ -85,7 +85,6 @@ class SumTree:
         self.data = np.zeros(capacity, dtype=np.int32)
         self.n_entries = 0
         self.max_priority = 1.0
-        self.min_priority = np.inf
         self.write = 0
 
     # update to the root node
@@ -118,10 +117,6 @@ class SumTree:
         # return the max priority
         return self.max_priority
 
-    def min(self):
-        # return the min priority
-        return self.min_priority
-
     # store priority and sample
     def add(self, p, data):
         idx = self.write + self.capacity - 1
@@ -139,7 +134,6 @@ class SumTree:
     # update priority
     def update(self, idx, p):
         self.max_priority = max(p, self.max_priority)
-        self.min_priority = min(p, self.min_priority)
         change = p - self.tree[idx]
 
         self.tree[idx] = p
@@ -189,20 +183,6 @@ class TransitionReplayBuffer(object):
     def __len__(self) -> int:
         return self.buffer.get_stored_size()
 
-    @property
-    def storage(self):
-        return self.buffer
-
-    @property
-    def buffer_size(self) -> int:
-        return self.max_size
-
-    def can_sample(self, n_samples: int) -> bool:
-        return self.buffer.get_stored_size() >= n_samples
-
-    def is_full(self) -> int:
-        return len(self) == self.max_size
-
     def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False):
         self.buffer.add(
             obs_t,
@@ -240,9 +220,6 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
 
     def __len__(self) -> int:
         return self.tree.n_entries
-
-    def can_sample(self, n_samples: int) -> bool:
-        return self.tree.n_entries >= n_samples
 
     def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False):
         idx = self.buffer.add(

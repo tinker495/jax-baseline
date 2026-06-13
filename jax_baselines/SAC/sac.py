@@ -114,11 +114,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
             loss=loss,
             target=t_mean,
             new_priorities=new_priorities,
-            metrics={
-                "loss/qloss": loss,
-                "loss/targets": t_mean,
-                "loss/ent_coef": np.exp(self.log_ent_coef),
-            },
+            metrics={"loss/ent_coef": np.exp(self.log_ent_coef)},
         )
 
     def _train_step(

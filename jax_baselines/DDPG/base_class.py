@@ -378,6 +378,9 @@ class Deteministic_Policy_Gradient_Family(object):
         if self.simba:
             self.action_obs_rms = deepcopy(self.obs_rms)
 
+    def _write_ckpt_residual(self, value):
+        self._ckpt_update_residual = value
+
     def make_rollout_spec(self, ctx):
         pulse = CheckpointTrainPulse(
             train_freq=self.train_freq,
@@ -385,7 +388,7 @@ class Deteministic_Policy_Gradient_Family(object):
             train=self.train_step,
             record_loss=lambda loss: self.lossque.append(loss),
             read_residual=lambda: self._ckpt_update_residual,
-            write_residual=lambda value: setattr(self, "_ckpt_update_residual", value),
+            write_residual=self._write_ckpt_residual,
             post_pulse=self._snapshot_action_normalizer,
         )
         return RolloutSpec(

@@ -64,7 +64,6 @@ class IMPALA_TPPO(IMPALA_Family):
             self.params,
             self.opt_state,
             next(self.key_seq),
-            self.ent_coef,
             data[0],
             data[1],
             data[2],
@@ -155,7 +154,6 @@ class IMPALA_TPPO(IMPALA_Family):
         params,
         opt_state,
         key,
-        ent_coef,
         obses,
         actions,
         mu_log_prob,
@@ -195,7 +193,7 @@ class IMPALA_TPPO(IMPALA_Family):
                 use_key, key = jax.random.split(key)
                 (total_loss, (critic_loss, actor_loss, entropy_loss),), grad = jax.value_and_grad(
                     self._loss, has_aux=True
-                )(params, obs, act, vs, old_prob, old_act_prob, adv, ent_coef, use_key)
+                )(params, obs, act, vs, old_prob, old_act_prob, adv, use_key)
                 updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
                 params = optax.apply_updates(params, updates)
                 return (params, opt_state, key), (critic_loss, actor_loss, entropy_loss)
@@ -236,16 +234,15 @@ class IMPALA_TPPO(IMPALA_Family):
         params,
         obses,
         actions,
-        targets,
+        vs,
         old_prob,
         old_act_prob,
         adv,
-        ent_coef,
         key,
     ):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
-        critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
+        critic_loss = jnp.mean(jnp.square(jnp.squeeze(vs - vals)))
 
         prob, log_prob = self.get_logprob(
             self.actor(params, key, feature), actions, key, out_prob=True
@@ -273,7 +270,7 @@ class IMPALA_TPPO(IMPALA_Family):
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
         else:
-            total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
+            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
     def _loss_continuous(
@@ -281,16 +278,15 @@ class IMPALA_TPPO(IMPALA_Family):
         params,
         obses,
         actions,
-        targets,
+        vs,
         old_prob,
         old_act_prob,
         adv,
-        ent_coef,
         key,
     ):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
-        critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
+        critic_loss = jnp.mean(jnp.square(jnp.squeeze(vs - vals)))
 
         prob, log_prob = self.get_logprob(
             self.actor(params, key, feature), actions, key, out_prob=True
@@ -322,7 +318,7 @@ class IMPALA_TPPO(IMPALA_Family):
         if self.use_entropy_adv_shaping:
             total_loss = self.val_coef * critic_loss + actor_loss
         else:
-            total_loss = self.val_coef * critic_loss + actor_loss + ent_coef * entropy_loss
+            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
     def learn(
