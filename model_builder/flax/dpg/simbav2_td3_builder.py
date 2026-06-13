@@ -1,40 +1,10 @@
 import flax.linen as nn
-import jax
-import jax.numpy as jnp
 import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
-from model_builder.flax.layers import SimbaV2Block, SimbaV2Embedding, SimbaV2Head
+from model_builder.flax.dpg.simbav2_ddpg_td3_blocks import Actor, Critic
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import print_param
-
-
-class Actor(nn.Module):
-    action_size: tuple
-    node: int = 256
-    hidden_n: int = 2
-
-    @nn.compact
-    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
-        encoded = SimbaV2Embedding(self.node)(feature)
-        for _ in range(self.hidden_n):
-            encoded = SimbaV2Block(self.node)(encoded)
-        logits = SimbaV2Head(self.node, self.action_size[0])(encoded)
-        return jax.nn.tanh(logits)
-
-
-class Critic(nn.Module):
-    node: int = 256
-    hidden_n: int = 2
-
-    @nn.compact
-    def __call__(self, feature: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([feature, actions], axis=1)
-        encoded = SimbaV2Embedding(self.node)(concat)
-        for _ in range(self.hidden_n):
-            encoded = SimbaV2Block(self.node)(encoded)
-        q_value = SimbaV2Head(self.node, 1)(encoded)
-        return q_value
 
 
 def model_builder_maker(observation_space, action_size, policy_kwargs):

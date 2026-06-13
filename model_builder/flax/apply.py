@@ -1,8 +1,12 @@
+from typing import Callable, Optional, Union
+
 import flax.linen as nn
 
 
 def get_apply_fn_flax_module(
-    module: nn.Module, method: nn.Module.__call__ = None, mutable: list[str] = False
+    module: nn.Module,
+    method: Optional[Callable] = None,
+    mutable: Union[bool, list[str]] = False,
 ):
     if method is None:
 
