@@ -34,7 +34,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
         critic_num=2,
         quantile_drop=0.05,
         mixture_type="truncated",
-        risk_avoidance=0.0,
         **kwargs,
     ):
 
@@ -50,7 +49,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
                 f"Invalid mixture_type '{mixture_type}', expected 'truncated' or 'min'"
             )
         self.mixture_type = mixture_type
-        self.risk_avoidance = risk_avoidance
 
         super().__init__(env_builder, model_builder_maker, **kwargs)
 
@@ -331,8 +329,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
             run_name = run_name + "_truncated({:d})".format(self.quantile_drop)
         else:
             run_name = run_name + "_min"
-        if self.risk_avoidance != 0.0:
-            run_name = run_name + "_riskavoid{:.2f}".format(self.risk_avoidance)
         super().learn(
             total_timesteps,
             callback,

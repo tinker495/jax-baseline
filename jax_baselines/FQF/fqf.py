@@ -148,7 +148,6 @@ class FQF(Q_Network_Family):
             (
                 abs_error,
                 feature,
-                taus,
                 tau_hats,
                 theta_loss_tile,
                 targets,
@@ -241,7 +240,6 @@ class FQF(Q_Network_Family):
         return jnp.mean(hubber * weights), (
             hubber,
             feature,
-            taus,
             tau_hats,
             theta_loss_tile,
             targets,

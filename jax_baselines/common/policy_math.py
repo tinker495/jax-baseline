@@ -15,8 +15,8 @@ def truncated_mixture(quantiles, cut):
         Sorted and truncated quantile values with the highest 'cut' values removed
     """
     quantiles = jnp.concatenate(quantiles, axis=1)
-    sorted = jnp.sort(quantiles, axis=1)
-    return sorted[:, :-cut]
+    sorted_quantiles = jnp.sort(quantiles, axis=1)
+    return sorted_quantiles[:, :-cut]
 
 
 def q_log_pi(q, entropy_tau):
@@ -27,13 +27,9 @@ def q_log_pi(q, entropy_tau):
 
 
 def kl_divergence_discrete(p, q, eps: float = 1e-8):
-    # Add epsilon to prevent log(0)
-    p_safe = p + eps
-    q_safe = q + eps
-    # Compute log values
-    log_p = jnp.log(p_safe)
-    log_q = jnp.log(q_safe)
-    # Compute KL divergence with masking
+    # eps guards log(0); the outer weight uses the raw p so zero-mass atoms drop out.
+    log_p = jnp.log(p + eps)
+    log_q = jnp.log(q + eps)
     return jnp.sum(p * (log_p - log_q))
 
 

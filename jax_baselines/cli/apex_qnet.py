@@ -53,7 +53,6 @@ def add_args(parser):
     parser.add_argument("--learning_starts", type=int, default=5000, help="learning start")
     parser.add_argument("--initial_eps", type=float, default=0.4, help="initial epsilon")
     parser.add_argument("--eps_decay", type=float, default=3, help="exploration fraction")
-    parser.add_argument("--clip_rewards", action="store_true")
     parser.add_argument("--compress_memory", action="store_true")
     parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
     parser.add_argument(
