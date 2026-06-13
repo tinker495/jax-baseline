@@ -85,10 +85,7 @@ class FQF(Q_Network_Family):
         return jnp.sum(q, axis=2)
 
     def get_q(self, params, feature, tau, tau_hat, key=None) -> jnp.ndarray:
-        quantile_hat = self.model(params, key, feature, tau_hat)
-        tau = jnp.expand_dims(tau, axis=1)
-        q = (tau[:, :, 1:] - tau[:, :, :-1]) * quantile_hat
-        return jnp.sum(q, axis=2)
+        return self.quantiles_to_q(self.get_quantile(params, feature, tau_hat, key), tau)
 
     def _train_on_batch(self, data, context):
         (

@@ -28,11 +28,9 @@ def add_args(parser):
     parser.add_argument("--ent_coef", type=float, default=0.001, help="entropy coefficient")
     parser.add_argument("--val_coef", type=float, default=0.6, help="val coefficient")
     parser.add_argument("--epoch_num", type=int, default=4, help="epoch number")
-    parser.add_argument("--gae_normalize", dest="gae_normalize", action="store_true")
+    parser.add_argument("--gae_normalize", action="store_true")
     parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
-    parser.add_argument(
-        "--use_entropy_adv_shaping", dest="use_entropy_adv_shaping", action="store_true"
-    )
+    parser.add_argument("--use_entropy_adv_shaping", action="store_true")
     parser.add_argument(
         "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
     )

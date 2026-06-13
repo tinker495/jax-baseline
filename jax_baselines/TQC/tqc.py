@@ -72,19 +72,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         self.opt_policy_state = self.optimizer.init(self.policy_params)
         self.opt_critic_state = self.optimizer.init(self.critic_params)
 
-        if isinstance(self._ent_coef, str) and self._ent_coef.startswith("auto"):
-            init_value = np.log(1e-1)
-            if "_" in self._ent_coef:
-                init_value = np.log(float(self._ent_coef.split("_")[1]))
-                assert init_value > 0.0, "The initial value of ent_coef must be greater than 0"
-            self.log_ent_coef = jax.device_put(init_value)
-            self.auto_entropy = True
-        else:
-            try:
-                self.log_ent_coef = jnp.log(float(self._ent_coef))
-            except ValueError as err:
-                raise ValueError(f"Invalid value for ent_coef: {self._ent_coef}") from err
-            self.auto_entropy = False
+        self._setup_entropy_coef()
 
         self.quantile = (
             jnp.linspace(0.0, 1.0, self.n_support + 1, dtype=jnp.float32)[1:]
@@ -253,15 +241,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
             log_ent_coef,
             new_priorities,
         )
-
-    def _train_ent_coef(self, log_coef, log_prob):
-        def loss(log_ent_coef, log_prob):
-            ent_coef = jnp.exp(log_ent_coef)
-            return jnp.mean(ent_coef * (self.target_entropy - log_prob))
-
-        grad = jax.grad(loss)(log_coef, log_prob)
-        log_coef = log_coef - self.ent_coef_learning_rate * grad
-        return log_coef
 
     def _critic_loss(self, critic_params, policy_params, obses, actions, targets, weights, key):
         feature = self.preproc(policy_params, key, obses)

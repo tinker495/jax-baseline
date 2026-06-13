@@ -1,5 +1,7 @@
 from copy import deepcopy
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 from jax_baselines.common.checkpoint import make_checkpoint_scaffold
@@ -226,6 +228,35 @@ class Deteministic_Policy_Gradient_Family(object):
 
     def setup_model(self):
         pass
+
+    def _setup_entropy_coef(self):
+        """Initialize log_ent_coef and auto_entropy from self._ent_coef.
+
+        Shared by the SAC-style stochastic actors (SAC, TQC, CrossQ). An
+        "auto" coef enables automatic temperature tuning; an "auto_<x>" suffix
+        seeds the initial value, and a numeric coef pins a fixed temperature.
+        """
+        if isinstance(self._ent_coef, str) and self._ent_coef.startswith("auto"):
+            init_value = np.log(1e-1)
+            if "_" in self._ent_coef:
+                init_value = np.log(float(self._ent_coef.split("_")[1]))
+                assert init_value > 0.0, "The initial value of ent_coef must be greater than 0"
+            self.log_ent_coef = jax.device_put(init_value)
+            self.auto_entropy = True
+        else:
+            try:
+                self.log_ent_coef = jnp.log(float(self._ent_coef))
+            except ValueError as err:
+                raise ValueError(f"Invalid value for ent_coef: {self._ent_coef}") from err
+            self.auto_entropy = False
+
+    def _train_ent_coef(self, log_coef, log_prob):
+        def loss(log_ent_coef, log_prob):
+            ent_coef = jnp.exp(log_ent_coef)
+            return jnp.mean(ent_coef * (self.target_entropy - log_prob))
+
+        grad = jax.grad(loss)(log_coef, log_prob)
+        return log_coef - self.ent_coef_learning_rate * grad
 
     def train_step(self, steps, gradient_steps):
         return self.training_lifecycle.train(steps, gradient_steps)
