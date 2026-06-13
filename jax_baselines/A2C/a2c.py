@@ -153,7 +153,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         experiment_name="A2C",
         run_name="A2C",
     ):
-        super().learn(
+        return super().learn(
             total_timesteps,
             callback,
             log_interval,
