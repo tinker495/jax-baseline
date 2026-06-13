@@ -52,8 +52,11 @@ class IQN(Q_Network_Family):
         return self.model(params, key, self.preproc(params, key, obses), tau)
 
     def actions(self, obs, epsilon, eval_mode=False):
+        params_to_use = self.get_behavior_params()
+        if eval_mode and self.use_checkpointing and self.ckpt.enabled:
+            params_to_use = self.checkpoint_params
         if epsilon <= np.random.uniform(0, 1):
-            actions = np.asarray(self._get_actions(self.params, obs, next(self.key_seq)))
+            actions = np.asarray(self._get_actions(params_to_use, obs, next(self.key_seq)))
         else:
             actions = np.random.choice(self.action_size[0], [self.worker_size, 1])
         return actions

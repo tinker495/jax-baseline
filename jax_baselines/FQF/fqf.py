@@ -58,10 +58,13 @@ class FQF(Q_Network_Family):
         self._compile_common_functions()
 
     def actions(self, obs, epsilon, eval_mode=False):
+        params_to_use = self.get_behavior_params()
+        if eval_mode and self.use_checkpointing and self.ckpt.enabled:
+            params_to_use = self.checkpoint_params
         if epsilon <= np.random.uniform(0, 1):
             actions = np.asarray(
                 self._get_actions(
-                    self.params,
+                    params_to_use,
                     self.fqf_params,
                     obs,
                     next(self.key_seq) if self.param_noise else None,
