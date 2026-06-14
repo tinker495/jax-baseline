@@ -15,7 +15,7 @@ def add_args(parser):
     parser.add_argument("--experiment_name", type=str, default="DPG", help="experiment name")
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
-    parser.add_argument("--env", type=str, default="Pendulum-v0", help="environment")
+    parser.add_argument("--env", type=str, default="Pendulum-v1", help="environment")
     parser.add_argument("--worker", type=int, default=1, help="gym_worker_size")
     parser.add_argument("--algo", type=str, default="DDPG", help="algo ID")
     parser.add_argument("--gamma", type=float, default=0.995, help="gamma")
