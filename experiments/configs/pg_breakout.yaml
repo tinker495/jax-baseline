@@ -9,11 +9,11 @@ base:
   eval_num: 20
   experiment_name: PG_Breakout
   env: BreakoutNoFrameskip-v4
-  worker: 32
+  worker: 8
   # Default backend is gymnasium; keep EnvPool for this Atari sweep's throughput.
   env_backend: envpool
   steps: 1e7
-  batch: 256
+  batch: 1024
   mini_batch: 256
   gamma: 0.995
   lamda: 0.95
@@ -22,6 +22,6 @@ base:
   optimizer: rmsprop
 variants:
   - {algo: A2C, learning_rate: 0.001, ent_coef: 1e-6}
-  - {algo: SPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16}
-  - {algo: TPPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16}
-  - {algo: PPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16}
+  - {algo: SPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16, optimizer: adam, gae_normalize: true}
+  - {algo: TPPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16, optimizer: adam, gae_normalize: true}
+  - {algo: PPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16, optimizer: adam, gae_normalize: true}

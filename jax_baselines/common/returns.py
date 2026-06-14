@@ -39,6 +39,28 @@ def get_gaes(rewards, terminateds, truncateds, values, next_values, gamma, lamda
     return advs
 
 
+ADVANTAGE_NORMALIZE_SCOPES = ("batch", "minibatch")
+
+
+def normalize_advantage(adv):
+    """Standardize advantages to zero mean / unit std (eps-guarded).
+
+    Reduces over every element of ``adv``, so the scope is set by what is passed
+    in: the whole flattened rollout gives batch-scope normalization (once per
+    update), a single minibatch gives minibatch-scope normalization (PPO2-style,
+    recomputed per minibatch per epoch).
+    """
+    return (adv - jnp.mean(adv, keepdims=True)) / (jnp.std(adv, keepdims=True) + 1e-6)
+
+
+def validate_advantage_normalize_scope(scope):
+    if scope not in ADVANTAGE_NORMALIZE_SCOPES:
+        raise ValueError(
+            f"gae_normalize_scope must be one of {ADVANTAGE_NORMALIZE_SCOPES}, got {scope!r}"
+        )
+    return scope
+
+
 def get_vtrace(rewards, rhos, c_ts, terminateds, truncateds, values, next_values, gamma):
     deltas = rhos * (rewards + gamma * (1.0 - terminateds) * next_values - values)
 

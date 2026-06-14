@@ -5,7 +5,11 @@ import optax
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.common.jax_utils import convert_jax
-from jax_baselines.common.returns import get_gaes
+from jax_baselines.common.returns import (
+    get_gaes,
+    normalize_advantage,
+    validate_advantage_normalize_scope,
+)
 
 
 class SPO(Actor_Critic_Policy_Gradient_Family):
@@ -15,6 +19,7 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
         model_builder_maker,
         lamda=0.95,
         gae_normalize=False,
+        gae_normalize_scope="batch",
         minibatch_size=32,
         epoch_num=4,
         value_clip=2.0,
@@ -25,6 +30,7 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
         self.name = "SPO"
         self.lamda = lamda
         self.gae_normalize = gae_normalize
+        self.gae_normalize_scope = validate_advantage_normalize_scope(gae_normalize_scope)
         self.value_clip = value_clip
         self.ppo_eps = ppo_eps
         self.minibatch_size = minibatch_size
@@ -108,8 +114,8 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
         pi_prob = jnp.vstack(pi_prob)
         adv = jnp.vstack(adv)
         targets = value + adv
-        if self.gae_normalize:
-            adv = (adv - jnp.mean(adv, keepdims=True)) / (jnp.std(adv, keepdims=True) + 1e-6)
+        if self.gae_normalize and self.gae_normalize_scope == "batch":
+            adv = normalize_advantage(adv)
         return obses, actions, value, targets, pi_prob, adv
 
     def _train_step(
@@ -144,6 +150,8 @@ class SPO(Actor_Critic_Policy_Gradient_Family):
             def f(updates, input):
                 params, opt_state, key = updates
                 obs, act, oldv, target, act_prob, adv = input
+                if self.gae_normalize and self.gae_normalize_scope == "minibatch":
+                    adv = normalize_advantage(adv)
                 use_key, key = jax.random.split(key)
                 (total_loss, (c_loss, a_loss, entropy_loss)), grad = jax.value_and_grad(
                     self._loss, has_aux=True

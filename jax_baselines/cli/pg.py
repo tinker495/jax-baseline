@@ -43,6 +43,14 @@ def add_args(parser):
     parser.add_argument("--val_coef", type=float, default=0.6, help="val coefficient")
     parser.add_argument("--epoch_num", type=int, default=4, help="epoch number")
     parser.add_argument("--gae_normalize", action="store_true")
+    parser.add_argument(
+        "--gae_normalize_scope",
+        type=str,
+        default="batch",
+        choices=["batch", "minibatch"],
+        help="advantage normalization scope when --gae_normalize is set "
+        "(batch: whole rollout, once; minibatch: per-minibatch, PPO2-style)",
+    )
     parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
     parser.add_argument("--use_entropy_adv_shaping", action="store_true")
     parser.add_argument(
@@ -82,6 +90,7 @@ def _ppo_like(a):
         **_common(a),
         "lamda": a.lamda,
         "gae_normalize": a.gae_normalize,
+        "gae_normalize_scope": a.gae_normalize_scope,
         "minibatch_size": a.mini_batch,
         "epoch_num": a.epoch_num,
     }
