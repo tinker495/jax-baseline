@@ -13,7 +13,7 @@ base:
   # Default backend is gymnasium; keep EnvPool for this Atari sweep's throughput.
   env_backend: envpool
   steps: 1e7
-  batch: 1024
+  batch: 128
   mini_batch: 256
   gamma: 0.995
   lamda: 0.95
