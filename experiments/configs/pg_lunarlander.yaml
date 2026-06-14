@@ -12,7 +12,7 @@ base:
   worker: 32
   # Default backend is gymnasium; keep EnvPool for this sweep's throughput.
   env_backend: envpool
-  steps: 1e6
+  steps: 3e6
   batch: 128
   mini_batch: 256
   gamma: 0.995
@@ -24,3 +24,4 @@ variants:
   - {algo: A2C, learning_rate: 0.001, ent_coef: 1e-6}
   - {algo: PPO, learning_rate: 0.0003, ent_coef: 1e-3}
   - {algo: TPPO, learning_rate: 0.0003, ent_coef: 1e-3}
+  - {algo: SPO, learning_rate: 0.0003, ent_coef: 1e-3}
