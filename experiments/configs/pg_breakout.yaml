@@ -19,7 +19,7 @@ base:
   hidden_n: 1
   optimizer: rmsprop
 variants:
-  - {algo: A2C, learning_rate: 0.001, ent_coef: 1e-6, enabled: false}
+  - {algo: A2C, learning_rate: 0.001, ent_coef: 1e-6}
   - {algo: SPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16}
   - {algo: TPPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16}
   - {algo: PPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16}
