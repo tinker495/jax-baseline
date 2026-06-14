@@ -400,6 +400,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
                 description += f"{k} : {v:8.2f}, "
 
         description += f"loss : {np.mean(self.lossque):.3f}"
+        description += self._rollout_pbar_suffix()
         return description
 
     def run_name_update(self, run_name):

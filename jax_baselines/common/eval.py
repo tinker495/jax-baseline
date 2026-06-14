@@ -1,6 +1,31 @@
 import numpy as np
 
 
+def log_measurement(
+    log_metric,
+    namespace,
+    steps,
+    *,
+    episode_reward,
+    episode_length,
+    timeout_rate,
+    original_reward=None,
+):
+    """Write the canonical four measurement leaves under a namespace prefix.
+
+    The single tag-writer for both the ``eval/`` (frozen policy measured on a
+    separate ``eval_env``) and ``rollout/`` (behavior policy's own training
+    episodes) namespaces, so their leaf names can never drift apart again.
+    ``original_reward`` is logged only when an Atari wrapper supplied an
+    unclipped score.
+    """
+    if original_reward is not None:
+        log_metric(f"{namespace}/original_reward", original_reward, steps)
+    log_metric(f"{namespace}/episode_reward", episode_reward, steps)
+    log_metric(f"{namespace}/episode_length", episode_length, steps)
+    log_metric(f"{namespace}/timeout_rate", timeout_rate, steps)
+
+
 def _normalize_action_for_step(step_action):
     """Convert model output to an env.step-compatible action.
 
@@ -85,11 +110,15 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
         mean_original_score = np.mean(original_rewards)
 
     if logger_run:
-        if mean_original_score is not None:
-            logger_run.log_metric("env/original_reward", mean_original_score, steps)
-        logger_run.log_metric("env/episode_reward", mean_reward, steps)
-        logger_run.log_metric("env/episode len", mean_ep_len, steps)
-        logger_run.log_metric("env/time over", np.mean(total_truncated), steps)
+        log_measurement(
+            logger_run.log_metric,
+            "eval",
+            steps,
+            episode_reward=mean_reward,
+            episode_length=mean_ep_len,
+            timeout_rate=np.mean(total_truncated),
+            original_reward=mean_original_score,
+        )
 
     if mean_original_score is not None:
         return {

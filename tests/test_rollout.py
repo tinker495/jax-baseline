@@ -55,6 +55,7 @@ def _spec(agent, single_action, vector_action, refresh_exploration, has_true_res
         evaluate=agent.eval,
         describe=agent.description,
         bind_loss_window=lambda window: setattr(agent, "lossque", window),
+        record_rollout_episode=lambda *a, **k: None,
         checkpoint_on_episode_end=agent._checkpoint_on_episode_end,
         checkpoint_pulse=agent.checkpointing_adapter.train_and_reset,
     )
@@ -852,6 +853,7 @@ def test_checkpointing_loop_drives_real_pulse_to_train_step():
         evaluate=agent.eval,
         describe=agent.description,
         bind_loss_window=lambda window: setattr(agent, "lossque", window),
+        record_rollout_episode=lambda *a, **k: None,
         checkpoint_on_episode_end=agent._checkpoint_on_episode_end,
         checkpoint_pulse=pulse,
     )

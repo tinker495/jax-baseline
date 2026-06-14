@@ -35,22 +35,26 @@ class Logger_server(object):
     def add_multiline(self, eps):
         with self.writer as (summary, _):
             layout = {
-                "env": {
+                "rollout": {
                     "episode_reward": [
                         "Multiline",
-                        [f"env/episode_reward/eps{e:.2f}" for e in eps] + ["env/episode_reward"],
+                        [f"rollout/episode_reward/eps{e:.2f}" for e in eps]
+                        + ["rollout/episode_reward"],
                     ],
                     "original_reward": [
                         "Multiline",
-                        [f"env/original_reward/eps{e:.2f}" for e in eps] + ["env/original_reward"],
+                        [f"rollout/original_reward/eps{e:.2f}" for e in eps]
+                        + ["rollout/original_reward"],
                     ],
-                    "episode_len": [
+                    "episode_length": [
                         "Multiline",
-                        [f"env/episode_len/eps{e:.2f}" for e in eps] + ["env/episode_len"],
+                        [f"rollout/episode_length/eps{e:.2f}" for e in eps]
+                        + ["rollout/episode_length"],
                     ],
-                    "time_over": [
+                    "timeout_rate": [
                         "Multiline",
-                        [f"env/time_over/eps{e:.2f}" for e in eps] + ["env/time_over"],
+                        [f"rollout/timeout_rate/eps{e:.2f}" for e in eps]
+                        + ["rollout/timeout_rate"],
                     ],
                 },
             }

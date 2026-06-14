@@ -103,11 +103,17 @@ class _Pbar(list):
         pass
 
 
+class _NullLogger:
+    def log_metric(self, key, value, step):
+        pass
+
+
 class _Ctx:
     def __init__(self, steps):
         self.pbar = _Pbar(steps)
         self.eval_freq = 10_000
         self.log_interval = 10_000
+        self.logger_run = _NullLogger()
 
 
 def test_a2c_vectorized_flags_autoreset_dummy_step_as_terminal():

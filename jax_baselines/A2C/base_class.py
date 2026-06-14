@@ -9,6 +9,7 @@ from jax_baselines.common.env_info import get_local_env_info, infer_action_meta
 from jax_baselines.common.eval import evaluate_policy, record_and_test
 from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.optimizer import select_optimizer
+from jax_baselines.common.rollout_stats import EpisodeTracker
 from jax_baselines.common.seeding import key_gen, set_global_seeds
 from jax_baselines.common.serialization import restore, save
 from jax_baselines.common.training_session import TrainingSession
@@ -57,6 +58,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
 
         self.params = None
         self.save_path = None
+        self.rollout_tracker = None
         self.optimizer = select_optimizer(optimizer, self.learning_rate)
 
         self.get_env_setup()
@@ -181,7 +183,17 @@ class Actor_Critic_Policy_Gradient_Family(object):
 
         description += f"loss : {np.mean(self.lossque):.3f}"
 
+        description += self._rollout_pbar_suffix()
+
         return description
+
+    def _rollout_pbar_suffix(self):
+        """Pbar fragment with the rollout window-mean reward (empty until the
+        first training episode completes)."""
+        if self.rollout_tracker is None:
+            return ""
+        fragment = self.rollout_tracker.describe()
+        return f", {fragment}" if fragment else ""
 
     def run_name_update(self, run_name):
         return run_name
@@ -212,7 +224,12 @@ class Actor_Critic_Policy_Gradient_Family(object):
         obs, info = self.env.reset()
         obs = [np.expand_dims(obs, axis=0)]
         self.lossque = deque(maxlen=10)
+        self.rollout_tracker = EpisodeTracker(ctx.logger_run.log_metric, ctx.log_interval)
         eval_result = None
+        score = 0.0
+        eplen = 0
+        original = 0.0
+        have_original = False
         for steps in ctx.pbar:
             actions = self.actions(obs)[0]
             next_obs, reward, terminated, truncated, info = self.env.step(
@@ -220,9 +237,26 @@ class Actor_Critic_Policy_Gradient_Family(object):
             )
             next_obs = [np.expand_dims(next_obs, axis=0)]
             self.buffer.add(obs, actions, [reward], next_obs, [terminated], [truncated])
+            score += float(reward)
+            eplen += 1
+            step_original = info.get("original_reward")
+            if step_original is not None:
+                have_original = True
+                original += float(step_original)
             obs = next_obs
 
             if terminated or truncated:
+                self.rollout_tracker.record(
+                    steps,
+                    episode_reward=score,
+                    episode_length=eplen,
+                    timeout=float(truncated),
+                    original_reward=original if have_original else None,
+                )
+                score = 0.0
+                eplen = 0
+                original = 0.0
+                have_original = False
                 obs, info = self.env.reset()
                 obs = [np.expand_dims(obs, axis=0)]
 
@@ -238,12 +272,18 @@ class Actor_Critic_Policy_Gradient_Family(object):
 
     def learn_VectorizedEnv(self, ctx):
         self.lossque = deque(maxlen=10)
+        self.rollout_tracker = EpisodeTracker(ctx.logger_run.log_metric, ctx.log_interval)
         eval_result = None
+        scores = np.zeros([self.worker_size], dtype=np.float64)
+        eplens = np.zeros([self.worker_size], dtype=np.int32)
+        originals = np.zeros([self.worker_size], dtype=np.float64)
+        have_original = False
         # Workers that ended an episode last step emit an autoreset dummy step
         # (action ignored, reward 0, fresh obs). On-policy rollouts have a fixed
         # per-worker length, so the dummy can't be dropped; instead flag it
         # terminal so it contributes a zero-value target and never bridges the
-        # two episodes in the return. prev_done chains off the *real* env dones.
+        # two episodes in the return. prev_done chains off the *real* env dones,
+        # and the same mask keeps the dummy out of the rollout episode stats.
         prev_done = None
 
         for steps in ctx.pbar:
@@ -260,6 +300,14 @@ class Actor_Critic_Policy_Gradient_Family(object):
             ) = self.env.get_result()
 
             real_done = np.logical_or(terminateds, truncateds)
+            active = np.ones(self.worker_size, dtype=bool) if prev_done is None else ~prev_done
+            scores[active] += rewards[active]
+            eplens[active] += 1
+            step_original = infos.get("original_reward")
+            if step_original is not None:
+                have_original = True
+                originals[active] += np.asarray(step_original)[active]
+
             if prev_done is not None and prev_done.any():
                 # Flag the dummy step terminal AND zero its reward so it is fully
                 # inert (zero-value target, no episode bridge), independent of
@@ -267,6 +315,19 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 terminateds = np.where(prev_done, True, terminateds)
                 rewards = np.where(prev_done, np.float32(0.0), rewards)
             self.buffer.add([obs], actions, rewards, [next_obses], terminateds, truncateds)
+
+            for idx in np.where(real_done & active)[0]:
+                self.rollout_tracker.record(
+                    steps,
+                    episode_reward=float(scores[idx]),
+                    episode_length=int(eplens[idx]),
+                    timeout=float(truncateds[idx]),
+                    original_reward=float(originals[idx]) if have_original else None,
+                )
+                scores[idx] = 0.0
+                eplens[idx] = 0
+                originals[idx] = 0.0
+
             prev_done = real_done
 
             if (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0:

@@ -13,6 +13,7 @@ from jax_baselines.common.rollout import (
     CheckpointTrainPulse,
     RolloutSpec,
 )
+from jax_baselines.common.rollout_stats import EpisodeTracker
 from jax_baselines.common.schedules import ConstantSchedule, LinearSchedule
 from jax_baselines.common.seeding import key_gen, set_global_seeds
 from jax_baselines.common.serialization import restore, save
@@ -122,6 +123,7 @@ class Q_Network_Family(object):
         self.initial_checkpoint_window = int(initial_checkpoint_window)
 
         self.logger_run = None
+        self.rollout_tracker = None
         self._ckpt_update_residual = 0
         self.ckpt = make_checkpoint_scaffold(
             use_checkpointing=self.use_checkpointing,
@@ -254,7 +256,17 @@ class Q_Network_Family(object):
         if self.use_checkpointing and (self.ckpt.last_update_step is not None):
             description += f", ckpt_upd_step : {int(self.ckpt.last_update_step)}"
 
+        description += self._rollout_pbar_suffix()
+
         return description
+
+    def _rollout_pbar_suffix(self):
+        """Pbar fragment with the rollout window-mean reward (empty until the
+        first training episode completes)."""
+        if self.rollout_tracker is None:
+            return ""
+        fragment = self.rollout_tracker.describe()
+        return f", {fragment}" if fragment else ""
 
     def run_name_update(self, run_name):
         if self.munchausen:
@@ -325,6 +337,7 @@ class Q_Network_Family(object):
         self.update_eps = self.exploration.value(steps)
 
     def make_rollout_spec(self, ctx):
+        self.rollout_tracker = EpisodeTracker(ctx.logger_run.log_metric, ctx.log_interval)
         pulse = CheckpointTrainPulse(
             train_freq=self.train_freq,
             gradient_steps=self.gradient_steps,
@@ -349,6 +362,7 @@ class Q_Network_Family(object):
             evaluate=lambda steps: self.eval(ctx, steps),
             describe=self.description,
             bind_loss_window=self._bind_loss_window,
+            record_rollout_episode=self.rollout_tracker.record,
             checkpoint_on_episode_end=self.ckpt.on_episode_end,
             checkpoint_pulse=pulse,
         )

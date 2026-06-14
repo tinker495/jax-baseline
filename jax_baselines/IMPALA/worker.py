@@ -73,11 +73,11 @@ class Impala_Worker(object):
             obs = [np.expand_dims(obs, axis=0)]
             eplen = 0
             episode = 0
-            rw_label = "env/episode_reward"
+            rw_label = "rollout/episode_reward"
             if have_original_reward:
-                original_rw_label = "env/original_reward"
-            len_label = "env/episode_len"
-            to_label = "env/time_over"
+                original_rw_label = "rollout/original_reward"
+            len_label = "rollout/episode_length"
+            to_label = "rollout/timeout_rate"
 
             while not stop.is_set():
                 if update.is_set():

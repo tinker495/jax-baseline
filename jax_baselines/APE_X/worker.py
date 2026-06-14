@@ -110,17 +110,17 @@ class Ape_X_Worker(object):
             eplen = 0
             episode = 0
             if eps is None:
-                rw_label = "env/episode_reward"
+                rw_label = "rollout/episode_reward"
                 if have_original_reward:
-                    original_rw_label = "env/original_reward"
-                len_label = "env/episode_len"
-                to_label = "env/time_over"
+                    original_rw_label = "rollout/original_reward"
+                len_label = "rollout/episode_length"
+                to_label = "rollout/timeout_rate"
             else:
-                rw_label = f"env/episode_reward/eps{eps:.2f}"
+                rw_label = f"rollout/episode_reward/eps{eps:.2f}"
                 if have_original_reward:
-                    original_rw_label = f"env/original_reward/eps{eps:.2f}"
-                len_label = f"env/episode_len/eps{eps:.2f}"
-                to_label = f"env/time_over/eps{eps:.2f}"
+                    original_rw_label = f"rollout/original_reward/eps{eps:.2f}"
+                len_label = f"rollout/episode_length/eps{eps:.2f}"
+                to_label = f"rollout/timeout_rate/eps{eps:.2f}"
 
             while not stop.is_set():
                 if update.is_set():

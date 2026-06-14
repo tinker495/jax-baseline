@@ -107,6 +107,9 @@ class RolloutSpec:
     evaluate: Callable[[int], object]
     describe: Callable[[object], str]
     bind_loss_window: Callable[[deque], None]
+    # rollout-measurement seam: hands each completed training episode to the
+    # agent's EpisodeTracker (the engine stays logger-free).
+    record_rollout_episode: Callable[..., None]
     # checkpoint seam
     checkpoint_on_episode_end: Callable[..., bool]
     checkpoint_pulse: Callable[[int, int], None]
@@ -130,14 +133,36 @@ class RolloutEngine:
         lossque = self._begin()
         eval_result = None
 
+        score = 0.0
+        eplen = 0
+        original = 0.0
+        have_original = False
+
         for steps in pbar:
             sel = spec.single_action(obs, steps)
             next_obs, reward, terminated, truncated, info = spec.env.step(sel.env_action)
             next_obs = [np.expand_dims(next_obs, axis=0)]
             spec.replay_buffer.add(obs, sel.store_action, reward, next_obs, terminated, truncated)
+            score += float(reward)
+            eplen += 1
+            step_original = info.get("original_reward")
+            if step_original is not None:
+                have_original = True
+                original += float(step_original)
             obs = next_obs
 
             if terminated or truncated:
+                spec.record_rollout_episode(
+                    steps,
+                    episode_reward=score,
+                    episode_length=eplen,
+                    timeout=float(truncated),
+                    original_reward=original if have_original else None,
+                )
+                score = 0.0
+                eplen = 0
+                original = 0.0
+                have_original = False
                 obs, info = spec.env.reset()
                 obs = [np.expand_dims(obs, axis=0)]
 
@@ -156,9 +181,14 @@ class RolloutEngine:
         spec = self.spec
         lossque = self._begin()
         eval_result = None
+        scores = np.zeros([spec.worker_size], dtype=np.float64)
+        eplens = np.zeros([spec.worker_size], dtype=np.int32)
+        originals = np.zeros([spec.worker_size], dtype=np.float64)
+        have_original = False
         # Workers that ended an episode last step emit an autoreset dummy step
         # (action ignored, reward 0, fresh obs); ``store_mask`` keeps that bogus
-        # terminal->reset transition out of the replay buffer.
+        # terminal->reset transition out of the replay buffer, and the same
+        # ``active`` mask keeps it out of the rollout episode statistics.
         prev_done = None
 
         for steps in pbar:
@@ -173,6 +203,15 @@ class RolloutEngine:
                     lossque.append(loss)
 
             next_obses, rewards, terminateds, truncateds, infos = spec.env.get_result()
+            done = np.logical_or(terminateds, truncateds)
+            active = np.ones(spec.worker_size, dtype=bool) if prev_done is None else ~prev_done
+            scores[active] += rewards[active]
+            eplens[active] += 1
+            step_original = infos.get("original_reward")
+            if step_original is not None:
+                have_original = True
+                originals[active] += np.asarray(step_original)[active]
+
             store_mask = None if prev_done is None or not prev_done.any() else ~prev_done
             spec.replay_buffer.add(
                 [obs],
@@ -183,7 +222,20 @@ class RolloutEngine:
                 truncateds,
                 store_mask=store_mask,
             )
-            prev_done = np.logical_or(terminateds, truncateds)
+
+            for idx in np.where(done & active)[0]:
+                spec.record_rollout_episode(
+                    steps,
+                    episode_reward=float(scores[idx]),
+                    episode_length=int(eplens[idx]),
+                    timeout=float(truncateds[idx]),
+                    original_reward=float(originals[idx]) if have_original else None,
+                )
+                scores[idx] = 0.0
+                eplens[idx] = 0
+                originals[idx] = 0.0
+
+            prev_done = done
 
             if steps % spec.eval_freq == 0:
                 eval_result = spec.evaluate(steps)
@@ -201,6 +253,8 @@ class RolloutEngine:
 
         score = 0.0
         eplen = 0
+        original = 0.0
+        have_original = False
 
         for steps in pbar:
             eplen += 1
@@ -209,6 +263,10 @@ class RolloutEngine:
             next_obs = [np.expand_dims(next_obs, axis=0)]
             spec.replay_buffer.add(obs, sel.store_action, reward, next_obs, terminated, truncated)
             score += float(reward)
+            step_original = info.get("original_reward")
+            if step_original is not None:
+                have_original = True
+                original += float(step_original)
             obs = next_obs
 
             if terminated or truncated:
@@ -219,10 +277,19 @@ class RolloutEngine:
                         eplen,
                         train_and_reset_callback=spec.checkpoint_pulse,
                     )
+                    spec.record_rollout_episode(
+                        steps,
+                        episode_reward=score,
+                        episode_length=eplen,
+                        timeout=float(truncated),
+                        original_reward=original if have_original else None,
+                    )
                 else:
                     ckpt_success = True
                 score = 0.0
                 eplen = 0
+                original = 0.0
+                have_original = False
 
                 if not ckpt_success and spec.has_true_reset():
                     obs, info = spec.env.true_reset()
@@ -246,6 +313,8 @@ class RolloutEngine:
 
         scores = np.zeros([spec.worker_size], dtype=np.float64)
         eplens = np.zeros([spec.worker_size], dtype=np.int32)
+        originals = np.zeros([spec.worker_size], dtype=np.float64)
+        have_original = False
         # Workers that ended an episode last step emit an autoreset dummy step
         # (action ignored, reward 0, fresh obs); exclude it from returns,
         # episode lengths, and the replay buffer.
@@ -262,6 +331,10 @@ class RolloutEngine:
             active = np.ones(spec.worker_size, dtype=bool) if prev_done is None else ~prev_done
             scores[active] += rewards[active]
             eplens[active] += 1
+            step_original = infos.get("original_reward")
+            if step_original is not None:
+                have_original = True
+                originals[active] += np.asarray(step_original)[active]
 
             store_mask = None if prev_done is None or not prev_done.any() else ~prev_done
             spec.replay_buffer.add(
@@ -286,8 +359,17 @@ class RolloutEngine:
                         spec.checkpoint_pulse,
                     )
                     ckpt_results.append((idx, ckpt_success))
+                    if active[idx]:
+                        spec.record_rollout_episode(
+                            steps,
+                            episode_reward=float(scores[idx]),
+                            episode_length=int(eplens[idx]),
+                            timeout=float(truncateds[idx]),
+                            original_reward=float(originals[idx]) if have_original else None,
+                        )
                     scores[idx] = 0.0
                     eplens[idx] = 0
+                    originals[idx] = 0.0
 
                 if spec.has_true_reset() and any(not success for _, success in ckpt_results):
                     spec.env.true_reset()
