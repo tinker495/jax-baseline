@@ -87,7 +87,7 @@ class APE_X_QRDQN(Ape_X_Family):
                 )  # batch x support
                 target = rewards + gamma * (1.0 - terminateds) * next_vals
                 loss = QuantileHuberLosses(
-                    q_values, jnp.expand_dims(target, axis=2), quantile, delta
+                    jnp.expand_dims(target, axis=2), q_values, quantile, delta
                 )
                 return jnp.squeeze(loss)
 
@@ -209,7 +209,7 @@ class APE_X_QRDQN(Ape_X_Family):
             self.get_q(params, obses, key), actions, axis=1
         )  # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets, axis=2)  # batch x support x 1
-        loss = QuantileHuberLosses(theta_loss_tile, logit_valid_tile, self.quantile, self.delta)
+        loss = QuantileHuberLosses(logit_valid_tile, theta_loss_tile, self.quantile, self.delta)
         return (
             jnp.mean(loss * weights),
             loss,

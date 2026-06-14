@@ -63,7 +63,7 @@ class Buffer(object):
         terminated = self.buffer["terminated"][traj_idxs, 0]
         filled = np.equal(self.buffer["ep_idx"][idxs], self.buffer["ep_idx"][traj_idxs])[..., 0]
         filled = np.logical_and(filled, np.logical_not(terminated))
-        return obs, data, terminated, filled, idxs
+        return obs, data, terminated, filled
 
     @property
     def roll_idx_m1(self):
@@ -199,7 +199,7 @@ class TransitionReplayBuffer(object):
         if stored_size == 0:
             raise ValueError("Cannot sample from empty buffer")
         idxs = np.random.randint(0, stored_size, size=batch_size)
-        obs, data, terminated, filled, _ = self.buffer.sample(idxs, traj_len=self.prediction_depth)
+        obs, data, terminated, filled = self.buffer.sample(idxs, traj_len=self.prediction_depth)
         return {"obses": obs, **data, "terminateds": terminated, "filled": filled}
 
 
@@ -245,7 +245,7 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
             idxs[i] = idx
             priorities[i] = p
             buffer_idxs[i] = buffer_idx
-        obs, data, terminated, filled, _ = self.buffer.sample(
+        obs, data, terminated, filled = self.buffer.sample(
             buffer_idxs, traj_len=self.prediction_depth
         )
         weight = np.power(self.tree.n_entries * priorities / self.tree.total(), -beta)

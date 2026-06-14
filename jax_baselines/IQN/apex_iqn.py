@@ -80,7 +80,7 @@ class APE_X_IQN(Ape_X_Family):
                     jnp.take_along_axis(next_q, next_actions, axis=1)
                 )  # batch x support
                 target = rewards + gamma * (1.0 - terminateds) * next_vals
-                loss = QuantileHuberLosses(q_values, jnp.expand_dims(target, axis=2), tau, delta)
+                loss = QuantileHuberLosses(jnp.expand_dims(target, axis=2), q_values, tau, delta)
                 return jnp.squeeze(loss)
 
             def actor(model, preproc, params, obses, key):

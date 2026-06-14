@@ -17,8 +17,6 @@ class DQN(Q_Network_Family):
         self.name = "DQN"
         super().__init__(env_builder, model_builder_maker, **kwargs)
 
-        # Base class already handled conditional setup via self._init_setup_model
-
     def setup_model(self):
         model_builder = self.model_builder_maker(
             self.observation_space,

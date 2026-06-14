@@ -7,9 +7,8 @@ import optax
 PyTree = Any
 
 
-def random_split_like_tree(rng_key: jax.random.PRNGKey, target: PyTree = None, treedef=None):
-    if treedef is None:
-        treedef = jax.tree.structure(target)
+def random_split_like_tree(rng_key: jax.random.PRNGKey, target: PyTree):
+    treedef = jax.tree.structure(target)
     keys = jax.random.split(rng_key, treedef.num_leaves)
     return jax.tree.unflatten(treedef, keys)
 

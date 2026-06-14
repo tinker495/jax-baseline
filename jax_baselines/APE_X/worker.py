@@ -172,7 +172,7 @@ class Ape_X_Worker(object):
                     global_buffer.add(**transition, priorities=abs_td_error)
         finally:
             if stop.is_set():
-                print("worker stoped")
+                print("worker stopped")
             else:
                 stop.set()
         return None

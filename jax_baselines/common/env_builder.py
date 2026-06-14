@@ -135,7 +135,6 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
 
         self.env_id = env_id
         self.worker_num = worker_num
-        self.render = render
 
         # Convert env_id to EnvPool format
         envpool_env_id = _get_envpool_env_id(env_id)
@@ -168,7 +167,6 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
             )
 
         self.env = envpool.make(envpool_env_id, **env_kwargs)
-        self._envpool_env_id = envpool_env_id
 
         # Determine environment type for compatibility
         env_type = "atari_env" if self._is_atari else "envpool"

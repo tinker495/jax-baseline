@@ -152,7 +152,7 @@ class Ape_X_Worker(object):
             )
         finally:
             if stop.is_set():
-                print("worker stoped")
+                print("worker stopped")
             else:
                 stop.set()
         return None

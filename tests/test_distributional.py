@@ -18,6 +18,7 @@ from jax_baselines.common.distributional import (
     categorical_projection,
     distributional_td_target,
 )
+from jax_baselines.common.losses import QuantileHuberLosses
 from jax_baselines.common.policy_math import q_log_pi
 
 jax.config.update("jax_enable_x64", False)
@@ -437,3 +438,51 @@ def test_gamma_array_per_sample_hlgauss():
     target_q = nv * np.asarray(gammas) + np.asarray(reward)
     expected = np.asarray(hl.to_probs(jnp.asarray(target_q)))
     np.testing.assert_allclose(np.asarray(out), expected, atol=1e-5)
+
+
+# ---------------------------------------------------------------------------
+# QuantileHuberLosses argument-order convention: (target, pred)
+#
+# QuantileHuberLosses is ASYMMETRIC: error = target_tile - q_tile and
+# weight = |quantile - (error < 0)|, so swapping the first two args inverts the
+# per-quantile gradient weighting. The codebase canon is (target, pred) — see
+# qrdqn.py, iqn.py, apex_iqn.py `_loss`, tqc.py, fqf.py. This locks that order
+# so a future swap (pred, target) is detected.
+# ---------------------------------------------------------------------------
+def test_quantile_huber_loss_arg_order_convention():
+    delta = 1.0
+    quantile = jnp.asarray([0.125, 0.375, 0.625, 0.875]).reshape(1, 1, 4)
+
+    # (a) ASYMMETRY: target != pred -> (target, pred) != (pred, target).
+    # docstring shapes: target_tile (B, num_tau_prime, 1), q_tile (B, 1, num_tau).
+    target_a = jnp.asarray([2.0, -1.0, 0.5, 3.0]).reshape(1, 4, 1)
+    pred_a = jnp.asarray([0.0, 1.0, -2.0, 0.5]).reshape(1, 1, 4)
+    loss_canonical = QuantileHuberLosses(target_a, pred_a, quantile, delta)
+    # swap operands; reshape so each lands in the slot the docstring expects.
+    loss_swapped = QuantileHuberLosses(
+        pred_a.reshape(1, 4, 1), target_a.reshape(1, 1, 4), quantile, delta
+    )
+    assert not np.allclose(
+        np.asarray(loss_canonical), np.asarray(loss_swapped)
+    ), "QuantileHuberLosses is asymmetric in (target, pred); swapping must change the loss"
+
+    # (b) SEMANTICS: target > pred across all quantiles -> error > 0 -> error_neg = 0
+    # -> weight = |quantile - 0| = quantile. So d(loss)/d(pred) scales with quantile:
+    # high quantiles are weighted more strongly than low ones.
+    target = jnp.asarray([3.0, 3.5, 4.0, 4.5]).reshape(1, 4, 1)
+    pred = jnp.asarray([0.0, 0.5, 1.0, 1.5]).reshape(1, 1, 4)
+
+    def loss_of_pred(p):
+        return jnp.sum(QuantileHuberLosses(target, p, quantile, delta))
+
+    grad = np.asarray(jax.grad(loss_of_pred)(pred)).reshape(-1)
+    # all errors land in the huber linear region (|error| > delta), so the only
+    # per-atom modulation is the quantile weight; gradient sign is negative
+    # because error = target - pred decreases as pred grows.
+    assert np.all(grad < 0.0), "raising pred toward a larger target must lower the loss"
+    abs_grad = np.abs(grad)
+    assert np.all(
+        np.diff(abs_grad) > 0.0
+    ), "canonical (target, pred) loss must weight high quantiles more than low ones"
+    # not a tautology: the magnitudes equal the quantiles themselves here.
+    np.testing.assert_allclose(abs_grad, np.asarray(quantile).reshape(-1), atol=1e-6)

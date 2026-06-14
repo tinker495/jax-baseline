@@ -3,18 +3,18 @@ import jax.numpy as jnp
 import optax
 
 from jax_baselines.common.jax_utils import convert_jax
-from jax_baselines.common.returns import get_vtrace
 from jax_baselines.IMPALA.base_class import IMPALA_Family
 
 
 class IMPALA_SPO(IMPALA_Family):
     def __init__(self, workers, model_builder_maker, ppo_eps=0.2, epoch_num=3, **kwargs):
-        super().__init__(workers, model_builder_maker, **kwargs)
 
         self.name = "IMPALA_SPO"
         self.minibatch_size = 256
         self.epoch_num = epoch_num
         self.ppo_eps = ppo_eps
+
+        super().__init__(workers, model_builder_maker, **kwargs)
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
@@ -104,20 +104,9 @@ class IMPALA_SPO(IMPALA_Family):
             actions,
             key,
         )
-        rho_raw = jnp.exp(pi_prob - mu_log_prob)
-        rho = jnp.minimum(rho_raw, self.rho_max)
-        c_t = self.lamda * jnp.minimum(rho, self.cut_max)
-        vs = jax.vmap(get_vtrace, in_axes=(0, 0, 0, 0, 0, 0, 0, None))(
-            rewards, rho, c_t, terminateds, truncateds, value, next_value, self.gamma
+        vs, rho, adv = self._compute_vtrace(
+            pi_prob, mu_log_prob, rewards, terminateds, truncateds, value, next_value
         )
-        vs_t_plus_1 = jax.vmap(
-            lambda v, nv, t: jnp.where(
-                t == 1, nv, jnp.concatenate([v[1:], jnp.expand_dims(nv[-1], axis=-1)])
-            ),
-            in_axes=(0, 0, 0),
-        )(vs, next_value, truncateds)
-        adv = rewards + self.gamma * (1.0 - terminateds) * vs_t_plus_1 - value
-        adv = rho * adv
         obses = [jnp.vstack(o) for o in obses]
         actions = jnp.vstack(actions)
         vs = jnp.vstack(vs)

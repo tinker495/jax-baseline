@@ -12,6 +12,7 @@ from jax_baselines.APE_X.common_servers import Logger_server, Param_server
 from jax_baselines.common.env_info import get_remote_env_info
 from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.optimizer import select_optimizer
+from jax_baselines.common.returns import get_vtrace
 from jax_baselines.common.seeding import key_gen, set_global_seeds
 from jax_baselines.common.serialization import restore, save
 from jax_baselines.IMPALA.cpprb_buffers import ImpalaBuffer
@@ -130,6 +131,27 @@ class IMPALA_Family(object):
                 + jnp.sum(log_std, axis=-1, keepdims=True)
                 + 0.5 * jnp.log(2 * jnp.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
             )
+
+    def _compute_vtrace(
+        self, pi_prob, mu_log_prob, rewards, terminateds, truncateds, value, next_value
+    ):
+        """V-trace targets and clipped-IS advantages shared by every IMPALA
+        variant (A2C/PPO/TPPO/SPO). Inputs are per-worker stacked sequences."""
+        rho_raw = jnp.exp(pi_prob - mu_log_prob)
+        rho = jnp.minimum(rho_raw, self.rho_max)
+        c_t = self.lamda * jnp.minimum(rho, self.cut_max)
+        vs = jax.vmap(get_vtrace, in_axes=(0, 0, 0, 0, 0, 0, 0, None))(
+            rewards, rho, c_t, terminateds, truncateds, value, next_value, self.gamma
+        )
+        vs_t_plus_1 = jax.vmap(
+            lambda v, nv, t: jnp.where(
+                t == 1, nv, jnp.concatenate([v[1:], jnp.expand_dims(nv[-1], axis=-1)])
+            ),
+            in_axes=(0, 0, 0),
+        )(vs, next_value, truncateds)
+        adv = rewards + self.gamma * (1.0 - terminateds) * vs_t_plus_1 - value
+        adv = rho * adv
+        return vs, rho, adv
 
     def get_memory_setup(self):
         self.buffer = ImpalaBuffer(
