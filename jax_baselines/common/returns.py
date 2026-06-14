@@ -5,7 +5,11 @@ import jax.numpy as jnp
 def discount_with_terminated(rewards, terminateds, truncateds, next_values, gamma):
     def f(ret, info):
         reward, term, trunc, nextval = info
-        ret = reward + gamma * (ret * (1.0 - trunc) + nextval * (1.0 - term) * trunc)
+        # done marks the episode boundary (terminated OR truncated); the return
+        # accumulation resets there. At a boundary the value is bootstrapped from
+        # nextval only on truncation (term == 0), never on a true terminal.
+        done = term + trunc - term * trunc
+        ret = reward + gamma * (ret * (1.0 - done) + nextval * (1.0 - term) * done)
         return ret, ret
 
     truncateds = truncateds.at[-1].set(jnp.ones((1,), dtype=jnp.float32))

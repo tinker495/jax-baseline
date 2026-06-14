@@ -238,6 +238,12 @@ class Actor_Critic_Policy_Gradient_Family(object):
     def learn_VectorizedEnv(self, ctx):
         self.lossque = deque(maxlen=10)
         eval_result = None
+        # Workers that ended an episode last step emit an autoreset dummy step
+        # (action ignored, reward 0, fresh obs). On-policy rollouts have a fixed
+        # per-worker length, so the dummy can't be dropped; instead flag it
+        # terminal so it contributes a zero-value target and never bridges the
+        # two episodes in the return. prev_done chains off the *real* env dones.
+        prev_done = None
 
         for steps in ctx.pbar:
             obs = self.env.current_obs()
@@ -252,7 +258,15 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 infos,
             ) = self.env.get_result()
 
+            real_done = np.logical_or(terminateds, truncateds)
+            if prev_done is not None and prev_done.any():
+                # Flag the dummy step terminal AND zero its reward so it is fully
+                # inert (zero-value target, no episode bridge), independent of
+                # whatever the env reports on the discarded autoreset step.
+                terminateds = np.where(prev_done, True, terminateds)
+                rewards = np.where(prev_done, np.float32(0.0), rewards)
             self.buffer.add([obs], actions, rewards, [next_obses], terminateds, truncateds)
+            prev_done = real_done
 
             if (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0:
                 loss = self.train_step(steps)
