@@ -312,5 +312,6 @@ class HL_GAUSS_BBF(BBF):
         log_interval=1000,
         experiment_name="HL_GAUSS_BBF",
         run_name="HL_GAUSS_BBF",
+        eval_num=100,
     ):
-        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name)
+        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name, eval_num)

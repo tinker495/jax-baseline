@@ -66,7 +66,11 @@ def run_family(runner: FamilyRunner, argv=None):
     agent = spec.resolve_cls(args)(
         env_builder, maker, policy_kwargs=policy_kwargs, **spec.build(args)
     )
-    agent.learn(int(args.steps), experiment_name=args.experiment_name)
+    agent.learn(
+        int(args.steps),
+        experiment_name=args.experiment_name,
+        eval_num=args.eval_num,
+    )
     agent.test()
     return agent
 

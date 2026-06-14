@@ -152,6 +152,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         log_interval=1000,
         experiment_name="A2C",
         run_name="A2C",
+        eval_num=100,
     ):
         return super().learn(
             total_timesteps,
@@ -159,4 +160,5 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             log_interval,
             experiment_name,
             run_name,
+            eval_num,
         )

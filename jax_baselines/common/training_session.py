@@ -40,6 +40,19 @@ class RunContext:
     log_interval: int
 
 
+def eval_freq_from_count(eval_num, total_timesteps, worker_size):
+    """Convert a target number of evaluations over the whole run into an eval
+    cadence in env steps, snapped to a ``worker_size`` multiple so the
+    vectorized step counter lands on it and floored at ``worker_size``.
+
+    The default of 100 evals reproduces the historical ``total_timesteps // 100``
+    cadence.
+    """
+    eval_num = max(1, int(eval_num))
+    step = total_timesteps // eval_num
+    return max(worker_size, (step // worker_size) * worker_size)
+
+
 class TrainingSession:
     """Owns the ``learn()`` lifecycle shared across the training families."""
 
@@ -51,12 +64,13 @@ class TrainingSession:
         log_interval,
         experiment_name,
         run_name,
+        eval_num=100,
         logger_factory=TensorboardLogger,
     ):
         run_name = agent.run_name_update(run_name)
         agent.log_interval = log_interval
         agent.prepare_run(total_timesteps)
-        eval_freq = ((total_timesteps // 100) // agent.worker_size) * agent.worker_size
+        eval_freq = eval_freq_from_count(eval_num, total_timesteps, agent.worker_size)
         pbar = trange(0, total_timesteps, agent.worker_size, miniters=log_interval)
         logger = logger_factory(run_name, experiment_name, agent.log_dir, agent)
         # ``test()`` is a separate entry point that re-enters the run's logger, so the

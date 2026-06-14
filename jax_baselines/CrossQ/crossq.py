@@ -286,6 +286,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         log_interval=1000,
         experiment_name="CrossQ",
         run_name="CrossQ",
+        eval_num=100,
     ):
         super().learn(
             total_timesteps,
@@ -293,4 +294,5 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             log_interval,
             experiment_name,
             run_name,
+            eval_num,
         )

@@ -43,6 +43,12 @@ def add_args(parser):
     simba_group.add_argument("--simba", action="store_true")
     simba_group.add_argument("--simbav2", action="store_true")
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
+    parser.add_argument(
+        "--eval_num",
+        type=int,
+        default=100,
+        help="number of evaluations over the whole training run (default 100)",
+    )
     parser.add_argument("--logdir", type=str, default=default_logdir("dpg"), help="log file dir")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     parser.add_argument("--n_support", type=int, default=25, help="n_support for QRDQN,IQN,FQF")

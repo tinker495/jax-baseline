@@ -291,5 +291,6 @@ class BBF(SPR):
         log_interval=1000,
         experiment_name="BBF",
         run_name="BBF",
+        eval_num=100,
     ):
-        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name)
+        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name, eval_num)

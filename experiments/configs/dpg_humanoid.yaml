@@ -4,6 +4,8 @@ runtime:
   device: 0
   xvfb: true
 base:
+  # 20 evaluations over the whole run (was hardcoded ~100)
+  eval_num: 20
   experiment_name: DPG_Humanoid
   env: Humanoid-v5
   learning_rate: 0.0003

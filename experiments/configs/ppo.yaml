@@ -3,6 +3,8 @@ family: pg
 runtime:
   device: 0
 base:
+  # 20 evaluations over the whole run (was hardcoded ~100)
+  eval_num: 20
   env: BreakoutNoFrameskip-v4
   learning_rate: 0.00003
   steps: 2e6

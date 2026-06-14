@@ -341,6 +341,7 @@ class FQF(Q_Network_Family):
         log_interval=1000,
         experiment_name="FQF",
         run_name="FQF",
+        eval_num=100,
     ):
         run_name = run_name + "({:d})".format(self.n_support)
-        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name)
+        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name, eval_num)

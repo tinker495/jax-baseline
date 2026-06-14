@@ -287,9 +287,10 @@ class Q_Network_Family(object):
         log_interval=1000,
         experiment_name="Q_network",
         run_name="Q_network",
+        eval_num=100,
     ):
         return TrainingSession().run(
-            self, total_timesteps, callback, log_interval, experiment_name, run_name
+            self, total_timesteps, callback, log_interval, experiment_name, run_name, eval_num
         )
 
     def prepare_run(self, total_timesteps):

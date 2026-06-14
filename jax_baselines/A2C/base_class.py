@@ -202,9 +202,10 @@ class Actor_Critic_Policy_Gradient_Family(object):
         log_interval=1000,
         experiment_name="A2C",
         run_name="A2C",
+        eval_num=100,
     ):
         return TrainingSession().run(
-            self, total_timesteps, callback, log_interval, experiment_name, run_name
+            self, total_timesteps, callback, log_interval, experiment_name, run_name, eval_num
         )
 
     def learn_SingleEnv(self, ctx):

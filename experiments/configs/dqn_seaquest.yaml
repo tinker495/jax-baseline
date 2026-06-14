@@ -3,6 +3,8 @@ family: qnet
 runtime:
   device: 0
 base:
+  # 20 evaluations over the whole run (was hardcoded ~100)
+  eval_num: 20
   experiment_name: DQN_Seaquest
   env: SeaquestNoFrameskip-v4
   learning_rate: 0.0001

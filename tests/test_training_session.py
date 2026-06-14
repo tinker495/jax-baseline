@@ -69,7 +69,7 @@ class FakeSessionAgent:
         self.rec.append(("save_params", path))
 
 
-def _run(agent, total_timesteps=10000, log_interval=1000):
+def _run(agent, total_timesteps=10000, log_interval=1000, eval_num=100):
     return TrainingSession().run(
         agent,
         total_timesteps,
@@ -77,6 +77,7 @@ def _run(agent, total_timesteps=10000, log_interval=1000):
         log_interval=log_interval,
         experiment_name="exp",
         run_name="run",
+        eval_num=eval_num,
         logger_factory=FakeLogger,
     )
 
@@ -103,8 +104,28 @@ def test_eval_freq_aligned_to_worker_size():
 
     _run(agent, total_timesteps=10000)
 
-    # ((10000 // 100) // 8) * 8 == 96
+    # default eval_num=100: ((10000 // 100) // 8) * 8 == 96
     assert agent.seen_eval_freq == 96
+
+
+def test_eval_num_controls_eval_freq():
+    rec = []
+    agent = FakeSessionAgent(rec, worker_size=8)
+
+    _run(agent, total_timesteps=10000, eval_num=20)
+
+    # 20 evals over the run: (10000 // 20) aligned down to worker_size 8 == 496
+    assert agent.seen_eval_freq == 496
+
+
+def test_eval_num_floored_at_one_eval():
+    rec = []
+    agent = FakeSessionAgent(rec, worker_size=8)
+
+    # eval_num=0 must not divide-by-zero; floored to a single eval over the run.
+    _run(agent, total_timesteps=10000, eval_num=0)
+
+    assert agent.seen_eval_freq == 10000
 
 
 def test_save_params_called_once_with_logger_path():
@@ -130,13 +151,23 @@ def test_run_executes_without_env_buffer_or_model():
 
 
 class FakeOnPolicySession(TrainingSession):
-    def run(self, agent, total_timesteps, callback, log_interval, experiment_name, run_name):
+    def run(
+        self,
+        agent,
+        total_timesteps,
+        callback,
+        log_interval,
+        experiment_name,
+        run_name,
+        eval_num=100,
+    ):
         agent.session_args = (
             total_timesteps,
             callback,
             log_interval,
             experiment_name,
             run_name,
+            eval_num,
         )
         return "session-result"
 
@@ -174,7 +205,7 @@ def test_on_policy_learn_delegates_to_training_session(monkeypatch):
     )
 
     assert result == "session-result"
-    assert agent.session_args == (1234, callback, 7, "exp", "run")
+    assert agent.session_args == (1234, callback, 7, "exp", "run", 100)
 
 
 def test_on_policy_session_contract_hooks_are_minimal():

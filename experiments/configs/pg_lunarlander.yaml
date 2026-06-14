@@ -5,6 +5,8 @@ family: pg
 runtime:
   device: 0
 base:
+  # 20 evaluations over the whole run (was hardcoded ~100)
+  eval_num: 20
   experiment_name: PG_LunarLander
   env: LunarLander-v3
   worker: 32

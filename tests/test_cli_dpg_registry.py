@@ -201,8 +201,8 @@ def test_run_family_wires_agent_without_env_or_model(monkeypatch):
         def __init__(self, env_builder, maker, **kwargs):
             captured.update(env=env_builder, maker=maker, kwargs=kwargs)
 
-        def learn(self, steps, experiment_name=None):
-            captured.update(steps=steps, exp=experiment_name)
+        def learn(self, steps, experiment_name=None, eval_num=100):
+            captured.update(steps=steps, exp=experiment_name, eval_num=eval_num)
 
         def test(self):
             captured["tested"] = True
@@ -218,6 +218,7 @@ def test_run_family_wires_agent_without_env_or_model(monkeypatch):
     run_mod.run_family(fake_runner, ["--algo", "DDPG", "--steps", "7"])
 
     assert captured["steps"] == 7
+    assert captured["eval_num"] == 100
     assert captured["maker"] == "MAKER"
     assert captured["env"] == "ENVB"
     assert captured["kwargs"]["policy_kwargs"] == {"pk": 1}

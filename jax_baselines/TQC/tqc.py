@@ -298,6 +298,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         log_interval=1000,
         experiment_name="TQC",
         run_name="TQC",
+        eval_num=100,
     ):
         run_name = run_name + "({:d})".format(self.n_support)
         if self.mixture_type == "truncated":
@@ -310,4 +311,5 @@ class TQC(Deteministic_Policy_Gradient_Family):
             log_interval,
             experiment_name,
             run_name,
+            eval_num,
         )

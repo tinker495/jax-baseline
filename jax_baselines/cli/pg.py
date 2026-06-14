@@ -28,6 +28,12 @@ def add_args(parser):
     parser.add_argument("--batch", type=int, default=32, help="batch size")
     parser.add_argument("--mini_batch", type=int, default=32, help="batch size")
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
+    parser.add_argument(
+        "--eval_num",
+        type=int,
+        default=100,
+        help="number of evaluations over the whole training run (default 100)",
+    )
     parser.add_argument("--logdir", type=str, default=default_logdir("pg"), help="log file dir")
     parser.add_argument("--seed", type=int, default=0, help="random seed")
     parser.add_argument("--node", type=int, default=256, help="network node number")

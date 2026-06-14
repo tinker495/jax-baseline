@@ -245,6 +245,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         log_interval=1000,
         experiment_name="DDPG",
         run_name="DDPG",
+        eval_num=100,
     ):
         self.exploration = LinearSchedule(
             schedule_timesteps=int(self.exploration_fraction * total_timesteps),
@@ -258,4 +259,5 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             log_interval,
             experiment_name,
             run_name,
+            eval_num,
         )

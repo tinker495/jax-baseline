@@ -284,6 +284,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         log_interval=1000,
         experiment_name="TD3",
         run_name="TD3",
+        eval_num=100,
     ):
         super().learn(
             total_timesteps,
@@ -291,4 +292,5 @@ class TD3(Deteministic_Policy_Gradient_Family):
             log_interval,
             experiment_name,
             run_name,
+            eval_num,
         )

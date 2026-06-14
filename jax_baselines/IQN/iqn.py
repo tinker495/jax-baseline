@@ -224,10 +224,11 @@ class IQN(Q_Network_Family):
         log_interval=1000,
         experiment_name="IQN",
         run_name="IQN",
+        eval_num=100,
     ):
         run_name = run_name + (
             "({:d})_CVaR({:.2f})".format(self.n_support, self.CVaR)
             if self.risk_avoid
             else "({:d})".format(self.n_support)
         )
-        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name)
+        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name, eval_num)

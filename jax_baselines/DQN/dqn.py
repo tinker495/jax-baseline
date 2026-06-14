@@ -160,5 +160,6 @@ class DQN(Q_Network_Family):
         log_interval=1000,
         experiment_name="DQN",
         run_name="DQN",
+        eval_num=100,
     ):
-        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name)
+        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name, eval_num)

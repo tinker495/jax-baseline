@@ -289,6 +289,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         log_interval=1000,
         experiment_name="TPPO",
         run_name="TPPO",
+        eval_num=100,
     ):
         return super().learn(
             total_timesteps,
@@ -296,4 +297,5 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             log_interval,
             experiment_name,
             run_name,
+            eval_num,
         )
