@@ -22,6 +22,7 @@ def add_args(parser):
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--worker", type=int, default=1, help="gym_worker_size")
     parser.add_argument("--algo", type=str, default="A2C", help="algo ID")
+    parser.add_argument("--learning_rate", type=float, default=3e-4, help="learning rate")
     parser.add_argument("--gamma", type=float, default=0.995, help="gamma")
     parser.add_argument("--lamda", type=float, default=0.95, help="gae lamda")
     parser.add_argument("--batch", type=int, default=32, help="batch size")
@@ -59,6 +60,7 @@ def _common(a):
     return {
         "num_workers": a.worker,
         "gamma": a.gamma,
+        "learning_rate": a.learning_rate,
         "batch_size": a.batch,
         "val_coef": a.val_coef,
         "ent_coef": a.ent_coef,
