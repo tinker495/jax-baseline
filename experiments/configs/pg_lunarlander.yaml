@@ -8,6 +8,8 @@ base:
   experiment_name: PG_LunarLander
   env: LunarLander-v3
   worker: 32
+  # Default backend is gymnasium; keep EnvPool for this sweep's throughput.
+  env_backend: envpool
   steps: 1e6
   batch: 128
   mini_batch: 256

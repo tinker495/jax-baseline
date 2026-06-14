@@ -1,3 +1,4 @@
+import warnings
 from abc import ABC, abstractmethod
 
 import gymnasium as gym
@@ -7,13 +8,22 @@ from gymnasium import spaces
 from jax_baselines.common.seeding import seed_env
 
 
-def get_env_builder(env_name, **kwargs):
+def get_env_builder(env_name, env_backend="gymnasium", **kwargs):
+    if env_backend not in ("gymnasium", "envpool"):
+        raise ValueError(f"env_backend must be 'gymnasium' or 'envpool', got {env_backend!r}")
+
     def env_builder(worker=1, render_mode=None, seed=None):
         if worker > 1:
-            if _is_envpool_supported(env_name):
+            # Vectorized backend is an explicit choice: gymnasium AsyncVectorEnv
+            # (default, portable) or EnvPool (faster, only for envs it ships).
+            if env_backend == "envpool":
+                if not _is_envpool_supported(env_name):
+                    raise ValueError(
+                        f"env_backend='envpool' requested but EnvPool has no spec for "
+                        f"{env_name!r}; use env_backend='gymnasium' or a supported env id."
+                    )
                 return EnvPoolVectorizedEnv(env_name, worker_num=worker, seed=seed)
-            else:
-                return GymVectorizedEnv(env_name, worker_num=worker, seed=seed)
+            return GymVectorizedEnv(env_name, worker_num=worker, seed=seed)
         else:
             from jax_baselines.common.atari_wrappers import (
                 get_env_type,
@@ -87,15 +97,24 @@ def _get_envpool_env_id(env_name: str) -> str:
 
 
 def _is_envpool_supported(env_name: str) -> bool:
-    """Check if the environment is supported by EnvPool."""
+    """Return True if EnvPool has a spec for ``env_name``.
+
+    A missing envpool install is surfaced (it silently disables the fast path);
+    an unknown env id is the expected "not supported" outcome and stays quiet.
+    """
     try:
         import envpool
-
-        envpool_env_id = _get_envpool_env_id(env_name)
-        # Try to get spec to check if supported
-        envpool.make_spec(envpool_env_id)
+    except ImportError:
+        warnings.warn(
+            "envpool is not installed; vectorized envs use the slower gymnasium "
+            "AsyncVectorEnv. Install envpool to enable the fast path.",
+            stacklevel=2,
+        )
+        return False
+    try:
+        envpool.make_spec(_get_envpool_env_id(env_name))
         return True
-    except Exception:
+    except (KeyError, ValueError):
         return False
 
 
@@ -184,7 +203,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
             spec = envpool.make_spec(env_id)
             # EnvPool Atari envs have specific attributes
             return hasattr(spec, "stack_num") or "Atari" in str(type(spec))
-        except Exception:
+        except (KeyError, ValueError):
             pass
 
         # Fallback: check common Atari game names

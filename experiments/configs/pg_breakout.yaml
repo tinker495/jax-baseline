@@ -8,6 +8,8 @@ base:
   experiment_name: PG_Breakout
   env: BreakoutNoFrameskip-v4
   worker: 32
+  # Default backend is gymnasium; keep EnvPool for this Atari sweep's throughput.
+  env_backend: envpool
   steps: 1e7
   batch: 256
   mini_batch: 256

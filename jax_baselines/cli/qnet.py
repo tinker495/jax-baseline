@@ -20,6 +20,13 @@ def add_args(parser):
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="CartPole-v1", help="environment")
+    parser.add_argument(
+        "--env_backend",
+        type=str,
+        default="gymnasium",
+        choices=["gymnasium", "envpool"],
+        help="vectorized-env backend when worker>1 (gymnasium default; envpool is faster)",
+    )
     parser.add_argument("--algo", type=str, default="DQN", help="algo ID")
     parser.add_argument("--gamma", type=float, default=0.99, help="gamma")
     parser.add_argument("--target_update", type=int, default=2000, help="target update intervals")
@@ -70,7 +77,10 @@ def add_args(parser):
 
 def build_env(args):
     env_builder, _ = get_env_builder(
-        args.env, timescale=args.time_scale, capture_frame_rate=args.capture_frame_rate
+        args.env,
+        env_backend=args.env_backend,
+        timescale=args.time_scale,
+        capture_frame_rate=args.capture_frame_rate,
     )
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n}
     return env_builder, policy_kwargs

@@ -7,6 +7,8 @@ base:
   learning_rate: 0.00003
   steps: 2e6
   worker: 32
+  # Default backend is gymnasium; keep EnvPool for this Atari sweep's throughput.
+  env_backend: envpool
   batch: 32
   mini_batch: 256
   gamma: 0.995
