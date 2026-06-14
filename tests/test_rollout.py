@@ -163,8 +163,11 @@ class FakeBuffer:
     def __init__(self, rec):
         self.rec = rec
 
-    def add(self, obs, act, rew, nxt, term, trunc):
-        self.rec.append(("buffer_add", rep(act), rep(rew), rep(term), rep(trunc)))
+    def add(self, obs, act, rew, nxt, term, trunc, store_mask=None):
+        event = ("buffer_add", rep(act), rep(rew), rep(term), rep(trunc))
+        if store_mask is not None:
+            event += (("store_mask", rep(store_mask)),)
+        self.rec.append(event)
 
 
 class FakeExploration:
@@ -243,6 +246,12 @@ SINGLE_SCRIPT = [
 
 
 def _vec_script(ws):
+    # Worker 0 terminates at step 1 (== learning_starts, so its score/eplen are
+    # NOT reset here -- the reset only fires for steps > learning_starts) and then
+    # truncates at step 3. The step-2 dummy autoreset is store_mask-excluded, so
+    # the step-3 checkpoint reports the merged count (score=3, eplen=3) rather than
+    # (4, 4). That cross-episode merge is a pre-existing warmup-boundary artifact,
+    # unrelated to store_mask.
     def row(term_idx=None, trunc_idx=None):
         terms = np.zeros(ws, dtype=bool)
         truncs = np.zeros(ws, dtype=bool)
@@ -378,6 +387,7 @@ GOLDEN = {
             ("arr", [1.0, 1.0]),
             ("arr", [False, False]),
             ("arr", [False, False]),
+            ("store_mask", ("arr", [False, True])),
         ),
         ("actions", [("arr", [4.0, 4.0])], 0.87),
         ("env_step", ("arr", [[7, 7]])),
@@ -399,6 +409,7 @@ GOLDEN = {
             ("arr", [1.0, 1.0]),
             ("arr", [False, False]),
             ("arr", [False, False]),
+            ("store_mask", ("arr", [False, True])),
         ),
         ("actions", [("arr", [6.0, 6.0])], 0.85),
         ("env_step", ("arr", [[7, 7]])),
@@ -465,6 +476,7 @@ GOLDEN = {
             ("arr", [1.0, 1.0]),
             ("arr", [False, False]),
             ("arr", [False, False]),
+            ("store_mask", ("arr", [False, True])),
         ),
         ("actions", [("arr", [4.0, 4.0])], 0.87),
         ("env_step", ("arr", [[7, 7]])),
@@ -475,8 +487,8 @@ GOLDEN = {
             ("arr", [False, False]),
             ("arr", [True, False]),
         ),
-        ("checkpoint_on_episode_end", 3, 4.0, 4),
-        ("ckpt_train_and_reset", 3, 4),
+        ("checkpoint_on_episode_end", 3, 3.0, 3),
+        ("ckpt_train_and_reset", 3, 3),
         ("true_reset",),
         ("eval", 3),
         ("actions", [("arr", [5.0, 5.0])], 0.86),
@@ -487,6 +499,7 @@ GOLDEN = {
             ("arr", [1.0, 1.0]),
             ("arr", [False, False]),
             ("arr", [False, False]),
+            ("store_mask", ("arr", [False, True])),
         ),
         ("actions", [("arr", [6.0, 6.0])], 0.85),
         ("env_step", ("arr", [[7, 7]])),
@@ -555,6 +568,7 @@ GOLDEN = {
             ("arr", [1.0, 1.0]),
             ("arr", [False, False]),
             ("arr", [False, False]),
+            ("store_mask", ("arr", [False, True])),
         ),
         ("actions", [("arr", [4.0, 4.0])], 3),
         ("env_step", ("arr", [[0.5, 0.5]])),
@@ -576,6 +590,7 @@ GOLDEN = {
             ("arr", [1.0, 1.0]),
             ("arr", [False, False]),
             ("arr", [False, False]),
+            ("store_mask", ("arr", [False, True])),
         ),
         ("actions", [("arr", [6.0, 6.0])], 5),
         ("env_step", ("arr", [[0.5, 0.5]])),
@@ -642,6 +657,7 @@ GOLDEN = {
             ("arr", [1.0, 1.0]),
             ("arr", [False, False]),
             ("arr", [False, False]),
+            ("store_mask", ("arr", [False, True])),
         ),
         ("actions", [("arr", [4.0, 4.0])], 3),
         ("env_step", ("arr", [[0.5, 0.5]])),
@@ -652,8 +668,8 @@ GOLDEN = {
             ("arr", [False, False]),
             ("arr", [True, False]),
         ),
-        ("checkpoint_on_episode_end", 3, 4.0, 4),
-        ("ckpt_train_and_reset", 3, 4),
+        ("checkpoint_on_episode_end", 3, 3.0, 3),
+        ("ckpt_train_and_reset", 3, 3),
         ("eval", 3),
         ("actions", [("arr", [5.0, 5.0])], 4),
         ("env_step", ("arr", [[0.5, 0.5]])),
@@ -663,6 +679,7 @@ GOLDEN = {
             ("arr", [1.0, 1.0]),
             ("arr", [False, False]),
             ("arr", [False, False]),
+            ("store_mask", ("arr", [False, True])),
         ),
         ("actions", [("arr", [6.0, 6.0])], 5),
         ("env_step", ("arr", [[0.5, 0.5]])),

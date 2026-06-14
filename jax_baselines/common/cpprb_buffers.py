@@ -170,13 +170,28 @@ class ReplayBuffer(object):
     def __len__(self) -> int:
         return self.buffer.get_stored_size()
 
-    def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False):
+    def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False, store_mask=None):
+        # store_mask drops vectorized workers whose previous step ended an
+        # episode: their current step is an autoreset dummy (action ignored,
+        # reward 0, fresh obs) that must not enter the buffer.
+        if store_mask is not None:
+            if not store_mask.any():
+                return
+            obs_t = [o[store_mask] for o in obs_t]
+            nxtobs_t = [no[store_mask] for no in nxtobs_t]
+            action = action[store_mask]
+            reward = reward[store_mask]
+            terminated = terminated[store_mask]
+            truncated = truncated[store_mask]
         obsdict = dict(zip(self.obsdict, obs_t))
         nextobsdict = dict(zip(self.nextobsdict, nxtobs_t))
         self.buffer.add(**obsdict, action=action, reward=reward, **nextobsdict, done=terminated)
         # next_of / stack_compress reconstruct observations from sequentially
         # stored rows, so the episode boundary must be marked or the terminal
-        # frame window would bleed into the next episode.
+        # frame window would bleed into the next episode. Compression assumes a
+        # single contiguous stream and is unsupported with worker > 1 (interleaved
+        # workers break stack_compress reconstruction regardless), so scalar flags
+        # are expected here; the batched-array case is intentionally not handled.
         if self._compress_active and (terminated or truncated):
             self.buffer.on_episode_end()
 
@@ -248,8 +263,13 @@ class NstepReplayBuffer(ReplayBuffer):
         if terminated or truncated:
             self.buffer.on_episode_end()
 
-    def multiworker_add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False):
+    def multiworker_add(
+        self, obs_t, action, reward, nxtobs_t, terminated, truncated=False, store_mask=None
+    ):
         for w in range(self.worker_size):
+            # Skip workers emitting an autoreset dummy step (terminated last step).
+            if store_mask is not None and not store_mask[w]:
+                continue
             obsdict = dict(zip(self.obsdict, [o[w] for o in obs_t]))
             nextobsdict = dict(zip(self.nextobsdict, [no[w] for no in nxtobs_t]))
             self.local_buffers[w].add(

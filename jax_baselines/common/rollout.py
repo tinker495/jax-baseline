@@ -156,6 +156,10 @@ class RolloutEngine:
         spec = self.spec
         lossque = self._begin()
         eval_result = None
+        # Workers that ended an episode last step emit an autoreset dummy step
+        # (action ignored, reward 0, fresh obs); ``store_mask`` keeps that bogus
+        # terminal->reset transition out of the replay buffer.
+        prev_done = None
 
         for steps in pbar:
             spec.refresh_exploration(steps)
@@ -169,9 +173,17 @@ class RolloutEngine:
                     lossque.append(loss)
 
             next_obses, rewards, terminateds, truncateds, infos = spec.env.get_result()
+            store_mask = None if prev_done is None or not prev_done.any() else ~prev_done
             spec.replay_buffer.add(
-                [obs], sel.store_action, rewards, [next_obses], terminateds, truncateds
+                [obs],
+                sel.store_action,
+                rewards,
+                [next_obses],
+                terminateds,
+                truncateds,
+                store_mask=store_mask,
             )
+            prev_done = np.logical_or(terminateds, truncateds)
 
             if steps % spec.eval_freq == 0:
                 eval_result = spec.evaluate(steps)
@@ -234,6 +246,10 @@ class RolloutEngine:
 
         scores = np.zeros([spec.worker_size], dtype=np.float64)
         eplens = np.zeros([spec.worker_size], dtype=np.int32)
+        # Workers that ended an episode last step emit an autoreset dummy step
+        # (action ignored, reward 0, fresh obs); exclude it from returns,
+        # episode lengths, and the replay buffer.
+        prev_done = None
 
         for steps in pbar:
             spec.refresh_exploration(steps)
@@ -242,15 +258,24 @@ class RolloutEngine:
             spec.env.step(sel.env_action)
 
             next_obses, rewards, terminateds, truncateds, infos = spec.env.get_result()
-            scores += rewards
-            eplens += 1
+            done = np.logical_or(terminateds, truncateds)
+            active = np.ones(spec.worker_size, dtype=bool) if prev_done is None else ~prev_done
+            scores[active] += rewards[active]
+            eplens[active] += 1
 
+            store_mask = None if prev_done is None or not prev_done.any() else ~prev_done
             spec.replay_buffer.add(
-                [obs], sel.store_action, rewards, [next_obses], terminateds, truncateds
+                [obs],
+                sel.store_action,
+                rewards,
+                [next_obses],
+                terminateds,
+                truncateds,
+                store_mask=store_mask,
             )
+            prev_done = done
 
             if steps > spec.learning_starts:
-                done = np.logical_or(terminateds, truncateds)
                 done_idx = np.where(done)[0]
                 ckpt_results = []
                 for idx in done_idx:
