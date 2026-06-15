@@ -1,5 +1,5 @@
-from jax_baselines.cli._common import default_logdir, set_default_xla_flags
-from jax_baselines.cli._run import (
+from experiments.cli._common import default_logdir, set_default_xla_flags
+from experiments.cli._run import (
     AlgoSpec,
     FamilyRunner,
     default_replay_factory,

@@ -18,7 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from jax_baselines.cli import pg
+from experiments.cli import pg
 from jax_baselines.common.returns import (
     ADVANTAGE_NORMALIZE_SCOPES,
     normalize_advantage,

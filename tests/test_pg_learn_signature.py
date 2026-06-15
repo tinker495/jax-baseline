@@ -2,7 +2,7 @@
 
 The synchronous PG family (A2C / PPO / TPPO / SPO) all forward to
 ``Actor_Critic_Policy_Gradient_Family.learn``, which expects ``experiment_name``
-before ``run_name``. The CLI (``jax_baselines/cli/pg.py``) calls
+before ``run_name``. The CLI (``experiments/cli/pg.py``) calls
 ``agent.learn(steps, experiment_name=...)`` by keyword, so every subclass must
 expose those two parameters in the same positional order as the base to avoid
 silent positional drift (Hyrum's-law breakage for positional callers).

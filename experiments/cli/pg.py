@@ -1,6 +1,6 @@
+from experiments.cli._common import default_logdir, set_default_xla_flags
+from experiments.cli._run import AlgoSpec, FamilyRunner, run_family
 from jax_baselines.A2C.a2c import A2C
-from jax_baselines.cli._common import default_logdir, set_default_xla_flags
-from jax_baselines.cli._run import AlgoSpec, FamilyRunner, run_family
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.PPO.ppo import PPO
 from jax_baselines.SPO.spo import SPO

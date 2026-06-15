@@ -1,10 +1,10 @@
-from jax_baselines.A2C.impala import IMPALA
-from jax_baselines.cli._common import default_logdir, set_default_xla_flags
-from jax_baselines.cli._run import (
+from experiments.cli._common import default_logdir, set_default_xla_flags
+from experiments.cli._run import (
     AlgoSpec,
     DistributedFamilyRunner,
     run_distributed_family,
 )
+from jax_baselines.A2C.impala import IMPALA
 from jax_baselines.IMPALA.worker import Impala_Worker
 from jax_baselines.PPO.impala_ppo import IMPALA_PPO
 from jax_baselines.SPO.impala_spo import IMPALA_SPO

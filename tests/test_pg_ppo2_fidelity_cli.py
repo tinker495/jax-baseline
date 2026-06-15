@@ -3,10 +3,10 @@ from argparse import ArgumentParser
 import pytest
 import yaml
 
+from experiments.cli import exp
+from experiments.cli.pg import PG_RUNNER
 from jax_baselines.A2C import base_class as ac_base
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
-from jax_baselines.cli import exp
-from jax_baselines.cli.pg import PG_RUNNER
 
 
 def _parse(argv):

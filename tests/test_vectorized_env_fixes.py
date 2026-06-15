@@ -28,7 +28,7 @@ from replay_memory.cpprb_buffers import NstepReplayBuffer, ReplayBuffer
 # --- Fix 1: CLI default env ids are gymnasium-canonical ------------------
 @pytest.mark.parametrize("mod_name", ["qnet", "dpg", "apex_qnet", "apex_dpg"])
 def test_cli_default_env_is_gym_registered(mod_name):
-    mod = importlib.import_module(f"jax_baselines.cli.{mod_name}")
+    mod = importlib.import_module(f"experiments.cli.{mod_name}")
     parser = argparse.ArgumentParser()
     mod.add_args(parser)
     default_env = parser.parse_known_args([])[0].env

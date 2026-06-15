@@ -1,4 +1,4 @@
-"""Tests for the CLI family runner registry (``jax_baselines/cli/_run.py``).
+"""Tests for the CLI family runner registry (``experiments/cli/_run.py``).
 
 Covers the local (env-based) families that ride ``run_family``: dpg, pg, qnet.
 Pinned behaviors:
@@ -35,15 +35,15 @@ LOCAL_FAMILIES = sorted(EXPECTED_ALGOS)
 
 def _runner(name: str):
     if name == "dpg":
-        from jax_baselines.cli.dpg import DPG_RUNNER
+        from experiments.cli.dpg import DPG_RUNNER
 
         return DPG_RUNNER
     if name == "pg":
-        from jax_baselines.cli.pg import PG_RUNNER
+        from experiments.cli.pg import PG_RUNNER
 
         return PG_RUNNER
     if name == "qnet":
-        from jax_baselines.cli.qnet import QNET_RUNNER
+        from experiments.cli.qnet import QNET_RUNNER
 
         return QNET_RUNNER
     raise AssertionError(name)
@@ -94,7 +94,7 @@ def test_build_kwargs_are_accepted(family: str):
 
 @pytest.mark.parametrize("family", LOCAL_FAMILIES)
 def test_resolver_resolves_flax_base(family: str):
-    from jax_baselines.cli._run import resolve_maker
+    from experiments.cli._run import resolve_maker
 
     runner = _runner(family)
     for algo, spec in runner.algos.items():
@@ -109,8 +109,8 @@ def test_resolver_resolves_flax_base(family: str):
 
 @pytest.mark.parametrize("flags", [["--simba"], ["--simbav2"]])
 def test_dpg_simba_variants_resolve(flags: list[str]):
-    from jax_baselines.cli._run import resolve_maker
-    from jax_baselines.cli.dpg import DPG_RUNNER
+    from experiments.cli._run import resolve_maker
+    from experiments.cli.dpg import DPG_RUNNER
 
     for algo, spec in DPG_RUNNER.algos.items():
         args = _parse(DPG_RUNNER, ["--algo", algo, "--model_lib", "flax", *flags])
@@ -118,8 +118,8 @@ def test_dpg_simba_variants_resolve(flags: list[str]):
 
 
 def test_dpg_crossq_haiku_is_unsupported_clean_error():
-    from jax_baselines.cli._run import resolve_maker
-    from jax_baselines.cli.dpg import DPG_RUNNER
+    from experiments.cli._run import resolve_maker
+    from experiments.cli.dpg import DPG_RUNNER
 
     args = _parse(DPG_RUNNER, ["--algo", "CrossQ", "--model_lib", "haiku"])
     with pytest.raises(SystemExit):
@@ -127,7 +127,7 @@ def test_dpg_crossq_haiku_is_unsupported_clean_error():
 
 
 def test_dpg_build_threads_renamed_args():
-    from jax_baselines.cli.dpg import DPG_RUNNER
+    from experiments.cli.dpg import DPG_RUNNER
 
     args = _parse(DPG_RUNNER, ["--algo", "TQC", "--mixture", "wang", "--batch", "64", "--per"])
     built = DPG_RUNNER.algos["TQC"].build(args)
@@ -142,7 +142,7 @@ def test_dpg_td7_build_omits_forced_internal_defaults():
     prioritized_replay=True and use_checkpointing=True (caller kwargs win), so
     its build() must NOT pass those keys, or the forced values get overridden.
     """
-    from jax_baselines.cli.dpg import DPG_RUNNER
+    from experiments.cli.dpg import DPG_RUNNER
 
     built = DPG_RUNNER.algos["TD7"].build(_parse(DPG_RUNNER, ["--algo", "TD7"]))
     for forced in (
@@ -168,7 +168,7 @@ def test_dpg_td7_build_omits_forced_internal_defaults():
     ],
 )
 def test_qnet_hl_gauss_selects_class(algo: str, base: str, hl: str):
-    from jax_baselines.cli.qnet import QNET_RUNNER
+    from experiments.cli.qnet import QNET_RUNNER
 
     spec = QNET_RUNNER.algos[algo]
     assert spec.resolve_cls(_parse(QNET_RUNNER, ["--algo", algo])).__name__ == base
@@ -176,8 +176,8 @@ def test_qnet_hl_gauss_selects_class(algo: str, base: str, hl: str):
 
 
 def test_qnet_bbf_haiku_is_unsupported_clean_error():
-    from jax_baselines.cli._run import resolve_maker
-    from jax_baselines.cli.qnet import QNET_RUNNER
+    from experiments.cli._run import resolve_maker
+    from experiments.cli.qnet import QNET_RUNNER
 
     args = _parse(QNET_RUNNER, ["--algo", "BBF", "--model_lib", "haiku"])
     with pytest.raises(SystemExit):
@@ -192,8 +192,8 @@ def test_qnet_bbf_haiku_is_unsupported_clean_error():
 def test_run_family_wires_agent_without_env_or_model(monkeypatch):
     from dataclasses import replace
 
-    import jax_baselines.cli._run as run_mod
-    from jax_baselines.cli.dpg import DPG_RUNNER
+    import experiments.cli._run as run_mod
+    from experiments.cli.dpg import DPG_RUNNER
 
     captured: dict = {}
 
@@ -239,15 +239,15 @@ DIST_FAMILIES = sorted(EXPECTED_DIST_ALGOS)
 
 def _dist_runner(name: str):
     if name == "impala":
-        from jax_baselines.cli.impala import IMPALA_RUNNER
+        from experiments.cli.impala import IMPALA_RUNNER
 
         return IMPALA_RUNNER
     if name == "apex_dpg":
-        from jax_baselines.cli.apex_dpg import APEX_DPG_RUNNER
+        from experiments.cli.apex_dpg import APEX_DPG_RUNNER
 
         return APEX_DPG_RUNNER
     if name == "apex_qnet":
-        from jax_baselines.cli.apex_qnet import APEX_QNET_RUNNER
+        from experiments.cli.apex_qnet import APEX_QNET_RUNNER
 
         return APEX_QNET_RUNNER
     raise AssertionError(name)
@@ -271,7 +271,7 @@ def test_dist_build_kwargs_are_accepted(family: str):
 
 @pytest.mark.parametrize("family", DIST_FAMILIES)
 def test_dist_resolver_resolves_flax_base(family: str):
-    from jax_baselines.cli._run import resolve_maker
+    from experiments.cli._run import resolve_maker
 
     runner = _dist_runner(family)
     for algo, spec in runner.algos.items():
@@ -283,8 +283,8 @@ def test_run_distributed_family_wires_agent(monkeypatch):
     import types
     from dataclasses import replace
 
-    import jax_baselines.cli._run as run_mod
-    from jax_baselines.cli.apex_dpg import APEX_DPG_RUNNER
+    import experiments.cli._run as run_mod
+    from experiments.cli.apex_dpg import APEX_DPG_RUNNER
 
     captured: dict = {}
 

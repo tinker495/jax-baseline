@@ -124,24 +124,6 @@ ALLOWED_IMPORTS = (
         "distributed-runtime wiring slice",
     ),
     AllowedImport(
-        "jax_baselines/cli/_run.py",
-        "argparse",
-        "NOT_YET_MOVED",
-        "CLI-to-experiments slice",
-    ),
-    AllowedImport(
-        "jax_baselines/cli/_run.py",
-        "ray",
-        "NOT_YET_MOVED",
-        "CLI/distributed-runtime slice",
-    ),
-    AllowedImport(
-        "jax_baselines/cli/exp.py",
-        "argparse",
-        "NOT_YET_MOVED",
-        "CLI-to-experiments slice",
-    ),
-    AllowedImport(
         "jax_baselines/common/atari_wrappers.py",
         "env_builder",
         "MIGRATION_SHIM",
@@ -311,7 +293,7 @@ def test_import_boundary_scanner_preserves_direct_top_level_token_semantics():
     source = """
 from jax_baselines.common.env_builder import get_env
 from jax_baselines.common.cpprb_buffers import ReplayBuffer
-from jax_baselines.cli import qnet
+from jax_baselines.common import env_info
 from env_builder.factory import make_env
 from replay_memory.buffers import ReplayBuffer as AdapterReplayBuffer
 """

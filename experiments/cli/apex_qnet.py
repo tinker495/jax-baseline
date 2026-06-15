@@ -1,13 +1,13 @@
-from jax_baselines.APE_X.worker import Ape_X_Worker
-from jax_baselines.C51.apex_c51 import APE_X_C51
-from jax_baselines.cli._common import default_logdir, set_default_xla_flags
-from jax_baselines.cli._run import (
+from experiments.cli._common import default_logdir, set_default_xla_flags
+from experiments.cli._run import (
     AlgoSpec,
     DistributedFamilyRunner,
     default_multi_replay_factory,
     default_worker_replay_factory,
     run_distributed_family,
 )
+from jax_baselines.APE_X.worker import Ape_X_Worker
+from jax_baselines.C51.apex_c51 import APE_X_C51
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.DQN.apex_dqn import APE_X_DQN
 from jax_baselines.IQN.apex_iqn import APE_X_IQN
