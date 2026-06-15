@@ -1,23 +1,27 @@
 import multiprocessing as mp
 import time
 from collections import deque
+from importlib import import_module
 
 import jax
 import numpy as np
-import ray
 
 from jax_baselines.APE_X.common_servers import Logger_server, Param_server
-from jax_baselines.common.env_info import get_remote_env_info
-from jax_baselines.common.hparams import get_hyper_params
-from jax_baselines.common.replay_protocol import (
+from jax_baselines.core.env_info import get_remote_env_info
+from jax_baselines.core.hparams import get_hyper_params
+from jax_baselines.core.replay_protocol import (
     MultiPrioritizedReplayBufferFactory,
     WorkerReplayBufferFactory,
     require_replay_factory,
 )
-from jax_baselines.common.runtime_adapters import make_progress
-from jax_baselines.common.seeding import key_gen, set_global_seeds
-from jax_baselines.common.serialization import restore, save
+from jax_baselines.core.runtime_adapters import make_progress
+from jax_baselines.core.seeding import key_gen, set_global_seeds
+from jax_baselines.core.serialization import restore, save
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
+
+
+def _ray():
+    return import_module("ray")
 
 
 class Ape_X_Family(object):
@@ -118,7 +122,9 @@ class Ape_X_Family(object):
         return self.optimizer_factory(learning_rate)
 
     def get_env_setup(self):
-        self.observation_space, self.action_size, self.env_type = get_remote_env_info(self.workers)
+        self.observation_space, self.action_size, self.env_type = get_remote_env_info(
+            self.workers, _ray().get
+        )
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
         print("worker_size : ", len(self.workers))
@@ -187,13 +193,14 @@ class Ape_X_Family(object):
         if self.env_type == "SingleEnv":
             self.learn_SingleEnv(pbar, callback, log_interval)
 
-        self.save_params(ray.get(self.logger_server.get_log_dir.remote()))
+        self.save_params(_ray().get(self.logger_server.get_log_dir.remote()))
 
     def learn_unity(self, pbar, callback, log_interval):
         pass
 
     def learn_SingleEnv(self, pbar, callback, log_interval):
         stop = self.m.Event()
+        ray = _ray()
         worker_num = len(self.workers)
         update = [self.m.Event() for i in range(worker_num)]
         stop.clear()

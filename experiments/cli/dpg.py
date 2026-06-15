@@ -1,3 +1,4 @@
+from env_builder.env_builder import get_env_builder
 from experiments.cli._common import default_logdir, set_default_xla_flags
 from experiments.cli._run import (
     AlgoSpec,
@@ -6,7 +7,6 @@ from experiments.cli._run import (
     run_family,
 )
 from experiments.optimizers import make_batch_scaled_optimizer_factory
-from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DDPG.ddpg import DDPG
 from jax_baselines.SAC.sac import SAC

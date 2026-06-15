@@ -23,7 +23,7 @@ def save_obs(obs, path):
 
 
 def main():
-    from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
+    from env_builder.atari_wrappers import get_env_type, make_wrap_atari
 
     env_name = "BreakoutNoFrameskip-v4"
     env_type, env_id = get_env_type(env_name)

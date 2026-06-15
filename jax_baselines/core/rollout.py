@@ -28,7 +28,7 @@ from typing import Callable, Optional
 
 import numpy as np
 
-from jax_baselines.common.eval import (
+from jax_baselines.core.eval import (
     extract_lives,
     extract_original_reward,
     extract_vector_lives,

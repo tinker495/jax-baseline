@@ -5,7 +5,7 @@ import numpy as np
 from gymnasium import spaces
 
 from env_builder.seeding import seed_env
-from jax_baselines.common.env_protocols import Env, EnvInfo, VectorizedEnv
+from jax_baselines.core.env_protocols import Env, EnvInfo, VectorizedEnv
 
 __all__ = [
     "Env",

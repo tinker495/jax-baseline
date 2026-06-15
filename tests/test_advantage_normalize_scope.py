@@ -19,7 +19,7 @@ import numpy as np
 import pytest
 
 from experiments.cli import pg
-from jax_baselines.common.returns import (
+from jax_baselines.math.returns import (
     ADVANTAGE_NORMALIZE_SCOPES,
     normalize_advantage,
     validate_advantage_normalize_scope,

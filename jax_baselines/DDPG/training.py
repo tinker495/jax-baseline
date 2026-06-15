@@ -3,7 +3,7 @@
 Owns replay sampling, SIMBA normalization, PER priority updates, and metric
 logging. Algorithm subclasses only provide the per-batch gradient update via
 `_train_on_batch`. Environment rollout and the checkpoint training pulse live
-in `jax_baselines.common.rollout`.
+in `jax_baselines.core.rollout`.
 """
 
 from dataclasses import dataclass, field

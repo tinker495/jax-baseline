@@ -2,12 +2,12 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.common.jax_utils import convert_jax
-from jax_baselines.common.policy_math import (
+from jax_baselines.IMPALA.base_class import IMPALA_Family
+from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.policy_math import (
     kl_divergence_continuous,
     kl_divergence_discrete,
 )
-from jax_baselines.IMPALA.base_class import IMPALA_Family
 
 
 class IMPALA_TPPO(IMPALA_Family):

@@ -4,12 +4,12 @@ import numpy as np
 import optax
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
-from jax_baselines.common.jax_utils import convert_jax
-from jax_baselines.common.policy_math import (
+from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.policy_math import (
     kl_divergence_continuous,
     kl_divergence_discrete,
 )
-from jax_baselines.common.returns import (
+from jax_baselines.math.returns import (
     get_gaes,
     normalize_advantage,
     validate_advantage_normalize_scope,

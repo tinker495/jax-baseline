@@ -5,12 +5,12 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-from jax_baselines.common.jax_utils import convert_jax
-from jax_baselines.common.losses import QuantileHuberLosses
-from jax_baselines.common.param_updates import hard_update
-from jax_baselines.common.policy_math import q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import QNetTrainResult
+from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.losses import QuantileHuberLosses
+from jax_baselines.math.param_updates import hard_update
+from jax_baselines.math.policy_math import q_log_pi
 
 
 class IQN(Q_Network_Family):

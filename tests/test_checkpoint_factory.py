@@ -7,7 +7,7 @@ the schedule delegation. No JAX import needed -- checkpoint.py is pure Python +
 numpy.
 """
 
-from jax_baselines.common.checkpoint import (
+from jax_baselines.core.checkpoint import (
     CheckpointController,
     CheckpointScaffold,
     make_checkpoint_scaffold,

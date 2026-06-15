@@ -1,4 +1,4 @@
-"""Contract tests for jax_baselines.common.checkpoint.CheckpointController.
+"""Contract tests for jax_baselines.core.checkpoint.CheckpointController.
 
 The TD7-style checkpoint schedule was copy-pasted into the Q-Net and DPG base
 classes and had drifted (the DPG copy fell through its warmup branch into a
@@ -11,7 +11,7 @@ serialization round-trip the DPG family depends on.
 
 import numpy as np
 
-from jax_baselines.common.checkpoint import CheckpointController
+from jax_baselines.core.checkpoint import CheckpointController
 
 
 def make_controller(**overrides):

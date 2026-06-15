@@ -1,21 +1,25 @@
 import multiprocessing as mp
 import time
 from collections import deque
+from importlib import import_module
 
 import jax
 import jax.numpy as jnp
 import numpy as np
-import ray
 
 from jax_baselines.APE_X.common_servers import Logger_server, Param_server
-from jax_baselines.common.env_info import get_remote_env_info
-from jax_baselines.common.jax_utils import convert_jax
-from jax_baselines.common.returns import get_vtrace
-from jax_baselines.common.runtime_adapters import make_progress
-from jax_baselines.common.seeding import key_gen, set_global_seeds
-from jax_baselines.common.serialization import restore, save
+from jax_baselines.core.env_info import get_remote_env_info
+from jax_baselines.core.runtime_adapters import make_progress
+from jax_baselines.core.seeding import key_gen, set_global_seeds
+from jax_baselines.core.serialization import restore, save
 from jax_baselines.IMPALA.cpprb_buffers import ImpalaBuffer
+from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.returns import get_vtrace
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
+
+
+def _ray():
+    return import_module("ray")
 
 
 class IMPALA_Family(object):
@@ -99,7 +103,7 @@ class IMPALA_Family(object):
             self.action_size,
             self.env_type,
             self.action_type,
-        ) = get_remote_env_info(self.workers, include_action_type=True)
+        ) = get_remote_env_info(self.workers, _ray().get, include_action_type=True)
         self.worker_num = len(self.workers)
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
@@ -247,13 +251,14 @@ class IMPALA_Family(object):
         if self.env_type == "SingleEnv":
             self.learn_SingleEnv(pbar, callback, log_interval)
 
-        self.save_params(ray.get(self.logger_server.get_log_dir.remote()))
+        self.save_params(_ray().get(self.logger_server.get_log_dir.remote()))
 
     def learn_unity(self, pbar, callback, log_interval):
         pass
 
     def learn_SingleEnv(self, pbar, callback, log_interval):
         stop = self.m.Event()
+        ray = _ray()
         update = [self.m.Event() for i in range(self.worker_num)]
         stop.clear()
         for u in update:

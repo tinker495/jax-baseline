@@ -1,4 +1,4 @@
-"""Tests for ``jax_baselines.common.training_session``.
+"""Tests for ``jax_baselines.core.training_session``.
 
 The session owns the ``learn()`` lifecycle one seam above the rollout loop. The
 win pinned here: a fake agent satisfying the *session contract* drives
@@ -14,7 +14,7 @@ Behaviors pinned:
 """
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
-from jax_baselines.common.training_session import RunContext, TrainingSession
+from jax_baselines.core.training_session import RunContext, TrainingSession
 
 
 class FakeLoggerRun:

@@ -7,14 +7,14 @@ import numpy as np
 import optax
 
 from jax_baselines.APE_X.base_class import Ape_X_Family
-from jax_baselines.common.distributional import (
+from jax_baselines.core.seeding import key_gen
+from jax_baselines.math.distributional import (
     CategoricalBackend,
     MunchausenSpec,
     distributional_td_target,
 )
-from jax_baselines.common.jax_utils import convert_jax
-from jax_baselines.common.param_updates import hard_update
-from jax_baselines.common.seeding import key_gen
+from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.param_updates import hard_update
 
 
 class APE_X_C51(Ape_X_Family):

@@ -1,8 +1,8 @@
+from env_builder.env_builder import get_env_builder
 from experiments.cli._common import default_logdir, set_default_xla_flags
 from experiments.cli._run import AlgoSpec, FamilyRunner, run_family
 from experiments.optimizers import make_optimizer_factory
 from jax_baselines.A2C.a2c import A2C
-from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.PPO.ppo import PPO
 from jax_baselines.SPO.spo import SPO
 from jax_baselines.TPPO.tppo import TPPO

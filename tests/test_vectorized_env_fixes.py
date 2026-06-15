@@ -21,7 +21,7 @@ import gymnasium as gym
 import numpy as np
 import pytest
 
-from jax_baselines.common import env_builder as eb
+from env_builder import env_builder as eb
 from replay_memory.cpprb_buffers import NstepReplayBuffer, ReplayBuffer
 
 

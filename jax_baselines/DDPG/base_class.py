@@ -4,25 +4,25 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from jax_baselines.common.checkpoint import make_checkpoint_scaffold
-from jax_baselines.common.checkpoint_state import CheckpointState
-from jax_baselines.common.env_info import get_local_env_info
-from jax_baselines.common.eval import evaluate_policy, record_and_test
-from jax_baselines.common.replay_protocol import (
+from jax_baselines.core.checkpoint import make_checkpoint_scaffold
+from jax_baselines.core.checkpoint_state import CheckpointState
+from jax_baselines.core.env_info import get_local_env_info
+from jax_baselines.core.eval import evaluate_policy, record_and_test
+from jax_baselines.core.replay_protocol import (
     ReplayBufferFactory,
     require_replay_factory,
 )
-from jax_baselines.common.rollout import (
+from jax_baselines.core.rollout import (
     ActionSelection,
     CheckpointTrainPulse,
     RolloutSpec,
 )
-from jax_baselines.common.rollout_stats import EpisodeTracker
-from jax_baselines.common.seeding import key_gen, set_global_seeds
-from jax_baselines.common.serialization import restore, save
-from jax_baselines.common.statistics import RunningMeanStd
-from jax_baselines.common.training_session import TrainingSession, off_policy_loop
+from jax_baselines.core.rollout_stats import EpisodeTracker
+from jax_baselines.core.seeding import key_gen, set_global_seeds
+from jax_baselines.core.serialization import restore, save
+from jax_baselines.core.training_session import TrainingSession, off_policy_loop
 from jax_baselines.DDPG.training import DPGTrainingLifecycle
+from jax_baselines.math.statistics import RunningMeanStd
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 

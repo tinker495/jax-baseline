@@ -6,8 +6,8 @@ import importlib
 
 import numpy as np
 
-from jax_baselines.common.env_info import get_local_env_info, infer_action_meta
-from jax_baselines.common.env_protocols import Env, EnvInfo, SingleEnv, VectorizedEnv
+from jax_baselines.core.env_info import get_local_env_info, infer_action_meta
+from jax_baselines.core.env_protocols import Env, EnvInfo, SingleEnv, VectorizedEnv
 
 
 class _ObservationSpace:
@@ -77,20 +77,20 @@ class _BrokenVectorizedEnv(_FakeVectorizedEnv):
         del self.env_info["action_space"]
 
 
-def test_env_builder_package_imports_and_common_shims_share_modules():
+def test_env_builder_package_imports_use_core_protocols_without_common_shims():
     adapter_module = importlib.import_module("env_builder.env_builder")
-    common_module = importlib.import_module("jax_baselines.common.env_builder")
     adapter_seeding = importlib.import_module("env_builder.seeding")
-    common_seeding = importlib.import_module("jax_baselines.common.seeding")
+    core_seeding = importlib.import_module("jax_baselines.core.seeding")
     adapter_atari = importlib.import_module("env_builder.atari_wrappers")
-    common_atari = importlib.import_module("jax_baselines.common.atari_wrappers")
 
-    assert common_module is adapter_module
-    assert common_seeding is adapter_seeding
-    assert common_atari is adapter_atari
-    assert common_module.VectorizedEnv is VectorizedEnv
-    assert common_module.Env is Env
-    assert common_module.EnvInfo is EnvInfo
+    assert adapter_seeding.seed_prngs is core_seeding.seed_prngs
+    assert adapter_seeding.key_gen is core_seeding.key_gen
+    assert adapter_seeding.set_global_seeds is core_seeding.set_global_seeds
+    assert hasattr(adapter_seeding, "seed_env")
+    assert hasattr(adapter_atari, "make_wrap_atari")
+    assert adapter_module.VectorizedEnv is VectorizedEnv
+    assert adapter_module.Env is Env
+    assert adapter_module.EnvInfo is EnvInfo
     assert hasattr(importlib.import_module("env_builder"), "get_env_builder")
 
 

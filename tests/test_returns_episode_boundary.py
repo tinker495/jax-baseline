@@ -18,7 +18,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
-from jax_baselines.common.returns import discount_with_terminated, get_vtrace
+from jax_baselines.math.returns import discount_with_terminated, get_vtrace
 
 GAMMA = 0.9
 

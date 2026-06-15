@@ -1,8 +1,8 @@
 """Serializable checkpoint state for the off-policy DPG family.
 
-Sibling to :mod:`jax_baselines.common.checkpoint` (the schedule) and
-:mod:`jax_baselines.common.rollout` (the rollout loop): where
-:class:`~jax_baselines.common.checkpoint.CheckpointController` owns the checkpoint
+Sibling to :mod:`jax_baselines.core.checkpoint` (the schedule) and
+:mod:`jax_baselines.core.rollout` (the rollout loop): where
+:class:`~jax_baselines.core.checkpoint.CheckpointController` owns the checkpoint
 *schedule*, this module owns the checkpoint *state* an agent persists to resume
 training and run eval-consistent behaviour.
 
@@ -13,7 +13,7 @@ the ``params`` field (with the eval-time snapshot in ``eval_snapshot``). The spi
 itself never names a concrete algorithm's parameters.
 
 Serialization rides the existing pytree
-:func:`~jax_baselines.common.serialization.save` / ``restore``: every field is a
+:func:`~jax_baselines.core.serialization.save` / ``restore``: every field is a
 pytree node, so the struct *is* the wire format. There is no spine-level
 ``to_state``/``from_state`` ladder; the sibling ``CheckpointController`` and
 ``RunningMeanStd`` keep their own and are embedded here as plain ``dict`` fields.

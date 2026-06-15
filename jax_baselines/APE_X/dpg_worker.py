@@ -2,24 +2,27 @@ import base64
 import multiprocessing as mp
 import traceback
 from functools import partial
+from importlib import import_module
 
-import gymnasium as gym
 import jax
 import numpy as np
-import ray
 
-from jax_baselines.common.replay_protocol import make_worker_local_replay_buffer
-from jax_baselines.common.seeding import seed_env, seed_prngs
+from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
+from jax_baselines.core.seeding import seed_prngs
 
 
-@ray.remote(num_cpus=1)
 class Ape_X_Worker(object):
     encoded = base64.b64encode(mp.current_process().authkey)
+
+    @classmethod
+    def remote(cls, *args, **kwargs):
+        return import_module("ray").remote(num_cpus=1)(cls).remote(*args, **kwargs)
 
     def __init__(self, env_name_, seed=None) -> None:
         mp.current_process().authkey = base64.b64decode(self.encoded)
         self.env_type = "SingleEnv"
         self.env_id = None
+        seed_env = import_module("env_builder.seeding").seed_env
         seed_prngs(seed)
 
         if callable(env_name_):
@@ -36,6 +39,7 @@ class Ape_X_Worker(object):
             except Exception:
                 self.env_id = getattr(getattr(env, "spec", None), "id", None)
         else:
+            gym = import_module("gymnasium")
             self.env = gym.make(env_name_)
             self.env_id = env_name_
         seed_env(self.env, seed)
@@ -63,6 +67,7 @@ class Ape_X_Worker(object):
         seed=None,
     ):
         try:
+            ray = import_module("ray")
             seed_prngs(seed)
             global_buffer, env_dict, n_s = buffer_info
             local_buffer = make_worker_local_replay_buffer(

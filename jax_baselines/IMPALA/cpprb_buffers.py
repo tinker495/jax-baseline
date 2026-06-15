@@ -1,12 +1,10 @@
 import random
 from collections import deque, namedtuple
+from importlib import import_module
 
-import cpprb
 import numpy as np
-import ray
-from ray.util.queue import Queue
 
-from jax_baselines.common.seeding import seed_prngs
+from jax_baselines.core.seeding import seed_prngs
 
 batch = namedtuple(
     "batch_tuple",
@@ -18,6 +16,7 @@ class EpochBuffer:
     def __init__(self, size: int, env_dict: dict):
         self.obsdict = dict((o, s) for o, s in env_dict.items() if o.startswith("obs"))
         self.nextobsdict = dict((o, s) for o, s in env_dict.items() if o.startswith("next_obs"))
+        cpprb = import_module("cpprb")
         self.buffer = cpprb.ReplayBuffer(size, env_dict=env_dict)
 
     def __len__(self):
@@ -52,8 +51,11 @@ class EpochBuffer:
         return transitions
 
 
-@ray.remote(num_cpus=1)
 class Buffer_getter:
+    @classmethod
+    def remote(cls, *args, **kwargs):
+        return import_module("ray").remote(num_cpus=1)(cls).remote(*args, **kwargs)
+
     def __init__(self, queue, size, sample_size, seed=None):
         self.queue = queue
         self.replay = size > 0
@@ -128,7 +130,8 @@ class ImpalaBuffer:
             "truncted": {},
         }
 
-        self.queue = Queue(maxsize=max(actor_num * 2, replay_size))
+        queue_type = import_module("ray.util.queue").Queue
+        self.queue = queue_type(maxsize=max(actor_num * 2, replay_size))
         getter_seed = None if seed is None else seed + 10_000
         self.getter = Buffer_getter.remote(self.queue, replay_size, sample_size, getter_seed)
         self.get = self.getter.sample.remote()
@@ -143,6 +146,6 @@ class ImpalaBuffer:
         return self.queue.empty()
 
     def sample(self):
-        out = ray.get(self.get)
+        out = import_module("ray").get(self.get)
         self.get = self.getter.sample.remote()
         return out

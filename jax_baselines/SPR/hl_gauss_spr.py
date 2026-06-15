@@ -4,19 +4,19 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.common.distributional import (
+from jax_baselines.DQN.training import QNetTrainResult
+from jax_baselines.math.distributional import (
     HLGaussBackend,
     HLGaussTransform,
     MunchausenSpec,
     distributional_td_target,
 )
-from jax_baselines.common.jax_utils import convert_jax
-from jax_baselines.common.param_updates import (
+from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.param_updates import (
     filter_like_tree,
     scaled_by_reset_with_filter,
     soft_update,
 )
-from jax_baselines.DQN.training import QNetTrainResult
 from jax_baselines.SPR.spr import SPR
 
 

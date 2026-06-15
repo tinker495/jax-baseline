@@ -7,7 +7,7 @@ parallel times, so completed episodes are pushed into a fixed window and the
 window mean is logged periodically.
 
 The tracker is the only ``rollout/`` writer for these families; it reuses the
-shared :func:`jax_baselines.common.eval.log_measurement` tag-writer so the
+shared :func:`jax_baselines.core.eval.log_measurement` tag-writer so the
 ``rollout/`` leaves can never drift from the ``eval/`` leaves. The distributed
 families keep their own server-side aggregation and do not use this tracker
 (documented inconsistency, see ADR 0003).
@@ -17,7 +17,7 @@ from collections import deque
 
 import numpy as np
 
-from jax_baselines.common.eval import log_measurement
+from jax_baselines.core.eval import log_measurement
 
 
 class EpisodeTracker:

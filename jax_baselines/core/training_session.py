@@ -1,13 +1,13 @@
 """Shared ``learn()`` lifecycle for the training families.
 
 The session sits one seam *above* the rollout loop. Where
-:mod:`jax_baselines.common.rollout` owns the per-step environment loop, the
+:mod:`jax_baselines.core.rollout` owns the per-step environment loop, the
 session owns the run *lifecycle* that wrapped it: run-name tagging, schedule
 setup, ``eval_freq``, the ``pbar``, the logger lifecycle, and the closing
 eval + save.
 
 The session is **loop-agnostic** — :meth:`TrainingSession.run` never touches a
-:class:`~jax_baselines.common.rollout.RolloutEngine`; it only calls
+:class:`~jax_baselines.core.rollout.RolloutEngine`; it only calls
 ``agent.run_training_loop(ctx)``. The coupling to the rollout engine lives
 solely in :func:`off_policy_loop`, the off-policy rollout dispatch that the
 Q-Net and DPG families delegate to from their ``run_training_loop``. That keeps
@@ -21,8 +21,8 @@ read back off ``self``. ``ctx.logger_run`` is valid only inside the session's
 
 from dataclasses import dataclass
 
-from jax_baselines.common.rollout import RolloutEngine
-from jax_baselines.common.runtime_adapters import NoOpLogger, make_progress
+from jax_baselines.core.rollout import RolloutEngine
+from jax_baselines.core.runtime_adapters import NoOpLogger, make_progress
 
 
 @dataclass(frozen=True)

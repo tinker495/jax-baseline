@@ -22,7 +22,7 @@ from typing import Optional, Protocol
 import jax
 import jax.numpy as jnp
 
-from jax_baselines.common.policy_math import q_log_pi
+from jax_baselines.math.policy_math import q_log_pi
 
 
 @dataclass(frozen=True, eq=False)

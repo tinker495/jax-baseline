@@ -1,4 +1,4 @@
-"""Tests for the unified ``jax_baselines.common.rollout`` engine.
+"""Tests for the unified ``jax_baselines.core.rollout`` engine.
 
 The bulk of this module is a characterization suite: golden call-traces pin the
 observable behavior of the four ``learn_*`` loops for both the Q-Net and DPG
@@ -27,7 +27,7 @@ action-selection seam directly.
 import numpy as np
 import pytest
 
-from jax_baselines.common.rollout import (
+from jax_baselines.core.rollout import (
     ActionSelection,
     CheckpointTrainPulse,
     RolloutEngine,

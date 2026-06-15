@@ -1,11 +1,21 @@
 import numpy as np
-import ray
 
-from jax_baselines.common.runtime_adapters import NoOpLogger
+from jax_baselines.core.runtime_adapters import NoOpLogger
 
 
-@ray.remote
-class Param_server(object):
+def _ray():
+    from importlib import import_module
+
+    return import_module("ray")
+
+
+class _RayActor:
+    @classmethod
+    def remote(cls, *args, **kwargs):
+        return _ray().remote(cls).remote(*args, **kwargs)
+
+
+class Param_server(_RayActor):
     def __init__(self, params) -> None:
         self.params = params
 
@@ -16,8 +26,7 @@ class Param_server(object):
         self.params = params
 
 
-@ray.remote
-class Logger_server(object):
+class Logger_server(_RayActor):
     def __init__(self, log_dir, log_name, logger_factory=None) -> None:
         # Pass None as the agent to avoid attempting to extract hparams from this Ray actor
         # (which would serialize the whole actor). Hyperparameters should be

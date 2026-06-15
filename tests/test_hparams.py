@@ -1,4 +1,4 @@
-"""Coverage for the hparam-provider protocol in jax_baselines.common.hparams.
+"""Coverage for the hparam-provider protocol in jax_baselines.core.hparams.
 
 ``get_hyper_params`` reflects scalar config off the agent, then discovers held
 providers exposing a callable ``hparams() -> dict`` and merges their dicts. This
@@ -6,7 +6,7 @@ is what logs ``self.ckpt.hparams()`` without the gatherer naming "ckpt", and
 what lets future deep handles log for free.
 """
 
-from jax_baselines.common.hparams import get_hyper_params
+from jax_baselines.core.hparams import get_hyper_params
 
 
 class _Provider:

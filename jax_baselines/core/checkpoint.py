@@ -1,6 +1,6 @@
 """TD7-style per-episode checkpoint schedule for the off-policy rollout families.
 
-Sibling to :mod:`jax_baselines.common.rollout`: where :class:`RolloutEngine`
+Sibling to :mod:`jax_baselines.core.rollout`: where :class:`RolloutEngine`
 owns the environment-interaction loop, :class:`CheckpointController` owns the
 checkpoint *schedule* that loop drives at every episode boundary. The two meet
 only at the :class:`RolloutSpec` checkpoint seam — the engine calls
@@ -23,14 +23,14 @@ Everything family-specific is injected:
 The controller owns all schedule runtime state and serializes it through
 :meth:`to_state` / :meth:`from_state` (the DPG family persists it across
 save/load). The training-cadence residual is *not* owned here — it belongs to
-:class:`~jax_baselines.common.rollout.CheckpointTrainPulse`.
+:class:`~jax_baselines.core.rollout.CheckpointTrainPulse`.
 """
 
 from typing import Callable, Optional
 
 import numpy as np
 
-from jax_baselines.common.statistics import compute_ckpt_window_stat
+from jax_baselines.math.statistics import compute_ckpt_window_stat
 
 
 class CheckpointScaffold:

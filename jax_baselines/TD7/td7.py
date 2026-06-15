@@ -7,11 +7,11 @@ import numpy as np
 import optax
 from flax import struct
 
-from jax_baselines.common.jax_utils import convert_jax
-from jax_baselines.common.losses import hubberloss
-from jax_baselines.common.param_updates import hard_update, scaled_by_reset
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.training import DPGTrainReport
+from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.losses import hubberloss
+from jax_baselines.math.param_updates import hard_update, scaled_by_reset
 
 
 @struct.dataclass

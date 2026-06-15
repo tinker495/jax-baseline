@@ -5,9 +5,9 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-from jax_baselines.common.env_info import get_local_env_info, infer_action_meta
-from jax_baselines.common.epoch_buffer import EpochBuffer
-from jax_baselines.common.eval import (
+from jax_baselines.core.env_info import get_local_env_info, infer_action_meta
+from jax_baselines.core.epoch_buffer import EpochBuffer
+from jax_baselines.core.eval import (
     evaluate_policy,
     extract_lives,
     extract_original_reward,
@@ -15,11 +15,11 @@ from jax_baselines.common.eval import (
     extract_vector_original_rewards,
     record_and_test,
 )
-from jax_baselines.common.jax_utils import convert_jax
-from jax_baselines.common.rollout_stats import EpisodeTracker
-from jax_baselines.common.seeding import key_gen, set_global_seeds
-from jax_baselines.common.serialization import restore, save
-from jax_baselines.common.training_session import TrainingSession
+from jax_baselines.core.rollout_stats import EpisodeTracker
+from jax_baselines.core.seeding import key_gen, set_global_seeds
+from jax_baselines.core.serialization import restore, save
+from jax_baselines.core.training_session import TrainingSession
+from jax_baselines.math.jax_utils import convert_jax
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 

@@ -5,7 +5,7 @@ module remains as the core-facing protocol/no-op surface for direct library use
 and backward-compatible imports that no longer pull concrete runtime adapters.
 """
 
-from jax_baselines.common.runtime_adapters import (
+from jax_baselines.core.runtime_adapters import (
     EvaluationRecorder,
     HistogramLoggerRun,
     LoggerFactory,

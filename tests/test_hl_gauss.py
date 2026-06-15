@@ -1,4 +1,4 @@
-"""Contract tests for jax_baselines.common.distributional.HLGaussTransform.
+"""Contract tests for jax_baselines.math.distributional.HLGaussTransform.
 
 The HL-Gauss scalar<->distribution transform was copy-pasted (byte-identical)
 into the HL_GAUSS variants of C51, BBF and SPR, and had no direct test. These
@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from jax_baselines.common.distributional import HLGaussTransform
+from jax_baselines.math.distributional import HLGaussTransform
 
 
 def test_build_sets_support_edges_and_bin_scaled_sigma():

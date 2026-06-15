@@ -1,6 +1,6 @@
 import numpy as np
 
-from jax_baselines.common.env_protocols import EnvInfo, SingleEnv, VectorizedEnv
+from jax_baselines.core.env_protocols import EnvInfo, SingleEnv, VectorizedEnv
 
 REQUIRED_ENV_INFO_KEYS = ("observation_space", "action_space", "env_type", "env_id")
 
@@ -82,20 +82,19 @@ def get_local_env_info(env_builder, num_workers=1, seed=None):
     return env, eval_env, observation_space, action_size, worker_size, env_type
 
 
-def get_remote_env_info(workers, include_action_type=False):
-    """Get standardized environment info from remote workers (ray actors).
+def get_remote_env_info(workers, remote_get, include_action_type=False):
+    """Get standardized environment info from remote worker references.
 
     Args:
-        workers: List of ray actors with get_info.remote() method
+        workers: List of remote workers with get_info.remote() method
+        remote_get: Runtime adapter callable that resolves one remote reference
         include_action_type: If True, also return action_type
 
     Returns:
         observation_space, action_size, env_type [, action_type]
     """
-    import ray
-
     if isinstance(workers, list):
-        env_dict = ray.get(workers[0].get_info.remote())
+        env_dict = remote_get(workers[0].get_info.remote())
         observation_space = [list(env_dict["observation_space"].shape)]
         action_space = env_dict["action_space"]
 

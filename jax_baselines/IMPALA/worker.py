@@ -2,28 +2,34 @@ import base64
 import multiprocessing as mp
 import traceback
 from functools import partial
+from importlib import import_module
 
-import gymnasium as gym
 import jax
 import numpy as np
-import ray
 
-from jax_baselines.common.seeding import seed_env, seed_prngs
+from jax_baselines.core.seeding import seed_prngs
 from jax_baselines.IMPALA.cpprb_buffers import EpochBuffer
 
 
-@ray.remote(num_cpus=1)
 class Impala_Worker(object):
     encoded = base64.b64encode(mp.current_process().authkey)
 
+    @classmethod
+    def remote(cls, *args, **kwargs):
+        return import_module("ray").remote(num_cpus=1)(cls).remote(*args, **kwargs)
+
     def __init__(self, env_name_, seed=None) -> None:
         mp.current_process().authkey = base64.b64decode(self.encoded)
-        from jax_baselines.common.atari_wrappers import get_env_type, make_wrap_atari
+        atari_wrappers = import_module("env_builder.atari_wrappers")
+        get_env_type = atari_wrappers.get_env_type
+        make_wrap_atari = atari_wrappers.make_wrap_atari
+        seed_env = import_module("env_builder.seeding").seed_env
 
         self.env_type, self.env_id = get_env_type(env_name_)
         if self.env_type == "atari_env" and "MinAtar" not in env_name_:
             self.env = make_wrap_atari(env_name_, clip_rewards=True)
         else:
+            gym = import_module("gymnasium")
             self.env = gym.make(env_name_)
         seed_prngs(seed)
         seed_env(self.env, seed)
@@ -49,6 +55,7 @@ class Impala_Worker(object):
         seed=None,
     ):
         try:
+            ray = import_module("ray")
             seed_prngs(seed)
             queue, env_dict, actor_num = buffer_info
             local_buffer = EpochBuffer(local_size, env_dict)

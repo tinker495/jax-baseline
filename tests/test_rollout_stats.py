@@ -2,11 +2,11 @@
 
 Two layers:
 
-- :class:`jax_baselines.common.rollout_stats.EpisodeTracker` windowing: the
+- :class:`jax_baselines.core.rollout_stats.EpisodeTracker` windowing: the
   window mean is logged under the ``rollout/`` prefix, throttled to
   ``log_interval`` and skipping an empty window, with ``original_reward`` only
   when supplied.
-- The :class:`jax_baselines.common.rollout.RolloutEngine` episode-end emit: the
+- The :class:`jax_baselines.core.rollout.RolloutEngine` episode-end emit: the
   four loops hand each *completed* training episode to the
   ``record_rollout_episode`` callback, and the autoreset dummy step is never
   counted as an episode end (the ``active``/``prev_done`` mask).
@@ -14,8 +14,8 @@ Two layers:
 
 import numpy as np
 
-from jax_baselines.common.rollout import ActionSelection, RolloutEngine, RolloutSpec
-from jax_baselines.common.rollout_stats import EpisodeTracker
+from jax_baselines.core.rollout import ActionSelection, RolloutEngine, RolloutSpec
+from jax_baselines.core.rollout_stats import EpisodeTracker
 
 
 # --- EpisodeTracker -------------------------------------------------------

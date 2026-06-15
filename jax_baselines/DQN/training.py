@@ -4,7 +4,7 @@ Centralises replay sampling, PER priority updates, and metric/histogram logging
 behind a single training-lifecycle object. Algorithms keep their JIT-compiled
 tuple returns and translate them into a lifecycle result on the Python side via
 `_train_on_batch`. Environment rollout and the checkpoint training pulse live in
-`jax_baselines.common.rollout`.
+`jax_baselines.core.rollout`.
 """
 
 from dataclasses import dataclass, field

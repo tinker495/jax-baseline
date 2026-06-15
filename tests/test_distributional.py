@@ -1,4 +1,4 @@
-"""Pure / characterization tests for jax_baselines.common.distributional.
+"""Pure / characterization tests for jax_baselines.math.distributional.
 
 These lock the canonical distributional-TD-target semantics (``c51.py`` /
 ``hl_gauss_c51.py``) into a representation-agnostic operator, using synthetic
@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from jax_baselines.common.distributional import (
+from jax_baselines.math.distributional import (
     CategoricalBackend,
     HLGaussBackend,
     HLGaussTransform,
@@ -18,8 +18,8 @@ from jax_baselines.common.distributional import (
     categorical_projection,
     distributional_td_target,
 )
-from jax_baselines.common.losses import QuantileHuberLosses
-from jax_baselines.common.policy_math import q_log_pi
+from jax_baselines.math.losses import QuantileHuberLosses
+from jax_baselines.math.policy_math import q_log_pi
 
 jax.config.update("jax_enable_x64", False)
 

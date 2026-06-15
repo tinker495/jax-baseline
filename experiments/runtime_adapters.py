@@ -8,8 +8,8 @@ from tensorboardX import SummaryWriter
 from tensorboardX.summary import hparams
 from tqdm.auto import trange
 
-from jax_baselines.common.eval import run_test_episodes
-from jax_baselines.common.hparams import add_hparams
+from jax_baselines.core.eval import run_test_episodes
+from jax_baselines.core.hparams import add_hparams
 
 
 def _get_latest_run_id(local_dir, experiment_name, run_name):

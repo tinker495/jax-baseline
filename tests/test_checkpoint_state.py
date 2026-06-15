@@ -13,10 +13,10 @@ import jax
 import numpy as np
 import pytest
 
-from jax_baselines.common.checkpoint import make_checkpoint_scaffold
-from jax_baselines.common.statistics import RunningMeanStd
+from jax_baselines.core.checkpoint import make_checkpoint_scaffold
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DDPG.ddpg import DDPG
+from jax_baselines.math.statistics import RunningMeanStd
 from jax_baselines.SAC.sac import SAC
 from jax_baselines.TD3.td3 import TD3
 from jax_baselines.TD7.td7 import TD7

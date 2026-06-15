@@ -4,7 +4,7 @@ import pytest
 
 from jax_baselines.APE_X.base_class import Ape_X_Family
 from jax_baselines.APE_X.dpg_base_class import Ape_X_Deteministic_Policy_Gradient_Family
-from jax_baselines.common.replay_protocol import make_worker_local_replay_buffer
+from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DQN.base_class import Q_Network_Family
 

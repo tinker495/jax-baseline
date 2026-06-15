@@ -4,15 +4,15 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.common.distributional import (
+from jax_baselines.DQN.base_class import Q_Network_Family
+from jax_baselines.DQN.training import QNetTrainResult
+from jax_baselines.math.distributional import (
     CategoricalBackend,
     MunchausenSpec,
     distributional_td_target,
 )
-from jax_baselines.common.jax_utils import convert_jax
-from jax_baselines.common.param_updates import hard_update
-from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.DQN.training import QNetTrainResult
+from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.param_updates import hard_update
 
 
 class C51(Q_Network_Family):

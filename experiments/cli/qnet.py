@@ -1,3 +1,4 @@
+from env_builder.env_builder import get_env_builder
 from experiments.cli._common import default_logdir, set_default_xla_flags
 from experiments.cli._run import (
     AlgoSpec,
@@ -14,7 +15,6 @@ from jax_baselines.BBF.bbf import BBF
 from jax_baselines.BBF.hl_gauss_bbf import HL_GAUSS_BBF
 from jax_baselines.C51.c51 import C51
 from jax_baselines.C51.hl_gauss_c51 import HL_GAUSS_C51
-from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.DQN.dqn import DQN
 from jax_baselines.FQF.fqf import FQF
 from jax_baselines.IQN.iqn import IQN
