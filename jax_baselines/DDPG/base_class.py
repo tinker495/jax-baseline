@@ -9,7 +9,10 @@ from jax_baselines.common.checkpoint_state import CheckpointState
 from jax_baselines.common.env_info import get_local_env_info
 from jax_baselines.common.eval import evaluate_policy, record_and_test
 from jax_baselines.common.optimizer import select_optimizer
-from jax_baselines.common.replay_factory import make_replay_buffer
+from jax_baselines.common.replay_protocol import (
+    ReplayBufferFactory,
+    require_replay_factory,
+)
 from jax_baselines.common.rollout import (
     ActionSelection,
     CheckpointTrainPulse,
@@ -52,6 +55,7 @@ class Deteministic_Policy_Gradient_Family(object):
         policy_kwargs=None,
         seed=None,
         optimizer="adamw",
+        replay_factory: ReplayBufferFactory | None = None,
         # Checkpointing options (opt-in by default for base class)
         use_checkpointing=True,
         steps_before_checkpointing=500000,
@@ -94,6 +98,7 @@ class Deteministic_Policy_Gradient_Family(object):
         self.simba_v2 = simba_v2
         self.save_path = None
         self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-3 / self.batch_size)
+        self.replay_factory = replay_factory
 
         self.get_env_setup()
         self.get_memory_setup()
@@ -215,8 +220,8 @@ class Deteministic_Policy_Gradient_Family(object):
         print("-------------------------------------------------")
 
     def get_memory_setup(self):
-        # Use common replay factory to pick the correct buffer type
-        self.replay_buffer = make_replay_buffer(
+        replay_factory = require_replay_factory(self.replay_factory, "ReplayBufferFactory")
+        self.replay_buffer = replay_factory(
             buffer_size=self.buffer_size,
             observation_space=self.observation_space,
             action_shape_or_n=self.action_size,
@@ -369,7 +374,13 @@ class Deteministic_Policy_Gradient_Family(object):
         eval_num=100,
     ):
         return TrainingSession().run(
-            self, total_timesteps, callback, log_interval, experiment_name, run_name, eval_num
+            self,
+            total_timesteps,
+            callback,
+            log_interval,
+            experiment_name,
+            run_name,
+            eval_num,
         )
 
     # -------------------------------

@@ -7,7 +7,10 @@ from jax_baselines.common.checkpoint import make_checkpoint_scaffold
 from jax_baselines.common.env_info import get_local_env_info
 from jax_baselines.common.eval import evaluate_policy, record_and_test
 from jax_baselines.common.optimizer import select_optimizer
-from jax_baselines.common.replay_factory import make_replay_buffer
+from jax_baselines.common.replay_protocol import (
+    ReplayBufferFactory,
+    require_replay_factory,
+)
 from jax_baselines.common.rollout import (
     ActionSelection,
     CheckpointTrainPulse,
@@ -57,6 +60,7 @@ class Q_Network_Family(object):
         seed=None,
         optimizer="adamw",
         compress_memory=False,
+        replay_factory: ReplayBufferFactory | None = None,
         # Checkpointing options (opt-in by default for base class)
         use_checkpointing=True,
         steps_before_checkpointing=500000,
@@ -112,6 +116,7 @@ class Q_Network_Family(object):
         self.optimizer_name = optimizer
 
         self.compress_memory = compress_memory
+        self.replay_factory = replay_factory
 
         self.get_env_setup()
         self.get_memory_setup()
@@ -171,8 +176,8 @@ class Q_Network_Family(object):
         print("-------------------------------------------------")
 
     def get_memory_setup(self):
-        # Use factory to select correct buffer implementation
-        self.replay_buffer = make_replay_buffer(
+        replay_factory = require_replay_factory(self.replay_factory, "ReplayBufferFactory")
+        self.replay_buffer = replay_factory(
             buffer_size=self.buffer_size,
             observation_space=self.observation_space,
             action_shape_or_n=1,
@@ -302,7 +307,13 @@ class Q_Network_Family(object):
         eval_num=100,
     ):
         return TrainingSession().run(
-            self, total_timesteps, callback, log_interval, experiment_name, run_name, eval_num
+            self,
+            total_timesteps,
+            callback,
+            log_interval,
+            experiment_name,
+            run_name,
+            eval_num,
         )
 
     def prepare_run(self, total_timesteps):

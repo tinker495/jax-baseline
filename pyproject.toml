@@ -60,8 +60,10 @@ testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
 include = [
+    "experiments*",
     "jax_baselines*",
     "model_builder*",
+    "replay_memory*",
 ]
 
 [tool.uv]

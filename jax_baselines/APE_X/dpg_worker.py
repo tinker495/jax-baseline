@@ -8,7 +8,7 @@ import jax
 import numpy as np
 import ray
 
-from jax_baselines.common.cpprb_buffers import ReplayBuffer
+from jax_baselines.common.replay_protocol import make_worker_local_replay_buffer
 from jax_baselines.common.seeding import seed_env, seed_prngs
 
 
@@ -52,6 +52,7 @@ class Ape_X_Worker(object):
         self,
         local_size,
         buffer_info,
+        worker_replay_factory,
         model_builder,
         actor_builder,
         param_server,
@@ -64,7 +65,9 @@ class Ape_X_Worker(object):
         try:
             seed_prngs(seed)
             global_buffer, env_dict, n_s = buffer_info
-            local_buffer = ReplayBuffer(local_size, env_dict=env_dict, n_s=n_s)
+            local_buffer = make_worker_local_replay_buffer(
+                worker_replay_factory, local_size, env_dict, n_s
+            )
             preproc, actor_model, critic_model = model_builder()
             (
                 get_abs_td_error,

@@ -1,5 +1,10 @@
 from jax_baselines.cli._common import default_logdir, set_default_xla_flags
-from jax_baselines.cli._run import AlgoSpec, FamilyRunner, run_family
+from jax_baselines.cli._run import (
+    AlgoSpec,
+    FamilyRunner,
+    default_replay_factory,
+    run_family,
+)
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DDPG.ddpg import DDPG
@@ -77,7 +82,11 @@ def build_env(args):
         timescale=args.time_scale,
         capture_frame_rate=args.capture_frame_rate,
     )
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
+    policy_kwargs = {
+        "node": args.node,
+        "hidden_n": args.hidden_n,
+        "embedding_mode": "normal",
+    }
     return env_builder, policy_kwargs
 
 
@@ -107,6 +116,7 @@ def _common(a):
         "gradient_steps": a.gradient_steps,
         "log_dir": a.logdir,
         "optimizer": a.optimizer,
+        "replay_factory": default_replay_factory(),
         "use_checkpointing": a.use_checkpointing,
     }
 
@@ -178,6 +188,7 @@ ALGOS = {
             "gradient_steps": a.gradient_steps,
             "log_dir": a.logdir,
             "optimizer": a.optimizer,
+            "replay_factory": default_replay_factory(),
         },
     ),
 }

@@ -6,12 +6,12 @@ from collections import deque
 import numpy as np
 import pytest
 
-from jax_baselines.common.cpprb_buffers import NstepReplayBuffer
-from jax_baselines.common.frame_buffers import (
+from replay_memory.cpprb_buffers import NstepReplayBuffer
+from replay_memory.frame_buffers import (
     FrameStackReplayBuffer,
     PrioritizedFrameStackReplayBuffer,
 )
-from jax_baselines.common.replay_factory import make_replay_buffer
+from replay_memory.replay_factory import make_replay_buffer
 
 H = W = 6
 S = 4
@@ -142,7 +142,7 @@ def test_factory_selects_frame_buffer_for_image_nstep_compress(prioritized):
 
 
 def test_factory_keeps_cpprb_for_vector_or_singlestep():
-    from jax_baselines.common.cpprb_buffers import NstepReplayBuffer as Cpprb
+    from replay_memory.cpprb_buffers import NstepReplayBuffer as Cpprb
 
     # vector obs -> not frame-compressible
     assert isinstance(make_replay_buffer(500, [[4]], 1, n_step=NSTEP, compress_memory=True), Cpprb)

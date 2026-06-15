@@ -10,7 +10,11 @@ from jax_baselines.APE_X.common_servers import Logger_server, Param_server
 from jax_baselines.common.env_info import get_remote_env_info
 from jax_baselines.common.hparams import get_hyper_params
 from jax_baselines.common.optimizer import select_optimizer
-from jax_baselines.common.replay_factory import make_multi_prioritized_buffer
+from jax_baselines.common.replay_protocol import (
+    MultiPrioritizedReplayBufferFactory,
+    WorkerReplayBufferFactory,
+    require_replay_factory,
+)
 from jax_baselines.common.seeding import key_gen, set_global_seeds
 from jax_baselines.common.serialization import restore, save
 
@@ -45,10 +49,14 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         optimizer="adamw",
         compress_memory=False,
         param_broadcast_freq=20,
+        multi_replay_factory: MultiPrioritizedReplayBufferFactory | None = None,
+        worker_replay_factory: WorkerReplayBufferFactory | None = None,
     ):
         self.workers = workers
         self.model_builder_maker = model_builder_maker
         self.m = manager
+        self.multi_replay_factory = multi_replay_factory
+        self.worker_replay_factory = worker_replay_factory
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
@@ -108,7 +116,11 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         print("-------------------------------------------------")
 
     def get_memory_setup(self):
-        self.replay_buffer = make_multi_prioritized_buffer(
+        multi_replay_factory = require_replay_factory(
+            self.multi_replay_factory, "MultiPrioritizedReplayBufferFactory"
+        )
+        require_replay_factory(self.worker_replay_factory, "WorkerReplayBufferFactory")
+        self.replay_buffer = multi_replay_factory(
             buffer_size=self.buffer_size,
             observation_space=self.observation_space,
             alpha=self.prioritized_replay_alpha,
@@ -187,6 +199,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
                 self.workers[idx].run.remote(
                     2000,
                     self.replay_buffer.buffer_info(),
+                    self.worker_replay_factory,
                     self.model_builder,
                     self.actor_builder,
                     param_server,

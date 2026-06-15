@@ -148,10 +148,10 @@ ALLOWED_IMPORTS = (
         "env_builder slice",
     ),
     AllowedImport(
-        "jax_baselines/common/cpprb_buffers.py",
+        "jax_baselines/common/epoch_buffer.py",
         "cpprb",
         "NOT_YET_MOVED",
-        "replay slice",
+        "on-policy buffer slice",
     ),
     AllowedImport(
         "jax_baselines/common/env_builder.py",

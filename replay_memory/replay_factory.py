@@ -1,19 +1,19 @@
 """Factory helpers to create replay buffers with consistent constructor args.
 
-This wraps constructors in `jax_baselines.common.cpprb_buffers` so callers
+This wraps constructors in `replay_memory.cpprb_buffers` so callers
 don't need to duplicate branching logic for prioritized / n-step / multi.
 """
 
 from typing import Any
 
-from jax_baselines.common.cpprb_buffers import (
+from replay_memory.cpprb_buffers import (
     MultiPrioritizedReplayBuffer,
     NstepReplayBuffer,
     PrioritizedNstepReplayBuffer,
     PrioritizedReplayBuffer,
     ReplayBuffer,
 )
-from jax_baselines.common.frame_buffers import (
+from replay_memory.frame_buffers import (
     FrameStackReplayBuffer,
     PrioritizedFrameStackReplayBuffer,
 )
@@ -89,7 +89,12 @@ def make_replay_buffer(
             )
         else:
             return PrioritizedReplayBuffer(
-                buffer_size, observation_space, alpha, action_shape_or_n, compress_memory, eps
+                buffer_size,
+                observation_space,
+                alpha,
+                action_shape_or_n,
+                compress_memory,
+                eps,
             )
     else:
         if n_step > 1:
@@ -141,3 +146,8 @@ def make_multi_prioritized_buffer(
             compress_memory,
             eps,
         )
+
+
+def make_worker_replay_buffer(local_size: int, *, env_dict: dict, n_s: dict | None = None):
+    """Create the APE-X worker-local replay buffer from shared buffer metadata."""
+    return ReplayBuffer(local_size, env_dict=env_dict, n_s=n_s)

@@ -9,14 +9,14 @@ stored transitions (reconstructed by cpprb) are element-wise identical. cpprb's
 import numpy as np
 import pytest
 
-from jax_baselines.common.cpprb_buffers import (
+from replay_memory.cpprb_buffers import (
     MultiPrioritizedReplayBuffer,
     NstepReplayBuffer,
     PrioritizedNstepReplayBuffer,
     PrioritizedReplayBuffer,
     ReplayBuffer,
 )
-from jax_baselines.common.replay_factory import make_replay_buffer
+from replay_memory.replay_factory import make_replay_buffer
 
 H = W = 8
 S = 4  # frame-stack depth, as in Atari
@@ -101,10 +101,22 @@ def test_nstep_buffer_compress_lossless(cls):
 def test_nstep_multiworker_compress_lossless():
     workers = 2
     comp = NstepReplayBuffer(
-        500, OBS, action_space=1, worker_size=workers, n_step=3, gamma=0.99, compress_memory=True
+        500,
+        OBS,
+        action_space=1,
+        worker_size=workers,
+        n_step=3,
+        gamma=0.99,
+        compress_memory=True,
     )
     ref = NstepReplayBuffer(
-        500, OBS, action_space=1, worker_size=workers, n_step=3, gamma=0.99, compress_memory=False
+        500,
+        OBS,
+        action_space=1,
+        worker_size=workers,
+        n_step=3,
+        gamma=0.99,
+        compress_memory=False,
     )
     # Two workers stepping in lockstep; each ends its episode at a different time.
     gens = [[list(_episode(b, length)) for b, length in EPISODES] for _ in range(workers)]
@@ -143,7 +155,14 @@ def test_factory_forwards_compress_memory_single_step(prioritized):
     # Regression: make_replay_buffer used to drop compress_memory on every branch,
     # so --compress_memory was silently a no-op. Single-step image compress stays on
     # cpprb (next_of + stack_compress) and must round-trip losslessly.
-    common = dict(worker_size=1, n_step=1, gamma=0.99, prioritized=prioritized, alpha=0.6, eps=1e-3)
+    common = dict(
+        worker_size=1,
+        n_step=1,
+        gamma=0.99,
+        prioritized=prioritized,
+        alpha=0.6,
+        eps=1e-3,
+    )
     comp = make_replay_buffer(500, OBS, 1, compress_memory=True, **common)
     ref = make_replay_buffer(500, OBS, 1, compress_memory=False, **common)
     _feed_single(comp)
@@ -156,7 +175,7 @@ def test_factory_forwards_compress_memory_single_step(prioritized):
 def test_factory_routes_nstep_image_compress_to_frame_buffer(prioritized):
     # n-step image + compress can't use cpprb (stack_compress breaks the n-step
     # next_obs), so the factory routes to the frame-level buffer instead.
-    from jax_baselines.common.frame_buffers import (
+    from replay_memory.frame_buffers import (
         FrameStackReplayBuffer,
         PrioritizedFrameStackReplayBuffer,
     )
@@ -180,7 +199,14 @@ def test_factory_routes_nstep_image_compress_to_frame_buffer(prioritized):
 def test_multiprioritized_warns_and_keeps_next_obs():
     with pytest.warns(RuntimeWarning, match="compress_memory is unsupported"):
         mp = MultiPrioritizedReplayBuffer(
-            64, OBS, 0.6, action_space=1, n_step=1, gamma=0.99, manager=None, compress_memory=True
+            64,
+            OBS,
+            0.6,
+            action_space=1,
+            n_step=1,
+            gamma=0.99,
+            manager=None,
+            compress_memory=True,
         )
     # central buffer must store next_obs fully (no broken deletion)
     assert "next_obs0" in mp.env_dict

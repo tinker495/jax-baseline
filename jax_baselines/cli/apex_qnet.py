@@ -4,6 +4,8 @@ from jax_baselines.cli._common import default_logdir, set_default_xla_flags
 from jax_baselines.cli._run import (
     AlgoSpec,
     DistributedFamilyRunner,
+    default_multi_replay_factory,
+    default_worker_replay_factory,
     run_distributed_family,
 )
 from jax_baselines.common.env_builder import get_env_builder
@@ -85,6 +87,8 @@ def _common(a):
         "optimizer": a.optimizer,
         "compress_memory": a.compress_memory,
         "seed": a.seed,
+        "multi_replay_factory": default_multi_replay_factory(),
+        "worker_replay_factory": default_worker_replay_factory(),
     }
 
 
@@ -103,7 +107,12 @@ ALGOS = {
     "IQN": AlgoSpec(
         APE_X_IQN,
         "iqn",
-        lambda a: {**_common(a), "n_support": a.n_support, "delta": a.delta, "CVaR": a.CVaR},
+        lambda a: {
+            **_common(a),
+            "n_support": a.n_support,
+            "delta": a.delta,
+            "CVaR": a.CVaR,
+        },
     ),
 }
 

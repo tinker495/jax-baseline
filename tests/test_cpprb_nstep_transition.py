@@ -2,10 +2,7 @@ import numpy as np
 
 
 def main():
-    from jax_baselines.common.cpprb_buffers import (
-        MultiPrioritizedReplayBuffer,
-        ReplayBuffer,
-    )
+    from replay_memory.cpprb_buffers import MultiPrioritizedReplayBuffer, ReplayBuffer
 
     n = 4
     gamma = 0.995
@@ -24,7 +21,7 @@ def main():
     transition = rb.get_buffer()
     rb.clear()
 
-    for i in range(len(transition["terminated"])):
+    for i in range(len(transition["done"])):
         st = ""
         for k in transition.keys():
             st += f"{k}: {transition[k][i]}, "

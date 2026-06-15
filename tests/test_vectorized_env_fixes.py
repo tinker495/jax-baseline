@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 
 from jax_baselines.common import env_builder as eb
-from jax_baselines.common.cpprb_buffers import NstepReplayBuffer, ReplayBuffer
+from replay_memory.cpprb_buffers import NstepReplayBuffer, ReplayBuffer
 
 
 # --- Fix 1: CLI default env ids are gymnasium-canonical ------------------

@@ -8,9 +8,9 @@ from typing import Callable, Protocol
 
 @dataclass(frozen=True)
 class AlgoSpec:
-    cls: type | Callable[
-        [Namespace], type
-    ]  # agent class, or args -> class (e.g. hl_gauss variants)
+    cls: (
+        type | Callable[[Namespace], type]
+    )  # agent class, or args -> class (e.g. hl_gauss variants)
     builder: str  # maker filename token, e.g. "ddpg"
     build: Callable[[Namespace], dict]  # args -> constructor kwargs
     # (must NOT include env_builder / model_builder_maker / policy_kwargs;
@@ -52,6 +52,22 @@ def resolve_maker(runner: _MakerRunner, spec: AlgoSpec, args: Namespace):
             f"variant={runner.variant(args) or 'base'} (no module {module})"
         ) from exc
     return mod.model_builder_maker
+
+
+def _replay_factories():
+    return import_module("experiments.replay_factories")
+
+
+def default_replay_factory():
+    return _replay_factories().make_replay_buffer
+
+
+def default_multi_replay_factory():
+    return _replay_factories().make_multi_prioritized_buffer
+
+
+def default_worker_replay_factory():
+    return _replay_factories().make_worker_replay_buffer
 
 
 def run_family(runner: FamilyRunner, argv=None):
@@ -109,7 +125,11 @@ def run_distributed_family(runner: DistributedFamilyRunner, argv=None):
     ray.init(num_cpus=args.worker + runner.ray_cpu_headroom, num_gpus=0)
     workers = runner.make_workers(args)
     agent = spec.resolve_cls(args)(
-        workers, maker, manager, policy_kwargs=runner.policy_kwargs(args), **spec.build(args)
+        workers,
+        maker,
+        manager,
+        policy_kwargs=runner.policy_kwargs(args),
+        **spec.build(args),
     )
     agent.learn(int(args.steps))
     return agent

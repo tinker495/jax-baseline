@@ -4,8 +4,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from jax_baselines.common.cpprb_buffers import EpochBuffer
 from jax_baselines.common.env_info import get_local_env_info, infer_action_meta
+from jax_baselines.common.epoch_buffer import EpochBuffer
 from jax_baselines.common.eval import (
     evaluate_policy,
     extract_lives,
