@@ -144,21 +144,3 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         else:
             total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
-
-    def learn(
-        self,
-        total_timesteps,
-        callback=None,
-        log_interval=1000,
-        experiment_name="A2C",
-        run_name="A2C",
-        eval_num=100,
-    ):
-        return super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            experiment_name,
-            run_name,
-            eval_num,
-        )

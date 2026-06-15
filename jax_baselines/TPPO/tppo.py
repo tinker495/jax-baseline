@@ -298,6 +298,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         experiment_name="TPPO",
         run_name="TPPO",
         eval_num=100,
+        **kwargs,
     ):
         return super().learn(
             total_timesteps,
@@ -306,4 +307,5 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             experiment_name,
             run_name,
             eval_num,
+            **kwargs,
         )
