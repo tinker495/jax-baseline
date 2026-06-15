@@ -6,7 +6,14 @@ import numpy as np
 
 from jax_baselines.common.cpprb_buffers import EpochBuffer
 from jax_baselines.common.env_info import get_local_env_info, infer_action_meta
-from jax_baselines.common.eval import evaluate_policy, record_and_test
+from jax_baselines.common.eval import (
+    evaluate_policy,
+    extract_lives,
+    extract_original_reward,
+    extract_vector_lives,
+    extract_vector_original_rewards,
+    record_and_test,
+)
 from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.rollout_stats import EpisodeTracker
@@ -217,7 +224,13 @@ class Actor_Critic_Policy_Gradient_Family(object):
         eval_num=100,
     ):
         return TrainingSession().run(
-            self, total_timesteps, callback, log_interval, experiment_name, run_name, eval_num
+            self,
+            total_timesteps,
+            callback,
+            log_interval,
+            experiment_name,
+            run_name,
+            eval_num,
         )
 
     def learn_SingleEnv(self, ctx):
@@ -239,24 +252,27 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.buffer.add(obs, actions, [reward], next_obs, [terminated], [truncated])
             score += float(reward)
             eplen += 1
-            step_original = info.get("original_reward")
+            step_original = extract_original_reward(info)
             if step_original is not None:
                 have_original = True
                 original += float(step_original)
             obs = next_obs
 
             if terminated or truncated:
+                lives = extract_lives(info)
+                emit_original = have_original and (lives is None or lives == 0)
                 self.rollout_tracker.record(
                     steps,
                     episode_reward=score,
                     episode_length=eplen,
                     timeout=float(truncated),
-                    original_reward=original if have_original else None,
+                    original_reward=original if emit_original else None,
                 )
                 score = 0.0
                 eplen = 0
-                original = 0.0
-                have_original = False
+                if emit_original:
+                    original = 0.0
+                    have_original = False
                 obs, info = self.env.reset()
                 obs = [np.expand_dims(obs, axis=0)]
 
@@ -277,7 +293,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         scores = np.zeros([self.worker_size], dtype=np.float64)
         eplens = np.zeros([self.worker_size], dtype=np.int32)
         originals = np.zeros([self.worker_size], dtype=np.float64)
-        have_original = False
+        original_present = np.zeros([self.worker_size], dtype=bool)
         # Workers that ended an episode last step emit an autoreset dummy step
         # (action ignored, reward 0, fresh obs). On-policy rollouts have a fixed
         # per-worker length, so the dummy can't be dropped; instead flag it
@@ -303,10 +319,13 @@ class Actor_Critic_Policy_Gradient_Family(object):
             active = np.ones(self.worker_size, dtype=bool) if prev_done is None else ~prev_done
             scores[active] += rewards[active]
             eplens[active] += 1
-            step_original = infos.get("original_reward")
-            if step_original is not None:
-                have_original = True
-                originals[active] += np.asarray(step_original)[active]
+            step_original, step_original_present = extract_vector_original_rewards(
+                infos, self.worker_size
+            )
+            lives, lives_present = extract_vector_lives(infos, self.worker_size)
+            active_original = active & step_original_present
+            originals[active_original] += step_original[active_original]
+            original_present[active_original] = True
 
             if prev_done is not None and prev_done.any():
                 # Flag the dummy step terminal AND zero its reward so it is fully
@@ -317,18 +336,23 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.buffer.add([obs], actions, rewards, [next_obses], terminateds, truncateds)
 
             for idx in np.where(real_done & active)[0]:
+                emit_original = original_present[idx] and (
+                    not lives_present[idx] or lives[idx] == 0
+                )
                 self.rollout_tracker.record(
                     steps,
                     episode_reward=float(scores[idx]),
                     episode_length=int(eplens[idx]),
                     timeout=float(truncateds[idx]),
-                    original_reward=float(originals[idx]) if have_original else None,
+                    original_reward=float(originals[idx]) if emit_original else None,
                 )
                 scores[idx] = 0.0
                 eplens[idx] = 0
-                originals[idx] = 0.0
+                if emit_original:
+                    originals[idx] = 0.0
+                    original_present[idx] = False
 
-            prev_done = real_done
+            prev_done = real_done & active
 
             if (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0:
                 loss = self.train_step(steps)

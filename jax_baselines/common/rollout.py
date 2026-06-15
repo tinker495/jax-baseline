@@ -28,6 +28,13 @@ from typing import Callable, Optional
 
 import numpy as np
 
+from jax_baselines.common.eval import (
+    extract_lives,
+    extract_original_reward,
+    extract_vector_lives,
+    extract_vector_original_rewards,
+)
+
 
 @dataclass(frozen=True)
 class ActionSelection:
@@ -145,24 +152,27 @@ class RolloutEngine:
             spec.replay_buffer.add(obs, sel.store_action, reward, next_obs, terminated, truncated)
             score += float(reward)
             eplen += 1
-            step_original = info.get("original_reward")
+            step_original = extract_original_reward(info)
             if step_original is not None:
                 have_original = True
                 original += float(step_original)
             obs = next_obs
 
             if terminated or truncated:
+                lives = extract_lives(info)
+                emit_original = have_original and (lives is None or lives == 0)
                 spec.record_rollout_episode(
                     steps,
                     episode_reward=score,
                     episode_length=eplen,
                     timeout=float(truncated),
-                    original_reward=original if have_original else None,
+                    original_reward=original if emit_original else None,
                 )
                 score = 0.0
                 eplen = 0
-                original = 0.0
-                have_original = False
+                if emit_original:
+                    original = 0.0
+                    have_original = False
                 obs, info = spec.env.reset()
                 obs = [np.expand_dims(obs, axis=0)]
 
@@ -184,7 +194,7 @@ class RolloutEngine:
         scores = np.zeros([spec.worker_size], dtype=np.float64)
         eplens = np.zeros([spec.worker_size], dtype=np.int32)
         originals = np.zeros([spec.worker_size], dtype=np.float64)
-        have_original = False
+        original_present = np.zeros([spec.worker_size], dtype=bool)
         # Workers that ended an episode last step emit an autoreset dummy step
         # (action ignored, reward 0, fresh obs); ``store_mask`` keeps that bogus
         # terminal->reset transition out of the replay buffer, and the same
@@ -207,10 +217,13 @@ class RolloutEngine:
             active = np.ones(spec.worker_size, dtype=bool) if prev_done is None else ~prev_done
             scores[active] += rewards[active]
             eplens[active] += 1
-            step_original = infos.get("original_reward")
-            if step_original is not None:
-                have_original = True
-                originals[active] += np.asarray(step_original)[active]
+            step_original, step_original_present = extract_vector_original_rewards(
+                infos, spec.worker_size
+            )
+            lives, lives_present = extract_vector_lives(infos, spec.worker_size)
+            active_original = active & step_original_present
+            originals[active_original] += step_original[active_original]
+            original_present[active_original] = True
 
             store_mask = None if prev_done is None or not prev_done.any() else ~prev_done
             spec.replay_buffer.add(
@@ -224,18 +237,23 @@ class RolloutEngine:
             )
 
             for idx in np.where(done & active)[0]:
+                emit_original = original_present[idx] and (
+                    not lives_present[idx] or lives[idx] == 0
+                )
                 spec.record_rollout_episode(
                     steps,
                     episode_reward=float(scores[idx]),
                     episode_length=int(eplens[idx]),
                     timeout=float(truncateds[idx]),
-                    original_reward=float(originals[idx]) if have_original else None,
+                    original_reward=float(originals[idx]) if emit_original else None,
                 )
                 scores[idx] = 0.0
                 eplens[idx] = 0
-                originals[idx] = 0.0
+                if emit_original:
+                    originals[idx] = 0.0
+                    original_present[idx] = False
 
-            prev_done = done
+            prev_done = done & active
 
             if steps % spec.eval_freq == 0:
                 eval_result = spec.evaluate(steps)
@@ -263,13 +281,15 @@ class RolloutEngine:
             next_obs = [np.expand_dims(next_obs, axis=0)]
             spec.replay_buffer.add(obs, sel.store_action, reward, next_obs, terminated, truncated)
             score += float(reward)
-            step_original = info.get("original_reward")
+            step_original = extract_original_reward(info)
             if step_original is not None:
                 have_original = True
                 original += float(step_original)
             obs = next_obs
 
             if terminated or truncated:
+                lives = extract_lives(info)
+                emit_original = have_original and (lives is None or lives == 0)
                 if steps > spec.learning_starts:
                     ckpt_success = spec.checkpoint_on_episode_end(
                         steps,
@@ -282,14 +302,15 @@ class RolloutEngine:
                         episode_reward=score,
                         episode_length=eplen,
                         timeout=float(truncated),
-                        original_reward=original if have_original else None,
+                        original_reward=original if emit_original else None,
                     )
                 else:
                     ckpt_success = True
                 score = 0.0
                 eplen = 0
-                original = 0.0
-                have_original = False
+                if emit_original:
+                    original = 0.0
+                    have_original = False
 
                 if not ckpt_success and spec.has_true_reset():
                     obs, info = spec.env.true_reset()
@@ -314,7 +335,7 @@ class RolloutEngine:
         scores = np.zeros([spec.worker_size], dtype=np.float64)
         eplens = np.zeros([spec.worker_size], dtype=np.int32)
         originals = np.zeros([spec.worker_size], dtype=np.float64)
-        have_original = False
+        original_present = np.zeros([spec.worker_size], dtype=bool)
         # Workers that ended an episode last step emit an autoreset dummy step
         # (action ignored, reward 0, fresh obs); exclude it from returns,
         # episode lengths, and the replay buffer.
@@ -331,10 +352,13 @@ class RolloutEngine:
             active = np.ones(spec.worker_size, dtype=bool) if prev_done is None else ~prev_done
             scores[active] += rewards[active]
             eplens[active] += 1
-            step_original = infos.get("original_reward")
-            if step_original is not None:
-                have_original = True
-                originals[active] += np.asarray(step_original)[active]
+            step_original, step_original_present = extract_vector_original_rewards(
+                infos, spec.worker_size
+            )
+            lives, lives_present = extract_vector_lives(infos, spec.worker_size)
+            active_original = active & step_original_present
+            originals[active_original] += step_original[active_original]
+            original_present[active_original] = True
 
             store_mask = None if prev_done is None or not prev_done.any() else ~prev_done
             spec.replay_buffer.add(
@@ -346,10 +370,8 @@ class RolloutEngine:
                 truncateds,
                 store_mask=store_mask,
             )
-            prev_done = done
-
             if steps > spec.learning_starts:
-                done_idx = np.where(done)[0]
+                done_idx = np.where(done & active)[0]
                 ckpt_results = []
                 for idx in done_idx:
                     ckpt_success = spec.checkpoint_on_episode_end(
@@ -359,20 +381,27 @@ class RolloutEngine:
                         spec.checkpoint_pulse,
                     )
                     ckpt_results.append((idx, ckpt_success))
+                    emit_original = original_present[idx] and (
+                        not lives_present[idx] or lives[idx] == 0
+                    )
                     if active[idx]:
                         spec.record_rollout_episode(
                             steps,
                             episode_reward=float(scores[idx]),
                             episode_length=int(eplens[idx]),
                             timeout=float(truncateds[idx]),
-                            original_reward=float(originals[idx]) if have_original else None,
+                            original_reward=(float(originals[idx]) if emit_original else None),
                         )
                     scores[idx] = 0.0
                     eplens[idx] = 0
-                    originals[idx] = 0.0
+                    if active[idx] and emit_original:
+                        originals[idx] = 0.0
+                        original_present[idx] = False
 
                 if spec.has_true_reset() and any(not success for _, success in ckpt_results):
                     spec.env.true_reset()
+
+            prev_done = done & active
 
             if steps % spec.eval_freq == 0:
                 eval_result = spec.evaluate(steps)

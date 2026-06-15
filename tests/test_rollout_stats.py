@@ -107,8 +107,9 @@ class _ScriptedSingleEnv:
 
 
 class _ScriptedVecEnv:
-    def __init__(self, script, worker_size):
+    def __init__(self, script, worker_size, infos=None):
         self.script = script  # list of (rewards, terminateds, truncateds)
+        self.infos = infos if infos is not None else [{}] * len(script)
         self.ws = worker_size
         self.i = 0
 
@@ -120,8 +121,15 @@ class _ScriptedVecEnv:
 
     def get_result(self):
         rewards, terminateds, truncateds = self.script[self.i]
+        infos = self.infos[self.i]
         self.i += 1
-        return np.zeros((self.ws, 1), dtype=np.float32), rewards, terminateds, truncateds, {}
+        return (
+            np.zeros((self.ws, 1), dtype=np.float32),
+            rewards,
+            terminateds,
+            truncateds,
+            infos,
+        )
 
 
 class _NoopBuffer:
@@ -176,7 +184,12 @@ def _spec(env, record, **overrides):
 def test_single_env_emits_completed_episode_records():
     # Two episodes: terminate at step1 (return 2, len 2), truncate at step3 (return 2, len 2).
     env = _ScriptedSingleEnv(
-        [(1.0, False, False), (1.0, True, False), (1.0, False, False), (1.0, False, True)]
+        [
+            (1.0, False, False),
+            (1.0, True, False),
+            (1.0, False, False),
+            (1.0, False, True),
+        ]
     )
     records, record = _episode_recorder()
     RolloutEngine(_spec(env, record)).learn_single_env(range(4), None, log_interval=10**9)
@@ -197,6 +210,23 @@ def test_single_env_accumulates_original_reward():
 
     assert len(records) == 1
     assert records[0]["original"] == 30.0
+
+
+def test_single_env_original_reward_waits_for_zero_lives():
+    env = _ScriptedSingleEnv(
+        [(1.0, True, False), (1.0, True, False)],
+        infos=[
+            {"original_reward": 10.0, "lives": 2},
+            {"original_reward": 20.0, "lives": 0},
+        ],
+    )
+    records, record = _episode_recorder()
+    RolloutEngine(_spec(env, record)).learn_single_env(range(2), None, log_interval=10**9)
+
+    assert [(r["reward"], r["original"]) for r in records] == [
+        (1.0, None),
+        (1.0, 30.0),
+    ]
 
 
 def test_vectorized_env_excludes_autoreset_dummy_step():
@@ -230,10 +260,135 @@ def test_vectorized_env_excludes_autoreset_dummy_step():
     ]
 
 
+def test_vectorized_env_ignores_autoreset_dummy_done_flag():
+    ws = 1
+
+    def row(reward, term, trunc):
+        return (
+            np.array([reward], dtype=np.float32),
+            np.array([term]),
+            np.array([trunc]),
+        )
+
+    env = _ScriptedVecEnv(
+        [
+            row(1.0, False, False),
+            row(1.0, True, False),
+            row(5.0, True, False),
+            row(1.0, False, True),
+        ],
+        worker_size=ws,
+    )
+    records, record = _episode_recorder()
+    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(4), None, log_interval=10**9)
+
+    assert [(r["reward"], r["length"], r["timeout"]) for r in records] == [
+        (2.0, 2, 0.0),
+        (1.0, 1, 1.0),
+    ]
+
+
+def test_vectorized_env_accumulates_original_reward_from_dict_infos():
+    ws = 2
+
+    def row(rewards, terms, truncs):
+        return (
+            np.array(rewards, dtype=np.float32),
+            np.array(terms),
+            np.array(truncs),
+        )
+
+    env = _ScriptedVecEnv(
+        [
+            row([1.0, 2.0], [False, False], [False, False]),
+            row([1.0, 2.0], [True, False], [False, True]),
+        ],
+        worker_size=ws,
+        infos=[
+            {"original_reward": np.array([10.0, 20.0])},
+            {"original_reward": np.array([30.0, 40.0])},
+        ],
+    )
+    records, record = _episode_recorder()
+    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(2), None, log_interval=10**9)
+
+    assert [(r["reward"], r["original"]) for r in records] == [(2.0, 40.0), (4.0, 60.0)]
+
+
+def test_vectorized_env_respects_original_reward_presence_mask():
+    ws = 2
+
+    def row(rewards, terms, truncs):
+        return (
+            np.array(rewards, dtype=np.float32),
+            np.array(terms),
+            np.array(truncs),
+        )
+
+    env = _ScriptedVecEnv(
+        [
+            row([1.0, 2.0], [False, False], [False, False]),
+            row([1.0, 2.0], [True, False], [False, True]),
+        ],
+        worker_size=ws,
+        infos=[
+            {
+                "original_reward": np.array([10.0, 20.0]),
+                "_original_reward": np.array([True, False]),
+            },
+            {
+                "original_reward": np.array([30.0, 40.0]),
+                "_original_reward": np.array([True, False]),
+            },
+        ],
+    )
+    records, record = _episode_recorder()
+    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(2), None, log_interval=10**9)
+
+    assert [(r["reward"], r["original"]) for r in records] == [(2.0, 40.0), (4.0, None)]
+
+
+def test_vectorized_env_original_reward_waits_for_zero_lives():
+    ws = 1
+
+    def row(reward, term, trunc):
+        return (
+            np.array([reward], dtype=np.float32),
+            np.array([term]),
+            np.array([trunc]),
+        )
+
+    env = _ScriptedVecEnv(
+        [
+            row(1.0, True, False),
+            row(5.0, False, False),
+            row(1.0, True, False),
+        ],
+        worker_size=ws,
+        infos=[
+            {"original_reward": np.array([10.0]), "lives": np.array([2])},
+            {"original_reward": np.array([500.0]), "lives": np.array([2])},
+            {"original_reward": np.array([20.0]), "lives": np.array([0])},
+        ],
+    )
+    records, record = _episode_recorder()
+    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(3), None, log_interval=10**9)
+
+    assert [(r["reward"], r["original"]) for r in records] == [
+        (1.0, None),
+        (1.0, 30.0),
+    ]
+
+
 def test_single_env_checkpointing_emits_after_learning_starts():
     # learning_starts=0 so both episode ends (steps 1 and 3, both > 0) emit.
     env = _ScriptedSingleEnv(
-        [(1.0, False, False), (1.0, True, False), (1.0, False, False), (1.0, False, True)]
+        [
+            (1.0, False, False),
+            (1.0, True, False),
+            (1.0, False, False),
+            (1.0, False, True),
+        ]
     )
     records, record = _episode_recorder()
     RolloutEngine(_spec(env, record, learning_starts=0)).learn_single_env_checkpointing(
@@ -275,3 +430,78 @@ def test_vectorized_checkpointing_excludes_dummy_and_guards_active():
         (2.0, 2, 0.0),
         (1.0, 1, 1.0),
     ]
+
+
+def test_vectorized_checkpointing_ignores_autoreset_dummy_done_flag():
+    ws = 1
+
+    def row(reward, term, trunc):
+        return (
+            np.array([reward], dtype=np.float32),
+            np.array([term]),
+            np.array([trunc]),
+        )
+
+    ckpts = []
+    env = _ScriptedVecEnv(
+        [
+            row(1.0, False, False),
+            row(1.0, True, False),
+            row(5.0, True, False),
+            row(1.0, False, True),
+        ],
+        worker_size=ws,
+    )
+    records, record = _episode_recorder()
+
+    def checkpoint_on_episode_end(steps, score, eplen, *args, **kwargs):
+        ckpts.append((steps, float(score), int(eplen)))
+        return True
+
+    RolloutEngine(
+        _spec(
+            env,
+            record,
+            learning_starts=0,
+            checkpoint_on_episode_end=checkpoint_on_episode_end,
+        )
+    ).learn_vectorized_env_checkpointing(range(4), None, log_interval=10**9)
+
+    assert ckpts == [(1, 2.0, 2), (3, 1.0, 1)]
+    assert [(r["reward"], r["length"], r["timeout"]) for r in records] == [
+        (2.0, 2, 0.0),
+        (1.0, 1, 1.0),
+    ]
+
+
+def test_vectorized_checkpointing_accumulates_original_reward_from_per_worker_infos():
+    ws = 1
+
+    def row(reward, term, trunc):
+        return (
+            np.array([reward], dtype=np.float32),
+            np.array([term]),
+            np.array([trunc]),
+        )
+
+    env = _ScriptedVecEnv(
+        [
+            row(1.0, False, False),
+            row(1.0, True, False),
+            row(5.0, False, False),
+            row(1.0, False, True),
+        ],
+        worker_size=ws,
+        infos=[
+            [{"original_reward": 10.0}],
+            [{"original_reward": 20.0}],
+            [{"original_reward": 500.0}],
+            [{"original_reward": 30.0}],
+        ],
+    )
+    records, record = _episode_recorder()
+    RolloutEngine(_spec(env, record, learning_starts=0)).learn_vectorized_env_checkpointing(
+        range(4), None, log_interval=10**9
+    )
+
+    assert [(r["reward"], r["original"]) for r in records] == [(2.0, 30.0), (1.0, 30.0)]
