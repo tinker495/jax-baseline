@@ -143,9 +143,9 @@ ALLOWED_IMPORTS = (
     ),
     AllowedImport(
         "jax_baselines/common/atari_wrappers.py",
-        "gymnasium",
-        "NOT_YET_MOVED",
-        "env_builder slice",
+        "env_builder",
+        "MIGRATION_SHIM",
+        "env_builder shim cleanup slice",
     ),
     AllowedImport(
         "jax_baselines/common/epoch_buffer.py",
@@ -155,21 +155,9 @@ ALLOWED_IMPORTS = (
     ),
     AllowedImport(
         "jax_baselines/common/env_builder.py",
-        "envpool",
-        "NOT_YET_MOVED",
-        "env_builder slice",
-    ),
-    AllowedImport(
-        "jax_baselines/common/env_builder.py",
-        "gymnasium",
-        "NOT_YET_MOVED",
-        "env_builder slice",
-    ),
-    AllowedImport(
-        "jax_baselines/common/env_info.py",
-        "gymnasium",
-        "NOT_YET_MOVED",
-        "env_builder slice",
+        "env_builder",
+        "MIGRATION_SHIM",
+        "env_builder shim cleanup slice",
     ),
     AllowedImport(
         "jax_baselines/common/env_info.py",
@@ -191,9 +179,9 @@ ALLOWED_IMPORTS = (
     ),
     AllowedImport(
         "jax_baselines/common/seeding.py",
-        "gymnasium",
-        "NOT_YET_MOVED",
-        "env_builder slice",
+        "env_builder",
+        "MIGRATION_SHIM",
+        "env_builder shim cleanup slice",
     ),
 )
 
@@ -362,6 +350,19 @@ def test_import_boundary_allowlist_entries_are_documented():
         assert entry.retiring_slice.strip(), f"missing retiring-slice note: {entry}"
 
     assert not duplicate_keys, "duplicate allowlist entries:\n" + _format_pairs(duplicate_keys)
+
+
+def test_import_boundary_env_builder_common_shims_are_explicit_migration_debt():
+    entries_by_key = {entry.key: entry for entry in ALLOWED_IMPORTS}
+
+    for key in (
+        ("jax_baselines/common/atari_wrappers.py", "env_builder"),
+        ("jax_baselines/common/env_builder.py", "env_builder"),
+        ("jax_baselines/common/seeding.py", "env_builder"),
+    ):
+        entry = entries_by_key[key]
+        assert entry.tag == "MIGRATION_SHIM"
+        assert entry.retiring_slice == "env_builder shim cleanup slice"
 
 
 def test_import_boundary_failure_message_distinguishes_undeclared_and_stale_entries():

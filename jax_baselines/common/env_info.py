@@ -1,8 +1,8 @@
-import gymnasium as gym
 import numpy as np
-from gymnasium import spaces
 
-from jax_baselines.common.env_builder import VectorizedEnv
+from jax_baselines.common.env_protocols import EnvInfo, SingleEnv, VectorizedEnv
+
+REQUIRED_ENV_INFO_KEYS = ("observation_space", "action_space", "env_type", "env_id")
 
 
 # Action-space converters (defined at module scope to avoid lambda-based E731 lint issues)
@@ -12,6 +12,44 @@ def _discrete_action_conv(a):
 
 def _continuous_action_conv(a):
     return np.clip(a, -3.0, 3.0) / 3.0
+
+
+def _observation_space_shape(observation_space):
+    if hasattr(observation_space, "shape"):
+        return [list(observation_space.shape)]
+    return [list(observation_space)]
+
+
+def _is_discrete_space(action_space):
+    return hasattr(action_space, "n")
+
+
+def _action_size(action_space):
+    if _is_discrete_space(action_space):
+        return [action_space.n]
+    if hasattr(action_space, "shape") and action_space.shape:
+        return [action_space.shape[0]]
+    raise ValueError(f"Unsupported action space type: {type(action_space)}")
+
+
+def _is_single_env(env):
+    return isinstance(env, SingleEnv) or (
+        hasattr(env, "observation_space")
+        and hasattr(env, "action_space")
+        and callable(getattr(env, "reset", None))
+        and callable(getattr(env, "step", None))
+    )
+
+
+def _require_env_info(env_info: EnvInfo | None) -> EnvInfo:
+    if env_info is None:
+        raise ValueError("VectorizedEnv env_info is required")
+
+    missing = [key for key in REQUIRED_ENV_INFO_KEYS if key not in env_info]
+    if missing:
+        raise ValueError(f"VectorizedEnv env_info missing required keys: {', '.join(missing)}")
+
+    return env_info
 
 
 def get_local_env_info(env_builder, num_workers=1, seed=None):
@@ -24,38 +62,18 @@ def get_local_env_info(env_builder, num_workers=1, seed=None):
     eval_env = env_builder(1, seed=eval_seed)
 
     if isinstance(env, VectorizedEnv):
-        env_info = env.env_info
+        env_info = _require_env_info(env.env_info)
         obs_space = env_info["observation_space"]
         act_space = env_info["action_space"]
 
-        # Handle different observation space types
-        # EnvPool may return different space types than gymnasium
-        if hasattr(obs_space, "shape"):
-            observation_space = [list(obs_space.shape)]
-        else:
-            # Fallback for tuple/dict spaces
-            observation_space = [list(obs_space)]
-
-        # Handle action space
-        if isinstance(act_space, spaces.Discrete):
-            action_size = [act_space.n]
-        elif isinstance(act_space, spaces.Box):
-            action_size = [act_space.shape[0]]
-        elif hasattr(act_space, "n"):
-            action_size = [act_space.n]
-        elif hasattr(act_space, "shape"):
-            action_size = [act_space.shape[0]]
-        else:
-            raise ValueError(f"Unsupported action space type: {type(act_space)}")
-
+        observation_space = _observation_space_shape(obs_space)
+        action_size = _action_size(act_space)
         worker_size = env.worker_num
         env_type = "VectorizedEnv"
-    elif isinstance(env, (gym.Env, gym.Wrapper)):
+    elif _is_single_env(env):
         action_space = env.action_space
-        observation_space = [list(env.observation_space.shape)]
-        action_size = [
-            action_space.n if not isinstance(action_space, spaces.Box) else action_space.shape[0]
-        ]
+        observation_space = _observation_space_shape(env.observation_space)
+        action_size = _action_size(action_space)
         worker_size = 1
         env_type = "SingleEnv"
     else:
@@ -79,12 +97,13 @@ def get_remote_env_info(workers, include_action_type=False):
     if isinstance(workers, list):
         env_dict = ray.get(workers[0].get_info.remote())
         observation_space = [list(env_dict["observation_space"].shape)]
+        action_space = env_dict["action_space"]
 
-        if not isinstance(env_dict["action_space"], spaces.Box):
-            action_size = [env_dict["action_space"].n]
+        if _is_discrete_space(action_space):
+            action_size = [action_space.n]
             action_type = "discrete"
         else:
-            action_size = [env_dict["action_space"].shape[0]]
+            action_size = _action_size(action_space)
             action_type = "continuous"
 
         env_type = "SingleEnv"
@@ -99,10 +118,11 @@ def get_remote_env_info(workers, include_action_type=False):
 
 def infer_action_meta(action_space):
     """Return (action_type, conv_action) for given gym action_space."""
-    if not isinstance(action_space, spaces.Box):
+    if _is_discrete_space(action_space):
         action_type = "discrete"
         conv_action = _discrete_action_conv
     else:
+        _action_size(action_space)
         action_type = "continuous"
         conv_action = _continuous_action_conv
     return action_type, conv_action
