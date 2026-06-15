@@ -3,7 +3,7 @@ import random
 import numpy as np
 
 
-class Buffer(object):
+class Buffer:
     def __init__(self, size: int, obs_dict: dict, env_dict: dict):
         self.max_size = size
         self._idx = -1
@@ -147,7 +147,7 @@ class SumTree:
         return (idx, self.tree[idx], self.data[dataIdx])
 
 
-class TransitionReplayBuffer(object):
+class TransitionReplayBuffer:
     def __init__(
         self,
         size: int,

@@ -8,6 +8,11 @@ import numpy as np
 
 SIGMA_INIT = 0.5
 
+LOG_STD_MAX = 2
+LOG_STD_MIN = -20
+LOG_STD_SCALE = (LOG_STD_MAX - LOG_STD_MIN) / 2.0
+LOG_STD_MEAN = (LOG_STD_MAX + LOG_STD_MIN) / 2.0
+
 
 def get_eps(n):
     key = hk.next_rng_key()

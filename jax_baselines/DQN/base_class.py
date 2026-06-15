@@ -24,7 +24,7 @@ from jax_baselines.math.schedules import ConstantSchedule, LinearSchedule
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
-class Q_Network_Family(object):
+class Q_Network_Family:
     _qnet_handles_train_pulse = False
 
     def __init__(

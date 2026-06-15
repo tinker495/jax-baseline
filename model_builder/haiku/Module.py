@@ -1,8 +1,19 @@
-from typing import List
+from typing import List, Optional, Tuple
 
 import haiku as hk
 import jax
 import jax.numpy as jnp
+
+
+def pop_embedding_mode(policy_kwargs: Optional[dict], default: str = "normal") -> Tuple[dict, str]:
+    """Normalize policy_kwargs and split out the embedding_mode entry.
+
+    Returns the (mutated) policy_kwargs dict with ``embedding_mode`` removed and
+    the embedding mode string (defaulting to ``default``).
+    """
+    policy_kwargs = {} if policy_kwargs is None else policy_kwargs
+    embedding_mode = policy_kwargs.pop("embedding_mode", default)
+    return policy_kwargs, embedding_mode
 
 
 def visual_embedding(mode="simple"):

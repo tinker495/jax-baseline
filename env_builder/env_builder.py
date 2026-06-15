@@ -106,7 +106,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
     - High performance: Up to 1M FPS for Atari, 3M FPS for MuJoCo
     """
 
-    def __init__(self, env_id, worker_num=8, render=False, seed=None):
+    def __init__(self, env_id, worker_num=8, seed=None):
         import envpool
 
         self.env_id = env_id
@@ -306,7 +306,7 @@ class GymVectorizedEnv(VectorizedEnv):
     Used when EnvPool doesn't support the requested environment.
     """
 
-    def __init__(self, env_id, worker_num=8, render=False, seed=None):
+    def __init__(self, env_id, worker_num=8, seed=None):
         self.env_id = env_id
         self.worker_num = worker_num
 

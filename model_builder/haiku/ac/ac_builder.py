@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from model_builder.haiku.apply import get_apply_fn_haiku_module
-from model_builder.haiku.Module import PreProcess
+from model_builder.haiku.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import print_param
 
 
@@ -50,8 +50,7 @@ class Critic(hk.Module):
 
 
 def model_builder_maker(observation_space, action_size, action_type, policy_kwargs):
-    policy_kwargs = {} if policy_kwargs is None else policy_kwargs
-    embedding_mode = policy_kwargs.pop("embedding_mode", "normal")
+    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
 
     def _model_builder(key=None, print_model=False):
         preproc = hk.transform(
