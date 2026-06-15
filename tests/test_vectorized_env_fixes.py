@@ -140,3 +140,36 @@ def test_env_builder_envpool_backend_unsupported_env_raises():
 def test_get_env_builder_rejects_unknown_backend():
     with pytest.raises(ValueError, match="env_backend must be"):
         eb.get_env_builder("CartPole-v1", env_backend="nope")
+
+
+def test_envpool_atari_exposes_info_reward_as_original_reward():
+    env = eb.EnvPoolVectorizedEnv.__new__(eb.EnvPoolVectorizedEnv)
+    env._is_atari = True
+    env.obs = None
+    next_obs = np.zeros((2, 4), dtype=np.float32)
+    rewards = np.array([1.0, -1.0], dtype=np.float32)
+    terminateds = np.array([False, True])
+    truncateds = np.array([False, False])
+    infos = {"reward": np.array([4.0, -2.0], dtype=np.float32)}
+    env._pending_result = (next_obs, rewards, terminateds, truncateds, infos)
+
+    _, _, _, _, result_infos = env.get_result()
+
+    assert np.array_equal(result_infos["original_reward"], infos["reward"])
+    assert "original_reward" not in infos
+
+
+def test_envpool_non_atari_does_not_alias_info_reward():
+    env = eb.EnvPoolVectorizedEnv.__new__(eb.EnvPoolVectorizedEnv)
+    env._is_atari = False
+    env.obs = None
+    next_obs = np.zeros((2, 4), dtype=np.float32)
+    rewards = np.array([1.0, -1.0], dtype=np.float32)
+    terminateds = np.array([False, True])
+    truncateds = np.array([False, False])
+    infos = {"reward": np.array([4.0, -2.0], dtype=np.float32)}
+    env._pending_result = (next_obs, rewards, terminateds, truncateds, infos)
+
+    _, _, _, _, result_infos = env.get_result()
+
+    assert "original_reward" not in result_infos

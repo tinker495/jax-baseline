@@ -290,6 +290,12 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
         next_obs, rewards, terminateds, truncateds, infos = self._pending_result
         self._pending_result = None
 
+        if self._is_atari and isinstance(infos, dict) and "original_reward" not in infos:
+            original_reward = infos.get("reward")
+            if original_reward is not None:
+                infos = dict(infos)
+                infos["original_reward"] = original_reward
+
         # EnvPool handles auto-reset internally
         # After done, next_obs already contains the new episode's observation
         # We just need to update our current obs tracker

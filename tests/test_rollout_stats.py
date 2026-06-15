@@ -79,6 +79,17 @@ def test_tracker_original_reward_only_when_present():
     assert log.keyed("rollout/original_reward") == [(42.0, 2)]
 
 
+def test_tracker_logs_original_reward_when_reward_window_is_throttled():
+    log = _RecordingLog()
+    tracker = EpisodeTracker(log, log_interval=100)
+
+    tracker.record(150, episode_reward=1.0, episode_length=1, timeout=0.0)
+    tracker.record(160, episode_reward=1.0, episode_length=1, timeout=0.0, original_reward=42.0)
+
+    assert log.keyed("rollout/episode_reward") == [(1.0, 150)]
+    assert log.keyed("rollout/original_reward") == [(42.0, 160)]
+
+
 def test_tracker_describe_is_empty_until_first_episode():
     log = _RecordingLog()
     tracker = EpisodeTracker(log, log_interval=100)
