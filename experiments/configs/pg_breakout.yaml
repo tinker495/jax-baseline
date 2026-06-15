@@ -12,16 +12,20 @@ base:
   worker: 8
   # Default backend is gymnasium; keep EnvPool for this Atari sweep's throughput.
   env_backend: envpool
-  steps: 1e7
+  steps: 3e7
   batch: 128
   mini_batch: 256
   gamma: 0.995
   lamda: 0.95
   node: 512
   hidden_n: 1
-  optimizer: rmsprop
+  optimizer: adam
+  learning_rate: 0.0003
+  ent_coef: 1e-4
+  epoch_num: 16
+  gae_normalize: true
+  gae_normalize_scope: minibatch
 variants:
-  - {algo: A2C, learning_rate: 0.001, ent_coef: 1e-6}
-  - {algo: SPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16, optimizer: adam, gae_normalize: true}
-  - {algo: TPPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16, optimizer: adam, gae_normalize: true}
-  - {algo: PPO, learning_rate: 0.0003, ent_coef: 1e-2, epoch_num: 16, optimizer: adam, gae_normalize: true}
+  - {algo: SPO}
+  - {algo: TPPO}
+  - {algo: PPO}
