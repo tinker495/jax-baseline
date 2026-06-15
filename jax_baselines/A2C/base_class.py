@@ -3,6 +3,7 @@ from collections import deque
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optax
 
 from jax_baselines.common.env_info import get_local_env_info, infer_action_meta
 from jax_baselines.common.epoch_buffer import EpochBuffer
@@ -42,6 +43,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
         policy_kwargs=None,
         seed=None,
         optimizer="adamw",
+        optimizer_eps=1e-2 / 256.0,
+        max_grad_norm=None,
+        lr_annealing=False,
     ):
         self.name = "Actor_Critic_Policy_Gradient_Family"
         self.env_builder = env_builder
@@ -62,11 +66,15 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.log_dir = log_dir
         self.use_entropy_adv_shaping = use_entropy_adv_shaping
         self.entropy_adv_shaping_kappa = entropy_adv_shaping_kappa
+        self.optimizer_name = optimizer
+        self.optimizer_eps = optimizer_eps
+        self.max_grad_norm = max_grad_norm
+        self.lr_annealing = lr_annealing
 
         self.params = None
         self.save_path = None
         self.rollout_tracker = None
-        self.optimizer = select_optimizer(optimizer, self.learning_rate)
+        self.optimizer = self._make_optimizer(self.learning_rate)
 
         self.get_env_setup()
         # Control model initialization timing across children
@@ -205,8 +213,42 @@ class Actor_Critic_Policy_Gradient_Family(object):
     def run_name_update(self, run_name):
         return run_name
 
+    def _make_optimizer(self, learning_rate):
+        return select_optimizer(
+            self.optimizer_name,
+            learning_rate,
+            eps=self.optimizer_eps,
+            grad_max=self.max_grad_norm,
+        )
+
+    def _optimizer_updates_per_train_step(self):
+        rollout_size = max(1, int(self.batch_size) * int(self.worker_size))
+        minibatch_size = getattr(self, "minibatch_size", None)
+        minibatches = (
+            max(1, int(np.ceil(rollout_size / int(minibatch_size))))
+            if minibatch_size is not None
+            else 1
+        )
+        return max(1, int(getattr(self, "epoch_num", 1)) * minibatches)
+
+    def _lr_annealing_transition_steps(self, total_timesteps):
+        # Optax schedules tick per optimizer update, so translate env timesteps
+        # through the current on-policy rollout/epoch/minibatch update geometry.
+        rollout_size = max(1, int(self.batch_size) * int(self.worker_size))
+        train_steps = max(1, int(total_timesteps) // rollout_size)
+        return train_steps * self._optimizer_updates_per_train_step()
+
     def prepare_run(self, total_timesteps):
-        pass
+        if not getattr(self, "lr_annealing", False) or getattr(self, "params", None) is None:
+            return
+
+        schedule = optax.linear_schedule(
+            init_value=self.learning_rate,
+            end_value=0.0,
+            transition_steps=self._lr_annealing_transition_steps(total_timesteps),
+        )
+        self.optimizer = self._make_optimizer(schedule)
+        self.opt_state = self.optimizer.init(self.params)
 
     def run_training_loop(self, ctx):
         if self.env_type == "SingleEnv":

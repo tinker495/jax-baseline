@@ -39,9 +39,33 @@ def add_args(parser):
     parser.add_argument("--node", type=int, default=256, help="network node number")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
     parser.add_argument("--optimizer", type=str, default="adamw", help="optimaizer")
+    parser.add_argument(
+        "--optimizer_eps",
+        type=float,
+        default=1e-2 / 256.0,
+        help="optimizer epsilon for Adam-like optimizers",
+    )
+    parser.add_argument(
+        "--max_grad_norm",
+        type=float,
+        default=None,
+        help="global gradient norm clipping threshold; omitted disables clipping",
+    )
+    parser.add_argument(
+        "--lr_annealing",
+        action="store_true",
+        help="linearly anneal learning rate from the configured value to 0",
+    )
     parser.add_argument("--ent_coef", type=float, default=0.001, help="entropy coefficient")
     parser.add_argument("--val_coef", type=float, default=0.6, help="val coefficient")
     parser.add_argument("--epoch_num", type=int, default=4, help="epoch number")
+    parser.add_argument("--ppo_eps", type=float, default=0.2, help="PPO policy clip range")
+    parser.add_argument(
+        "--value_clip",
+        type=float,
+        default=2.0,
+        help="value-function clip range for PPO-like algorithms",
+    )
     parser.add_argument("--gae_normalize", action="store_true")
     parser.add_argument(
         "--gae_normalize_scope",
@@ -66,7 +90,11 @@ def build_env(args):
         timescale=args.time_scale,
         capture_frame_rate=args.capture_frame_rate,
     )
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
+    policy_kwargs = {
+        "node": args.node,
+        "hidden_n": args.hidden_n,
+        "embedding_mode": "normal",
+    }
     return env_builder, policy_kwargs
 
 
@@ -81,6 +109,9 @@ def _common(a):
         "use_entropy_adv_shaping": a.use_entropy_adv_shaping,
         "log_dir": a.logdir,
         "optimizer": a.optimizer,
+        "optimizer_eps": a.optimizer_eps,
+        "max_grad_norm": a.max_grad_norm,
+        "lr_annealing": a.lr_annealing,
         "seed": a.seed,
     }
 
@@ -96,11 +127,26 @@ def _ppo_like(a):
     }
 
 
+def _ppo_build(a):
+    return {
+        **_ppo_like(a),
+        "ppo_eps": a.ppo_eps,
+        "value_clip": a.value_clip,
+    }
+
+
+def _tppo_build(a):
+    return {
+        **_ppo_like(a),
+        "value_clip": a.value_clip,
+    }
+
+
 ALGOS = {
     "A2C": AlgoSpec(A2C, "ac", _common),
-    "PPO": AlgoSpec(PPO, "ac", _ppo_like),
-    "TPPO": AlgoSpec(TPPO, "ac", _ppo_like),
-    "SPO": AlgoSpec(SPO, "ac", _ppo_like),
+    "PPO": AlgoSpec(PPO, "ac", _ppo_build),
+    "TPPO": AlgoSpec(TPPO, "ac", _tppo_build),
+    "SPO": AlgoSpec(SPO, "ac", _ppo_build),
 }
 
 

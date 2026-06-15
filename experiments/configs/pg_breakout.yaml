@@ -15,17 +15,22 @@ base:
   steps: 3e7
   batch: 128
   mini_batch: 256
-  gamma: 0.995
+  gamma: 0.99
   lamda: 0.95
   node: 512
   hidden_n: 1
   optimizer: adam
-  learning_rate: 0.0003
-  ent_coef: 1e-4
-  epoch_num: 16
+  optimizer_eps: 0.00001
+  max_grad_norm: 0.5
+  lr_annealing: true
+  learning_rate: 0.00025
+  ent_coef: 0.01
+  val_coef: 0.5
+  epoch_num: 4
+  value_clip: 0.1
   gae_normalize: true
   gae_normalize_scope: minibatch
 variants:
-  - {algo: SPO}
+  - {algo: SPO, ppo_eps: 0.1}
   - {algo: TPPO}
-  - {algo: PPO}
+  - {algo: PPO, ppo_eps: 0.1}
