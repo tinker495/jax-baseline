@@ -23,6 +23,13 @@ def discount_with_terminated(rewards, terminateds, truncateds, next_values, gamm
 
 
 def get_gaes(rewards, terminateds, truncateds, values, next_values, gamma, lamda):
+    # rewards/terminateds/truncateds arrive flat ([T]) from the scalar-per-step
+    # buffer, while the critic's values/next_values keep a trailing unit dim
+    # ([T, 1]). Align them so deltas stays [T, 1]; otherwise [T] broadcasts
+    # against [T, 1] into a [T, T] matrix and the scan carry shape blows up.
+    rewards = rewards.reshape(values.shape)
+    terminateds = terminateds.reshape(values.shape)
+    truncateds = truncateds.reshape(values.shape)
     deltas = rewards + gamma * (1.0 - terminateds) * next_values - values
 
     def f(last_gae_lam, info):
@@ -32,7 +39,7 @@ def get_gaes(rewards, terminateds, truncateds, values, next_values, gamma, lamda
 
     _, advs = jax.lax.scan(
         f,
-        jnp.zeros((1,), dtype=jnp.float32),
+        jnp.zeros_like(deltas[0]),
         (deltas, terminateds, truncateds),
         reverse=True,
     )
