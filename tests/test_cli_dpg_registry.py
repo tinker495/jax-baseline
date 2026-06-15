@@ -201,8 +201,23 @@ def test_run_family_wires_agent_without_env_or_model(monkeypatch):
         def __init__(self, env_builder, maker, **kwargs):
             captured.update(env=env_builder, maker=maker, kwargs=kwargs)
 
-        def learn(self, steps, experiment_name=None, eval_num=100):
-            captured.update(steps=steps, exp=experiment_name, eval_num=eval_num)
+        def learn(
+            self,
+            steps,
+            experiment_name=None,
+            eval_num=100,
+            logger_factory=None,
+            progress_factory=None,
+            record_test_fn=None,
+        ):
+            captured.update(
+                steps=steps,
+                exp=experiment_name,
+                eval_num=eval_num,
+                logger_factory=logger_factory,
+                progress_factory=progress_factory,
+                record_test_fn=record_test_fn,
+            )
 
         def test(self):
             captured["tested"] = True
@@ -219,6 +234,9 @@ def test_run_family_wires_agent_without_env_or_model(monkeypatch):
 
     assert captured["steps"] == 7
     assert captured["eval_num"] == 100
+    assert captured["logger_factory"] is run_mod.TensorboardLogger
+    assert captured["progress_factory"] is run_mod.make_progress
+    assert captured["record_test_fn"] is run_mod.record_and_test
     assert captured["maker"] == "MAKER"
     assert captured["env"] == "ENVB"
     assert captured["kwargs"]["policy_kwargs"] == {"pk": 1}
@@ -292,8 +310,12 @@ def test_run_distributed_family_wires_agent(monkeypatch):
         def __init__(self, workers, maker, manager, **kwargs):
             captured.update(workers=workers, maker=maker, manager=manager, kwargs=kwargs)
 
-        def learn(self, steps):
-            captured["steps"] = steps
+        def learn(self, steps, logger_factory=None, progress_factory=None):
+            captured.update(
+                steps=steps,
+                logger_factory=logger_factory,
+                progress_factory=progress_factory,
+            )
 
     fake_spec = replace(APEX_DPG_RUNNER.algos["DDPG"], cls=FakeAgent)
     fake_runner = replace(
@@ -315,4 +337,6 @@ def test_run_distributed_family_wires_agent(monkeypatch):
     assert captured["maker"] == "MAKER"
     assert captured["manager"] == "MGR"
     assert captured["steps"] == 11
+    assert captured["logger_factory"] is run_mod.TensorboardLogger
+    assert captured["progress_factory"] is run_mod.make_progress
     assert captured["kwargs"]["policy_kwargs"] == {"pk": 1}

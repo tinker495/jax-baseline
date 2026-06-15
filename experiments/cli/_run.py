@@ -5,6 +5,12 @@ from dataclasses import dataclass
 from importlib import import_module
 from typing import Callable, Protocol
 
+from experiments.runtime_adapters import (
+    TensorboardLogger,
+    make_progress,
+    record_and_test,
+)
+
 
 @dataclass(frozen=True)
 class AlgoSpec:
@@ -86,6 +92,9 @@ def run_family(runner: FamilyRunner, argv=None):
         int(args.steps),
         experiment_name=args.experiment_name,
         eval_num=args.eval_num,
+        logger_factory=TensorboardLogger,
+        progress_factory=make_progress,
+        record_test_fn=record_and_test,
     )
     agent.test()
     return agent
@@ -131,5 +140,9 @@ def run_distributed_family(runner: DistributedFamilyRunner, argv=None):
         policy_kwargs=runner.policy_kwargs(args),
         **spec.build(args),
     )
-    agent.learn(int(args.steps))
+    agent.learn(
+        int(args.steps),
+        logger_factory=TensorboardLogger,
+        progress_factory=make_progress,
+    )
     return agent

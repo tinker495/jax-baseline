@@ -305,6 +305,9 @@ class Q_Network_Family(object):
         experiment_name="Q_network",
         run_name="Q_network",
         eval_num=100,
+        logger_factory=None,
+        progress_factory=None,
+        record_test_fn=None,
     ):
         return TrainingSession().run(
             self,
@@ -314,6 +317,9 @@ class Q_Network_Family(object):
             experiment_name,
             run_name,
             eval_num,
+            logger_factory=logger_factory,
+            progress_factory=progress_factory,
+            record_test_fn=record_test_fn,
         )
 
     def prepare_run(self, total_timesteps):
@@ -402,7 +408,8 @@ class Q_Network_Family(object):
 
     def test_eval_env(self, episode):
         # record_and_test expects (env_builder, logger_run, actions_eval_fn, episode, conv_action=None)
-        return record_and_test(
+        record_test_fn = getattr(self, "record_test_fn", record_and_test)
+        return record_test_fn(
             self.env_builder,
             self.logger_run,
             lambda obs: self.actions(obs, 0.0),

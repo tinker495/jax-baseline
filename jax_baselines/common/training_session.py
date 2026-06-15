@@ -21,10 +21,8 @@ read back off ``self``. ``ctx.logger_run`` is valid only inside the session's
 
 from dataclasses import dataclass
 
-from tqdm.auto import trange
-
-from jax_baselines.common.logger import TensorboardLogger
 from jax_baselines.common.rollout import RolloutEngine
+from jax_baselines.common.runtime_adapters import NoOpLogger, make_progress
 
 
 @dataclass(frozen=True)
@@ -65,17 +63,25 @@ class TrainingSession:
         experiment_name,
         run_name,
         eval_num=100,
-        logger_factory=TensorboardLogger,
+        logger_factory=None,
+        progress_factory=None,
+        record_test_fn=None,
     ):
         run_name = agent.run_name_update(run_name)
         agent.log_interval = log_interval
         agent.prepare_run(total_timesteps)
         eval_freq = eval_freq_from_count(eval_num, total_timesteps, agent.worker_size)
-        pbar = trange(0, total_timesteps, agent.worker_size, miniters=log_interval)
+        logger_factory = logger_factory or NoOpLogger
+        progress_factory = progress_factory or make_progress
+        pbar = progress_factory(0, total_timesteps, agent.worker_size, miniters=log_interval)
         logger = logger_factory(run_name, experiment_name, agent.log_dir, agent)
         # ``test()`` is a separate entry point that re-enters the run's logger, so the
         # agent keeps a reference to it (matching the pre-refactor learn() contract).
         agent.logger = logger
+        if record_test_fn is not None:
+            agent.record_test_fn = record_test_fn
+        elif hasattr(agent, "record_test_fn"):
+            delattr(agent, "record_test_fn")
         with logger as logger_run:
             # Bridge for callbacks built at __init__ time: the CheckpointController's
             # log_metric closure reads ``agent.logger_run``. Per-run state otherwise

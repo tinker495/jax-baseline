@@ -1,7 +1,7 @@
 import numpy as np
 import ray
 
-from jax_baselines.common.logger import TensorboardLogger
+from jax_baselines.common.runtime_adapters import NoOpLogger
 
 
 @ray.remote
@@ -18,11 +18,12 @@ class Param_server(object):
 
 @ray.remote
 class Logger_server(object):
-    def __init__(self, log_dir, log_name) -> None:
-        # pass None to avoid attempting to extract hparams from this Ray actor
+    def __init__(self, log_dir, log_name, logger_factory=None) -> None:
+        # Pass None as the agent to avoid attempting to extract hparams from this Ray actor
         # (which would serialize the whole actor). Hyperparameters should be
         # registered explicitly via `register_hparams` with a plain dict.
-        self.writer = TensorboardLogger(log_name, "experiment", log_dir, None)
+        logger_factory = logger_factory or NoOpLogger
+        self.writer = logger_factory(log_name, "experiment", log_dir, None)
         self.step = 0
         self.old_step = 0
         self.save_dict = dict()

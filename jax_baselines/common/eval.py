@@ -190,42 +190,48 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
         return {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
 
 
-def record_and_test(env_builder, logger_run, actions_eval_fn, episode, conv_action=None):
-    import os
+def run_test_episodes(test_env, actions_eval_fn, episode, conv_action=None):
+    """Run evaluation episodes on an already-constructed test environment."""
 
-    from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
-
-    directory = logger_run.get_local_path("video")
-    os.makedirs(directory, exist_ok=True)
-    test_env = env_builder(1, render_mode="rgb_array")
-    Render_env = RecordVideo(test_env, directory, episode_trigger=lambda x: True)
-    Render_env = RecordEpisodeStatistics(Render_env)
     total_rewards = []
-    with Render_env:
-        for _ in range(episode):
-            obs, info = Render_env.reset()
-            obs = [np.expand_dims(obs, axis=0)]
-            terminated = False
-            truncated = False
-            episode_rew = 0
-            eplen = 0
-            while not terminated and not truncated:
-                actions = actions_eval_fn(obs)
-                if conv_action is not None:
-                    step_action = conv_action(actions)
-                else:
-                    step_action = actions
+    for _ in range(episode):
+        obs, info = test_env.reset()
+        obs = [np.expand_dims(obs, axis=0)]
+        terminated = False
+        truncated = False
+        episode_rew = 0
+        eplen = 0
+        while not terminated and not truncated:
+            actions = actions_eval_fn(obs)
+            step_action = conv_action(actions) if conv_action is not None else actions
+            action_to_step = _normalize_action_for_step(step_action)
 
-                # Normalize action similar to evaluate_policy
-                action_to_step = _normalize_action_for_step(step_action)
+            observation, reward, terminated, truncated, info = test_env.step(action_to_step)
+            obs = [np.expand_dims(observation, axis=0)]
+            episode_rew += reward
+            eplen += 1
+        print("episod reward :", episode_rew, "episod len :", eplen)
+        total_rewards.append(episode_rew)
 
-                observation, reward, terminated, truncated, info = Render_env.step(action_to_step)
-                obs = [np.expand_dims(observation, axis=0)]
-                episode_rew += reward
-                eplen += 1
-            print("episod reward :", episode_rew, "episod len :", eplen)
-            total_rewards.append(episode_rew)
     avg_reward = np.mean(total_rewards)
     std_reward = np.std(total_rewards)
     print(f"reward : {avg_reward} +- {std_reward}(std)")
     return avg_reward, std_reward
+
+
+def record_and_test(env_builder, logger_run, actions_eval_fn, episode, conv_action=None):
+    """Run an unrecorded evaluation loop when no experiments recorder is injected.
+
+    Concrete Gymnasium ``RecordVideo`` / ``RecordEpisodeStatistics`` wrapping
+    lives in ``experiments.runtime_adapters.record_and_test``. This fallback
+    preserves the direct core ``agent.test()`` reward/std return shape without
+    creating video artifacts or importing Gymnasium wrappers.
+    """
+
+    test_env = env_builder(1)
+    try:
+        return run_test_episodes(test_env, actions_eval_fn, episode, conv_action)
+    finally:
+        close = getattr(test_env, "close", None)
+        if callable(close):
+            close()

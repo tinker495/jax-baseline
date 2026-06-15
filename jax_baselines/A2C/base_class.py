@@ -264,6 +264,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
         experiment_name="A2C",
         run_name="A2C",
         eval_num=100,
+        logger_factory=None,
+        progress_factory=None,
+        record_test_fn=None,
     ):
         return TrainingSession().run(
             self,
@@ -273,6 +276,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
             experiment_name,
             run_name,
             eval_num,
+            logger_factory=logger_factory,
+            progress_factory=progress_factory,
+            record_test_fn=record_test_fn,
         )
 
     def learn_SingleEnv(self, ctx):
@@ -421,7 +427,8 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.test_eval_env(episode)
 
     def test_eval_env(self, episode):
-        return record_and_test(
+        record_test_fn = getattr(self, "record_test_fn", record_and_test)
+        return record_test_fn(
             self.env_builder,
             self.logger_run,
             self.actions,

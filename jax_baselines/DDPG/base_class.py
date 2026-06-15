@@ -372,6 +372,9 @@ class Deteministic_Policy_Gradient_Family(object):
         experiment_name="DPG_network",
         run_name="DPG_network",
         eval_num=100,
+        logger_factory=None,
+        progress_factory=None,
+        record_test_fn=None,
     ):
         return TrainingSession().run(
             self,
@@ -381,6 +384,9 @@ class Deteministic_Policy_Gradient_Family(object):
             experiment_name,
             run_name,
             eval_num,
+            logger_factory=logger_factory,
+            progress_factory=progress_factory,
+            record_test_fn=record_test_fn,
         )
 
     # -------------------------------
@@ -459,7 +465,8 @@ class Deteministic_Policy_Gradient_Family(object):
 
     def test_eval_env(self, episode):
         # Use common test helper: (env_builder, logger_run, actions_eval_fn, episode, conv_action=None)
-        return record_and_test(
+        record_test_fn = getattr(self, "record_test_fn", record_and_test)
+        return record_test_fn(
             self.env_builder,
             self.logger_run,
             self.test_action,

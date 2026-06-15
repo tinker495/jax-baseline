@@ -148,18 +148,6 @@ ALLOWED_IMPORTS = (
         "distributed-runtime/env info slice",
     ),
     AllowedImport(
-        "jax_baselines/common/eval.py",
-        "gymnasium",
-        "NOT_YET_MOVED",
-        "logging/evaluation/video slice",
-    ),
-    AllowedImport(
-        "jax_baselines/common/logger.py",
-        "tensorboardX",
-        "NOT_YET_MOVED",
-        "logging slice",
-    ),
-    AllowedImport(
         "jax_baselines/common/seeding.py",
         "env_builder",
         "MIGRATION_SHIM",

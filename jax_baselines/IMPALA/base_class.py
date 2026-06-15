@@ -6,13 +6,13 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import ray
-from tqdm.auto import trange
 
 from jax_baselines.APE_X.common_servers import Logger_server, Param_server
 from jax_baselines.common.env_info import get_remote_env_info
 from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.returns import get_vtrace
+from jax_baselines.common.runtime_adapters import make_progress
 from jax_baselines.common.seeding import key_gen, set_global_seeds
 from jax_baselines.common.serialization import restore, save
 from jax_baselines.IMPALA.cpprb_buffers import ImpalaBuffer
@@ -230,10 +230,13 @@ class IMPALA_Family(object):
         run_name="IMPALA",
         reset_num_timesteps=True,
         replay_wrapper=None,
+        logger_factory=None,
+        progress_factory=None,
     ):
-        pbar = trange(total_trainstep, miniters=log_interval)
+        progress_factory = progress_factory or make_progress
+        pbar = progress_factory(total_trainstep, miniters=log_interval)
 
-        self.logger_server = Logger_server.remote(self.log_dir, run_name)
+        self.logger_server = Logger_server.remote(self.log_dir, run_name, logger_factory)
 
         if self.env_type == "unity":
             self.learn_unity(pbar, callback, log_interval)

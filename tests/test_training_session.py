@@ -128,6 +128,79 @@ def test_eval_num_floored_at_one_eval():
     assert agent.seen_eval_freq == 10000
 
 
+def test_adapter_factories_are_injected_into_session():
+    rec = []
+    agent = FakeSessionAgent(rec)
+    progress_calls = []
+    record_test_fn = object()
+
+    class FakeProgress:
+        def __iter__(self):
+            return iter(())
+
+        def set_description(self, desc):
+            rec.append(("set_description", desc))
+
+    def progress_factory(*args, **kwargs):
+        progress_calls.append((args, kwargs))
+        return FakeProgress()
+
+    TrainingSession().run(
+        agent,
+        total_timesteps=10000,
+        callback=None,
+        log_interval=1000,
+        experiment_name="exp",
+        run_name="run",
+        eval_num=100,
+        logger_factory=FakeLogger,
+        progress_factory=progress_factory,
+        record_test_fn=record_test_fn,
+    )
+
+    assert progress_calls == [((0, 10000, 8), {"miniters": 1000})]
+    assert agent.record_test_fn is record_test_fn
+
+
+def test_record_test_adapter_is_not_sticky_between_runs():
+    rec = []
+    agent = FakeSessionAgent(rec)
+
+    def progress_factory(*args, **kwargs):
+        return ()
+
+    record_test_fn = object()
+
+    TrainingSession().run(
+        agent,
+        total_timesteps=10000,
+        callback=None,
+        log_interval=1000,
+        experiment_name="exp",
+        run_name="run",
+        eval_num=100,
+        logger_factory=FakeLogger,
+        progress_factory=progress_factory,
+        record_test_fn=record_test_fn,
+    )
+    assert agent.record_test_fn is record_test_fn
+
+    TrainingSession().run(
+        agent,
+        total_timesteps=10000,
+        callback=None,
+        log_interval=1000,
+        experiment_name="exp",
+        run_name="run",
+        eval_num=100,
+        logger_factory=FakeLogger,
+        progress_factory=progress_factory,
+        record_test_fn=None,
+    )
+
+    assert not hasattr(agent, "record_test_fn")
+
+
 def test_save_params_called_once_with_logger_path():
     rec = []
     agent = FakeSessionAgent(rec)
@@ -160,6 +233,9 @@ class FakeOnPolicySession(TrainingSession):
         experiment_name,
         run_name,
         eval_num=100,
+        logger_factory=None,
+        progress_factory=None,
+        record_test_fn=None,
     ):
         agent.session_args = (
             total_timesteps,
@@ -168,6 +244,9 @@ class FakeOnPolicySession(TrainingSession):
             experiment_name,
             run_name,
             eval_num,
+            logger_factory,
+            progress_factory,
+            record_test_fn,
         )
         return "session-result"
 
@@ -205,7 +284,7 @@ def test_on_policy_learn_delegates_to_training_session(monkeypatch):
     )
 
     assert result == "session-result"
-    assert agent.session_args == (1234, callback, 7, "exp", "run", 100)
+    assert agent.session_args == (1234, callback, 7, "exp", "run", 100, None, None, None)
 
 
 def test_on_policy_session_contract_hooks_are_minimal():

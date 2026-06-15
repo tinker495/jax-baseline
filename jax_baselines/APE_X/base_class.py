@@ -5,7 +5,6 @@ from collections import deque
 import jax
 import numpy as np
 import ray
-from tqdm.auto import trange
 
 from jax_baselines.APE_X.common_servers import Logger_server, Param_server
 from jax_baselines.common.env_info import get_remote_env_info
@@ -16,6 +15,7 @@ from jax_baselines.common.replay_protocol import (
     WorkerReplayBufferFactory,
     require_replay_factory,
 )
+from jax_baselines.common.runtime_adapters import make_progress
 from jax_baselines.common.seeding import key_gen, set_global_seeds
 from jax_baselines.common.serialization import restore, save
 
@@ -156,6 +156,8 @@ class Ape_X_Family(object):
         run_name="APE_X",
         reset_num_timesteps=True,
         replay_wrapper=None,
+        logger_factory=None,
+        progress_factory=None,
     ):
         if self.munchausen:
             run_name = "M-" + run_name
@@ -169,9 +171,10 @@ class Ape_X_Family(object):
             run_name = "{}Step_".format(self.n_step) + run_name
         self.update_eps = 1.0
 
-        pbar = trange(total_trainstep, miniters=log_interval)
+        progress_factory = progress_factory or make_progress
+        pbar = progress_factory(total_trainstep, miniters=log_interval)
 
-        self.logger_server = Logger_server.remote(self.log_dir, run_name)
+        self.logger_server = Logger_server.remote(self.log_dir, run_name, logger_factory)
         hparams = get_hyper_params(self)
         self.logger_server.register_hparams.remote(hparams)
 
