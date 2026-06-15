@@ -7,11 +7,11 @@ import optax
 
 from jax_baselines.common.jax_utils import convert_jax
 from jax_baselines.common.losses import FQFQuantileLosses, QuantileHuberLosses
-from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.param_updates import hard_update
 from jax_baselines.common.policy_math import q_log_pi
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import QNetTrainResult
+from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 class FQF(Q_Network_Family):
@@ -21,16 +21,21 @@ class FQF(Q_Network_Family):
         model_builder_maker,
         n_support=32,
         delta=1.0,
+        fqf_optimizer_factory: OptimizerFactory | None = None,
         **kwargs,
     ):
 
         self.name = "FQF"
+        self.fqf_optimizer_factory = require_optimizer_factory(fqf_optimizer_factory)
         self.n_support = n_support
         self.delta = delta
         self.fqf_factor = 1e-2
         self.ent_coef = 0.01
 
         super().__init__(env_builder, model_builder_maker, **kwargs)
+
+    def _make_fqf_optimizer(self):
+        return self.fqf_optimizer_factory(self.learning_rate * self.fqf_factor)
 
     def setup_model(self):
         model_builder = self.model_builder_maker(
@@ -49,9 +54,7 @@ class FQF(Q_Network_Family):
 
         self.opt_state = self.optimizer.init(self.params)
 
-        self.fqf_optimizer = select_optimizer(
-            "rmsprop", self.learning_rate * self.fqf_factor, grad_max=5.0
-        )
+        self.fqf_optimizer = self._make_fqf_optimizer()
         self.fqf_opt_state = self.fqf_optimizer.init(self.fqf_params)
 
         # Use common JIT compilation

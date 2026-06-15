@@ -19,6 +19,9 @@ from __future__ import annotations
 import inspect
 from argparse import ArgumentParser
 
+import jax.numpy as jnp
+import numpy as np
+import optax
 import pytest
 
 # ---------------------------------------------------------------------------
@@ -173,6 +176,43 @@ def test_qnet_hl_gauss_selects_class(algo: str, base: str, hl: str):
     spec = QNET_RUNNER.algos[algo]
     assert spec.resolve_cls(_parse(QNET_RUNNER, ["--algo", algo])).__name__ == base
     assert spec.resolve_cls(_parse(QNET_RUNNER, ["--algo", algo, "--hl_gauss"])).__name__ == hl
+
+
+def test_qnet_bbf_optimizer_policy_preserves_plain_bbf_cli_optimizer(monkeypatch):
+    import experiments.cli.qnet as qnet_cli
+
+    calls = []
+
+    def fake_make_optimizer_factory(optimizer_name, **kwargs):
+        calls.append((optimizer_name, kwargs))
+        return lambda learning_rate: (optimizer_name, kwargs, learning_rate)
+
+    monkeypatch.setattr(qnet_cli, "make_optimizer_factory", fake_make_optimizer_factory)
+
+    args = _parse(qnet_cli.QNET_RUNNER, ["--algo", "BBF", "--optimizer", "sgd"])
+    built = qnet_cli.QNET_RUNNER.algos["BBF"].build(args)
+
+    assert calls == [("sgd", {"weight_decay": 0.1})]
+    assert built["optimizer_factory"](0.25) == ("sgd", {"weight_decay": 0.1}, 0.25)
+
+
+def test_qnet_hl_gauss_bbf_optimizer_policy_matches_historical_adamw_default():
+    from experiments.cli.qnet import QNET_RUNNER
+
+    args = _parse(
+        QNET_RUNNER,
+        ["--algo", "BBF", "--hl_gauss", "--optimizer", "sgd"],
+    )
+    built = QNET_RUNNER.algos["BBF"].build(args)
+    optimizer = built["optimizer_factory"](0.25)
+    reference = optax.adamw(learning_rate=0.25, weight_decay=0.1)
+    params = {"w": jnp.array([1.0, -2.0], dtype=jnp.float32)}
+    grads = {"w": jnp.array([0.5, -0.25], dtype=jnp.float32)}
+
+    updates, _ = optimizer.update(grads, optimizer.init(params), params)
+    expected, _ = reference.update(grads, reference.init(params), params)
+
+    np.testing.assert_allclose(updates["w"], expected["w"], rtol=1e-6)
 
 
 def test_qnet_bbf_haiku_is_unsupported_clean_error():

@@ -79,7 +79,7 @@ class HL_GAUSS_BBF(BBF):
             (lambda x, filtered: (jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.5)),
         )  # hard_reset for qnet and scaled_by_reset for the rest
         self.soft_reset_freq = 40000
-        self.optimizer = optax.adamw(learning_rate=self.learning_rate, weight_decay=0.1)
+        self.optimizer = self._make_optimizer(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
 
         self.hl_gauss = HLGaussTransform.build(

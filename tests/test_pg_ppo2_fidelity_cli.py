@@ -1,11 +1,13 @@
 from argparse import ArgumentParser
 
+import jax.numpy as jnp
+import numpy as np
 import pytest
 import yaml
 
 from experiments.cli import exp
 from experiments.cli.pg import PG_RUNNER
-from jax_baselines.A2C import base_class as ac_base
+from experiments.optimizers import select_optimizer
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 
 
@@ -26,8 +28,9 @@ def test_pg_cli_preserves_ppo2_control_defaults():
     tppo = _build("TPPO")
 
     for built in (a2c, ppo, tppo):
-        assert built["optimizer_eps"] == pytest.approx(1e-2 / 256.0)
-        assert built["max_grad_norm"] is None
+        assert callable(built["optimizer_factory"])
+        assert "optimizer_eps" not in built
+        assert "max_grad_norm" not in built
         assert built["lr_annealing"] is False
 
     assert ppo["ppo_eps"] == pytest.approx(0.2)
@@ -63,8 +66,9 @@ def test_pg_cli_routes_ppo_clip_kwargs_by_constructor(algo, expected_clip_keys):
         ],
     )
 
-    assert built["optimizer_eps"] == pytest.approx(1e-5)
-    assert built["max_grad_norm"] == pytest.approx(0.5)
+    assert callable(built["optimizer_factory"])
+    assert "optimizer_eps" not in built
+    assert "max_grad_norm" not in built
     assert built["lr_annealing"] is True
     assert {key for key in ("ppo_eps", "value_clip") if key in built} == expected_clip_keys
     if "ppo_eps" in expected_clip_keys:
@@ -108,33 +112,30 @@ def test_pg_breakout_config_emits_ppo2_atari_flags_parseable_by_pg_cli():
     assert "--ppo_eps" not in by_algo["TPPO"][1]
 
 
-def test_ac_base_optimizer_threads_eps_and_global_grad_clip(monkeypatch):
-    calls = []
+def test_pg_cli_optimizer_factory_threads_eps_and_global_grad_clip():
+    built = _build(
+        "A2C",
+        [
+            "--optimizer",
+            "adam",
+            "--optimizer_eps",
+            "1e-5",
+            "--max_grad_norm",
+            "0.5",
+        ],
+    )
+    optimizer = built["optimizer_factory"](0.00025)
+    reference = select_optimizer("adam", 0.00025, eps=1e-5, grad_max=0.5)
+    params = {"w": jnp.array([0.0, 0.0], dtype=jnp.float32)}
+    grads = {"w": jnp.array([3.0, 4.0], dtype=jnp.float32)}
 
-    def fake_select_optimizer(optim_str, lr, eps, grad_max):
-        calls.append({"optim_str": optim_str, "lr": lr, "eps": eps, "grad_max": grad_max})
-        return object()
+    updates, _ = optimizer.update(grads, optimizer.init(params), params)
+    expected, _ = reference.update(grads, reference.init(params), params)
 
-    monkeypatch.setattr(ac_base, "select_optimizer", fake_select_optimizer)
-    agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
-    agent.optimizer_name = "adam"
-    agent.optimizer_eps = 1e-5
-    agent.max_grad_norm = 0.5
-
-    optimizer = agent._make_optimizer(0.00025)
-
-    assert optimizer is not None
-    assert calls == [
-        {
-            "optim_str": "adam",
-            "lr": 0.00025,
-            "eps": pytest.approx(1e-5),
-            "grad_max": pytest.approx(0.5),
-        }
-    ]
+    np.testing.assert_allclose(updates["w"], expected["w"], rtol=1e-6)
 
 
-def test_prepare_run_rebuilds_optimizer_with_linear_lr_schedule(monkeypatch):
+def test_prepare_run_rebuilds_optimizer_with_linear_lr_schedule():
     calls = []
 
     class FakeOptimizer:
@@ -142,16 +143,13 @@ def test_prepare_run_rebuilds_optimizer_with_linear_lr_schedule(monkeypatch):
             calls.append({"init_params": params})
             return {"state": "reset"}
 
-    def fake_select_optimizer(optim_str, lr, eps, grad_max):
-        calls.append({"optim_str": optim_str, "lr": lr, "eps": eps, "grad_max": grad_max})
+    def fake_optimizer_factory(lr):
+        calls.append({"lr": lr})
         return FakeOptimizer()
 
-    monkeypatch.setattr(ac_base, "select_optimizer", fake_select_optimizer)
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
-    agent.optimizer_name = "adam"
+    agent.optimizer_factory = fake_optimizer_factory
     agent.learning_rate = 0.00025
-    agent.optimizer_eps = 1e-5
-    agent.max_grad_norm = 0.5
     agent.lr_annealing = True
     agent.batch_size = 10
     agent.worker_size = 2
@@ -168,20 +166,14 @@ def test_prepare_run_rebuilds_optimizer_with_linear_lr_schedule(monkeypatch):
     assert float(schedule(0)) == pytest.approx(0.00025)
     assert float(schedule(30)) == pytest.approx(0.000125)
     assert float(schedule(60)) == pytest.approx(0.0)
-    assert calls[0]["eps"] == pytest.approx(1e-5)
-    assert calls[0]["grad_max"] == pytest.approx(0.5)
     assert calls[1] == {"init_params": {"w": 1.0}}
     assert agent.opt_state == {"state": "reset"}
 
 
-def test_prepare_run_skips_lr_annealing_until_params_exist(monkeypatch):
+def test_prepare_run_skips_lr_annealing_until_params_exist():
     calls = []
-    monkeypatch.setattr(
-        ac_base,
-        "select_optimizer",
-        lambda *args, **kwargs: calls.append((args, kwargs)),
-    )
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.optimizer_factory = lambda *args, **kwargs: calls.append((args, kwargs))
     agent.lr_annealing = True
     agent.params = None
 

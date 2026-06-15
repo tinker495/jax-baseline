@@ -8,7 +8,6 @@ from jax_baselines.common.checkpoint import make_checkpoint_scaffold
 from jax_baselines.common.checkpoint_state import CheckpointState
 from jax_baselines.common.env_info import get_local_env_info
 from jax_baselines.common.eval import evaluate_policy, record_and_test
-from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.replay_protocol import (
     ReplayBufferFactory,
     require_replay_factory,
@@ -24,6 +23,7 @@ from jax_baselines.common.serialization import restore, save
 from jax_baselines.common.statistics import RunningMeanStd
 from jax_baselines.common.training_session import TrainingSession, off_policy_loop
 from jax_baselines.DDPG.training import DPGTrainingLifecycle
+from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 class Deteministic_Policy_Gradient_Family(object):
@@ -54,7 +54,7 @@ class Deteministic_Policy_Gradient_Family(object):
         _init_setup_model=True,
         policy_kwargs=None,
         seed=None,
-        optimizer="adamw",
+        optimizer_factory: OptimizerFactory | None = None,
         replay_factory: ReplayBufferFactory | None = None,
         # Checkpointing options (opt-in by default for base class)
         use_checkpointing=True,
@@ -97,7 +97,8 @@ class Deteministic_Policy_Gradient_Family(object):
         self.simba = simba or simba_v2
         self.simba_v2 = simba_v2
         self.save_path = None
-        self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-3 / self.batch_size)
+        self.optimizer_factory = require_optimizer_factory(optimizer_factory)
+        self.optimizer = self._make_optimizer(self.learning_rate)
         self.replay_factory = replay_factory
 
         self.get_env_setup()
@@ -147,6 +148,9 @@ class Deteministic_Policy_Gradient_Family(object):
 
     def load_params(self, path):
         self._restore_checkpoint_state(restore(path))
+
+    def _make_optimizer(self, learning_rate):
+        return self.optimizer_factory(learning_rate)
 
     # -------------------------------
     # Checkpoint contract (per-algorithm bundle = the real seam)

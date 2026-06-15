@@ -4,6 +4,7 @@ from experiments.cli._run import (
     DistributedFamilyRunner,
     run_distributed_family,
 )
+from experiments.optimizers import make_batch_scaled_optimizer_factory
 from jax_baselines.A2C.impala import IMPALA
 from jax_baselines.IMPALA.worker import Impala_Worker
 from jax_baselines.PPO.impala_ppo import IMPALA_PPO
@@ -53,7 +54,7 @@ def _common(a):
         "batch_size": a.batch,
         "sample_size": a.sample_size,
         "buffer_size": int(a.buffer_size),
-        "optimizer": a.optimizer,
+        "optimizer_factory": make_batch_scaled_optimizer_factory(a.optimizer, a.batch),
         "val_coef": a.val_coef,
         "ent_coef": a.ent_coef,
         "rho_max": a.rho_max,

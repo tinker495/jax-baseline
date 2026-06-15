@@ -5,6 +5,11 @@ from experiments.cli._run import (
     default_replay_factory,
     run_family,
 )
+from experiments.optimizers import (
+    make_batch_scaled_optimizer_factory,
+    make_fqf_optimizer_factory,
+    make_optimizer_factory,
+)
 from jax_baselines.BBF.bbf import BBF
 from jax_baselines.BBF.hl_gauss_bbf import HL_GAUSS_BBF
 from jax_baselines.C51.c51 import C51
@@ -119,11 +124,23 @@ def _common(a):
         "learning_starts": a.learning_starts,
         "exploration_fraction": a.exploration_fraction,
         "log_dir": a.logdir,
-        "optimizer": a.optimizer,
+        "optimizer_factory": make_batch_scaled_optimizer_factory(a.optimizer, a.batch),
         "compress_memory": a.compress_memory,
         "replay_factory": default_replay_factory(),
         "use_checkpointing": a.use_checkpointing,
     }
+
+
+def _bbf_optimizer_factory(a):
+    """Preserve BBF-family optimizer policy after moving selection to experiments.
+
+    Plain BBF historically honored the CLI optimizer name, while HL_GAUSS_BBF
+    selected AdamW with weight_decay=0.1 inside setup_model. Keep that
+    algorithm-specific policy in the experiments adapter rather than the core.
+    """
+    if a.hl_gauss:
+        return make_optimizer_factory("adamw", eps=1e-8, weight_decay=0.1)
+    return make_optimizer_factory(a.optimizer, weight_decay=0.1)
 
 
 ALGOS = {
@@ -151,7 +168,12 @@ ALGOS = {
     "FQF": AlgoSpec(
         FQF,
         "fqf",
-        lambda a: {**_common(a), "delta": a.delta, "n_support": a.n_support},
+        lambda a: {
+            **_common(a),
+            "delta": a.delta,
+            "n_support": a.n_support,
+            "fqf_optimizer_factory": make_fqf_optimizer_factory(),
+        },
     ),
     # SPR forces a self-prediction loop: its old construction block carries a
     # reduced kwarg set (off_policy_fix/scaled_by_reset + categorial bounds, no
@@ -175,7 +197,7 @@ ALGOS = {
             "categorial_max": a.max,
             "categorial_min": a.min,
             "log_dir": a.logdir,
-            "optimizer": a.optimizer,
+            "optimizer_factory": make_batch_scaled_optimizer_factory(a.optimizer, a.batch),
             "compress_memory": a.compress_memory,
             "replay_factory": default_replay_factory(),
             "use_checkpointing": a.use_checkpointing,
@@ -204,7 +226,7 @@ ALGOS = {
             "categorial_min": a.min,
             "exploration_fraction": a.exploration_fraction,
             "log_dir": a.logdir,
-            "optimizer": a.optimizer,
+            "optimizer_factory": _bbf_optimizer_factory(a),
             "compress_memory": a.compress_memory,
             "replay_factory": default_replay_factory(),
             "use_checkpointing": a.use_checkpointing,

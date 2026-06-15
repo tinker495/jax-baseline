@@ -16,11 +16,11 @@ from jax_baselines.common.eval import (
     record_and_test,
 )
 from jax_baselines.common.jax_utils import convert_jax
-from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.rollout_stats import EpisodeTracker
 from jax_baselines.common.seeding import key_gen, set_global_seeds
 from jax_baselines.common.serialization import restore, save
 from jax_baselines.common.training_session import TrainingSession
+from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 class Actor_Critic_Policy_Gradient_Family(object):
@@ -42,9 +42,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         _init_setup_model=True,
         policy_kwargs=None,
         seed=None,
-        optimizer="adamw",
-        optimizer_eps=1e-2 / 256.0,
-        max_grad_norm=None,
+        optimizer_factory: OptimizerFactory | None = None,
         lr_annealing=False,
     ):
         self.name = "Actor_Critic_Policy_Gradient_Family"
@@ -66,9 +64,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.log_dir = log_dir
         self.use_entropy_adv_shaping = use_entropy_adv_shaping
         self.entropy_adv_shaping_kappa = entropy_adv_shaping_kappa
-        self.optimizer_name = optimizer
-        self.optimizer_eps = optimizer_eps
-        self.max_grad_norm = max_grad_norm
+        self.optimizer_factory = require_optimizer_factory(optimizer_factory)
         self.lr_annealing = lr_annealing
 
         self.params = None
@@ -214,12 +210,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         return run_name
 
     def _make_optimizer(self, learning_rate):
-        return select_optimizer(
-            self.optimizer_name,
-            learning_rate,
-            eps=self.optimizer_eps,
-            grad_max=self.max_grad_norm,
-        )
+        return self.optimizer_factory(learning_rate)
 
     def _optimizer_updates_per_train_step(self):
         rollout_size = max(1, int(self.batch_size) * int(self.worker_size))

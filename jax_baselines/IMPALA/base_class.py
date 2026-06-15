@@ -10,12 +10,12 @@ import ray
 from jax_baselines.APE_X.common_servers import Logger_server, Param_server
 from jax_baselines.common.env_info import get_remote_env_info
 from jax_baselines.common.jax_utils import convert_jax
-from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.returns import get_vtrace
 from jax_baselines.common.runtime_adapters import make_progress
 from jax_baselines.common.seeding import key_gen, set_global_seeds
 from jax_baselines.common.serialization import restore, save
 from jax_baselines.IMPALA.cpprb_buffers import ImpalaBuffer
+from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 class IMPALA_Family(object):
@@ -41,7 +41,7 @@ class IMPALA_Family(object):
         _init_setup_model=True,
         policy_kwargs=None,
         seed=None,
-        optimizer="adamw",
+        optimizer_factory: OptimizerFactory | None = None,
     ):
         self.name = "IMPALA_Family"
         self.workers = workers
@@ -71,7 +71,8 @@ class IMPALA_Family(object):
         self.params = None
         self.target_params = None
         self.save_path = None
-        self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-3 / self.batch_size)
+        self.optimizer_factory = require_optimizer_factory(optimizer_factory)
+        self.optimizer = self._make_optimizer(self.learning_rate)
         self.model_builder = None
         self.actor_builder = None
 
@@ -88,6 +89,9 @@ class IMPALA_Family(object):
 
     def load_params(self, path):
         self.params = self.target_params = restore(path)
+
+    def _make_optimizer(self, learning_rate):
+        return self.optimizer_factory(learning_rate)
 
     def get_env_setup(self):
         (

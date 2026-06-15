@@ -5,6 +5,7 @@ from experiments.cli._run import (
     default_replay_factory,
     run_family,
 )
+from experiments.optimizers import make_batch_scaled_optimizer_factory
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DDPG.ddpg import DDPG
@@ -115,7 +116,7 @@ def _common(a):
         "seed": a.seed,
         "gradient_steps": a.gradient_steps,
         "log_dir": a.logdir,
-        "optimizer": a.optimizer,
+        "optimizer_factory": make_batch_scaled_optimizer_factory(a.optimizer, a.batch),
         "replay_factory": default_replay_factory(),
         "use_checkpointing": a.use_checkpointing,
     }
@@ -187,7 +188,7 @@ ALGOS = {
             "seed": a.seed,
             "gradient_steps": a.gradient_steps,
             "log_dir": a.logdir,
-            "optimizer": a.optimizer,
+            "optimizer_factory": make_batch_scaled_optimizer_factory(a.optimizer, a.batch),
             "replay_factory": default_replay_factory(),
         },
     ),

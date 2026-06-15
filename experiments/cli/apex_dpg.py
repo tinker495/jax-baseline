@@ -6,6 +6,7 @@ from experiments.cli._run import (
     default_worker_replay_factory,
     run_distributed_family,
 )
+from experiments.optimizers import make_batch_scaled_optimizer_factory
 from jax_baselines.APE_X.dpg_worker import Ape_X_Worker
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.DDPG.apex_ddpg import APE_X_DDPG
@@ -71,7 +72,9 @@ def _common(a):
         "seed": a.seed,
         "gradient_steps": a.gradient_steps,
         "log_dir": a.logdir,
-        "optimizer": a.optimizer,
+        "optimizer_factory": make_batch_scaled_optimizer_factory(
+            a.optimizer, a.batch_num * a.batch_size
+        ),
         "multi_replay_factory": default_multi_replay_factory(),
         "worker_replay_factory": default_worker_replay_factory(),
     }

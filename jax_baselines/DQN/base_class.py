@@ -6,7 +6,6 @@ import numpy as np
 from jax_baselines.common.checkpoint import make_checkpoint_scaffold
 from jax_baselines.common.env_info import get_local_env_info
 from jax_baselines.common.eval import evaluate_policy, record_and_test
-from jax_baselines.common.optimizer import select_optimizer
 from jax_baselines.common.replay_protocol import (
     ReplayBufferFactory,
     require_replay_factory,
@@ -22,6 +21,7 @@ from jax_baselines.common.seeding import key_gen, set_global_seeds
 from jax_baselines.common.serialization import restore, save
 from jax_baselines.common.training_session import TrainingSession, off_policy_loop
 from jax_baselines.DQN.training import QNetTrainingLifecycle
+from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 class Q_Network_Family(object):
@@ -58,7 +58,7 @@ class Q_Network_Family(object):
         _init_setup_model=True,
         policy_kwargs=None,
         seed=None,
-        optimizer="adamw",
+        optimizer_factory: OptimizerFactory | None = None,
         compress_memory=False,
         replay_factory: ReplayBufferFactory | None = None,
         # Checkpointing options (opt-in by default for base class)
@@ -112,8 +112,8 @@ class Q_Network_Family(object):
         self.params = None
         self.target_params = None
         self.save_path = None
-        self.optimizer = select_optimizer(optimizer, self.learning_rate, 1e-3 / self.batch_size)
-        self.optimizer_name = optimizer
+        self.optimizer_factory = require_optimizer_factory(optimizer_factory)
+        self.optimizer = self._make_optimizer(self.learning_rate)
 
         self.compress_memory = compress_memory
         self.replay_factory = replay_factory
@@ -192,6 +192,9 @@ class Q_Network_Family(object):
 
     def setup_model(self):
         pass
+
+    def _make_optimizer(self, learning_rate):
+        return self.optimizer_factory(learning_rate)
 
     def train_step(self, steps, gradient_steps):
         return self.training_lifecycle.train(steps, gradient_steps)

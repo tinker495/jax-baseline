@@ -1,5 +1,6 @@
 from experiments.cli._common import default_logdir, set_default_xla_flags
 from experiments.cli._run import AlgoSpec, FamilyRunner, run_family
+from experiments.optimizers import make_optimizer_factory
 from jax_baselines.A2C.a2c import A2C
 from jax_baselines.common.env_builder import get_env_builder
 from jax_baselines.PPO.ppo import PPO
@@ -108,9 +109,11 @@ def _common(a):
         "ent_coef": a.ent_coef,
         "use_entropy_adv_shaping": a.use_entropy_adv_shaping,
         "log_dir": a.logdir,
-        "optimizer": a.optimizer,
-        "optimizer_eps": a.optimizer_eps,
-        "max_grad_norm": a.max_grad_norm,
+        "optimizer_factory": make_optimizer_factory(
+            a.optimizer,
+            eps=a.optimizer_eps,
+            grad_max=a.max_grad_norm,
+        ),
         "lr_annealing": a.lr_annealing,
         "seed": a.seed,
     }
