@@ -14,6 +14,7 @@ Two coupled fixes (2026-06-14):
 
 from collections import deque
 
+import jax
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -62,6 +63,30 @@ def test_discount_does_not_bleed_across_episode_boundary():
     # Episode A (idx0, idx1) must be clean -- no reward from the next episode.
     out = _returns([1, 1, 0, 1], [0, 1, 0, 0], [0, 0, 0, 0], [10, 10, 10, 10])
     assert out[0] == 1.9 and out[1] == 1.0  # episode A isolated
+
+
+def test_discount_with_terminated_real_train_step_contract():
+    # The [T, 1]-float tests above mask the real bug: A2C's _train_step feeds
+    # discount_with_terminated through jax.vmap with the genuine buffer layout --
+    # rewards/terminateds/truncateds are FLAT [worker, T] and the done-flags are
+    # BOOL, while next_values keeps the critic's trailing unit dim [worker, T, 1].
+    # Before the fix this raised (truncateds[-1] scalar broadcast, then bool
+    # subtraction in `term + trunc - term*trunc`). Pins that contract so the
+    # regression that silently broke `pg --algo A2C` cannot return.
+    rewards = jnp.array([[1.0, 1.0, 1.0, 1.0]], dtype=jnp.float32)  # [worker=1, T=4]
+    terminateds = jnp.array([[False, False, True, False]])  # [1, 4] bool
+    truncateds = jnp.array([[False, False, False, False]])  # [1, 4] bool
+    next_values = jnp.array([[[10.0], [10.0], [10.0], [10.0]]], dtype=jnp.float32)  # [1, 4, 1]
+
+    targets = jax.vmap(discount_with_terminated, in_axes=(0, 0, 0, 0, None))(
+        rewards, terminateds, truncateds, next_values, GAMMA
+    )
+
+    assert targets.shape == (1, 4, 1)
+    # Same episode-boundary returns as the [T,1] direct-call test, now via the
+    # real flat+bool+vmap path: terminal at idx2 resets, forced truncation at the
+    # last step bootstraps from next_value.
+    assert [round(float(v), 2) for v in np.asarray(targets).reshape(-1)] == [2.71, 1.9, 1.0, 10.0]
 
 
 # --- V-trace estimator: shared by every IMPALA variant (A2C/PPO/TPPO/SPO) ---
@@ -156,11 +181,13 @@ class _RecordingBuffer:
         self.terminateds = []
         self.rewards = []
         self.truncateds = []
+        self.actions = []
 
     def add(self, obs, action, reward, nxtobs, terminated, truncated):
         self.terminateds.append(np.asarray(terminated).copy())
         self.rewards.append(np.asarray(reward).copy())
         self.truncateds.append(np.asarray(truncated).copy())
+        self.actions.append(np.asarray(action).copy())
 
 
 class _Pbar(list):
@@ -212,6 +239,50 @@ def test_a2c_vectorized_flags_autoreset_dummy_step_as_terminal():
     assert stored_term == [[False, False], [True, False], [True, False]]
     assert stored_rew == [[1.0, 1.0], [1.0, 1.0], [0.0, 1.0]]
     assert stored_trunc == [[False, False], [False, False], [False, False]]
+
+
+class _ScriptSingleEnv:
+    """Minimal single (non-vectorized) gym-style env for the SingleEnv loop."""
+
+    def __init__(self):
+        self.received_actions = []
+
+    def reset(self):
+        return np.zeros(2, dtype=np.float32), {}
+
+    def step(self, action):
+        self.received_actions.append(action)
+        return np.ones(2, dtype=np.float32), 1.0, False, False, {}
+
+
+def test_a2c_single_env_action_plumbing_and_buffer_shape():
+    # Regression for the worker=1 SingleEnv path: it used to double-collapse the
+    # action (`self.actions(obs)[0]` then `conv_action(...)[0]`), so conv_action's
+    # own a[0] already left a scalar and the extra [0] raised IndexError before
+    # env.step ever ran. The loop now mirrors eval: conv_action(self.actions(obs))
+    # normalized exactly once.
+    agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    env = _ScriptSingleEnv()
+    agent.env = env
+    agent.batch_size = 10_000  # train cadence never fires
+    agent.lossque = deque(maxlen=10)
+    # action_discrete returns [worker=1, action_dim=1]; _discrete_action_conv is a[0].
+    agent.actions = lambda obs: np.array([[1]], dtype=np.int32)
+    agent.conv_action = lambda a: a[0]
+    agent.train_step = lambda steps: 0.0
+    agent.eval = lambda ctx, steps: None
+    agent.description = lambda eval_result: "desc"
+    agent.buffer = _RecordingBuffer()
+
+    Actor_Critic_Policy_Gradient_Family.learn_SingleEnv(agent, _Ctx([0, 1, 2]))
+
+    # env.step received a bare scalar action each step (not an array, no crash).
+    assert len(env.received_actions) == 3
+    assert all(np.ndim(a) == 0 for a in env.received_actions)
+    # The buffer keeps the worker dim so a real EpochBuffer's action[worker_idx]
+    # stays indexable -- stored shape [worker=1, action_dim=1], matching the
+    # vectorized path rather than the pre-fix collapsed scalar.
+    assert all(a.shape == (1, 1) for a in agent.buffer.actions)
 
 
 def test_pipelined_loop_drives_real_async_envpool_end_to_end():

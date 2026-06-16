@@ -3,6 +3,16 @@ import jax.numpy as jnp
 
 
 def discount_with_terminated(rewards, terminateds, truncateds, next_values, gamma):
+    # rewards/terminateds/truncateds arrive flat ([T]) from the scalar-per-step
+    # buffer, while the critic's next_values keep a trailing unit dim ([T, 1]).
+    # Reshape so the scan stays [T, 1] (otherwise truncateds[-1] is a scalar and
+    # the boundary-set below fails to broadcast), and cast the bool done-flags to
+    # float so ``done = term + trunc - term*trunc`` is valid -- JAX rejects
+    # subtraction on bool. Mirrors get_gaes' flat->[T,1] alignment.
+    rewards = rewards.reshape(next_values.shape)
+    terminateds = terminateds.reshape(next_values.shape).astype(jnp.float32)
+    truncateds = truncateds.reshape(next_values.shape).astype(jnp.float32)
+
     def f(ret, info):
         reward, term, trunc, nextval = info
         # done marks the episode boundary (terminated OR truncated); the return

@@ -8,6 +8,7 @@ import optax
 from jax_baselines.core.env_info import get_local_env_info, infer_action_meta
 from jax_baselines.core.epoch_buffer import EpochBuffer
 from jax_baselines.core.eval import (
+    _normalize_action_for_step,
     evaluate_policy,
     extract_lives,
     extract_original_reward,
@@ -281,10 +282,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
         original = 0.0
         have_original = False
         for steps in ctx.pbar:
-            actions = self.actions(obs)[0]
-            next_obs, reward, terminated, truncated, info = self.env.step(
-                self.conv_action(actions)[0]
-            )
+            actions = self.actions(obs)
+            step_action = _normalize_action_for_step(self.conv_action(actions))
+            next_obs, reward, terminated, truncated, info = self.env.step(step_action)
             next_obs = [np.expand_dims(next_obs, axis=0)]
             self.buffer.add(obs, actions, [reward], next_obs, [terminated], [truncated])
             score += float(reward)
