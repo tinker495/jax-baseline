@@ -116,6 +116,12 @@ class TD7(Deteministic_Policy_Gradient_Family):
         zs = self.encoder(encoder_params, key, feature)
         return self.actor(policy_params, key, feature, zs)
 
+    def get_behavior_state(self):
+        return {
+            "encoder": self.fixed_encoder_params,
+            "policy": self.policy_params,
+        }
+
     def _select_action_state(self, eval, steps):
         if eval and self.use_checkpointing and self.eval_snapshot is not None:
             return self.eval_snapshot

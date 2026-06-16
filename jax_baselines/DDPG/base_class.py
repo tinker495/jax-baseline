@@ -286,10 +286,14 @@ class Deteministic_Policy_Gradient_Family(object):
         pass
 
     def get_behavior_state(self):
-        """Get state dict to use for behavior (training-time actions)."""
+        """Get state dict to use for behavior (training-time actions).
+
+        The DPG family acts from a deterministic/stochastic policy network only;
+        the encoder slot is unused here and TD7 overrides to fill it.
+        """
         return {
-            "encoder": getattr(self, "fixed_encoder_params", getattr(self, "encoder_params", None)),
-            "policy": getattr(self, "policy_params", None),
+            "encoder": None,
+            "policy": self.policy_params,
         }
 
     def get_eval_state(self):
