@@ -132,7 +132,8 @@ APEX_QNET_RUNNER = DistributedFamilyRunner(
 
 
 def main(argv=None):
-    return run_distributed_family(APEX_QNET_RUNNER, argv)
+    run_distributed_family(APEX_QNET_RUNNER, argv)
+    return 0
 
 
 if __name__ == "__main__":

@@ -291,5 +291,18 @@ class BBF(SPR):
         experiment_name="BBF",
         run_name="BBF",
         eval_num=100,
+        logger_factory=None,
+        progress_factory=None,
+        record_test_fn=None,
     ):
-        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name, eval_num)
+        super().learn(
+            total_timesteps,
+            callback,
+            log_interval,
+            experiment_name,
+            run_name,
+            eval_num,
+            logger_factory=logger_factory,
+            progress_factory=progress_factory,
+            record_test_fn=record_test_fn,
+        )

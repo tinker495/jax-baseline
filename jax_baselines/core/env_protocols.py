@@ -8,16 +8,37 @@ instead of concrete backend packages.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Protocol, TypedDict, runtime_checkable
+from dataclasses import dataclass
+from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
 
 
 class EnvInfo(TypedDict):
-    """Vectorized-environment metadata shared across adapter and core layers."""
+    """Environment metadata shared across adapter and core layers."""
 
-    observation_space: Any
-    action_space: Any
+    observation_space: list[list[int]]
+    action_size: list[int]
+    action_type: Literal["discrete", "continuous"]
     env_type: str
     env_id: str
+    worker_num: int
+    core_env_type: str
+
+
+@dataclass(frozen=True)
+class PreparedEnvSpec:
+    """Adapter-prepared train/eval environments plus typed metadata."""
+
+    env: Any
+    eval_env: Any
+    env_info: EnvInfo
+
+
+@dataclass(frozen=True)
+class PreparedWorkerEnvSpec:
+    """Adapter-prepared single worker environment plus typed metadata."""
+
+    env: Any
+    env_info: EnvInfo
 
 
 @runtime_checkable

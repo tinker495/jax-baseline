@@ -205,7 +205,8 @@ DPG_RUNNER = FamilyRunner(
 
 
 def main(argv=None):
-    return run_family(DPG_RUNNER, argv)
+    run_family(DPG_RUNNER, argv)
+    return 0
 
 
 if __name__ == "__main__":

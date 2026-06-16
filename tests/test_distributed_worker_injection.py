@@ -18,6 +18,7 @@ import pytest
 
 from jax_baselines.APE_X.dpg_worker import Ape_X_Worker as ApexDpgWorker
 from jax_baselines.APE_X.worker import Ape_X_Worker as ApexQnetWorker
+from jax_baselines.core.env_protocols import PreparedWorkerEnvSpec
 from jax_baselines.IMPALA.worker import Impala_Worker
 
 
@@ -53,15 +54,33 @@ def test_worker_builds_env_through_injected_adapter(worker_cls):
         calls.append((worker, seed))
         return _FakeEnv()
 
+    def prepare_worker_env(seed=None):
+        env = env_builder(worker=1, seed=seed)
+        return PreparedWorkerEnvSpec(
+            env=env,
+            env_info={
+                "observation_space": [[4]],
+                "action_size": [2],
+                "action_type": "discrete",
+                "env_type": "single",
+                "env_id": "FakeEnv-v0",
+                "worker_num": 1,
+                "core_env_type": "SingleEnv",
+            },
+        )
+
+    env_builder.prepare_worker_env = prepare_worker_env
+
     worker = worker_cls(env_builder, seed=7)
 
     assert calls == [(1, 7)]
     info = worker.get_info()
-    assert info["observation_space"].shape == (4,)
-    assert info["action_space"].n == 2
+    assert info["observation_space"] == [[4]]
+    assert info["action_size"] == [2]
+    assert info["action_type"] == "discrete"
     # get_remote_env_info normalizes distributed envs to SingleEnv; the worker
     # reports that directly instead of inferring a backend-specific env_type.
-    assert info["env_type"] == "SingleEnv"
+    assert info["core_env_type"] == "SingleEnv"
 
 
 def test_impala_worker_replay_factory_satisfies_seam():

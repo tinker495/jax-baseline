@@ -139,6 +139,53 @@ def test_apex_families_use_injected_shared_and_worker_factories(family_cls, acti
     ]
 
 
+def test_spr_uses_injected_transition_replay_factory():
+    from jax_baselines.SPR.spr import SPR
+
+    agent = SPR.__new__(SPR)
+    fake_buffer = object()
+    factory = FakeReplayFactory(fake_buffer)
+    agent.replay_factory = factory
+    agent.buffer_size = 321
+    agent.observation_space = [[84, 84, 4]]
+    agent.worker_size = 1
+    agent.n_step = 3
+    agent.n_step_method = True
+    agent.prediction_depth = 5
+    agent.gamma = 0.99
+    agent.prioritized_replay = True
+    agent.prioritized_replay_alpha = 0.6
+    agent.prioritized_replay_eps = 0.01
+    agent.compress_memory = False
+
+    agent.get_memory_setup()
+
+    assert agent.replay_buffer is fake_buffer
+    assert factory.calls == [
+        {
+            "buffer_size": 321,
+            "observation_space": [[84, 84, 4]],
+            "action_shape_or_n": 1,
+            "worker_size": 1,
+            "n_step": 3,
+            "gamma": 0.99,
+            "prioritized": True,
+            "alpha": 0.6,
+            "eps": 0.01,
+            "compress_memory": False,
+            "prediction_depth": 5,
+        }
+    ]
+
+
+def test_transition_replay_buffers_live_in_replay_adapter():
+    assert not Path("jax_baselines/SPR/efficent_buffer.py").exists()
+    source = Path("jax_baselines/SPR/spr.py").read_text()
+    assert "TransitionReplayBuffer" not in source
+    assert "require_replay_factory" in source
+    assert Path("replay_memory/transition_buffers.py").exists()
+
+
 @pytest.mark.parametrize(
     "family_cls",
     [Q_Network_Family, Deteministic_Policy_Gradient_Family],

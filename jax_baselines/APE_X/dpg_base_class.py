@@ -16,6 +16,7 @@ from jax_baselines.core.replay_protocol import (
 from jax_baselines.core.runtime_adapters import make_progress
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.serialization import restore, save
+from jax_baselines.math.jax_utils import convert_jax
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
@@ -147,6 +148,9 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
 
     def _train_step(self, steps):
         pass
+
+    def _get_actions(self, params, obses, key=None):
+        return self.actor(params, key, self.preproc(params, key, convert_jax(obses)))
 
     def description(self):
         return "buffer len : {} loss : {:.3f} |".format(

@@ -16,6 +16,7 @@ Pinned behaviors:
 
 from __future__ import annotations
 
+import importlib
 import inspect
 from argparse import ArgumentParser
 
@@ -281,6 +282,37 @@ def test_run_family_wires_agent_without_env_or_model(monkeypatch):
     assert captured["env"] == "ENVB"
     assert captured["kwargs"]["policy_kwargs"] == {"pk": 1}
     assert captured["tested"] is True
+
+
+@pytest.mark.parametrize(
+    ("module_name", "runner_name", "runner_func_name"),
+    [
+        ("qnet", "QNET_RUNNER", "run_family"),
+        ("dpg", "DPG_RUNNER", "run_family"),
+        ("pg", "PG_RUNNER", "run_family"),
+        ("impala", "IMPALA_RUNNER", "run_distributed_family"),
+        ("apex_qnet", "APEX_QNET_RUNNER", "run_distributed_family"),
+        ("apex_dpg", "APEX_DPG_RUNNER", "run_distributed_family"),
+    ],
+)
+def test_console_main_returns_zero_after_success(
+    monkeypatch,
+    module_name,
+    runner_name,
+    runner_func_name,
+):
+    mod = importlib.import_module(f"experiments.cli.{module_name}")
+    captured = {}
+
+    def fake_runner(runner, argv=None):
+        captured["runner"] = runner
+        captured["argv"] = argv
+        return object()
+
+    monkeypatch.setattr(mod, runner_func_name, fake_runner)
+
+    assert mod.main(["--sentinel"]) == 0
+    assert captured == {"runner": getattr(mod, runner_name), "argv": ["--sentinel"]}
 
 
 # ---------------------------------------------------------------------------

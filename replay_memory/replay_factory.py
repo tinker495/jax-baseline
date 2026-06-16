@@ -18,6 +18,10 @@ from replay_memory.frame_buffers import (
     PrioritizedFrameStackReplayBuffer,
 )
 from replay_memory.impala_buffers import EpochBuffer
+from replay_memory.transition_buffers import (
+    PrioritizedTransitionReplayBuffer,
+    TransitionReplayBuffer,
+)
 
 
 def _frame_compress_applicable(observation_space, worker_size, n_step, n_frames):
@@ -46,6 +50,7 @@ def make_replay_buffer(
     eps: float = 1e-3,
     compress_memory: bool = False,
     n_frames: int = 4,
+    prediction_depth: int | None = None,
 ):
     """Create an appropriate replay buffer based on flags.
 
@@ -57,6 +62,23 @@ def make_replay_buffer(
     - For n_step only -> NstepReplayBuffer
     - Otherwise -> ReplayBuffer
     """
+    if prediction_depth is not None:
+        if prioritized:
+            return PrioritizedTransitionReplayBuffer(
+                buffer_size,
+                observation_space,
+                action_shape_or_n,
+                prediction_depth=prediction_depth,
+                alpha=alpha,
+                eps=eps,
+            )
+        return TransitionReplayBuffer(
+            buffer_size,
+            observation_space,
+            action_shape_or_n,
+            prediction_depth=prediction_depth,
+        )
+
     if compress_memory and _frame_compress_applicable(
         observation_space, worker_size, n_step, n_frames
     ):

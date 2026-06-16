@@ -3,6 +3,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from jax_baselines.core.replay_protocol import require_replay_factory
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import QNetTrainReport, QNetTrainResult
 from jax_baselines.math.distributional import (
@@ -16,10 +17,6 @@ from jax_baselines.math.param_updates import (
     scaled_by_reset_with_filter,
     soft_update,
     tree_random_normal_like,
-)
-from jax_baselines.SPR.efficent_buffer import (
-    PrioritizedTransitionReplayBuffer,
-    TransitionReplayBuffer,
 )
 
 
@@ -70,22 +67,20 @@ class SPR(Q_Network_Family):
         self._gamma = jnp.power(self.gamma, jnp.arange(self.n_step))
 
     def get_memory_setup(self):
-        if self.prioritized_replay:
-            self.replay_buffer = PrioritizedTransitionReplayBuffer(
-                self.buffer_size,
-                self.observation_space,
-                1,
-                prediction_depth=max(self.prediction_depth, self.n_step),
-                alpha=self.prioritized_replay_alpha,
-                eps=self.prioritized_replay_eps,
-            )
-        else:
-            self.replay_buffer = TransitionReplayBuffer(
-                self.buffer_size,
-                self.observation_space,
-                1,
-                prediction_depth=max(self.prediction_depth, self.n_step),
-            )
+        replay_factory = require_replay_factory(self.replay_factory, "ReplayBufferFactory")
+        self.replay_buffer = replay_factory(
+            buffer_size=self.buffer_size,
+            observation_space=self.observation_space,
+            action_shape_or_n=1,
+            worker_size=self.worker_size,
+            n_step=self.n_step if self.n_step_method else 1,
+            gamma=self.gamma,
+            prioritized=self.prioritized_replay,
+            alpha=self.prioritized_replay_alpha,
+            eps=self.prioritized_replay_eps,
+            compress_memory=self.compress_memory,
+            prediction_depth=max(self.prediction_depth, self.n_step),
+        )
 
     def setup_model(self):
         model_builder = self.model_builder_maker(
@@ -523,5 +518,18 @@ class SPR(Q_Network_Family):
         experiment_name="SPR",
         run_name="SPR",
         eval_num=100,
+        logger_factory=None,
+        progress_factory=None,
+        record_test_fn=None,
     ):
-        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name, eval_num)
+        super().learn(
+            total_timesteps,
+            callback,
+            log_interval,
+            experiment_name,
+            run_name,
+            eval_num,
+            logger_factory=logger_factory,
+            progress_factory=progress_factory,
+            record_test_fn=record_test_fn,
+        )

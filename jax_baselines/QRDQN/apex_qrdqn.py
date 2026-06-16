@@ -15,12 +15,77 @@ from jax_baselines.math.policy_math import q_log_pi
 
 
 class APE_X_QRDQN(Ape_X_Family):
-    def __init__(self, workers, model_builder_maker, n_support=200, delta=1.0, **kwargs):
+    def __init__(
+        self,
+        workers,
+        model_builder_maker,
+        manager=None,
+        n_support=200,
+        delta=1.0,
+        gamma=0.995,
+        learning_rate=5e-5,
+        buffer_size=50000,
+        exploration_initial_eps=0.9,
+        exploration_decay=0.7,
+        batch_num=16,
+        mini_batch_size=512,
+        double_q=False,
+        dueling_model=False,
+        n_step=1,
+        learning_starts=1000,
+        target_network_update_freq=2000,
+        gradient_steps=1,
+        prioritized_replay_alpha=0.6,
+        prioritized_replay_beta0=0.4,
+        prioritized_replay_eps=1e-3,
+        param_noise=False,
+        munchausen=False,
+        log_interval=200,
+        log_dir=None,
+        _init_setup_model=True,
+        policy_kwargs=None,
+        seed=None,
+        optimizer_factory=None,
+        compress_memory=False,
+        multi_replay_factory=None,
+        worker_replay_factory=None,
+    ):
 
         self.n_support = n_support
         self.delta = delta
 
-        super().__init__(workers, model_builder_maker, **kwargs)
+        super().__init__(
+            workers,
+            model_builder_maker,
+            manager=manager,
+            gamma=gamma,
+            learning_rate=learning_rate,
+            buffer_size=buffer_size,
+            exploration_initial_eps=exploration_initial_eps,
+            exploration_decay=exploration_decay,
+            batch_num=batch_num,
+            mini_batch_size=mini_batch_size,
+            double_q=double_q,
+            dueling_model=dueling_model,
+            n_step=n_step,
+            learning_starts=learning_starts,
+            target_network_update_freq=target_network_update_freq,
+            gradient_steps=gradient_steps,
+            prioritized_replay_alpha=prioritized_replay_alpha,
+            prioritized_replay_beta0=prioritized_replay_beta0,
+            prioritized_replay_eps=prioritized_replay_eps,
+            param_noise=param_noise,
+            munchausen=munchausen,
+            log_interval=log_interval,
+            log_dir=log_dir,
+            _init_setup_model=_init_setup_model,
+            policy_kwargs=policy_kwargs,
+            seed=seed,
+            optimizer_factory=optimizer_factory,
+            compress_memory=compress_memory,
+            multi_replay_factory=multi_replay_factory,
+            worker_replay_factory=worker_replay_factory,
+        )
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
@@ -269,6 +334,8 @@ class APE_X_QRDQN(Ape_X_Family):
         run_name="Ape_X_QRDQN",
         reset_num_timesteps=True,
         replay_wrapper=None,
+        logger_factory=None,
+        progress_factory=None,
     ):
         super().learn(
             total_timesteps,
@@ -277,4 +344,6 @@ class APE_X_QRDQN(Ape_X_Family):
             run_name,
             reset_num_timesteps,
             replay_wrapper,
+            logger_factory=logger_factory,
+            progress_factory=progress_factory,
         )

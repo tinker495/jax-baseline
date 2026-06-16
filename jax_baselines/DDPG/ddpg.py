@@ -247,6 +247,9 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         experiment_name="DDPG",
         run_name="DDPG",
         eval_num=100,
+        logger_factory=None,
+        progress_factory=None,
+        record_test_fn=None,
     ):
         self.exploration = LinearSchedule(
             schedule_timesteps=int(self.exploration_fraction * total_timesteps),
@@ -261,4 +264,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             experiment_name,
             run_name,
             eval_num,
+            logger_factory=logger_factory,
+            progress_factory=progress_factory,
+            record_test_fn=record_test_fn,
         )

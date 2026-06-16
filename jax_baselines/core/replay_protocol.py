@@ -23,6 +23,7 @@ class ReplayBufferFactory(Protocol):
         eps: float = 1e-3,
         compress_memory: bool = False,
         n_frames: int = 4,
+        prediction_depth: int | None = None,
     ) -> Any:
         ...
 

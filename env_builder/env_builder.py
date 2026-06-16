@@ -5,16 +5,63 @@ import numpy as np
 from gymnasium import spaces
 
 from env_builder.seeding import seed_env
-from jax_baselines.core.env_protocols import Env, EnvInfo, VectorizedEnv
+from jax_baselines.core.env_protocols import (
+    Env,
+    EnvInfo,
+    PreparedEnvSpec,
+    PreparedWorkerEnvSpec,
+    SingleEnv,
+    VectorizedEnv,
+)
 
 __all__ = [
     "Env",
     "EnvInfo",
+    "PreparedEnvSpec",
+    "PreparedWorkerEnvSpec",
     "VectorizedEnv",
     "EnvPoolVectorizedEnv",
     "GymVectorizedEnv",
     "get_env_builder",
 ]
+
+
+def _observation_space_shape(observation_space) -> list[list[int]]:
+    if hasattr(observation_space, "shape"):
+        return [list(observation_space.shape)]
+    return [list(observation_space)]
+
+
+def _action_meta(action_space) -> tuple[list[int], str]:
+    if hasattr(action_space, "n"):
+        return [int(action_space.n)], "discrete"
+    if hasattr(action_space, "shape") and action_space.shape:
+        return [int(action_space.shape[0])], "continuous"
+    raise ValueError(f"Unsupported action space type: {type(action_space)}")
+
+
+def _single_env_info(env, env_id: str) -> EnvInfo:
+    if not isinstance(env, SingleEnv):
+        raise ValueError("Single env must satisfy the SingleEnv protocol")
+    action_size, action_type = _action_meta(env.action_space)
+    return {
+        "observation_space": _observation_space_shape(env.observation_space),
+        "action_size": action_size,
+        "action_type": action_type,
+        "env_type": "single",
+        "env_id": env_id,
+        "worker_num": 1,
+        "core_env_type": "SingleEnv",
+    }
+
+
+def _prepared_env_info(env, env_id: str) -> EnvInfo:
+    if isinstance(env, VectorizedEnv):
+        env_info = env.env_info
+        if env_info is None:
+            raise ValueError("Vectorized env must expose env_info")
+        return env_info
+    return _single_env_info(env, env_id)
 
 
 def get_env_builder(env_name, env_backend="gymnasium", **kwargs):
@@ -36,7 +83,7 @@ def get_env_builder(env_name, env_backend="gymnasium", **kwargs):
         else:
             from env_builder.atari_wrappers import get_env_type, make_wrap_atari
 
-            env_type, env_id = get_env_type(env_name)
+            env_type, _ = get_env_type(env_name)
             if env_type == "atari_env":
                 env = make_wrap_atari(env_name, clip_rewards=True)
             else:
@@ -44,9 +91,25 @@ def get_env_builder(env_name, env_backend="gymnasium", **kwargs):
             seed_env(env, seed)
             return env
 
-    env_type = "SingleEnv"
+    def prepare_envs(num_workers=1, seed=None):
+        eval_seed = None if seed is None else seed + 1
+        env = env_builder(num_workers, seed=seed)
+        eval_env = env_builder(1, seed=eval_seed)
+        return PreparedEnvSpec(
+            env=env,
+            eval_env=eval_env,
+            env_info=_prepared_env_info(env, env_name),
+        )
+
+    def prepare_worker_env(seed=None):
+        env = env_builder(1, seed=seed)
+        return PreparedWorkerEnvSpec(env=env, env_info=_single_env_info(env, env_name))
+
+    env_builder.prepare_envs = prepare_envs
+    env_builder.prepare_worker_env = prepare_worker_env
+
     env_info = {
-        "env_type": env_type,
+        "env_type": "adapter_factory",
         "env_id": env_name,
     }
     return env_builder, env_info
@@ -149,11 +212,15 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
 
         # Store environment info matching the existing interface
         observation_space = self._format_observation_space(self.env.observation_space)
+        action_size, action_type = _action_meta(self.env.action_space)
         self.env_info: EnvInfo = {
-            "observation_space": observation_space,
-            "action_space": self.env.action_space,
+            "observation_space": _observation_space_shape(observation_space),
+            "action_size": action_size,
+            "action_type": action_type,
             "env_type": env_type,
             "env_id": env_id,
+            "worker_num": worker_num,
+            "core_env_type": "VectorizedEnv",
         }
 
         # Set up action conversion for discrete action spaces
@@ -343,11 +410,15 @@ class GymVectorizedEnv(VectorizedEnv):
             self.env = gym.vector.make(env_id, num_envs=worker_num, asynchronous=True)
 
         # Store environment info
+        action_size, action_type = _action_meta(self.env.single_action_space)
         self.env_info: EnvInfo = {
-            "observation_space": self.env.single_observation_space,
-            "action_space": self.env.single_action_space,
+            "observation_space": _observation_space_shape(self.env.single_observation_space),
+            "action_size": action_size,
+            "action_type": action_type,
             "env_type": "gym_vector",
             "env_id": env_id,
+            "worker_num": worker_num,
+            "core_env_type": "VectorizedEnv",
         }
 
         # Set up action conversion

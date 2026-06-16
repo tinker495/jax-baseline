@@ -245,7 +245,8 @@ QNET_RUNNER = FamilyRunner(
 
 
 def main(argv=None):
-    return run_family(QNET_RUNNER, argv)
+    run_family(QNET_RUNNER, argv)
+    return 0
 
 
 if __name__ == "__main__":

@@ -1,8 +1,22 @@
 import numpy as np
 
-from jax_baselines.core.env_protocols import EnvInfo, SingleEnv, VectorizedEnv
+from jax_baselines.core.env_protocols import (
+    EnvInfo,
+    PreparedEnvSpec,
+    PreparedWorkerEnvSpec,
+    SingleEnv,
+    VectorizedEnv,
+)
 
-REQUIRED_ENV_INFO_KEYS = ("observation_space", "action_space", "env_type", "env_id")
+REQUIRED_ENV_INFO_KEYS = (
+    "observation_space",
+    "action_size",
+    "action_type",
+    "env_type",
+    "env_id",
+    "worker_num",
+    "core_env_type",
+)
 
 
 # Action-space converters (defined at module scope to avoid lambda-based E731 lint issues)
@@ -14,72 +28,90 @@ def _continuous_action_conv(a):
     return np.clip(a, -3.0, 3.0) / 3.0
 
 
-def _observation_space_shape(observation_space):
-    if hasattr(observation_space, "shape"):
-        return [list(observation_space.shape)]
-    return [list(observation_space)]
-
-
-def _is_discrete_space(action_space):
-    return hasattr(action_space, "n")
-
-
-def _action_size(action_space):
-    if _is_discrete_space(action_space):
-        return [action_space.n]
-    if hasattr(action_space, "shape") and action_space.shape:
-        return [action_space.shape[0]]
-    raise ValueError(f"Unsupported action space type: {type(action_space)}")
-
-
-def _is_single_env(env):
-    return isinstance(env, SingleEnv) or (
-        hasattr(env, "observation_space")
-        and hasattr(env, "action_space")
-        and callable(getattr(env, "reset", None))
-        and callable(getattr(env, "step", None))
-    )
-
-
 def _require_env_info(env_info: EnvInfo | None) -> EnvInfo:
     if env_info is None:
-        raise ValueError("VectorizedEnv env_info is required")
+        raise ValueError("Prepared env_info is required")
 
     missing = [key for key in REQUIRED_ENV_INFO_KEYS if key not in env_info]
     if missing:
-        raise ValueError(f"VectorizedEnv env_info missing required keys: {', '.join(missing)}")
+        raise ValueError(f"Prepared env_info missing required keys: {', '.join(missing)}")
 
     return env_info
 
 
-def get_local_env_info(env_builder, num_workers=1, seed=None):
-    """Create envs and extract standardized info used by base classes.
+def _require_single_env(env, context: str):
+    if not isinstance(env, SingleEnv):
+        raise ValueError(f"{context} must satisfy the SingleEnv protocol")
+
+
+def _validate_core_env_type(env_info: EnvInfo) -> str:
+    env_type = env_info["core_env_type"]
+    if env_type not in {"SingleEnv", "VectorizedEnv"}:
+        raise ValueError(f"Unsupported core_env_type: {env_type!r}")
+    return env_type
+
+
+def _prepare_envs(env_builder, num_workers=1, seed=None):
+    prepare = getattr(env_builder, "prepare_envs", None)
+    if not callable(prepare):
+        raise ValueError("Environment adapter must expose prepare_envs(num_workers=..., seed=...)")
+    prepared = prepare(num_workers=num_workers, seed=seed)
+    if not isinstance(prepared, PreparedEnvSpec):
+        raise ValueError("prepare_envs must return PreparedEnvSpec")
+    if prepared.eval_env is None:
+        raise ValueError("Prepared local eval_env is required")
+    return prepared
+
+
+def get_local_env_info(env_builder, num_workers=1, seed=None, include_action_type=False):
+    """Extract standardized info from adapter-prepared train/eval envs.
 
     Returns: (env, eval_env, observation_space, action_size, worker_size, env_type)
     """
-    eval_seed = None if seed is None else seed + 1
-    env = env_builder(num_workers, seed=seed)
-    eval_env = env_builder(1, seed=eval_seed)
+    prepared = _prepare_envs(env_builder, num_workers=num_workers, seed=seed)
+    env_info = _require_env_info(prepared.env_info)
 
-    if isinstance(env, VectorizedEnv):
-        env_info = _require_env_info(env.env_info)
-        obs_space = env_info["observation_space"]
-        act_space = env_info["action_space"]
+    observation_space = env_info["observation_space"]
+    action_size = env_info["action_size"]
+    worker_size = int(env_info["worker_num"])
+    env_type = _validate_core_env_type(env_info)
 
-        observation_space = _observation_space_shape(obs_space)
-        action_size = _action_size(act_space)
-        worker_size = env.worker_num
-        env_type = "VectorizedEnv"
-    elif _is_single_env(env):
-        action_space = env.action_space
-        observation_space = _observation_space_shape(env.observation_space)
-        action_size = _action_size(action_space)
-        worker_size = 1
-        env_type = "SingleEnv"
-    else:
-        raise ValueError("Unsupported env type")
+    if env_type == "VectorizedEnv" and not isinstance(prepared.env, VectorizedEnv):
+        raise ValueError(
+            "Prepared train env metadata says VectorizedEnv but env is not VectorizedEnv"
+        )
+    if env_type == "SingleEnv":
+        _require_single_env(prepared.env, "Prepared train env")
+    _require_single_env(prepared.eval_env, "Prepared eval env")
 
-    return env, eval_env, observation_space, action_size, worker_size, env_type
+    result = (
+        prepared.env,
+        prepared.eval_env,
+        observation_space,
+        action_size,
+        worker_size,
+        env_type,
+    )
+    if include_action_type:
+        return (*result, env_info["action_type"])
+    return result
+
+
+def prepare_worker_env(env_builder, seed=None):
+    """Return a single worker env and adapter-provided normalized metadata."""
+    prepare = getattr(env_builder, "prepare_worker_env", None)
+    if not callable(prepare):
+        raise ValueError("Environment adapter must expose prepare_worker_env(seed=...)")
+    prepared = prepare(seed=seed)
+    if not isinstance(prepared, PreparedWorkerEnvSpec):
+        raise ValueError("prepare_worker_env must return PreparedWorkerEnvSpec")
+    env_info = _require_env_info(prepared.env_info)
+    if _validate_core_env_type(env_info) != "SingleEnv":
+        raise ValueError("Prepared worker env metadata must be SingleEnv")
+    if int(env_info["worker_num"]) != 1:
+        raise ValueError("Prepared worker env worker_num must be 1")
+    _require_single_env(prepared.env, "Prepared worker env")
+    return prepared.env, env_info
 
 
 def get_remote_env_info(workers, remote_get, include_action_type=False):
@@ -95,17 +127,11 @@ def get_remote_env_info(workers, remote_get, include_action_type=False):
     """
     if isinstance(workers, list):
         env_dict = remote_get(workers[0].get_info.remote())
-        observation_space = [list(env_dict["observation_space"].shape)]
-        action_space = env_dict["action_space"]
-
-        if _is_discrete_space(action_space):
-            action_size = [action_space.n]
-            action_type = "discrete"
-        else:
-            action_size = _action_size(action_space)
-            action_type = "continuous"
-
-        env_type = "SingleEnv"
+        env_info = _require_env_info(env_dict)
+        observation_space = env_info["observation_space"]
+        action_size = env_info["action_size"]
+        action_type = env_info["action_type"]
+        env_type = _validate_core_env_type(env_info)
 
         if include_action_type:
             return observation_space, action_size, env_type, action_type
@@ -115,13 +141,10 @@ def get_remote_env_info(workers, remote_get, include_action_type=False):
         raise ValueError("Invalid workers type")
 
 
-def infer_action_meta(action_space):
-    """Return (action_type, conv_action) for given gym action_space."""
-    if _is_discrete_space(action_space):
-        action_type = "discrete"
-        conv_action = _discrete_action_conv
-    else:
-        _action_size(action_space)
-        action_type = "continuous"
-        conv_action = _continuous_action_conv
-    return action_type, conv_action
+def infer_action_meta(action_type):
+    """Return (action_type, conv_action) for adapter-normalized action metadata."""
+    if action_type == "discrete":
+        return action_type, _discrete_action_conv
+    if action_type == "continuous":
+        return action_type, _continuous_action_conv
+    raise ValueError(f"Unsupported action type: {action_type!r}")

@@ -7,6 +7,7 @@ from importlib import import_module
 import jax
 import numpy as np
 
+from jax_baselines.core.env_info import prepare_worker_env
 from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
 from jax_baselines.core.seeding import seed_prngs
 
@@ -22,20 +23,11 @@ class Impala_Worker(object):
         mp.current_process().authkey = base64.b64decode(self.encoded)
         seed_prngs(seed)
         # env_builder is the repo-local Environment Adapter callable injected by
-        # experiments; calling it with worker=1 returns a normalized, already
-        # seeded single environment. The core worker never imports gymnasium or
-        # reaches into env_builder internals.
-        self.env = env_builder(worker=1, seed=seed)
+        # experiments; the adapter prepares the env and normalized metadata.
+        self.env, self.env_info = prepare_worker_env(env_builder, seed=seed)
 
     def get_info(self):
-        # The distributed base class normalizes the remote env to "SingleEnv"
-        # (see core.env_info.get_remote_env_info); it consumes only the spaces.
-        return {
-            "observation_space": self.env.observation_space,
-            "action_space": self.env.action_space,
-            "env_type": "SingleEnv",
-            "env_id": None,
-        }
+        return self.env_info
 
     def run(
         self,

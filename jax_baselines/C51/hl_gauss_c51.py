@@ -189,6 +189,9 @@ class HL_GAUSS_C51(Q_Network_Family):
         experiment_name="HL_GAUSS_C51",
         run_name="HL_GAUSS_C51",
         eval_num=100,
+        logger_factory=None,
+        progress_factory=None,
+        record_test_fn=None,
     ):
         super().learn(
             total_timesteps,
@@ -197,4 +200,7 @@ class HL_GAUSS_C51(Q_Network_Family):
             experiment_name,
             run_name,
             eval_num,
+            logger_factory=logger_factory,
+            progress_factory=progress_factory,
+            record_test_fn=record_test_fn,
         )

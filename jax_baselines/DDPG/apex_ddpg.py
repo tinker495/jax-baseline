@@ -182,6 +182,8 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
         run_name="Ape_X_DDPG",
         reset_num_timesteps=True,
         replay_wrapper=None,
+        logger_factory=None,
+        progress_factory=None,
     ):
         super().learn(
             total_timesteps,
@@ -190,4 +192,6 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
             run_name,
             reset_num_timesteps,
             replay_wrapper,
+            logger_factory=logger_factory,
+            progress_factory=progress_factory,
         )

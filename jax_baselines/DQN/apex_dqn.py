@@ -14,9 +14,6 @@ from jax_baselines.math.policy_math import q_log_pi
 
 
 class APE_X_DQN(Ape_X_Family):
-    def __init__(self, workers, model_builder_maker, **kwargs):
-        super().__init__(workers, model_builder_maker, **kwargs)
-
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
             self.observation_space,
@@ -232,6 +229,8 @@ class APE_X_DQN(Ape_X_Family):
         run_name="Ape_X_DQN",
         reset_num_timesteps=True,
         replay_wrapper=None,
+        logger_factory=None,
+        progress_factory=None,
     ):
         super().learn(
             total_timesteps,
@@ -240,4 +239,6 @@ class APE_X_DQN(Ape_X_Family):
             run_name,
             reset_num_timesteps,
             replay_wrapper,
+            logger_factory=logger_factory,
+            progress_factory=progress_factory,
         )

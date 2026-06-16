@@ -16,16 +16,72 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
         self,
         workers,
         model_builder_maker,
+        manager=None,
         target_action_noise_mul=1.5,
         policy_delay=3,
-        **kwargs,
+        gamma=0.995,
+        learning_rate=5e-5,
+        buffer_size=50000,
+        exploration_initial_eps=0.9,
+        exploration_decay=0.7,
+        batch_num=16,
+        mini_batch_size=512,
+        n_step=1,
+        learning_starts=1000,
+        target_network_update_tau=5e-4,
+        gradient_steps=1,
+        prioritized_replay_alpha=0.6,
+        prioritized_replay_beta0=0.4,
+        prioritized_replay_eps=1e-3,
+        scaled_by_reset=False,
+        simba=False,
+        log_interval=200,
+        log_dir=None,
+        _init_setup_model=True,
+        policy_kwargs=None,
+        seed=None,
+        optimizer_factory=None,
+        compress_memory=False,
+        param_broadcast_freq=20,
+        multi_replay_factory=None,
+        worker_replay_factory=None,
     ):
-        super().__init__(workers, model_builder_maker, **kwargs)
-
-        self.action_noise = self.exploration_initial_eps ** (1 + self.exploration_decay)
+        self.action_noise = exploration_initial_eps ** (1 + exploration_decay)
         self.target_action_noise = self.action_noise * target_action_noise_mul
         self.action_noise_clamp = 0.5
         self.policy_delay = policy_delay
+
+        super().__init__(
+            workers,
+            model_builder_maker,
+            manager=manager,
+            gamma=gamma,
+            learning_rate=learning_rate,
+            buffer_size=buffer_size,
+            exploration_initial_eps=exploration_initial_eps,
+            exploration_decay=exploration_decay,
+            batch_num=batch_num,
+            mini_batch_size=mini_batch_size,
+            n_step=n_step,
+            learning_starts=learning_starts,
+            target_network_update_tau=target_network_update_tau,
+            gradient_steps=gradient_steps,
+            prioritized_replay_alpha=prioritized_replay_alpha,
+            prioritized_replay_beta0=prioritized_replay_beta0,
+            prioritized_replay_eps=prioritized_replay_eps,
+            scaled_by_reset=scaled_by_reset,
+            simba=simba,
+            log_interval=log_interval,
+            log_dir=log_dir,
+            _init_setup_model=_init_setup_model,
+            policy_kwargs=policy_kwargs,
+            seed=seed,
+            optimizer_factory=optimizer_factory,
+            compress_memory=compress_memory,
+            param_broadcast_freq=param_broadcast_freq,
+            multi_replay_factory=multi_replay_factory,
+            worker_replay_factory=worker_replay_factory,
+        )
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
@@ -244,6 +300,8 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
         run_name="Ape_X_TD3",
         reset_num_timesteps=True,
         replay_wrapper=None,
+        logger_factory=None,
+        progress_factory=None,
     ):
         super().learn(
             total_timesteps,
@@ -252,4 +310,6 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
             run_name,
             reset_num_timesteps,
             replay_wrapper,
+            logger_factory=logger_factory,
+            progress_factory=progress_factory,
         )

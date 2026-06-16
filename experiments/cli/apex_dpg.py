@@ -98,7 +98,8 @@ APEX_DPG_RUNNER = DistributedFamilyRunner(
 
 
 def main(argv=None):
-    return run_distributed_family(APEX_DPG_RUNNER, argv)
+    run_distributed_family(APEX_DPG_RUNNER, argv)
+    return 0
 
 
 if __name__ == "__main__":

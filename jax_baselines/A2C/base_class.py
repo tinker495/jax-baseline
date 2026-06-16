@@ -101,15 +101,15 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.action_size,
             self.worker_size,
             self.env_type,
-        ) = get_local_env_info(self.env_builder, self.num_workers, seed=self.seed)
+            action_type,
+        ) = get_local_env_info(
+            self.env_builder,
+            self.num_workers,
+            seed=self.seed,
+            include_action_type=True,
+        )
 
-        # infer action metadata (type and conversion)
-        # For vectorized envs the underlying action_space is stored in env.env_info
-        if self.env_type == "VectorizedEnv":
-            action_space = self.env.env_info["action_space"]
-        else:
-            action_space = self.env.action_space
-        self.action_type, self.conv_action = infer_action_meta(action_space)
+        self.action_type, self.conv_action = infer_action_meta(action_type)
 
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)

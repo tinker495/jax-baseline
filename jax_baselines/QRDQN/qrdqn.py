@@ -209,6 +209,19 @@ class QRDQN(Q_Network_Family):
         experiment_name="QRDQN",
         run_name="QRDQN",
         eval_num=100,
+        logger_factory=None,
+        progress_factory=None,
+        record_test_fn=None,
     ):
         run_name = run_name + "({:d})".format(self.n_support)
-        super().learn(total_timesteps, callback, log_interval, experiment_name, run_name, eval_num)
+        super().learn(
+            total_timesteps,
+            callback,
+            log_interval,
+            experiment_name,
+            run_name,
+            eval_num,
+            logger_factory=logger_factory,
+            progress_factory=progress_factory,
+            record_test_fn=record_test_fn,
+        )

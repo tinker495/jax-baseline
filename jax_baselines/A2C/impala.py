@@ -7,10 +7,57 @@ from jax_baselines.math.jax_utils import convert_jax
 
 
 class IMPALA(IMPALA_Family):
-    def __init__(self, workers, model_builder_maker, **kwargs):
+    def __init__(
+        self,
+        workers,
+        model_builder_maker,
+        manager=None,
+        buffer_size=0,
+        gamma=0.995,
+        lamda=0.95,
+        learning_rate=3e-4,
+        update_freq=100,
+        batch_size=1024,
+        sample_size=1,
+        val_coef=0.2,
+        ent_coef=0.01,
+        use_entropy_adv_shaping=True,
+        entropy_adv_shaping_kappa=2.0,
+        rho_max=1.0,
+        log_interval=1,
+        log_dir=None,
+        _init_setup_model=True,
+        policy_kwargs=None,
+        seed=None,
+        optimizer_factory=None,
+        worker_replay_factory=None,
+    ):
 
         self.name = "IMPALA_AC"
-        super().__init__(workers, model_builder_maker, **kwargs)
+        super().__init__(
+            workers,
+            model_builder_maker,
+            manager=manager,
+            buffer_size=buffer_size,
+            gamma=gamma,
+            lamda=lamda,
+            learning_rate=learning_rate,
+            update_freq=update_freq,
+            batch_size=batch_size,
+            sample_size=sample_size,
+            val_coef=val_coef,
+            ent_coef=ent_coef,
+            use_entropy_adv_shaping=use_entropy_adv_shaping,
+            entropy_adv_shaping_kappa=entropy_adv_shaping_kappa,
+            rho_max=rho_max,
+            log_interval=log_interval,
+            log_dir=log_dir,
+            _init_setup_model=_init_setup_model,
+            policy_kwargs=policy_kwargs,
+            seed=seed,
+            optimizer_factory=optimizer_factory,
+            worker_replay_factory=worker_replay_factory,
+        )
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
@@ -207,6 +254,8 @@ class IMPALA(IMPALA_Family):
         run_name="IMPALA_AC",
         reset_num_timesteps=True,
         replay_wrapper=None,
+        logger_factory=None,
+        progress_factory=None,
     ):
         super().learn(
             total_trainstep,
@@ -215,4 +264,6 @@ class IMPALA(IMPALA_Family):
             run_name,
             reset_num_timesteps,
             replay_wrapper,
+            logger_factory=logger_factory,
+            progress_factory=progress_factory,
         )

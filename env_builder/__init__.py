@@ -11,12 +11,20 @@ from env_builder.env_builder import (
     get_env_builder,
 )
 from env_builder.seeding import key_gen, seed_env, seed_prngs, set_global_seeds
-from jax_baselines.core.env_protocols import Env, SingleEnv, VectorizedEnv
+from jax_baselines.core.env_protocols import (
+    Env,
+    PreparedEnvSpec,
+    PreparedWorkerEnvSpec,
+    SingleEnv,
+    VectorizedEnv,
+)
 
 __all__ = [
     "Env",
     "SingleEnv",
     "VectorizedEnv",
+    "PreparedEnvSpec",
+    "PreparedWorkerEnvSpec",
     "EnvPoolVectorizedEnv",
     "GymVectorizedEnv",
     "get_env_builder",
