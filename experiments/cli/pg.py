@@ -76,11 +76,7 @@ def add_args(parser):
         help="advantage normalization scope when --gae_normalize is set "
         "(batch: whole rollout, once; minibatch: per-minibatch, PPO2-style)",
     )
-    parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
     parser.add_argument("--use_entropy_adv_shaping", action="store_true")
-    parser.add_argument(
-        "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
-    )
     parser.set_defaults(gae_normalize=False)
 
 
@@ -88,8 +84,6 @@ def build_env(args):
     env_builder, _ = get_env_builder(
         args.env,
         env_backend=args.env_backend,
-        timescale=args.time_scale,
-        capture_frame_rate=args.capture_frame_rate,
     )
     policy_kwargs = {
         "node": args.node,

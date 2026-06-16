@@ -64,7 +64,7 @@ def _prepared_env_info(env, env_id: str) -> EnvInfo:
     return _single_env_info(env, env_id)
 
 
-def get_env_builder(env_name, env_backend="gymnasium", **kwargs):
+def get_env_builder(env_name, env_backend="gymnasium"):
     if env_backend not in ("gymnasium", "envpool"):
         raise ValueError(f"env_backend must be 'gymnasium' or 'envpool', got {env_backend!r}")
 

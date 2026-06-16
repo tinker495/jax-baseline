@@ -84,10 +84,6 @@ def add_args(parser):
     parser.add_argument("--compress_memory", action="store_true")
     parser.add_argument("--hl_gauss", action="store_true")
     parser.add_argument("--scaled_by_reset", action="store_true")
-    parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
-    parser.add_argument(
-        "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
-    )
     parser.add_argument("--use_checkpointing", action="store_true")
 
 
@@ -95,8 +91,6 @@ def build_env(args):
     env_builder, _ = get_env_builder(
         args.env,
         env_backend=args.env_backend,
-        timescale=args.time_scale,
-        capture_frame_rate=args.capture_frame_rate,
     )
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n}
     return env_builder, policy_kwargs

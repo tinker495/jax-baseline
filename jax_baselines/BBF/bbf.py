@@ -28,15 +28,17 @@ class BBF(SPR):
 
         self.shift_size = 4
         self.prediction_depth = 5
-        self.off_policy_fix = off_policy_fix
         self.intensity_scale = 0.05
-        self.categorial_bar_n = categorial_bar_n
-        self.categorial_max = float(categorial_max)
-        self.categorial_min = float(categorial_min)
-        self.spr_weight = float(spr_weight)
 
-        # Set BBF-specific defaults
+        # Set BBF-specific defaults. off_policy_fix/spr_weight/categorial_* are
+        # forwarded so SPR.__init__ stays their single owner; setting them on self
+        # here would be clobbered when super() reapplies SPR's defaults.
         bbf_kwargs = {
+            "off_policy_fix": off_policy_fix,
+            "spr_weight": spr_weight,
+            "categorial_bar_n": categorial_bar_n,
+            "categorial_max": categorial_max,
+            "categorial_min": categorial_min,
             "double_q": True,
             "dueling_model": True,
             "n_step": 10,

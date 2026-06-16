@@ -69,10 +69,6 @@ def add_args(parser):
     parser.add_argument("--critic_num", type=int, default=2, help="tqc critic number")
     parser.add_argument("--ent_coef", type=str, default="auto", help="sac entropy coefficient")
     parser.add_argument("--learning_starts", type=int, default=5000, help="learning start")
-    parser.add_argument("--time_scale", type=float, default=20.0, help="unity time scale")
-    parser.add_argument(
-        "--capture_frame_rate", type=int, default=1, help="unity capture frame rate"
-    )
     parser.add_argument("--use_checkpointing", action="store_true")
 
 
@@ -80,8 +76,6 @@ def build_env(args):
     env_builder, _ = get_env_builder(
         args.env,
         env_backend=args.env_backend,
-        timescale=args.time_scale,
-        capture_frame_rate=args.capture_frame_rate,
     )
     policy_kwargs = {
         "node": args.node,

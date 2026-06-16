@@ -40,13 +40,6 @@ class Model(hk.Module):
             )  # [ batch x feature ]
 
             mul_embedding = feature * quantile_embedding  # [ batch x feature ]
-            if self.hidden_n != 0:
-                mul_embedding = hk.Sequential(
-                    [
-                        self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                        for i in range(2 * self.hidden_n)
-                    ]
-                )(mul_embedding)
             if not self.dueling:
                 return hk.Sequential(
                     [

@@ -302,8 +302,8 @@ def test_experiments_composition_path_uses_adapter_prepared_envs(monkeypatch):
 
     calls = []
 
-    def fake_get_env_builder(env_name, **kwargs):
-        calls.append(("get_env_builder", env_name, kwargs))
+    def fake_get_env_builder(env_name, env_backend="gymnasium"):
+        calls.append(("get_env_builder", env_name, {"env_backend": env_backend}))
 
         def builder(*args, **kwargs):
             raise AssertionError("core must not call the raw builder on the experiments path")
@@ -356,7 +356,7 @@ def test_experiments_composition_path_uses_adapter_prepared_envs(monkeypatch):
         (
             "get_env_builder",
             "CartPole-v1",
-            {"env_backend": "gymnasium", "timescale": 20.0, "capture_frame_rate": 1},
+            {"env_backend": "gymnasium"},
         ),
         ("prepare_envs", 4, 21),
     ]
