@@ -47,7 +47,6 @@ class BBF(SPR):
             **kwargs,
         }
 
-        self.name = "BBF"
         super().__init__(env_builder, model_builder_maker, **bbf_kwargs)
 
     def setup_model(self):

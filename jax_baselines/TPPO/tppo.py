@@ -33,7 +33,6 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
     ):
         super().__init__(env_builder, model_builder_maker, **kwargs)
 
-        self.name = "TPPO"
         self.lamda = lamda
         self.gae_normalize = gae_normalize
         self.gae_normalize_scope = validate_advantage_normalize_scope(gae_normalize_scope)

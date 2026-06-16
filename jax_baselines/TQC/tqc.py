@@ -37,7 +37,6 @@ class TQC(Deteministic_Policy_Gradient_Family):
         **kwargs,
     ):
 
-        self.name = "TQC"
         self._ent_coef = ent_coef
         self.ent_coef_learning_rate = 1e-4
         self.n_support = n_support

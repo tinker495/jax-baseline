@@ -32,7 +32,6 @@ class TD3(Deteministic_Policy_Gradient_Family):
         **kwargs,
     ):
 
-        self.name = "TD3"
         self.action_noise = action_noise
         self.target_action_noise = action_noise * target_action_noise_mul
         self.action_noise_clamp = 0.5

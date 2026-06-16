@@ -52,7 +52,6 @@ class IMPALA_Family(object):
         optimizer_factory: OptimizerFactory | None = None,
         worker_replay_factory: WorkerReplayBufferFactory | None = None,
     ):
-        self.name = "IMPALA_Family"
         self.workers = workers
         self.model_builder_maker = model_builder_maker
         self.worker_replay_factory = worker_replay_factory

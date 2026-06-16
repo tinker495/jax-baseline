@@ -10,7 +10,6 @@ from jax_baselines.math.returns import discount_with_terminated
 class A2C(Actor_Critic_Policy_Gradient_Family):
     def __init__(self, env_builder, model_builder_maker, **kwargs):
 
-        self.name = "A2C"
         super().__init__(env_builder, model_builder_maker, **kwargs)
         self.get_memory_setup()
 

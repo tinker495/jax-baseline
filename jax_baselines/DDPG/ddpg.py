@@ -34,7 +34,6 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         **kwargs,
     ):
 
-        self.name = "DDPG"
         self.exploration_final_eps = exploration_final_eps
         self.exploration_initial_eps = exploration_initial_eps
         self.exploration_fraction = exploration_fraction

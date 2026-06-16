@@ -22,7 +22,6 @@ class QRDQN(Q_Network_Family):
         **kwargs,
     ):
 
-        self.name = "QRDQN"
         self.n_support = n_support
         self.delta = delta
 

@@ -14,7 +14,6 @@ from jax_baselines.math.policy_math import q_log_pi
 class DQN(Q_Network_Family):
     def __init__(self, env_builder: callable, model_builder_maker, **kwargs):
 
-        self.name = "DQN"
         super().__init__(env_builder, model_builder_maker, **kwargs)
 
     def setup_model(self):

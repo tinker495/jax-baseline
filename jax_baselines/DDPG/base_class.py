@@ -64,7 +64,6 @@ class Deteministic_Policy_Gradient_Family(object):
         ckpt_baseline_mode="min",
         ckpt_baseline_q=None,
     ):
-        self.name = "Deteministic_Policy_Gradient_Family"
         self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
         self.num_workers = num_workers

@@ -61,7 +61,6 @@ class HL_GAUSS_SPR(SPR):
             **kwargs,
         }
 
-        self.name = "HL_GAUSS_SPR"
         super().__init__(env_builder, model_builder_maker, **hl_gauss_spr_kwargs)
 
         self._gamma = jnp.power(self.gamma, jnp.arange(self.n_step))

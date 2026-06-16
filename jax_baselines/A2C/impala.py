@@ -33,7 +33,6 @@ class IMPALA(IMPALA_Family):
         worker_replay_factory=None,
     ):
 
-        self.name = "IMPALA_AC"
         super().__init__(
             workers,
             model_builder_maker,

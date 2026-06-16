@@ -21,7 +21,6 @@ class SPO(SurrogatePolicyGradient):
         **kwargs,
     ):
 
-        self.name = "SPO"
         self.lamda = lamda
         self.gae_normalize = gae_normalize
         self.gae_normalize_scope = validate_advantage_normalize_scope(gae_normalize_scope)

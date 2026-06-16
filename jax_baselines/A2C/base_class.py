@@ -45,7 +45,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
         optimizer_factory: OptimizerFactory | None = None,
         lr_annealing=False,
     ):
-        self.name = "Actor_Critic_Policy_Gradient_Family"
         self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
         self.num_workers = num_workers

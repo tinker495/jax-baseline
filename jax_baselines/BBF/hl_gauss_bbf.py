@@ -54,8 +54,6 @@ class HL_GAUSS_BBF(BBF):
 
         super().__init__(env_builder, model_builder_maker, **hl_gauss_bbf_kwargs)
 
-        self.name = "HL_GAUSS_BBF"
-
     def setup_model(self):
         model_builder = self.model_builder_maker(
             self.observation_space,

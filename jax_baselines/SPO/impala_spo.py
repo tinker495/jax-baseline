@@ -33,7 +33,6 @@ class IMPALA_SPO(SurrogateIMPALA):
         worker_replay_factory=None,
     ):
 
-        self.name = "IMPALA_SPO"
         self.minibatch_size = 256
         self.epoch_num = epoch_num
         self.ppo_eps = ppo_eps

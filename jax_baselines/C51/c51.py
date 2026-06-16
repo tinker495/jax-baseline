@@ -28,7 +28,6 @@ class C51(Q_Network_Family):
         # Initialize subclass-specific attributes BEFORE calling super().__init__
         # because the base class constructor may call self.setup_model(), which
         # needs these attributes to be present.
-        self.name = "C51"
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = float(categorial_max)
         self.categorial_min = float(categorial_min)

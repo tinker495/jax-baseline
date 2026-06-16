@@ -49,7 +49,6 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
         super().__init__(env_builder, model_builder_maker, **td7_kwargs)
 
-        self.name = "TD7"
         self.action_noise = action_noise
         self.target_action_noise = action_noise * target_action_noise_mul
         self.action_noise_clamp = 0.5

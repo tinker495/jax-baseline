@@ -24,7 +24,6 @@ class IQN(Q_Network_Family):
         **kwargs,
     ):
 
-        self.name = "IQN"
         self.n_support = n_support
         self.delta = delta
         self.CVaR = CVaR

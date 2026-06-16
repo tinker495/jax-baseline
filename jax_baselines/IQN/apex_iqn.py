@@ -15,6 +15,8 @@ from jax_baselines.math.policy_math import q_log_pi
 
 
 class APE_X_IQN(Ape_X_Family):
+    _run_name = "Ape_X_IQN"
+
     def __init__(
         self,
         workers,
@@ -175,34 +177,15 @@ class APE_X_IQN(Ape_X_Family):
 
         return builder
 
-    def train_step(self, steps, gradient_steps):
-        for _ in range(gradient_steps):
-            self.train_steps_count += 1
-            data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
-
-            (
-                self.params,
-                self.target_params,
-                self.opt_state,
-                loss,
-                t_mean,
-                new_priorities,
-            ) = self._train_step(
-                self.params,
-                self.target_params,
-                self.opt_state,
-                steps,
-                next(self.key_seq) if self.param_noise else None,
-                **data,
-            )
-
-            self.replay_buffer.update_priorities(data["indexes"], new_priorities)
-
-        if steps % self.log_interval == 0:
-            log_dict = {"loss/qloss": float(loss), "loss/targets": float(t_mean)}
-            self.logger_server.log_trainer.remote(steps, log_dict)
-
-        return loss
+    def _invoke_train_step(self, steps, data):
+        return self._train_step(
+            self.params,
+            self.target_params,
+            self.opt_state,
+            steps,
+            next(self.key_seq) if self.param_noise else None,
+            **data,
+        )
 
     def _train_step(
         self,
@@ -262,18 +245,23 @@ class APE_X_IQN(Ape_X_Family):
             pi_next = jnp.expand_dims(
                 jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau), axis=2
             )
-            next_vals = (
-                jnp.sum(
-                    pi_next * (next_q - jnp.expand_dims(tau_log_pi_next, axis=2)),
-                    axis=1,
-                )
-                * not_terminateds
-            )
+            next_vals = next_q - jnp.expand_dims(
+                tau_log_pi_next, axis=2
+            )  # batch x actions x support
+            sample_pi = jax.random.categorical(
+                key, jnp.tile(pi_next, (1, 1, self.n_support)), 1
+            )  # batch x 1 x support
+            next_vals = jnp.take_along_axis(
+                next_vals, jnp.expand_dims(sample_pi, axis=1), axis=1
+            )  # batch x 1 x support
+            next_vals = not_terminateds * jnp.squeeze(next_vals, axis=1)
 
-            q_k_targets = jnp.mean(self.get_q(target_params, obses, target_tau, key), axis=2)
-            q_sub_targets, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
-            log_pi = q_sub_targets - self.munchausen_entropy_tau * tau_log_pi
-            munchausen_addon = jnp.take_along_axis(log_pi, jnp.squeeze(actions, axis=2), axis=1)
+            if self.double_q:
+                q_k_targets = jnp.mean(self.get_q(params, obses, target_tau, key), axis=2)
+            else:
+                q_k_targets = jnp.mean(self.get_q(target_params, obses, target_tau, key), axis=2)
+            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
             rewards = rewards + self.munchausen_alpha * jnp.clip(munchausen_addon, min=-1, max=0)
         else:
@@ -291,25 +279,3 @@ class APE_X_IQN(Ape_X_Family):
                 jnp.take_along_axis(next_q, next_actions, axis=1)
             )  # batch x support
         return (next_vals * self._gamma) + rewards  # batch x support
-
-    def learn(
-        self,
-        total_timesteps,
-        callback=None,
-        log_interval=1000,
-        run_name="Ape_X_IQN",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
-        logger_factory=None,
-        progress_factory=None,
-    ):
-        super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            run_name,
-            reset_num_timesteps,
-            replay_wrapper,
-            logger_factory=logger_factory,
-            progress_factory=progress_factory,
-        )

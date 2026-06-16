@@ -24,7 +24,6 @@ class SACCheckpointParams:
 class SAC(Deteministic_Policy_Gradient_Family):
     def __init__(self, env_builder: callable, model_builder_maker, ent_coef="auto", **kwargs):
 
-        self.name = "SAC"
         self._ent_coef = ent_coef
         self.ent_coef_learning_rate = 1e-4
 

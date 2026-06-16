@@ -27,7 +27,6 @@ class HL_GAUSS_C51(Q_Network_Family):
         **kwargs,
     ):
 
-        self.name = "HL_GAUSS_C51"
         self.categorial_bar_n = categorial_bar_n
         self.categorial_max = float(categorial_max)
         self.categorial_min = float(categorial_min)

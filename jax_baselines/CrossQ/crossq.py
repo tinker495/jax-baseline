@@ -34,7 +34,6 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             **kwargs,
         }
 
-        self.name = "CrossQ"
         self._ent_coef = ent_coef
         self.ent_coef_learning_rate = 1e-4
         self.policy_delay = policy_delay

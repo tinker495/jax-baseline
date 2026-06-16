@@ -69,7 +69,6 @@ class Q_Network_Family:
         ckpt_baseline_mode="median",
         ckpt_baseline_q=None,
     ):
-        self.name = "Q_Network_Family"
         self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
         self.num_workers = num_workers

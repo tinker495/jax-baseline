@@ -12,6 +12,8 @@ from jax_baselines.math.param_updates import soft_update
 
 
 class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
+    _run_name = "Ape_X_TD3"
+
     def __init__(
         self,
         workers,
@@ -167,30 +169,10 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
 
         return builder
 
-    def train_step(self, steps, gradient_steps):
-        # Sample a batch from the replay buffer
-        for _ in range(gradient_steps):
-            self.train_steps_count += 1
-            data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
-
-            (
-                self.params,
-                self.target_params,
-                self.opt_state,
-                loss,
-                t_mean,
-                new_priorities,
-            ) = self._train_step(
-                self.params, self.target_params, self.opt_state, next(self.key_seq), steps, **data
-            )
-
-            self.replay_buffer.update_priorities(data["indexes"], new_priorities)
-
-        if steps % self.log_interval == 0:
-            log_dict = {"loss/qloss": float(loss), "loss/targets": float(t_mean)}
-            self.logger_server.log_trainer.remote(steps, log_dict)
-
-        return loss
+    def _invoke_train_step(self, steps, data):
+        return self._train_step(
+            self.params, self.target_params, self.opt_state, next(self.key_seq), steps, **data
+        )
 
     def _train_step(
         self,
@@ -291,25 +273,3 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
         q1, q2 = self.critic(target_params, key, next_feature, next_action)
         next_q = jnp.minimum(q1, q2)
         return (not_terminateds * next_q * self._gamma) + rewards
-
-    def learn(
-        self,
-        total_timesteps,
-        callback=None,
-        log_interval=1000,
-        run_name="Ape_X_TD3",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
-        logger_factory=None,
-        progress_factory=None,
-    ):
-        super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            run_name,
-            reset_num_timesteps,
-            replay_wrapper,
-            logger_factory=logger_factory,
-            progress_factory=progress_factory,
-        )

@@ -25,6 +25,8 @@ def _ray():
 
 
 class Ape_X_Deteministic_Policy_Gradient_Family(object):
+    _run_name = "APE_X_DPG"
+
     def __init__(
         self,
         workers,
@@ -93,6 +95,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         self.optimizer = self._make_optimizer(self.learning_rate)
         self.model_builder = None
         self.actor_builder = None
+        self.train_steps_count = 0
 
         self.compress_memory = compress_memory
         self.param_broadcast_freq = param_broadcast_freq
@@ -154,17 +157,41 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
             len(self.replay_buffer), np.mean(self.lossque)
         )
 
+    def train_step(self, steps, gradient_steps):
+        for _ in range(gradient_steps):
+            self.train_steps_count += 1
+            data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
+
+            (
+                self.params,
+                self.target_params,
+                self.opt_state,
+                loss,
+                t_mean,
+                new_priorities,
+            ) = self._invoke_train_step(steps, data)
+
+            self.replay_buffer.update_priorities(data["indexes"], new_priorities)
+
+        if steps % self.log_interval == 0:
+            log_dict = {"loss/qloss": float(loss), "loss/targets": float(t_mean)}
+            self.logger_server.log_trainer.remote(steps, log_dict)
+
+        return loss
+
     def learn(
         self,
         total_trainstep,
         callback=None,
         log_interval=1000,
-        run_name="APE_X_DPG",
+        run_name=None,
         reset_num_timesteps=True,
         replay_wrapper=None,
         logger_factory=None,
         progress_factory=None,
     ):
+        if run_name is None:
+            run_name = self._run_name
         if self.n_step_method:
             run_name = "{}Step_".format(self.n_step) + run_name
 

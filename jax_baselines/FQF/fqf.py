@@ -25,7 +25,6 @@ class FQF(Q_Network_Family):
         **kwargs,
     ):
 
-        self.name = "FQF"
         self.fqf_optimizer_factory = require_optimizer_factory(fqf_optimizer_factory)
         self.n_support = n_support
         self.delta = delta
