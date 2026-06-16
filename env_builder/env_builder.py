@@ -186,6 +186,11 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
         env_kwargs = {
             "env_type": "gymnasium",
             "num_envs": worker_num,
+            # Lockstep async: with batch_size == num_envs every recv() waits for
+            # all N envs, preserving the fixed-N-transitions-per-step contract
+            # the algorithms rely on while still overlapping env stepping with
+            # the caller's work between step() and get_result().
+            "batch_size": worker_num,
         }
 
         if seed is not None:
@@ -229,12 +234,18 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
         else:
             self.action_conv = lambda a: np.asarray(a)
 
-        # Initialize environment
-        raw_obs, _ = self.env.reset()
-        self.obs = self._process_observations(raw_obs)
+        # env_id vector for send(); recv() may hand back envs in completion
+        # order, so every result is re-sorted to the canonical 0..N-1 layout
+        # the training loop indexes by (scores, prev_done, replay rows).
+        self._all_env_ids = np.arange(worker_num, dtype=np.int32)
+        self._awaiting_recv = False
 
-        # Storage for step/get_result pattern compatibility
-        self._pending_result = None
+        # Async handshake: async_reset() launches every reset on the C++ side,
+        # the first recv() collects the initial observation. From here the
+        # contract is a strict send (step) / recv (get_result) alternation.
+        self.env.async_reset()
+        raw_obs, _, _, _, info = self.env.recv()
+        self.obs = self._process_observations(raw_obs[np.argsort(info["env_id"])])
 
     def _check_atari_env(self, env_id: str) -> bool:
         """Check if the environment is an Atari game."""
@@ -302,23 +313,18 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
         return self.obs
 
     def step(self, actions):
-        """Execute actions in all environments.
+        """Fire actions into all environments without blocking.
 
-        This method stores the step for get_result() to maintain
-        compatibility with the existing async step/get_result pattern.
+        ``send()`` hands the actions to EnvPool's C++ worker threads and
+        returns immediately, so the caller can do useful work (e.g. a gradient
+        step) while the environments advance. ``get_result()`` collects the
+        outcome via ``recv()``.
         """
-        # Convert actions to appropriate format
-        actions = self.action_conv(actions)
-
-        # Execute step (EnvPool is synchronous but we buffer for compatibility)
-        obs, rewards, terminateds, truncateds, infos = self.env.step(actions)
-        obs = self._process_observations(obs)
-
-        # Store results for get_result()
-        self._pending_result = (obs, rewards, terminateds, truncateds, infos)
+        self.env.send(self.action_conv(actions), self._all_env_ids)
+        self._awaiting_recv = True
 
     def get_result(self):
-        """Get the results of the previous step.
+        """Block until the in-flight async step finishes and return its result.
 
         Returns:
             next_obs: Next observations (num_envs, ...)
@@ -327,24 +333,46 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
             truncateds: Truncated flags (num_envs,)
             infos: Info dicts
         """
-        if self._pending_result is None:
+        if not self._awaiting_recv:
             raise RuntimeError("get_result() called without a preceding step()")
+        self._awaiting_recv = False
 
-        next_obs, rewards, terminateds, truncateds, infos = self._pending_result
-        self._pending_result = None
+        next_obs, rewards, terminateds, truncateds, infos = self.env.recv()
+        order = np.argsort(infos["env_id"])
+        next_obs = self._process_observations(next_obs[order])
+        rewards = rewards[order]
+        terminateds = terminateds[order]
+        truncateds = truncateds[order]
+        infos = self._reorder_info(infos, order)
 
-        if self._is_atari and isinstance(infos, dict) and "original_reward" not in infos:
+        if self._is_atari and "original_reward" not in infos:
             original_reward = infos.get("reward")
             if original_reward is not None:
-                infos = dict(infos)
                 infos["original_reward"] = original_reward
 
-        # EnvPool handles auto-reset internally
-        # After done, next_obs already contains the new episode's observation
-        # We just need to update our current obs tracker
+        # EnvPool handles auto-reset internally: after a done flag, next_obs
+        # already holds the new episode's first observation.
         self.obs = next_obs
 
         return next_obs, rewards, terminateds, truncateds, infos
+
+    def _reorder_info(self, infos, order):
+        """Re-sort per-env info arrays into the canonical 0..N-1 layout.
+
+        Only top-level arrays whose leading axis is the worker dimension are
+        permuted -- that covers every field the algorithms consume (``reward``,
+        ``lives``, their presence masks, ``env_id``). Nested values such as
+        EnvPool's ``players`` dict are passed through unchanged: nothing reads
+        them, and under the lockstep ``batch_size == num_envs`` config ``recv()``
+        empirically returns envs already in order, so ``order`` is the identity
+        and the reorder is purely defensive.
+        """
+        return {
+            key: value[order]
+            if isinstance(value, np.ndarray) and value.shape and value.shape[0] == self.worker_num
+            else value
+            for key, value in infos.items()
+        }
 
     def close(self):
         """Close the environment."""
@@ -427,9 +455,21 @@ class GymVectorizedEnv(VectorizedEnv):
         else:
             self.action_conv = lambda a: np.asarray(a)
 
+        # gymnasium vector envs split into step_async()/step_wait(); for
+        # AsyncVectorEnv each sub-env runs in its own subprocess, so
+        # step_async() returns immediately and the envs advance while the
+        # caller works, with step_wait() collecting. Every construction path
+        # above builds an async-capable vector env; fail loudly if one without
+        # the split slips through (e.g. SyncVectorEnv lacks it).
+        if not (hasattr(self.env, "step_async") and hasattr(self.env, "step_wait")):
+            raise TypeError(
+                f"{type(self.env).__name__} lacks step_async/step_wait; "
+                "GymVectorizedEnv requires an async-capable vector env."
+            )
+
         # Initialize
         self.obs, _ = self.env.reset()
-        self._pending_result = None
+        self._awaiting_result = False
 
     def get_info(self):
         return self.env_info
@@ -438,16 +478,17 @@ class GymVectorizedEnv(VectorizedEnv):
         return self.obs
 
     def step(self, actions):
-        actions = self.action_conv(actions)
-        obs, rewards, terminateds, truncateds, infos = self.env.step(actions)
-        self._pending_result = (obs, rewards, terminateds, truncateds, infos)
+        """Dispatch actions without blocking (gymnasium ``step_async``)."""
+        self.env.step_async(self.action_conv(actions))
+        self._awaiting_result = True
 
     def get_result(self):
-        if self._pending_result is None:
+        """Block on the in-flight async step and return its result."""
+        if not self._awaiting_result:
             raise RuntimeError("get_result() called without a preceding step()")
+        self._awaiting_result = False
 
-        next_obs, rewards, terminateds, truncateds, infos = self._pending_result
-        self._pending_result = None
+        next_obs, rewards, terminateds, truncateds, infos = self.env.step_wait()
         self.obs = next_obs
 
         return next_obs, rewards, terminateds, truncateds, infos

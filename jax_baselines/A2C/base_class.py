@@ -339,11 +339,17 @@ class Actor_Critic_Policy_Gradient_Family(object):
         # and the same mask keeps the dummy out of the rollout episode stats.
         prev_done = None
 
-        for steps in ctx.pbar:
-            obs = self.env.current_obs()
-            actions = self.actions([obs])
-            self.env.step(actions)
+        # Pipeline the async env: send each step's actions, then run the buffer
+        # bookkeeping AND the periodic train_step while EnvPool's C++ workers
+        # (or gymnasium's subprocesses) advance the environments in the
+        # background. The action for step t+1 is still computed from step t+1's
+        # observation, so this stays strictly on-policy -- only the order of
+        # "send" vs "post-step processing" changes, never the data dependency.
+        obs = self.env.current_obs()
+        actions = self.actions([obs])
+        self.env.step(actions)
 
+        for steps in ctx.pbar:
             (
                 next_obses,
                 rewards,
@@ -351,6 +357,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 truncateds,
                 infos,
             ) = self.env.get_result()
+
+            # Fire the next step before processing this one, so the env advances
+            # in the background while the bookkeeping and train_step below run.
+            next_actions = self.actions([next_obses])
+            self.env.step(next_actions)
 
             real_done = np.logical_or(terminateds, truncateds)
             active = np.ones(self.worker_size, dtype=bool) if prev_done is None else ~prev_done
@@ -390,6 +401,10 @@ class Actor_Critic_Policy_Gradient_Family(object):
                     original_present[idx] = False
 
             prev_done = real_done & active
+
+            # Advance the pipeline: the action just sent belongs to next_obses.
+            obs = next_obses
+            actions = next_actions
 
             if (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0:
                 loss = self.train_step(steps)

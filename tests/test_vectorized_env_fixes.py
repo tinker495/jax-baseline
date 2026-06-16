@@ -16,6 +16,7 @@ Three independent fixes are pinned here:
 
 import argparse
 import importlib
+from types import SimpleNamespace
 
 import gymnasium as gym
 import numpy as np
@@ -142,16 +143,31 @@ def test_get_env_builder_rejects_unknown_backend():
         eb.get_env_builder("CartPole-v1", env_backend="nope")
 
 
-def test_envpool_atari_exposes_info_reward_as_original_reward():
+def _fake_recv_env(is_atari):
+    """An EnvPoolVectorizedEnv whose ``self.env.recv()`` yields one fixed batch.
+
+    Mirrors the real async contract: ``get_result()`` pulls via ``recv()`` and
+    re-sorts by ``info['env_id']``, so the fake must supply that field.
+    """
     env = eb.EnvPoolVectorizedEnv.__new__(eb.EnvPoolVectorizedEnv)
-    env._is_atari = True
+    env._is_atari = is_atari
+    env.worker_num = 2
     env.obs = None
+    env._awaiting_recv = True
     next_obs = np.zeros((2, 4), dtype=np.float32)
     rewards = np.array([1.0, -1.0], dtype=np.float32)
     terminateds = np.array([False, True])
     truncateds = np.array([False, False])
-    infos = {"reward": np.array([4.0, -2.0], dtype=np.float32)}
-    env._pending_result = (next_obs, rewards, terminateds, truncateds, infos)
+    infos = {
+        "reward": np.array([4.0, -2.0], dtype=np.float32),
+        "env_id": np.array([0, 1], dtype=np.int32),
+    }
+    env.env = SimpleNamespace(recv=lambda: (next_obs, rewards, terminateds, truncateds, infos))
+    return env, infos
+
+
+def test_envpool_atari_exposes_info_reward_as_original_reward():
+    env, infos = _fake_recv_env(is_atari=True)
 
     _, _, _, _, result_infos = env.get_result()
 
@@ -160,16 +176,37 @@ def test_envpool_atari_exposes_info_reward_as_original_reward():
 
 
 def test_envpool_non_atari_does_not_alias_info_reward():
-    env = eb.EnvPoolVectorizedEnv.__new__(eb.EnvPoolVectorizedEnv)
-    env._is_atari = False
-    env.obs = None
-    next_obs = np.zeros((2, 4), dtype=np.float32)
-    rewards = np.array([1.0, -1.0], dtype=np.float32)
-    terminateds = np.array([False, True])
-    truncateds = np.array([False, False])
-    infos = {"reward": np.array([4.0, -2.0], dtype=np.float32)}
-    env._pending_result = (next_obs, rewards, terminateds, truncateds, infos)
+    env, _ = _fake_recv_env(is_atari=False)
 
     _, _, _, _, result_infos = env.get_result()
 
     assert "original_reward" not in result_infos
+
+
+def test_envpool_get_result_resorts_recv_into_canonical_env_order():
+    # recv() may hand envs back in completion order; get_result() must re-sort
+    # every per-env array by info["env_id"] so worker i always occupies row i --
+    # the rollout loops index scores/prev_done/replay rows by that position.
+    env = eb.EnvPoolVectorizedEnv.__new__(eb.EnvPoolVectorizedEnv)
+    env._is_atari = False
+    env.worker_num = 3
+    env.obs = None
+    env._awaiting_recv = True
+    # Row r belongs to env env_id[r]; values encode the owning env so the
+    # canonical re-sort is observable. This batch arrives as env 2, 0, 1.
+    env_id = np.array([2, 0, 1], dtype=np.int32)
+    next_obs = np.array([[2.0], [0.0], [1.0]], dtype=np.float32)
+    rewards = np.array([2.0, 0.0, 1.0], dtype=np.float32)
+    terminateds = np.array([True, False, False])  # the terminal belongs to env2
+    truncateds = np.array([False, False, False])
+    infos = {"reward": np.array([20.0, 0.0, 10.0], dtype=np.float32), "env_id": env_id}
+    env.env = SimpleNamespace(recv=lambda: (next_obs, rewards, terminateds, truncateds, infos))
+
+    obs, rew, term, _, result_infos = env.get_result()
+
+    # Canonical 0..N-1 order: env0, env1, env2 -- every array re-sorted in lockstep.
+    assert obs.tolist() == [[0.0], [1.0], [2.0]]
+    assert rew.tolist() == [0.0, 1.0, 2.0]
+    assert term.tolist() == [False, False, True]
+    assert result_infos["reward"].tolist() == [0.0, 10.0, 20.0]
+    assert result_infos["env_id"].tolist() == [0, 1, 2]

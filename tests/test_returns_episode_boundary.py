@@ -16,7 +16,9 @@ from collections import deque
 
 import jax.numpy as jnp
 import numpy as np
+import pytest
 
+from env_builder import env_builder as eb
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.math.returns import discount_with_terminated, get_vtrace
 
@@ -210,3 +212,40 @@ def test_a2c_vectorized_flags_autoreset_dummy_step_as_terminal():
     assert stored_term == [[False, False], [True, False], [True, False]]
     assert stored_rew == [[1.0, 1.0], [1.0, 1.0], [0.0, 1.0]]
     assert stored_trunc == [[False, False], [False, False], [False, False]]
+
+
+def test_pipelined_loop_drives_real_async_envpool_end_to_end():
+    # The on-policy loop now pipelines send(step)/recv(get_result) around a REAL
+    # async EnvPool env. This exercises that composition end-to-end -- the loop's
+    # current_obs -> step -> get_result alternation against the live send/recv
+    # contract -- without touching the (separately broken) JAX return math: both
+    # actions and train_step are stubbed. A crash here means the async handshake
+    # or the buffer/episode bookkeeping drifted, not the learning update.
+    pytest.importorskip("envpool")
+
+    worker = 4
+    env = eb.EnvPoolVectorizedEnv("CartPole-v1", worker_num=worker, seed=0)
+    try:
+        agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+        agent.env = env
+        agent.worker_size = worker
+        agent.batch_size = 2
+        agent.lossque = deque(maxlen=10)
+        trained = []
+        agent.actions = lambda obs: np.zeros(worker, dtype=np.int32)
+        agent.train_step = lambda steps: (trained.append(steps), 0.0)[1]
+        agent.eval = lambda ctx, steps: None
+        agent.description = lambda eval_result: "desc"
+        agent.buffer = _RecordingBuffer()
+
+        n_steps = 16
+        Actor_Critic_Policy_Gradient_Family.learn_VectorizedEnv(agent, _Ctx(list(range(n_steps))))
+    finally:
+        env.close()
+
+    # One buffer.add per step, each a per-worker batch -- proves the recv results
+    # flowed through the pipeline with the worker dimension intact.
+    assert len(agent.buffer.rewards) == n_steps
+    assert all(np.asarray(r).shape == (worker,) for r in agent.buffer.rewards)
+    # The periodic train_step (the work that overlaps env stepping) actually ran.
+    assert len(trained) >= 1
