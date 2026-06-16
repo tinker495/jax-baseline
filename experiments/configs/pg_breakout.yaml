@@ -31,6 +31,6 @@ base:
   gae_normalize: true
   gae_normalize_scope: minibatch
 variants:
-  - {algo: SPO, ppo_eps: 0.1}
+  - {algo: SPO, ppo_eps: 0.2} # SPO is too conservative, so it's better to increase it to 0.2.
   - {algo: TPPO}
   - {algo: PPO, ppo_eps: 0.1}
