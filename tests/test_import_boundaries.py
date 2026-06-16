@@ -51,10 +51,30 @@ class AllowedImport:
         return self.path, self.token
 
 
-# Issue #13 finalized the migration ledger: the core has no static imports of
-# concrete adapter packages.  Future exceptions must be added deliberately and
-# will be checked by the tests below.
-ALLOWED_IMPORTS: tuple[AllowedImport, ...] = ()
+# Issue #13 finalized the migration ledger for static imports; the issue #7 audit
+# then extended the ratchet to dynamic ``import_module`` calls (see the main test
+# below) and surfaced the distributed families' Ray wiring, which had been hiding
+# from the static-only scan behind function-local dynamic imports.
+#
+# The remaining entries are the consciously declared distributed-runtime Ray
+# exemption that ADR 0002 anticipated with the ``DISTRIBUTED_RUNTIME_EXEMPTION``
+# tag: APE-X / IMPALA keep distributed *algorithm* semantics in the core (ADR
+# 0001), and the Ray actor/queue plumbing those families need is declared here
+# rather than concealed. env_builder, gymnasium, and cpprb were removed from these
+# files in the same audit (env via the injected Environment Adapter callable,
+# replay via the WorkerReplayBufferFactory seam), so Ray is the only token left.
+_DISTRIBUTED_RAY = "DISTRIBUTED_RUNTIME_EXEMPTION"
+_RAY_SLICE = "distributed runtime: Ray actor/queue wiring (ADR 0001; issue #7 audit)"
+ALLOWED_IMPORTS: tuple[AllowedImport, ...] = (
+    AllowedImport("jax_baselines/APE_X/base_class.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
+    AllowedImport("jax_baselines/APE_X/common_servers.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
+    AllowedImport("jax_baselines/APE_X/dpg_base_class.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
+    AllowedImport("jax_baselines/APE_X/dpg_worker.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
+    AllowedImport("jax_baselines/APE_X/worker.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
+    AllowedImport("jax_baselines/IMPALA/base_class.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
+    AllowedImport("jax_baselines/IMPALA/vtrace_queue.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
+    AllowedImport("jax_baselines/IMPALA/worker.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
+)
 
 
 def _iter_python_files(root: Path) -> Iterable[Path]:
@@ -110,6 +130,10 @@ def _find_forbidden_imports_in_source(path: str, source: str) -> set[tuple[str, 
 
 
 def _literal_import_target(node: ast.AST) -> str | None:
+    # Only string-literal targets are analyzable statically. A computed target
+    # (``import_module(name)``) is out of scope by design — the scanner cannot
+    # resolve the value without executing code. This is an accepted ratchet
+    # blind spot; the positive-import test is the backstop for such cases.
     if isinstance(node, ast.Call) and node.args:
         first_arg = node.args[0]
         if isinstance(first_arg, ast.Constant) and isinstance(first_arg.value, str):
@@ -187,7 +211,16 @@ def _assert_allowlist_matches(actual: set[tuple[str, str]], declared: set[tuple[
 
 
 def test_import_boundary_allowlist_matches_current_forbidden_imports():
-    actual = _find_forbidden_imports(SCAN_ROOT)
+    # Issue #7 audit fix: the ratchet now scans BOTH static source imports and
+    # dynamic ``import_module("...")`` / ``__import__("...")`` calls across the
+    # whole core, not just static imports. The distributed families reach Ray,
+    # cpprb, Gymnasium, and env_builder through *function-local dynamic* imports;
+    # scanning only static ``import`` nodes let those leaks hide from the gate
+    # (a false-green: the allowlist read empty while the core still imported
+    # adapters at runtime). Folding the dynamic scan in makes every forbidden
+    # import — static or dynamic, module-top-level or function-local — answer to
+    # the same stale-aware allowlist below.
+    actual = _find_forbidden_imports(SCAN_ROOT) | _find_forbidden_dynamic_imports(SCAN_ROOT)
     declared = _allowlist_keys()
 
     _assert_allowlist_matches(actual, declared)

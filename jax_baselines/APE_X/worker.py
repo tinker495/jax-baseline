@@ -17,55 +17,23 @@ class Ape_X_Worker(object):
     def remote(cls, *args, **kwargs):
         return import_module("ray").remote(num_cpus=1)(cls).remote(*args, **kwargs)
 
-    def __init__(self, env_name_, seed=None) -> None:
+    def __init__(self, env_builder, seed=None) -> None:
         mp.current_process().authkey = base64.b64decode(self.encoded)
-        atari_wrappers = import_module("env_builder.atari_wrappers")
-        get_env_type = atari_wrappers.get_env_type
-        make_wrap_atari = atari_wrappers.make_wrap_atari
-        seed_env = import_module("env_builder.seeding").seed_env
-
         seed_prngs(seed)
-
-        # Accept either an env id (string) or an env_builder callable
-        if callable(env_name_):
-            # env_builder is expected to return a gym env when called
-            try:
-                env = env_name_(worker=1, seed=seed)
-            except TypeError:
-                try:
-                    env = env_name_(1, seed=seed)
-                except TypeError:
-                    # some builders accept worker/render args; try default worker=1
-                    env = env_name_()
-            self.env = env
-            # Try to infer env_id from env.spec
-            try:
-                self.env_id = env.unwrapped.spec.id
-            except Exception:
-                self.env_id = getattr(getattr(env, "spec", None), "id", None)
-            # If we can, map env_id to env_type, otherwise fallback to SingleEnv
-            if self.env_id is not None:
-                self.env_type, _ = get_env_type(self.env_id)
-                if self.env_type is None:
-                    self.env_type = "SingleEnv"
-            else:
-                # Best-effort fallback
-                self.env_type = "SingleEnv"
-        else:
-            self.env_type, self.env_id = get_env_type(env_name_)
-            if self.env_type == "atari_env":
-                self.env = make_wrap_atari(env_name_, clip_rewards=True)
-            else:
-                gym = import_module("gymnasium")
-                self.env = gym.make(env_name_)
-        seed_env(self.env, seed)
+        # env_builder is the repo-local Environment Adapter callable injected by
+        # experiments; calling it with worker=1 returns a normalized, already
+        # seeded single environment. The core worker never imports gymnasium or
+        # reaches into env_builder internals.
+        self.env = env_builder(worker=1, seed=seed)
 
     def get_info(self):
+        # The distributed base class normalizes the remote env to "SingleEnv"
+        # (see core.env_info.get_remote_env_info); it consumes only the spaces.
         return {
             "observation_space": self.env.observation_space,
             "action_space": self.env.action_space,
-            "env_type": self.env_type,
-            "env_id": self.env_id,
+            "env_type": "SingleEnv",
+            "env_id": None,
         }
 
     def run(

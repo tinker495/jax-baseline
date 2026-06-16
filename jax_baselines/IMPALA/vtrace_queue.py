@@ -1,3 +1,13 @@
+"""IMPALA V-trace rollout queue (Ray-backed shared replay).
+
+Distributed *runtime wiring* that the Algorithm Core keeps as a consciously
+declared Ray exemption (ADR 0002 ``DISTRIBUTED_RUNTIME_EXEMPTION``): the cross-actor
+queue and its getter are Ray actors. The cpprb-backed worker-local rollout buffer
+(``EpochBuffer``) lives in the ``replay_memory`` adapter and reaches the core only
+through the ``WorkerReplayBufferFactory`` seam; the shared ``batch`` record is
+defined here so the adapter depends on the core, never the reverse.
+"""
+
 import random
 from collections import deque, namedtuple
 from importlib import import_module
@@ -10,45 +20,6 @@ batch = namedtuple(
     "batch_tuple",
     ["obses", "actions", "mu_log_prob", "rewards", "nxtobses", "terminateds", "truncateds"],
 )
-
-
-class EpochBuffer:
-    def __init__(self, size: int, env_dict: dict):
-        self.obsdict = dict((o, s) for o, s in env_dict.items() if o.startswith("obs"))
-        self.nextobsdict = dict((o, s) for o, s in env_dict.items() if o.startswith("next_obs"))
-        cpprb = import_module("cpprb")
-        self.buffer = cpprb.ReplayBuffer(size, env_dict=env_dict)
-
-    def __len__(self):
-        return self.buffer.get_stored_size()
-
-    def add(self, obs_t, action, log_prob, reward, nxtobs_t, terminated, truncted=False):
-        obsdict = dict(zip(self.obsdict.keys(), [o for o in obs_t]))
-        nextobsdict = dict(zip(self.nextobsdict.keys(), [no for no in nxtobs_t]))
-        self.buffer.add(
-            **obsdict,
-            action=action,
-            log_prob=log_prob,
-            reward=reward,
-            **nextobsdict,
-            terminated=terminated,
-            truncted=truncted,
-        )
-        if terminated or truncted:
-            self.buffer.on_episode_end()
-
-    def get_buffer(self):
-        trans = self.buffer.get_all_transitions()
-        transitions = batch(
-            [trans[o] for o in self.obsdict.keys()],
-            trans["action"],
-            trans["log_prob"],
-            trans["reward"],
-            [trans[o] for o in self.nextobsdict.keys()],
-            trans["terminated"],
-            trans["truncted"],
-        )
-        return transitions
 
 
 class Buffer_getter:

@@ -1,7 +1,9 @@
+from env_builder.env_builder import get_env_builder
 from experiments.cli._common import default_logdir, set_default_xla_flags
 from experiments.cli._run import (
     AlgoSpec,
     DistributedFamilyRunner,
+    default_impala_worker_replay_factory,
     run_distributed_family,
 )
 from experiments.optimizers import make_batch_scaled_optimizer_factory
@@ -38,7 +40,8 @@ def add_args(parser):
 
 
 def make_workers(args):
-    return [Impala_Worker.remote(args.env, seed=args.seed + i) for i in range(args.worker)]
+    env_builder, _ = get_env_builder(args.env)
+    return [Impala_Worker.remote(env_builder, seed=args.seed + i) for i in range(args.worker)]
 
 
 def policy_kwargs(args):
@@ -60,6 +63,7 @@ def _common(a):
         "rho_max": a.rho_max,
         "log_dir": a.logdir,
         "seed": a.seed,
+        "worker_replay_factory": default_impala_worker_replay_factory(),
     }
 
 

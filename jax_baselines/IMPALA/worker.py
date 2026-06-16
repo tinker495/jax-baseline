@@ -7,8 +7,8 @@ from importlib import import_module
 import jax
 import numpy as np
 
+from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
 from jax_baselines.core.seeding import seed_prngs
-from jax_baselines.IMPALA.cpprb_buffers import EpochBuffer
 
 
 class Impala_Worker(object):
@@ -18,34 +18,30 @@ class Impala_Worker(object):
     def remote(cls, *args, **kwargs):
         return import_module("ray").remote(num_cpus=1)(cls).remote(*args, **kwargs)
 
-    def __init__(self, env_name_, seed=None) -> None:
+    def __init__(self, env_builder, seed=None) -> None:
         mp.current_process().authkey = base64.b64decode(self.encoded)
-        atari_wrappers = import_module("env_builder.atari_wrappers")
-        get_env_type = atari_wrappers.get_env_type
-        make_wrap_atari = atari_wrappers.make_wrap_atari
-        seed_env = import_module("env_builder.seeding").seed_env
-
-        self.env_type, self.env_id = get_env_type(env_name_)
-        if self.env_type == "atari_env" and "MinAtar" not in env_name_:
-            self.env = make_wrap_atari(env_name_, clip_rewards=True)
-        else:
-            gym = import_module("gymnasium")
-            self.env = gym.make(env_name_)
         seed_prngs(seed)
-        seed_env(self.env, seed)
+        # env_builder is the repo-local Environment Adapter callable injected by
+        # experiments; calling it with worker=1 returns a normalized, already
+        # seeded single environment. The core worker never imports gymnasium or
+        # reaches into env_builder internals.
+        self.env = env_builder(worker=1, seed=seed)
 
     def get_info(self):
+        # The distributed base class normalizes the remote env to "SingleEnv"
+        # (see core.env_info.get_remote_env_info); it consumes only the spaces.
         return {
             "observation_space": self.env.observation_space,
             "action_space": self.env.action_space,
-            "env_type": self.env_type,
-            "env_id": self.env_id,
+            "env_type": "SingleEnv",
+            "env_id": None,
         }
 
     def run(
         self,
         local_size,
         buffer_info,
+        worker_replay_factory,
         model_builder,
         actor_builder,
         param_server,
@@ -58,7 +54,9 @@ class Impala_Worker(object):
             ray = import_module("ray")
             seed_prngs(seed)
             queue, env_dict, actor_num = buffer_info
-            local_buffer = EpochBuffer(local_size, env_dict)
+            local_buffer = make_worker_local_replay_buffer(
+                worker_replay_factory, local_size, env_dict, None
+            )
             preproc, actor_model, _ = model_builder()
             actor, get_action_prob, convert_action = actor_builder()
 

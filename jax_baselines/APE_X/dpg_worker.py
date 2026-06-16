@@ -18,38 +18,23 @@ class Ape_X_Worker(object):
     def remote(cls, *args, **kwargs):
         return import_module("ray").remote(num_cpus=1)(cls).remote(*args, **kwargs)
 
-    def __init__(self, env_name_, seed=None) -> None:
+    def __init__(self, env_builder, seed=None) -> None:
         mp.current_process().authkey = base64.b64decode(self.encoded)
-        self.env_type = "SingleEnv"
-        self.env_id = None
-        seed_env = import_module("env_builder.seeding").seed_env
         seed_prngs(seed)
-
-        if callable(env_name_):
-            try:
-                env = env_name_(worker=1, seed=seed)
-            except TypeError:
-                try:
-                    env = env_name_(1, seed=seed)
-                except TypeError:
-                    env = env_name_()
-            self.env = env
-            try:
-                self.env_id = env.unwrapped.spec.id
-            except Exception:
-                self.env_id = getattr(getattr(env, "spec", None), "id", None)
-        else:
-            gym = import_module("gymnasium")
-            self.env = gym.make(env_name_)
-            self.env_id = env_name_
-        seed_env(self.env, seed)
+        # env_builder is the repo-local Environment Adapter callable injected by
+        # experiments; calling it with worker=1 returns a normalized, already
+        # seeded single environment. The core worker never imports gymnasium or
+        # reaches into env_builder internals.
+        self.env = env_builder(worker=1, seed=seed)
 
     def get_info(self):
+        # The distributed base class normalizes the remote env to "SingleEnv"
+        # (see core.env_info.get_remote_env_info); it consumes only the spaces.
         return {
             "observation_space": self.env.observation_space,
             "action_space": self.env.action_space,
-            "env_type": self.env_type,
-            "env_id": self.env_id,
+            "env_type": "SingleEnv",
+            "env_id": None,
         }
 
     def run(

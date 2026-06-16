@@ -76,6 +76,10 @@ def default_worker_replay_factory():
     return _replay_factories().make_worker_replay_buffer
 
 
+def default_impala_worker_replay_factory():
+    return _replay_factories().make_impala_worker_buffer
+
+
 def run_family(runner: FamilyRunner, argv=None):
     parser = ArgumentParser()
     runner.add_args(parser)

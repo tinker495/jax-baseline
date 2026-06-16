@@ -9,10 +9,14 @@ import numpy as np
 
 from jax_baselines.APE_X.common_servers import Logger_server, Param_server
 from jax_baselines.core.env_info import get_remote_env_info
+from jax_baselines.core.replay_protocol import (
+    WorkerReplayBufferFactory,
+    require_replay_factory,
+)
 from jax_baselines.core.runtime_adapters import make_progress
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.serialization import restore, save
-from jax_baselines.IMPALA.cpprb_buffers import ImpalaBuffer
+from jax_baselines.IMPALA.vtrace_queue import ImpalaBuffer
 from jax_baselines.math.jax_utils import convert_jax
 from jax_baselines.math.returns import get_vtrace
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
@@ -46,10 +50,12 @@ class IMPALA_Family(object):
         policy_kwargs=None,
         seed=None,
         optimizer_factory: OptimizerFactory | None = None,
+        worker_replay_factory: WorkerReplayBufferFactory | None = None,
     ):
         self.name = "IMPALA_Family"
         self.workers = workers
         self.model_builder_maker = model_builder_maker
+        self.worker_replay_factory = worker_replay_factory
         self.m = manager if manager is not None else mp.Manager()
         self.buffer_size = buffer_size
         self.log_interval = log_interval
@@ -267,12 +273,16 @@ class IMPALA_Family(object):
         cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
         param_server = Param_server.remote(ray.put(cpu_param))
 
+        worker_replay_factory = require_replay_factory(
+            self.worker_replay_factory, "WorkerReplayBufferFactory"
+        )
         jobs = []
         for idx in range(self.worker_num):
             jobs.append(
                 self.workers[idx].run.remote(
                     self.batch_size,
                     self.buffer.queue_info(),
+                    worker_replay_factory,
                     self.model_builder,
                     self.actor_builder,
                     param_server,

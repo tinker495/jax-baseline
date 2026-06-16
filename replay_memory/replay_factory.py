@@ -17,6 +17,7 @@ from replay_memory.frame_buffers import (
     FrameStackReplayBuffer,
     PrioritizedFrameStackReplayBuffer,
 )
+from replay_memory.impala_buffers import EpochBuffer
 
 
 def _frame_compress_applicable(observation_space, worker_size, n_step, n_frames):
@@ -151,3 +152,13 @@ def make_multi_prioritized_buffer(
 def make_worker_replay_buffer(local_size: int, *, env_dict: dict, n_s: dict | None = None):
     """Create the APE-X worker-local replay buffer from shared buffer metadata."""
     return ReplayBuffer(local_size, env_dict=env_dict, n_s=n_s)
+
+
+def make_impala_worker_buffer(local_size: int, *, env_dict: dict, n_s: dict | None = None):
+    """Create the IMPALA worker-local rollout buffer (stores V-trace ``log_prob``).
+
+    Satisfies the ``WorkerReplayBufferFactory`` seam used by the IMPALA worker.
+    ``n_s`` is accepted for protocol uniformity but unused: the IMPALA rollout is
+    a flat single-step sequence, not an n-step buffer.
+    """
+    return EpochBuffer(local_size, env_dict)
