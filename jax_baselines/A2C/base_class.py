@@ -229,7 +229,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         return train_steps * self._optimizer_updates_per_train_step()
 
     def prepare_run(self, total_timesteps):
-        if not getattr(self, "lr_annealing", False) or getattr(self, "params", None) is None:
+        if not self.lr_annealing or self.params is None:
             return
 
         schedule = optax.linear_schedule(

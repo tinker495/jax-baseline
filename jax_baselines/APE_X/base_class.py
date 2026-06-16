@@ -178,7 +178,6 @@ class Ape_X_Family(object):
             run_name = "Double_" + run_name
         if self.n_step_method:
             run_name = "{}Step_".format(self.n_step) + run_name
-        self.update_eps = 1.0
 
         progress_factory = progress_factory or make_progress
         pbar = progress_factory(total_trainstep, miniters=log_interval)
@@ -187,15 +186,10 @@ class Ape_X_Family(object):
         hparams = get_hyper_params(self)
         self.logger_server.register_hparams.remote(hparams)
 
-        if self.env_type == "unity":
-            self.learn_unity(pbar, callback, log_interval)
         if self.env_type == "SingleEnv":
             self.learn_SingleEnv(pbar, callback, log_interval)
 
         self.save_params(_ray().get(self.logger_server.get_log_dir.remote()))
-
-    def learn_unity(self, pbar, callback, log_interval):
-        pass
 
     def learn_SingleEnv(self, pbar, callback, log_interval):
         stop = self.m.Event()

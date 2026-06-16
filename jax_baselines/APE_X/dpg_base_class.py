@@ -86,8 +86,6 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         self.log_dir = log_dir
         self.n_step_method = n_step > 1
         self.n_step = n_step
-        self.munchausen_alpha = 0.9
-        self.munchausen_entropy_tau = 0.03
 
         self.params = None
         self.target_params = None
@@ -169,7 +167,6 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
     ):
         if self.n_step_method:
             run_name = "{}Step_".format(self.n_step) + run_name
-        self.update_eps = 1.0
 
         progress_factory = progress_factory or make_progress
         pbar = progress_factory(total_trainstep, miniters=log_interval)
@@ -178,15 +175,10 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         hparams = get_hyper_params(self)
         self.logger_server.register_hparams.remote(hparams)
 
-        if self.env_type == "unity":
-            self.learn_unity(pbar, callback, log_interval)
         if self.env_type == "SingleEnv":
             self.learn_SingleEnv(pbar, callback, log_interval)
 
         self.save_params(_ray().get(self.logger_server.get_log_dir.remote()))
-
-    def learn_unity(self, pbar, callback, log_interval):
-        pass
 
     def learn_SingleEnv(self, pbar, callback, log_interval):
         stop = self.m.Event()

@@ -259,6 +259,11 @@ class FakeOnPolicyAgent(Actor_Critic_Policy_Gradient_Family):
         self.eval_eps = 3
         self.actions = "actions"
         self.conv_action = "conv-action"
+        # Mirror the real base __init__ defaults (base_class.py:68,70) so the
+        # hardened prepare_run (direct attribute access) keeps its no-op
+        # semantics: lr_annealing off and params unset.
+        self.lr_annealing = False
+        self.params = None
 
     def learn_SingleEnv(self, ctx):
         self.calls.append(("single", ctx))

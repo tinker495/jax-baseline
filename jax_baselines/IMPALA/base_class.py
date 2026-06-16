@@ -251,15 +251,10 @@ class IMPALA_Family(object):
 
         self.logger_server = Logger_server.remote(self.log_dir, run_name, logger_factory)
 
-        if self.env_type == "unity":
-            self.learn_unity(pbar, callback, log_interval)
         if self.env_type == "SingleEnv":
             self.learn_SingleEnv(pbar, callback, log_interval)
 
         self.save_params(_ray().get(self.logger_server.get_log_dir.remote()))
-
-    def learn_unity(self, pbar, callback, log_interval):
-        pass
 
     def learn_SingleEnv(self, pbar, callback, log_interval):
         stop = self.m.Event()
