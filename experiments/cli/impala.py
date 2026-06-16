@@ -4,6 +4,7 @@ from experiments.cli._run import (
     AlgoSpec,
     DistributedFamilyRunner,
     default_impala_worker_replay_factory,
+    default_policy_kwargs,
     run_distributed_family,
 )
 from experiments.optimizers import make_batch_scaled_optimizer_factory
@@ -44,10 +45,6 @@ def make_workers(args):
     return [Impala_Worker.remote(env_builder, seed=args.seed + i) for i in range(args.worker)]
 
 
-def policy_kwargs(args):
-    return {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
-
-
 def _common(a):
     return {
         "gamma": a.gamma,
@@ -78,7 +75,7 @@ ALGOS = {
 IMPALA_RUNNER = DistributedFamilyRunner(
     add_args=add_args,
     make_workers=make_workers,
-    policy_kwargs=policy_kwargs,
+    policy_kwargs=default_policy_kwargs,
     algos=ALGOS,
     maker_pkg="model_builder.{lib}.ac",
     variant=lambda _args: "",

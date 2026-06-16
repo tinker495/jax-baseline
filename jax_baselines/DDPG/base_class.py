@@ -96,7 +96,6 @@ class Deteministic_Policy_Gradient_Family(object):
         self.reset_freq = 500000
         self.simba = simba or simba_v2
         self.simba_v2 = simba_v2
-        self.save_path = None
         self.optimizer_factory = require_optimizer_factory(optimizer_factory)
         self.optimizer = self._make_optimizer(self.learning_rate)
         self.replay_factory = replay_factory

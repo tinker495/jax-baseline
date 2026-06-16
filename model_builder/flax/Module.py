@@ -73,10 +73,9 @@ def pop_embedding_mode(policy_kwargs: Optional[dict], default: str = "normal") -
 
 
 def visual_embedding(
-    mode: str = "normal", flatten=True, **kwargs
+    mode: str = "normal", flatten: bool = True, multiple: int = 1
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:
     if mode == "resnet":
-        multiple = kwargs.get("multiple", 1)
         net = nn.Sequential(
             [
                 ImpalaBlock(16 * multiple),

@@ -369,6 +369,26 @@ def test_dist_resolver_resolves_flax_base(family: str):
         assert callable(resolve_maker(runner, spec, args))
 
 
+@pytest.mark.parametrize("family", DIST_FAMILIES)
+def test_dist_policy_kwargs_uses_shared_normal_embedding(family: str):
+    """All distributed families share the Atari ``normal`` embedding policy.
+
+    Pins the consolidation of three byte-identical ``policy_kwargs`` helpers onto
+    ``_run.default_policy_kwargs`` so the embedding mode cannot silently drift per
+    family.
+    """
+    from experiments.cli._run import default_policy_kwargs
+
+    runner = _dist_runner(family)
+    assert runner.policy_kwargs is default_policy_kwargs
+    args = _parse(runner, ["--algo", sorted(runner.algos)[0], "--node", "128", "--hidden_n", "3"])
+    assert runner.policy_kwargs(args) == {
+        "node": 128,
+        "hidden_n": 3,
+        "embedding_mode": "normal",
+    }
+
+
 def test_run_distributed_family_wires_agent(monkeypatch):
     import types
     from dataclasses import replace

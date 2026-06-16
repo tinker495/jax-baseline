@@ -222,3 +222,50 @@ def test_local_qnet_algorithms_use_train_on_batch_and_inherit_train_step():
 
         assert "_train_on_batch" in method_names
         assert "train_step" not in method_names
+
+
+def test_apex_qnet_actor_builders_close_over_nstep_gamma():
+    """APE-X actor builders must bind the n-step gamma (``self._gamma``), never the
+    single-step ``self.gamma``.
+
+    The actor-side ``get_abs_td_error`` closure scales the bootstrap with the
+    captured ``gamma``; binding ``self.gamma`` instead of ``self._gamma`` mis-weights
+    the n-step PER priority. apex_c51 regressed to ``self.gamma`` once before, so this
+    pins the invariant across every APE-X Q-Net variant.
+    """
+    targets = {
+        "jax_baselines/DQN/apex_dqn.py": "APE_X_DQN",
+        "jax_baselines/C51/apex_c51.py": "APE_X_C51",
+        "jax_baselines/QRDQN/apex_qrdqn.py": "APE_X_QRDQN",
+        "jax_baselines/IQN/apex_iqn.py": "APE_X_IQN",
+    }
+
+    repo_root = Path(__file__).resolve().parents[1]
+    for relative_path, class_name in targets.items():
+        tree = ast.parse((repo_root / relative_path).read_text())
+        class_node = next(
+            node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == class_name
+        )
+        builder = next(
+            node
+            for node in class_node.body
+            if isinstance(node, ast.FunctionDef) and node.name == "get_actor_builder"
+        )
+        # Collect every `gamma = self.<attr>` binding inside the builder.
+        gamma_attrs = []
+        for assign in ast.walk(builder):
+            if not isinstance(assign, ast.Assign):
+                continue
+            value = assign.value
+            if not (
+                isinstance(value, ast.Attribute)
+                and isinstance(value.value, ast.Name)
+                and value.value.id == "self"
+            ):
+                continue
+            if any(isinstance(t, ast.Name) and t.id == "gamma" for t in assign.targets):
+                gamma_attrs.append(value.attr)
+
+        assert gamma_attrs == [
+            "_gamma"
+        ], f"{class_name} actor builder must bind gamma from self._gamma, got {gamma_attrs}"

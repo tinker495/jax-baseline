@@ -80,6 +80,15 @@ def default_impala_worker_replay_factory():
     return _replay_factories().make_impala_worker_buffer
 
 
+def default_policy_kwargs(args: Namespace) -> dict:
+    """Network policy kwargs shared by the distributed families (APE-X / IMPALA).
+
+    All three distributed entry points feed Atari-style visual inputs, so they
+    use the ``normal`` embedding mode with the configured ``node``/``hidden_n``.
+    """
+    return {"node": args.node, "hidden_n": args.hidden_n, "embedding_mode": "normal"}
+
+
 def run_family(runner: FamilyRunner, argv=None):
     parser = ArgumentParser()
     runner.add_args(parser)

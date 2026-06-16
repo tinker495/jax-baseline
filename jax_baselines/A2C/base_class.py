@@ -68,7 +68,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.lr_annealing = lr_annealing
 
         self.params = None
-        self.save_path = None
         self.rollout_tracker = None
         self.optimizer = self._make_optimizer(self.learning_rate)
 

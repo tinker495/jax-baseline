@@ -80,7 +80,6 @@ class IMPALA_Family(object):
 
         self.params = None
         self.target_params = None
-        self.save_path = None
         self.optimizer_factory = require_optimizer_factory(optimizer_factory)
         self.optimizer = self._make_optimizer(self.learning_rate)
         self.model_builder = None
