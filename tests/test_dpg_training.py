@@ -21,8 +21,11 @@ class FakeReplayBuffer:
 
 
 class FakeNormalizer:
+    def __init__(self, offset):
+        self.offset = offset
+
     def normalize(self, value):
-        return value + 10.0
+        return value + self.offset
 
 
 class FakeLoggerRun:
@@ -40,7 +43,8 @@ class FakeAgent:
         self.prioritized_replay = True
         self.prioritized_replay_beta0 = 0.4
         self.simba = True
-        self.obs_rms = FakeNormalizer()
+        self.obs_rms = FakeNormalizer(100.0)
+        self.action_obs_rms = FakeNormalizer(10.0)
         self.train_steps_count = 0
         self.logger_run = FakeLoggerRun()
         self._last_log_step = 0
@@ -59,6 +63,9 @@ class FakeAgent:
 
     def _aggregate_train_reports(self, reports):
         return reports[-1]
+
+    def _policy_update_obs_rms(self):
+        return self.action_obs_rms if self.action_obs_rms is not None else self.obs_rms
 
 
 def test_dpg_training_lifecycle_samples_normalizes_updates_priorities_and_logs():
@@ -81,3 +88,14 @@ def test_dpg_training_lifecycle_samples_normalizes_updates_priorities_and_logs()
         ("loss/qloss", 2.0, 10),
         ("loss/targets", 22.0, 10),
     ]
+
+
+def test_dpg_training_lifecycle_falls_back_to_live_rms_before_policy_snapshot():
+    agent = FakeAgent()
+    agent.action_obs_rms = None
+    lifecycle = DPGTrainingLifecycle(agent)
+
+    lifecycle.train(steps=10, gradient_steps=1)
+
+    assert np.array_equal(agent.batches[0]["obses"], np.array([101.0]))
+    assert np.array_equal(agent.batches[0]["nxtobses"], np.array([102.0]))

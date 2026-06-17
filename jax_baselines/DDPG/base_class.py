@@ -363,12 +363,15 @@ class Deteministic_Policy_Gradient_Family(object):
                     and self.ckpt.enabled
                     and self.checkpoint_obs_rms is not None
                 )
-                else (self.action_obs_rms if self.action_obs_rms is not None else self.obs_rms)
+                else self._policy_update_obs_rms()
             )
             if (not eval) and steps != np.inf:
                 self.obs_rms.update(obs)
             obs = rms.normalize(obs)
         return obs
+
+    def _policy_update_obs_rms(self):
+        return self.action_obs_rms if self.action_obs_rms is not None else self.obs_rms
 
     def learn(
         self,
@@ -493,5 +496,4 @@ class Deteministic_Policy_Gradient_Family(object):
 
         # If using SIMBA normalization, snapshot obs_rms for eval-time consistency.
         if self.simba:
-            source = self.action_obs_rms if self.action_obs_rms is not None else self.obs_rms
-            self.checkpoint_obs_rms = deepcopy(source)
+            self.checkpoint_obs_rms = deepcopy(self._policy_update_obs_rms())

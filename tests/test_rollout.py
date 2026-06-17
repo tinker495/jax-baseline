@@ -35,6 +35,7 @@ from jax_baselines.core.rollout import (
 )
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DQN.base_class import Q_Network_Family
+from jax_baselines.TD7.td7 import TD7
 
 
 # --- runner seam: rebuilds the family RolloutSpec the base classes inject ---
@@ -742,11 +743,15 @@ def test_checkpoint_pulse_carries_residual_and_skips_training_below_train_freq()
     assert state["losses"] == []
 
 
-def test_checkpoint_pulse_runs_post_pulse_even_without_training():
+def test_checkpoint_pulse_runs_post_pulse_only_after_training():
     posts = []
     pulse, _ = _make_pulse(train_freq=3, gradient_steps=1, post_pulse=lambda: posts.append(True))
 
-    pulse(1, 1)  # 1 < 3 -> no training, but post-pulse still fires
+    pulse(1, 1)  # 1 < 3 -> no training, so policy-update snapshots must not move
+
+    assert posts == []
+
+    pulse(2, 2)
 
     assert posts == [True]
 
@@ -812,6 +817,76 @@ def test_dpg_snapshot_action_normalizer_noop_without_simba():
     agent._snapshot_action_normalizer()
 
     assert not hasattr(agent, "action_obs_rms")
+
+
+class _OffsetNormalizer:
+    def __init__(self, offset):
+        self.offset = offset
+        self.calls = []
+
+    def normalize(self, obs):
+        self.calls.append(("normalize", obs))
+        return [np.asarray(x) + self.offset for x in obs]
+
+    def update(self, obs):
+        self.calls.append(("update", obs))
+
+
+def _dpg_action_agent():
+    agent = Deteministic_Policy_Gradient_Family.__new__(Deteministic_Policy_Gradient_Family)
+    agent.simba = True
+    agent.use_checkpointing = True
+    agent.ckpt = type("Ckpt", (), {"enabled": True})()
+    agent.obs_rms = _OffsetNormalizer(100)
+    agent.action_obs_rms = _OffsetNormalizer(10)
+    agent.checkpoint_obs_rms = _OffsetNormalizer(1000)
+    agent.learning_starts = 0
+    agent.worker_size = 1
+    agent.action_size = (1,)
+    agent._select_action_state = lambda eval, steps: {"encoder": None, "policy": None}
+    agent._policy_action_from_state = lambda state, obs, eval, steps: np.asarray(obs[0])
+    agent._apply_action_noise = lambda actions, steps, eval: actions
+    return agent
+
+
+def test_dpg_rollout_actions_use_policy_update_normalizer_and_update_live_rms():
+    agent = _dpg_action_agent()
+
+    action = agent.actions([np.array([1.0])], steps=5, eval=False)
+
+    assert np.array_equal(action, np.array([11.0]))
+    assert agent.obs_rms.calls == [("update", [np.array([1.0])])]
+    assert agent.action_obs_rms.calls == [("normalize", [np.array([1.0])])]
+    assert agent.checkpoint_obs_rms.calls == []
+
+
+def test_dpg_eval_actions_use_checkpoint_normalizer():
+    agent = _dpg_action_agent()
+
+    action = agent.actions([np.array([1.0])], steps=5, eval=True)
+
+    assert np.array_equal(action, np.array([1001.0]))
+    assert agent.obs_rms.calls == []
+    assert agent.action_obs_rms.calls == []
+    assert agent.checkpoint_obs_rms.calls == [("normalize", [np.array([1.0])])]
+
+
+def test_td7_eval_snapshot_waits_for_checkpoint_enabled_gate():
+    agent = TD7.__new__(TD7)
+    agent.use_checkpointing = True
+    agent.ckpt = type("Ckpt", (), {"enabled": False})()
+    agent.eval_snapshot = {"encoder": "checkpoint-encoder", "policy": "checkpoint-policy"}
+    agent.fixed_encoder_params = "live-encoder"
+    agent.policy_params = "live-policy"
+
+    assert TD7._select_action_state(agent, eval=True, steps=5) == {
+        "encoder": "live-encoder",
+        "policy": "live-policy",
+    }
+
+    agent.ckpt.enabled = True
+
+    assert TD7._select_action_state(agent, eval=True, steps=5) == agent.eval_snapshot
 
 
 # --- engine + real CheckpointTrainPulse, end-to-end -----------------------

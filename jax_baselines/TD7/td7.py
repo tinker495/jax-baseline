@@ -123,7 +123,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         }
 
     def _select_action_state(self, eval, steps):
-        if eval and self.use_checkpointing and self.eval_snapshot is not None:
+        if eval and self.use_checkpointing and self.ckpt.enabled and self.eval_snapshot is not None:
             return self.eval_snapshot
         return self.get_behavior_state()
 

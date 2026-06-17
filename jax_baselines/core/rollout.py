@@ -89,7 +89,7 @@ class CheckpointTrainPulse:
             loss = self._train(steps, num_update_iters * self._gradient_steps)
             self._record_loss(loss)
 
-        if self._post_pulse is not None:
+        if num_update_iters > 0 and self._post_pulse is not None:
             self._post_pulse()
 
 

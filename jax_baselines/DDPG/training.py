@@ -74,8 +74,9 @@ class DPGTrainingLifecycle:
 
     def _normalize_batch(self, data):
         if self.agent.simba:
-            data["obses"] = self.agent.obs_rms.normalize(data["obses"])
-            data["nxtobses"] = self.agent.obs_rms.normalize(data["nxtobses"])
+            obs_rms = self.agent._policy_update_obs_rms()
+            data["obses"] = obs_rms.normalize(data["obses"])
+            data["nxtobses"] = obs_rms.normalize(data["nxtobses"])
 
     def _update_priorities(self, data, report):
         if self.agent.prioritized_replay:
