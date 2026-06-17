@@ -7,13 +7,11 @@ and backward-compatible imports that no longer pull concrete runtime adapters.
 
 from jax_baselines.core.runtime_adapters import (
     EvaluationRecorder,
-    HistogramLoggerRun,
     LoggerFactory,
     LoggerRun,
     NoOpLogger,
     NoOpLoggerRun,
     NoOpProgress,
-    NoOpWriter,
     ProgressBar,
     ProgressFactory,
     make_progress,
@@ -21,13 +19,11 @@ from jax_baselines.core.runtime_adapters import (
 
 __all__ = [
     "EvaluationRecorder",
-    "HistogramLoggerRun",
     "LoggerFactory",
     "LoggerRun",
     "NoOpLogger",
     "NoOpLoggerRun",
     "NoOpProgress",
-    "NoOpWriter",
     "ProgressBar",
     "ProgressFactory",
     "make_progress",

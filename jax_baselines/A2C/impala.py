@@ -253,6 +253,7 @@ class IMPALA(IMPALA_Family):
         run_name="IMPALA_AC",
         reset_num_timesteps=True,
         replay_wrapper=None,
+        experiment_name="experiment",
         logger_factory=None,
         progress_factory=None,
     ):
@@ -263,6 +264,7 @@ class IMPALA(IMPALA_Family):
             run_name,
             reset_num_timesteps,
             replay_wrapper,
+            experiment_name=experiment_name,
             logger_factory=logger_factory,
             progress_factory=progress_factory,
         )

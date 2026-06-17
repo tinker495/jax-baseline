@@ -90,6 +90,7 @@ def test_distributed_learn_overrides_forward_driver_factories(_runner, _algo, _s
         # injected driver factories down to super().learn(...).
         assert "logger_factory=logger_factory" in source
         assert "progress_factory=progress_factory" in source
+        assert "experiment_name=experiment_name" in source
     else:
         # APE-X leaves consolidated learn() onto the shared base. The resolved
         # entrypoint must still consume the injected factories rather than
@@ -97,7 +98,10 @@ def test_distributed_learn_overrides_forward_driver_factories(_runner, _algo, _s
         # server and progress_factory is used (falling back to make_progress).
         assert "logger_factory" in inspect.signature(cls.learn).parameters
         assert "progress_factory" in inspect.signature(cls.learn).parameters
-        assert "Logger_server.remote(self.log_dir, run_name, logger_factory)" in source
+        assert "experiment_name" in inspect.signature(cls.learn).parameters
+        # logger_factory + experiment_name thread into the logger server (not hardcoded).
+        assert "Logger_server.remote(" in source
+        assert "experiment_name, logger_factory" in source
         assert "progress_factory or make_progress" in source
 
 

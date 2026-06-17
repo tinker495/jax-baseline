@@ -97,28 +97,6 @@ def test_qnet_training_lifecycle_samples_updates_priorities_and_logs():
     assert agent.logger_run.histograms[0][0] == "loss/tau"
 
 
-class FakeLoggerRunWithoutHistogram:
-    def __init__(self):
-        self.metrics = []
-
-    def log_metric(self, name, value, steps):
-        self.metrics.append((name, value, steps))
-
-
-def test_qnet_training_lifecycle_tolerates_logger_without_histograms():
-    agent = FakeAgent()
-    agent.logger_run = FakeLoggerRunWithoutHistogram()
-    lifecycle = QNetTrainingLifecycle(agent)
-
-    lifecycle.train(steps=10, gradient_steps=1)
-
-    assert agent.logger_run.metrics == [
-        ("loss/extra", 101.0, 10),
-        ("loss/qloss", 1.0, 10),
-        ("loss/targets", 21.0, 10),
-    ]
-
-
 def test_qnet_train_report_keeps_replay_priorities_out_of_report_surface():
     report = QNetTrainReport(loss=1.0, target=2.0)
     result = QNetTrainResult(report=report, replay_priorities=np.array([3.0]))

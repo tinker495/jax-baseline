@@ -190,6 +190,7 @@ class Ape_X_Family(object):
         run_name=None,
         reset_num_timesteps=True,
         replay_wrapper=None,
+        experiment_name="experiment",
         logger_factory=None,
         progress_factory=None,
     ):
@@ -209,7 +210,9 @@ class Ape_X_Family(object):
         progress_factory = progress_factory or make_progress
         pbar = progress_factory(total_trainstep, miniters=log_interval)
 
-        self.logger_server = Logger_server.remote(self.log_dir, run_name, logger_factory)
+        self.logger_server = Logger_server.remote(
+            self.log_dir, run_name, experiment_name, logger_factory
+        )
         hparams = get_hyper_params(self)
         self.logger_server.register_hparams.remote(hparams)
 
@@ -287,6 +290,7 @@ class Ape_X_Family(object):
                 for u in update:
                     u.set()
         self.logger_server.last_update.remote()
+        ray.get(self.logger_server.close.remote())
         stop.set()
         ray.wait(jobs, timeout=300)
         time.sleep(1)

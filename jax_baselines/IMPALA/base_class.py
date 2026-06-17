@@ -242,13 +242,16 @@ class IMPALA_Family(object):
         run_name="IMPALA",
         reset_num_timesteps=True,
         replay_wrapper=None,
+        experiment_name="experiment",
         logger_factory=None,
         progress_factory=None,
     ):
         progress_factory = progress_factory or make_progress
         pbar = progress_factory(total_trainstep, miniters=log_interval)
 
-        self.logger_server = Logger_server.remote(self.log_dir, run_name, logger_factory)
+        self.logger_server = Logger_server.remote(
+            self.log_dir, run_name, experiment_name, logger_factory
+        )
 
         if self.env_type == "SingleEnv":
             self.learn_SingleEnv(pbar, callback, log_interval)
@@ -312,6 +315,7 @@ class IMPALA_Family(object):
                 for u in update:
                     u.set()
         self.logger_server.last_update.remote()
+        ray.get(self.logger_server.close.remote())
         stop.set()
         while not self.buffer.queue.empty():
             self.buffer.queue.get()

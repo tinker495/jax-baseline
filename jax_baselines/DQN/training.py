@@ -195,6 +195,5 @@ class QNetTrainingLifecycle:
             self.agent._last_log_step = steps
             for metric_name, metric_value in report.metrics.items():
                 logger_run.log_metric(metric_name, metric_value, steps)
-            if hasattr(logger_run, "log_histogram"):
-                for histogram_name, histogram_value in report.histograms.items():
-                    logger_run.log_histogram(histogram_name, histogram_value, steps)
+            for histogram_name, histogram_value in report.histograms.items():
+                logger_run.log_histogram(histogram_name, histogram_value, steps)

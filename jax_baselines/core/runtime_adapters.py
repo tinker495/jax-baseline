@@ -13,7 +13,13 @@ from typing import Any, Iterable, Iterator, Optional, Protocol, runtime_checkabl
 
 @runtime_checkable
 class LoggerRun(Protocol):
-    """Minimal live logger surface the core uses inside a run."""
+    """The stable contract the Algorithm Core logs through inside a run.
+
+    Every backend implements the whole surface. ``log_histogram`` and
+    ``declare_multiline_layout`` degrade to no-ops on backends that do not
+    support them, so call sites never feature-test the logger or reach for a
+    backend-specific writer.
+    """
 
     def log_param(self, hparam_dict: dict) -> None:
         ...
@@ -21,12 +27,15 @@ class LoggerRun(Protocol):
     def log_metric(self, key: str, value: Any, step: Optional[int] = None) -> None:
         ...
 
-    def get_local_path(self, path: str) -> str:
+    def log_histogram(self, key: str, value: Any, step: Optional[int] = None) -> None:
         ...
 
+    def declare_multiline_layout(self, eps: Iterable[float]) -> None:
+        """Declare the per-epsilon rollout multiline layout (TensorBoard custom
+        scalars). Backends without a custom-layout concept no-op."""
+        ...
 
-class HistogramLoggerRun(LoggerRun, Protocol):
-    def log_histogram(self, key: str, value: Any, step: Optional[int] = None) -> None:
+    def get_local_path(self, path: str) -> str:
         ...
 
 
@@ -55,33 +64,11 @@ class EvaluationRecorder(Protocol):
         ...
 
 
-class NoOpWriter:
-    """SummaryWriter-shaped no-op for core-only runs and distributed tests."""
-
-    def add_scalar(self, *args: Any, **kwargs: Any) -> None:
-        return None
-
-    def add_histogram(self, *args: Any, **kwargs: Any) -> None:
-        return None
-
-    def add_custom_scalars(self, *args: Any, **kwargs: Any) -> None:
-        return None
-
-    def add_summary(self, *args: Any, **kwargs: Any) -> None:
-        return None
-
-    def close(self) -> None:
-        return None
-
-
 class NoOpLoggerRun:
+    """Protocol-safe ``LoggerRun`` used when no experiment adapter is injected."""
+
     def __init__(self, local_dir: str):
         self.local_dir = local_dir
-        self.writer = NoOpWriter()
-
-    def __iter__(self) -> Iterable[Any]:
-        yield self.writer
-        yield self.local_dir
 
     def log_param(self, hparam_dict: dict) -> None:
         return None
@@ -90,6 +77,9 @@ class NoOpLoggerRun:
         return None
 
     def log_histogram(self, key: str, value: Any, step: Optional[int] = None) -> None:
+        return None
+
+    def declare_multiline_layout(self, eps: Iterable[Any]) -> None:
         return None
 
     def get_local_path(self, path: str) -> str:
@@ -110,6 +100,9 @@ class NoOpLogger:
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
         return False
+
+    def close(self) -> None:
+        return None
 
 
 class NoOpProgress:

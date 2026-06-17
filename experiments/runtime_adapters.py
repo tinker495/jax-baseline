@@ -27,51 +27,37 @@ def _get_latest_run_id(local_dir, experiment_name, run_name):
 class TensorboardRun:
     def __init__(self, dir: str):
         self.dir = dir
-        self.writer = SummaryWriter(dir)
+        self._writer = SummaryWriter(dir)
 
     def log_param(self, hparam_dict):
         exp, ssi, sei = hparams(hparam_dict, {})
 
-        self.writer.file_writer.add_summary(exp)
-        self.writer.file_writer.add_summary(ssi)
-        self.writer.file_writer.add_summary(sei)
+        self._writer.file_writer.add_summary(exp)
+        self._writer.file_writer.add_summary(ssi)
+        self._writer.file_writer.add_summary(sei)
 
     def log_metric(self, key, value, step=None):
-        self.writer.add_scalar(key, value, step)
+        self._writer.add_scalar(key, value, step)
 
     def log_histogram(self, key, value, step=None):
-        self.writer.add_histogram(key, value, step)
+        self._writer.add_histogram(key, value, step)
+
+    def declare_multiline_layout(self, eps):
+        """TensorBoard custom-scalars layout overlaying the per-epsilon rollout
+        curves (distributed APE-X). TensorBoard-only; other backends no-op."""
+        layout = {
+            "rollout": {
+                leaf: [
+                    "Multiline",
+                    [f"rollout/{leaf}/eps{e:.2f}" for e in eps] + [f"rollout/{leaf}"],
+                ]
+                for leaf in ("episode_reward", "original_reward", "episode_length", "timeout_rate")
+            },
+        }
+        self._writer.add_custom_scalars(layout)
 
     def get_local_path(self, path):
         return os.path.join(self.dir, path)
-
-
-class TensorboardContext:
-    """Context object supporting both tuple-unpack and logger-run access."""
-
-    def __init__(self, run: TensorboardRun, local_dir: str):
-        self.run = run
-        self.local_dir = local_dir
-
-    def __iter__(self):
-        yield self.run.writer
-        yield self.local_dir
-
-    def log_param(self, hparam_dict):
-        return self.run.log_param(hparam_dict)
-
-    def log_metric(self, key, value, step=None):
-        return self.run.log_metric(key, value, step)
-
-    def log_histogram(self, key, value, step=None):
-        return self.run.log_histogram(key, value, step)
-
-    def get_local_path(self, path):
-        return self.run.get_local_path(path)
-
-    @property
-    def writer(self):
-        return self.run.writer
 
 
 class TensorboardLogger:
@@ -99,14 +85,17 @@ class TensorboardLogger:
             add_hparams(agent_or_hparams, self.run)
 
     def __enter__(self):
-        return TensorboardContext(self.run, self.local_dir)
+        return self.run
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         return False
 
+    def close(self):
+        self.run._writer.close()
+
     def __del__(self):
         try:
-            self.run.writer.close()
+            self.close()
         except Exception:
             pass
 

@@ -235,6 +235,7 @@ def test_run_family_wires_agent_without_env_or_model(monkeypatch):
 
     import experiments.cli._run as run_mod
     from experiments.cli.dpg import DPG_RUNNER
+    from experiments.runtime_adapters import TensorboardLogger
 
     captured: dict = {}
 
@@ -275,7 +276,7 @@ def test_run_family_wires_agent_without_env_or_model(monkeypatch):
 
     assert captured["steps"] == 7
     assert captured["eval_num"] == 100
-    assert captured["logger_factory"] is run_mod.TensorboardLogger
+    assert captured["logger_factory"] is TensorboardLogger
     assert captured["progress_factory"] is run_mod.make_progress
     assert captured["record_test_fn"] is run_mod.record_and_test
     assert captured["maker"] == "MAKER"
@@ -395,6 +396,7 @@ def test_run_distributed_family_wires_agent(monkeypatch):
 
     import experiments.cli._run as run_mod
     from experiments.cli.apex_dpg import APEX_DPG_RUNNER
+    from experiments.runtime_adapters import TensorboardLogger
 
     captured: dict = {}
 
@@ -402,9 +404,10 @@ def test_run_distributed_family_wires_agent(monkeypatch):
         def __init__(self, workers, maker, manager, **kwargs):
             captured.update(workers=workers, maker=maker, manager=manager, kwargs=kwargs)
 
-        def learn(self, steps, logger_factory=None, progress_factory=None):
+        def learn(self, steps, experiment_name=None, logger_factory=None, progress_factory=None):
             captured.update(
                 steps=steps,
+                experiment_name=experiment_name,
                 logger_factory=logger_factory,
                 progress_factory=progress_factory,
             )
@@ -429,6 +432,7 @@ def test_run_distributed_family_wires_agent(monkeypatch):
     assert captured["maker"] == "MAKER"
     assert captured["manager"] == "MGR"
     assert captured["steps"] == 11
-    assert captured["logger_factory"] is run_mod.TensorboardLogger
+    assert captured["experiment_name"] == "APEX_DPG"  # threaded from --experiment_name default
+    assert captured["logger_factory"] is TensorboardLogger
     assert captured["progress_factory"] is run_mod.make_progress
     assert captured["kwargs"]["policy_kwargs"] == {"pk": 1}

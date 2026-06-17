@@ -32,6 +32,8 @@ import sys
 
 import yaml
 
+from experiments.cli._common import load_runtime_env
+
 FAMILY_SCRIPTS = {
     "qnet": "qnet",
     "dpg": "dpg",
@@ -77,6 +79,9 @@ def _iter_commands(config, cli_overrides=None):
 def main(argv=None):
     # Behave like a normal Unix tool when piped into head/grep (no BrokenPipe traceback).
     signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    # Load .env before snapshotting os.environ so spawned variant subprocesses
+    # inherit JAXBL_/WANDB_/AIM_ settings (each child also loads it via run_family).
+    load_runtime_env()
     parser = argparse.ArgumentParser(description="Run a YAML-defined experiment sweep.")
     parser.add_argument("config", help="path to a sweep YAML file")
     parser.add_argument(
