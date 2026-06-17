@@ -18,6 +18,7 @@ set_default_xla_flags()
 
 
 def add_args(parser):
+    parser.add_argument("--experiment_name", type=str, default="IMPALA", help="experiment name")
     parser.add_argument("--learning_rate", type=float, default=0.0002, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="BreakoutNoFrameskip-v4", help="environment")

@@ -5,11 +5,9 @@ from dataclasses import dataclass
 from importlib import import_module
 from typing import Callable, Protocol
 
-from experiments.runtime_adapters import (
-    TensorboardLogger,
-    make_progress,
-    record_and_test,
-)
+from experiments.cli._common import load_runtime_env
+from experiments.cli._loggers import add_logger_args, resolve_logger_factory
+from experiments.runtime_adapters import make_progress, record_and_test
 
 
 @dataclass(frozen=True)
@@ -90,8 +88,10 @@ def default_policy_kwargs(args: Namespace) -> dict:
 
 
 def run_family(runner: FamilyRunner, argv=None):
+    load_runtime_env()
     parser = ArgumentParser()
     runner.add_args(parser)
+    add_logger_args(parser)
     args = parser.parse_args(argv)
     if args.algo not in runner.algos:
         raise SystemExit(f"unknown algo '{args.algo}', expected one of {sorted(runner.algos)}")
@@ -105,7 +105,7 @@ def run_family(runner: FamilyRunner, argv=None):
         int(args.steps),
         experiment_name=args.experiment_name,
         eval_num=args.eval_num,
-        logger_factory=TensorboardLogger,
+        logger_factory=resolve_logger_factory(args),
         progress_factory=make_progress,
         record_test_fn=record_and_test,
     )
@@ -136,13 +136,16 @@ def run_distributed_family(runner: DistributedFamilyRunner, argv=None):
 
     import ray
 
+    load_runtime_env()
     parser = ArgumentParser()
     runner.add_args(parser)
+    add_logger_args(parser)
     args = parser.parse_args(argv)
     if args.algo not in runner.algos:
         raise SystemExit(f"unknown algo '{args.algo}', expected one of {sorted(runner.algos)}")
     spec = runner.algos[args.algo]
     maker = resolve_maker(runner, spec, args)
+    logger_factory = resolve_logger_factory(args)
     manager = mp.get_context().Manager()
     ray.init(num_cpus=args.worker + runner.ray_cpu_headroom, num_gpus=0)
     workers = runner.make_workers(args)
@@ -155,7 +158,8 @@ def run_distributed_family(runner: DistributedFamilyRunner, argv=None):
     )
     agent.learn(
         int(args.steps),
-        logger_factory=TensorboardLogger,
+        experiment_name=args.experiment_name,
+        logger_factory=logger_factory,
         progress_factory=make_progress,
     )
     return agent

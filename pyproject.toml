@@ -38,6 +38,7 @@ dependencies = [
     "opencv-python",
     "envpool",
     "pyyaml",
+    "python-dotenv",
 ]
 
 [project.scripts]
@@ -48,11 +49,19 @@ impala = "experiments.cli.impala:main"
 apex-qnet = "experiments.cli.apex_qnet:main"
 apex-dpg = "experiments.cli.apex_dpg:main"
 exp = "experiments.cli.exp:main"
+dashboard = "experiments.cli.dashboard:main"
 
 [dependency-groups]
 dev = [
     "pre-commit",
     "pytest",
+    # Logging backends (--logger wandb/aim) and the TensorBoard viewer (`dashboard`),
+    # installed by `uv sync` so the console scripts work from a checkout. tensorboard
+    # imports pkg_resources, which setuptools<81 still bundles (81+ dropped it).
+    "wandb",
+    "aim",
+    "tensorboard",
+    "setuptools<81",
 ]
 
 [tool.pytest.ini_options]

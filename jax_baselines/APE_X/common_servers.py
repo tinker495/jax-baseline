@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 
 from jax_baselines.core.runtime_adapters import NoOpLogger
@@ -27,60 +29,38 @@ class Param_server(_RayActor):
 
 
 class Logger_server(_RayActor):
-    def __init__(self, log_dir, log_name, logger_factory=None) -> None:
+    def __init__(
+        self, log_dir, log_name, experiment_name="experiment", logger_factory=None
+    ) -> None:
         # Pass None as the agent to avoid attempting to extract hparams from this Ray actor
         # (which would serialize the whole actor). Hyperparameters should be
         # registered explicitly via `register_hparams` with a plain dict.
         logger_factory = logger_factory or NoOpLogger
-        self.writer = logger_factory(log_name, "experiment", log_dir, None)
+        self.logger = logger_factory(log_name, experiment_name, log_dir, None)
         self.step = 0
         self.old_step = 0
         self.save_dict = dict()
-        with self.writer as (summary, save_path):
-            self.save_path = save_path
+        with self.logger as run:
+            self.save_path = os.path.normpath(run.get_local_path(""))
 
     def get_log_dir(self):
         return self.save_path
 
     def add_multiline(self, eps):
-        with self.writer as (summary, _):
-            layout = {
-                "rollout": {
-                    "episode_reward": [
-                        "Multiline",
-                        [f"rollout/episode_reward/eps{e:.2f}" for e in eps]
-                        + ["rollout/episode_reward"],
-                    ],
-                    "original_reward": [
-                        "Multiline",
-                        [f"rollout/original_reward/eps{e:.2f}" for e in eps]
-                        + ["rollout/original_reward"],
-                    ],
-                    "episode_length": [
-                        "Multiline",
-                        [f"rollout/episode_length/eps{e:.2f}" for e in eps]
-                        + ["rollout/episode_length"],
-                    ],
-                    "timeout_rate": [
-                        "Multiline",
-                        [f"rollout/timeout_rate/eps{e:.2f}" for e in eps]
-                        + ["rollout/timeout_rate"],
-                    ],
-                },
-            }
-            summary.add_custom_scalars(layout)
+        with self.logger as run:
+            run.declare_multiline_layout(eps)
 
     def log_trainer(self, step, log_dict):
         self.step = step
-        with self.writer as (summary, _):
+        with self.logger as run:
             for key, value in log_dict.items():
-                summary.add_scalar(key, value, self.step)
+                run.log_metric(key, value, self.step)
 
     def log_worker(self, log_dict, episode):
         if self.old_step != self.step:
-            with self.writer as (summary, _):
+            with self.logger as run:
                 for key, value in self.save_dict.items():
-                    summary.add_scalar(key, np.mean(value), self.step)
+                    run.log_metric(key, np.mean(value), self.step)
                 self.save_dict = dict()
                 self.old_step = self.step
         for key, value in log_dict.items():
@@ -90,16 +70,23 @@ class Logger_server(_RayActor):
                 self.save_dict[key] = [value]
 
     def last_update(self):
-        with self.writer as (summary, _):
+        with self.logger as run:
             for key, value in self.save_dict.items():
-                summary.add_scalar(key, np.mean(value), self.step)
+                run.log_metric(key, np.mean(value), self.step)
+
+    def close(self):
+        """Finalize the run. The centralized logger actor outlives every
+        ``with self.logger`` block, so the backend's run is closed here once the
+        driver is done — not on per-call ``__exit__`` (which keeps it open) nor
+        only on actor GC."""
+        self.logger.close()
 
     def register_hparams(self, hparams: dict):
-        """Register hyperparameters (plain dict) to be logged to TensorBoard.
+        """Register hyperparameters (plain dict) to be logged.
 
         This should be called from the trainer/process that has the real agent
         object, using `get_hyper_params(agent)` to build a serializable dict,
         and then `logger.register_hparams.remote(hparams)` to send it to this
         Ray actor.
         """
-        self.writer.log_hparams(hparams)
+        self.logger.log_hparams(hparams)

@@ -17,7 +17,6 @@ base:
   use_checkpointing: true
   node: 256
   hidden_n: 2
-  logdir: log/
   optimizer: adamw
 variants:
   - {algo: TQC, simbav2: true}
