@@ -19,16 +19,16 @@ base:
   hidden_n: 2
   optimizer: adamw
 variants:
-  - {algo: TQC, simbav2: true}
-  - {algo: TQC, simba: true}
+  - {algo: TD3}
+  - {algo: TD3, simba: true}
+  - {algo: TD3, simbav2: true}
+  - {algo: SAC}
+  - {algo: SAC, simba: true}
+  - {algo: SAC, simbav2: true}
   - {algo: TQC}
-  - {algo: CrossQ, enabled: false}
-  - {algo: SAC, enabled: false}
-  - {algo: TD3, simba: true, enabled: false}
-  - {algo: TD3, simbav2: true, enabled: false}
-  - {algo: SAC, enabled: false}
-  - {algo: SAC, simba: true, enabled: false}
-  - {algo: SAC, simbav2: true, enabled: false}
-  - {algo: TD7, enabled: false}
-  - {algo: TD7, simba: true, enabled: false}
-  - {algo: TD7, simbav2: true, enabled: false}
+  - {algo: TQC, simba: true}
+  - {algo: TQC, simbav2: true}
+  - {algo: TD7}
+  - {algo: TD7, simba: true}
+  - {algo: TD7, simbav2: true}
+  - {algo: CrossQ}

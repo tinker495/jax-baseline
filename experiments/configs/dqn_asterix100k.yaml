@@ -22,7 +22,6 @@ variants:
     gamma: 0.99
     buffer_size: 1e5
     exploration_fraction: 0.2
-    use_checkpointing: true
     target_update: 1000
     gradient_steps: 1
     double: true
@@ -39,7 +38,6 @@ variants:
     gamma: 0.99
     buffer_size: 1e5
     exploration_fraction: 0.2
-    use_checkpointing: true
     target_update: 1000
     gradient_steps: 1
     double: true
@@ -57,7 +55,6 @@ variants:
     gamma: 0.99
     buffer_size: 1e5
     exploration_fraction: 0.2
-    use_checkpointing: true
     target_update: 1000
     gradient_steps: 2
     double: true
@@ -74,7 +71,6 @@ variants:
     gamma: 0.99
     buffer_size: 1e5
     exploration_fraction: 0.2
-    use_checkpointing: true
     target_update: 1000
     gradient_steps: 2
     double: true
@@ -91,7 +87,6 @@ variants:
     gamma: 0.99
     buffer_size: 1e5
     exploration_fraction: 0.2
-    use_checkpointing: true
     gradient_steps: 2
     max: 15
     min: -15
@@ -104,7 +99,6 @@ variants:
     gamma: 0.99
     buffer_size: 1e5
     exploration_fraction: 0.2
-    use_checkpointing: true
     gradient_steps: 2
     max: 15
     min: -15
@@ -118,7 +112,6 @@ variants:
     gamma: 0.99
     buffer_size: 1e5
     exploration_fraction: 0.2
-    use_checkpointing: true
     gradient_steps: 2
     max: 15
     min: -15
@@ -132,7 +125,6 @@ variants:
     gamma: 0.99
     buffer_size: 1e5
     exploration_fraction: 0.2
-    use_checkpointing: true
     gradient_steps: 8
     max: 15
     min: -15
@@ -145,7 +137,6 @@ variants:
     gamma: 0.99
     buffer_size: 1e5
     exploration_fraction: 0.2
-    use_checkpointing: true
     gradient_steps: 8
     max: 15
     min: -15
@@ -159,7 +150,6 @@ variants:
     gamma: 0.99
     buffer_size: 1e5
     exploration_fraction: 0.2
-    use_checkpointing: true
     gradient_steps: 8
     max: 15
     min: -15
