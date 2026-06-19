@@ -221,7 +221,7 @@ class Ape_X_Family(object):
 
         self.save_params(_ray().get(self.logger_server.get_log_dir.remote()))
 
-    def learn_SingleEnv(self, pbar, callback, log_interval):
+    def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
         stop = self.m.Event()
         ray = _ray()
         worker_num = len(self.workers)

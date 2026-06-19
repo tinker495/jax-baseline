@@ -50,3 +50,9 @@ def test_spr_family_forwards_clobbered_ctor_args_to_spr_owner(cls, extra, monkey
     assert isinstance(agent.categorial_min, float)
     for key, value in extra.items():
         assert getattr(agent, key) == value
+    # shift_size/prediction_depth/intensity_scale are SPR-owned constants too: the
+    # subclasses no longer pre-set them before super().__init__ (those writes were
+    # dead -- clobbered by SPR's own defaults). Guard the single owner.
+    assert agent.shift_size == 4
+    assert agent.prediction_depth == 5
+    assert agent.intensity_scale == 0.05

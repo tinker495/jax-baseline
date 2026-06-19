@@ -103,10 +103,10 @@ def off_policy_loop(agent, ctx):
     single = agent.env_type == "SingleEnv"
     ckpt = agent.use_checkpointing
     if single and ckpt:
-        engine.learn_single_env_checkpointing(ctx.pbar, None, ctx.log_interval)
+        engine.learn_single_env_checkpointing(ctx.pbar, log_interval=ctx.log_interval)
     elif single:
-        engine.learn_single_env(ctx.pbar, None, ctx.log_interval)
+        engine.learn_single_env(ctx.pbar, log_interval=ctx.log_interval)
     elif ckpt:
-        engine.learn_vectorized_env_checkpointing(ctx.pbar, None, ctx.log_interval)
+        engine.learn_vectorized_env_checkpointing(ctx.pbar, log_interval=ctx.log_interval)
     else:
-        engine.learn_vectorized_env(ctx.pbar, None, ctx.log_interval)
+        engine.learn_vectorized_env(ctx.pbar, log_interval=ctx.log_interval)

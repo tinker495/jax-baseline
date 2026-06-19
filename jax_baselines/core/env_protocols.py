@@ -7,7 +7,6 @@ instead of concrete backend packages.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
 
@@ -58,35 +57,27 @@ class SingleEnv(Protocol):
         ...
 
 
-class Env(ABC):
-    """Async-style env surface used by vectorized adapters."""
-
-    @abstractmethod
-    def __init__(self, **kwargs: Any) -> None:
-        pass
-
-    @abstractmethod
-    def get_info(self) -> dict[str, Any]:
-        pass
-
-    @abstractmethod
-    def current_obs(self) -> Any:
-        pass
-
-    @abstractmethod
-    def step(self, action: Any) -> None:
-        pass
-
-    @abstractmethod
-    def get_result(self) -> Any:
-        pass
-
-    @abstractmethod
-    def close(self) -> None:
-        pass
-
-
-class VectorizedEnv(Env):
-    """Core-facing marker for vectorized environment adapters."""
+@runtime_checkable
+class VectorizedEnv(Protocol):
+    """Async-style vectorized environment surface consumed by the core."""
 
     env_info: EnvInfo | None = None
+
+    def get_info(self) -> dict[str, Any]:
+        ...
+
+    def current_obs(self) -> Any:
+        ...
+
+    def step(self, action: Any) -> None:
+        ...
+
+    def get_result(self) -> Any:
+        ...
+
+    def close(self) -> None:
+        ...
+
+
+# Backward-compatible name exported by env_builder; no separate ABC needed.
+Env = VectorizedEnv

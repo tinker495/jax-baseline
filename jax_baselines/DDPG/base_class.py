@@ -282,9 +282,6 @@ class Deteministic_Policy_Gradient_Family(object):
     def _aggregate_train_reports(self, reports):
         return reports[-1]
 
-    def _get_actions(self, params, obses) -> np.ndarray:
-        pass
-
     def get_behavior_state(self):
         """Get state dict to use for behavior (training-time actions).
 

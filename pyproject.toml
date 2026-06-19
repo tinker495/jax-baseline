@@ -13,7 +13,6 @@ dependencies = [
     "requests",
     "protobuf",
     "swig",
-    "gymnasium",
     "gymnasium[atari,box2d,mujoco]",
     "autorom[accept-rom-license]",
     "mujoco",

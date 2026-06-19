@@ -33,14 +33,10 @@ class HL_GAUSS_SPR(SPR):
         categorial_min=-250,
         **kwargs,
     ):
-
-        self.shift_size = 4
-        self.prediction_depth = 5
-        self.intensity_scale = 0.05
-
         # Set HL_GAUSS_SPR-specific defaults. off_policy_fix/spr_weight/scaled_by_reset/
-        # categorial_* are forwarded so SPR.__init__ stays their single owner; setting
-        # them on self here would be clobbered when super() reapplies SPR's defaults.
+        # categorial_* (and shift_size/prediction_depth/intensity_scale) are owned by
+        # SPR.__init__; setting them on self here would be clobbered when super()
+        # reapplies SPR's defaults.
         hl_gauss_spr_kwargs = {
             "off_policy_fix": off_policy_fix,
             "spr_weight": spr_weight,

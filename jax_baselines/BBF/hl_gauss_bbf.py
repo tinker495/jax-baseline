@@ -31,13 +31,9 @@ class HL_GAUSS_BBF(BBF):
         categorial_min=-250,
         **kwargs,
     ):
-
-        self.shift_size = 4
-        self.prediction_depth = 5
-        self.intensity_scale = 0.05
-
         # Set HL_GAUSS_BBF-specific defaults. off_policy_fix/spr_weight/categorial_*
-        # are forwarded so SPR.__init__ stays their single owner (see BBF).
+        # (and shift_size/prediction_depth/intensity_scale) are owned by SPR.__init__
+        # (see BBF).
         hl_gauss_bbf_kwargs = {
             "off_policy_fix": off_policy_fix,
             "spr_weight": spr_weight,

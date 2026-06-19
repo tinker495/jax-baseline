@@ -205,7 +205,7 @@ class Q_Network_Family:
         return reports[-1]
 
     def _get_actions(self, params, obses) -> np.ndarray:
-        pass
+        raise NotImplementedError
 
     def _compile_common_functions(self):
         """Common JIT compilation for Q-Network family algorithms."""

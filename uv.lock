@@ -1638,7 +1638,6 @@ requires-dist = [
     { name = "equinox" },
     { name = "ffmpeg" },
     { name = "flax" },
-    { name = "gymnasium" },
     { name = "gymnasium", extras = ["atari", "box2d", "mujoco"] },
     { name = "imageio-ffmpeg" },
     { name = "jax", extras = ["cuda12"] },

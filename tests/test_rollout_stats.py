@@ -12,6 +12,8 @@ Two layers:
   counted as an episode end (the ``active``/``prev_done`` mask).
 """
 
+import inspect
+
 import numpy as np
 
 from jax_baselines.core.rollout import ActionSelection, RolloutEngine, RolloutSpec
@@ -148,6 +150,20 @@ class _NoopBuffer:
         pass
 
 
+def test_rollout_engine_keeps_legacy_callback_signature():
+    methods = [
+        RolloutEngine.learn_single_env,
+        RolloutEngine.learn_vectorized_env,
+        RolloutEngine.learn_single_env_checkpointing,
+        RolloutEngine.learn_vectorized_env_checkpointing,
+    ]
+    for method in methods:
+        inspect.signature(method).bind_partial(object(), range(1), None, 10**9)
+    inspect.signature(RolloutEngine.learn_single_env_checkpointing).bind_partial(
+        object(), range(1), None, 10**9, obs=None
+    )
+
+
 def _episode_recorder():
     records = []
 
@@ -203,7 +219,7 @@ def test_single_env_emits_completed_episode_records():
         ]
     )
     records, record = _episode_recorder()
-    RolloutEngine(_spec(env, record)).learn_single_env(range(4), None, log_interval=10**9)
+    RolloutEngine(_spec(env, record)).learn_single_env(range(4), log_interval=10**9)
 
     assert [(r["reward"], r["length"], r["timeout"]) for r in records] == [
         (2.0, 2, 0.0),
@@ -217,7 +233,7 @@ def test_single_env_accumulates_original_reward():
         infos=[{"original_reward": 10.0}, {"original_reward": 20.0}],
     )
     records, record = _episode_recorder()
-    RolloutEngine(_spec(env, record)).learn_single_env(range(2), None, log_interval=10**9)
+    RolloutEngine(_spec(env, record)).learn_single_env(range(2), log_interval=10**9)
 
     assert len(records) == 1
     assert records[0]["original"] == 30.0
@@ -232,7 +248,7 @@ def test_single_env_original_reward_waits_for_zero_lives():
         ],
     )
     records, record = _episode_recorder()
-    RolloutEngine(_spec(env, record)).learn_single_env(range(2), None, log_interval=10**9)
+    RolloutEngine(_spec(env, record)).learn_single_env(range(2), log_interval=10**9)
 
     assert [(r["reward"], r["original"]) for r in records] == [
         (1.0, None),
@@ -262,7 +278,7 @@ def test_vectorized_env_excludes_autoreset_dummy_step():
         worker_size=ws,
     )
     records, record = _episode_recorder()
-    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(4), None, log_interval=10**9)
+    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(4), log_interval=10**9)
 
     # The dummy step's reward 5 is excluded; two clean episodes recorded.
     assert [(r["reward"], r["length"], r["timeout"]) for r in records] == [
@@ -291,7 +307,7 @@ def test_vectorized_env_ignores_autoreset_dummy_done_flag():
         worker_size=ws,
     )
     records, record = _episode_recorder()
-    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(4), None, log_interval=10**9)
+    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(4), log_interval=10**9)
 
     assert [(r["reward"], r["length"], r["timeout"]) for r in records] == [
         (2.0, 2, 0.0),
@@ -321,7 +337,7 @@ def test_vectorized_env_accumulates_original_reward_from_dict_infos():
         ],
     )
     records, record = _episode_recorder()
-    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(2), None, log_interval=10**9)
+    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(2), log_interval=10**9)
 
     assert [(r["reward"], r["original"]) for r in records] == [(2.0, 40.0), (4.0, 60.0)]
 
@@ -354,7 +370,7 @@ def test_vectorized_env_respects_original_reward_presence_mask():
         ],
     )
     records, record = _episode_recorder()
-    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(2), None, log_interval=10**9)
+    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(2), log_interval=10**9)
 
     assert [(r["reward"], r["original"]) for r in records] == [(2.0, 40.0), (4.0, None)]
 
@@ -383,7 +399,7 @@ def test_vectorized_env_original_reward_waits_for_zero_lives():
         ],
     )
     records, record = _episode_recorder()
-    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(3), None, log_interval=10**9)
+    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(3), log_interval=10**9)
 
     assert [(r["reward"], r["original"]) for r in records] == [
         (1.0, None),
@@ -403,7 +419,7 @@ def test_single_env_checkpointing_emits_after_learning_starts():
     )
     records, record = _episode_recorder()
     RolloutEngine(_spec(env, record, learning_starts=0)).learn_single_env_checkpointing(
-        range(4), None, log_interval=10**9
+        range(4), log_interval=10**9
     )
 
     assert [(r["reward"], r["length"], r["timeout"]) for r in records] == [
@@ -434,7 +450,7 @@ def test_vectorized_checkpointing_excludes_dummy_and_guards_active():
     )
     records, record = _episode_recorder()
     RolloutEngine(_spec(env, record, learning_starts=0)).learn_vectorized_env_checkpointing(
-        range(4), None, log_interval=10**9
+        range(4), log_interval=10**9
     )
 
     assert [(r["reward"], r["length"], r["timeout"]) for r in records] == [
@@ -476,7 +492,7 @@ def test_vectorized_checkpointing_ignores_autoreset_dummy_done_flag():
             learning_starts=0,
             checkpoint_on_episode_end=checkpoint_on_episode_end,
         )
-    ).learn_vectorized_env_checkpointing(range(4), None, log_interval=10**9)
+    ).learn_vectorized_env_checkpointing(range(4), log_interval=10**9)
 
     assert ckpts == [(1, 2.0, 2), (3, 1.0, 1)]
     assert [(r["reward"], r["length"], r["timeout"]) for r in records] == [
@@ -512,7 +528,7 @@ def test_vectorized_checkpointing_accumulates_original_reward_from_per_worker_in
     )
     records, record = _episode_recorder()
     RolloutEngine(_spec(env, record, learning_starts=0)).learn_vectorized_env_checkpointing(
-        range(4), None, log_interval=10**9
+        range(4), log_interval=10**9
     )
 
     assert [(r["reward"], r["original"]) for r in records] == [(2.0, 30.0), (1.0, 30.0)]

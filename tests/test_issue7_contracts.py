@@ -63,6 +63,9 @@ def test_distributed_learn_contract_accepts_driver_factories(_runner, _algo, _sp
     inspect.signature(cls.learn).bind_partial(
         cls.__new__(cls),
         0,
+        callback=None,
+        reset_num_timesteps=True,
+        replay_wrapper=None,
         logger_factory=None,
         progress_factory=None,
     )
