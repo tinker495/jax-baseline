@@ -151,7 +151,7 @@ class TransitionReplayBuffer:
     def __init__(
         self,
         size: int,
-        observation_space: list = [],
+        observation_space: list | None = None,
         action_space=1,
         prediction_depth=5,
     ):
@@ -165,7 +165,7 @@ class TransitionReplayBuffer:
                     "dtype": np.uint8 if len(o) >= 3 else np.float32,
                 },
             )
-            for idx, o in enumerate(observation_space)
+            for idx, o in enumerate(observation_space or [])
         )
 
         if isinstance(action_space, int):
@@ -207,7 +207,7 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
     def __init__(
         self,
         size: int,
-        observation_space: list = [],
+        observation_space: list | None = None,
         action_space=1,
         prediction_depth=5,
         alpha: float = 0.6,

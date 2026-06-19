@@ -5,10 +5,6 @@ from __future__ import annotations
 import numpy as np
 
 
-def _as_array(values):
-    return np.asarray(values)
-
-
 class EpochBuffer(object):
     def __init__(self, epoch_size: int, observation_space: list, worker_size=1, action_space=1):
         self.epoch_size = epoch_size
@@ -42,23 +38,27 @@ class EpochBuffer(object):
         for worker_buffer in self.local_buffers:
             transitions["obses"].append(
                 [
-                    _as_array([record["obses"][obs_idx] for record in worker_buffer])
+                    np.asarray([record["obses"][obs_idx] for record in worker_buffer])
                     for obs_idx in range(len(self.observation_space))
                 ]
             )
-            transitions["actions"].append(_as_array([record["action"] for record in worker_buffer]))
-            transitions["rewards"].append(_as_array([record["reward"] for record in worker_buffer]))
+            transitions["actions"].append(
+                np.asarray([record["action"] for record in worker_buffer])
+            )
+            transitions["rewards"].append(
+                np.asarray([record["reward"] for record in worker_buffer])
+            )
             transitions["nxtobses"].append(
                 [
-                    _as_array([record["nxtobses"][obs_idx] for record in worker_buffer])
+                    np.asarray([record["nxtobses"][obs_idx] for record in worker_buffer])
                     for obs_idx in range(len(self.observation_space))
                 ]
             )
             transitions["terminateds"].append(
-                _as_array([record["terminated"] for record in worker_buffer])
+                np.asarray([record["terminated"] for record in worker_buffer])
             )
             transitions["truncateds"].append(
-                _as_array([record["truncated"] for record in worker_buffer])
+                np.asarray([record["truncated"] for record in worker_buffer])
             )
             worker_buffer.clear()
         return transitions
