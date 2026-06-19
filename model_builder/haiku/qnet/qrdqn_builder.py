@@ -56,7 +56,7 @@ class Model(hk.Module):
                 hk.Reshape((self.action_size[0], self.support_n)),
             ]
         )(feature)
-        return v + a - jnp.max(a, axis=1, keepdims=True)
+        return v + a - jnp.mean(a, axis=1, keepdims=True)
 
 
 def model_builder_maker(

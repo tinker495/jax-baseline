@@ -70,7 +70,7 @@ class Model(hk.Module):
                     )
                 ]
             )(mul_embedding)
-            return v + a - jnp.max(a, axis=1, keepdims=True)
+            return v + a - jnp.mean(a, axis=1, keepdims=True)
 
         out = jax.vmap(qnet, in_axes=(None, 2), out_axes=2)(
             feature, costau

@@ -49,7 +49,7 @@ class Model(nn.Module):
                 ]
                 + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.01))]
             )(feature)
-            return v + a - jnp.max(a, axis=1, keepdims=True)
+            return v + a - jnp.mean(a, axis=1, keepdims=True)
 
 
 def model_builder_maker(observation_space, action_space, dueling_model, param_noise, policy_kwargs):

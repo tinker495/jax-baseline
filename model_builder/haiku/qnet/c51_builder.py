@@ -65,7 +65,7 @@ class Model(hk.Module):
                 hk.Reshape((self.action_size[0], self.categorial_bar_n)),
             ]
         )(feature)
-        q = v + a - jnp.max(a, axis=1, keepdims=True)
+        q = v + a - jnp.mean(a, axis=1, keepdims=True)
         return jax.nn.softmax(q, axis=2)
 
 

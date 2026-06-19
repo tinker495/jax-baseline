@@ -28,7 +28,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
             def actor(self, x):
                 return self.act(x)
 
-        class Merged_Critics(nn.Module):
+        class Merged_Critic(nn.Module):
             def setup(self):
                 self.crit1 = Critic(**policy_kwargs)
                 self.crit2 = Critic(**policy_kwargs)
@@ -41,7 +41,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         model_actor = Merged_Actor()
         preproc_fn = get_apply_fn_flax_module(model_actor, model_actor.preprocess)
         actor_fn = get_apply_fn_flax_module(model_actor, model_actor.actor)
-        model_critic = Merged_Critics()
+        model_critic = Merged_Critic()
         critic_fn = get_apply_fn_flax_module(model_critic)
         if key is not None:
             policy_params = model_actor.init(

@@ -42,7 +42,7 @@ class Model(hk.Module):
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [self.layer(self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
         )(feature)
-        return v + a - jnp.max(a, axis=1, keepdims=True)
+        return v + a - jnp.mean(a, axis=1, keepdims=True)
 
 
 def model_builder_maker(observation_space, action_space, dueling_model, param_noise, policy_kwargs):

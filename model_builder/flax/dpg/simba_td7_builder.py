@@ -114,7 +114,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 zs = self.encoder(feature)
                 return feature, zs
 
-        class Merged_critic(nn.Module):
+        class Merged_Critic(nn.Module):
             def setup(self):
                 self.crit1 = Critic(**policy_kwargs)
                 self.crit2 = Critic(**policy_kwargs)
@@ -131,7 +131,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         encoder_fn = get_apply_fn_flax_module(encoder_model, encoder_model.encoder)
         action_encoder_fn = get_apply_fn_flax_module(encoder_model, encoder_model.action_encoder)
         policy_model = Actor(action_size=action_size)
-        critic_model = Merged_critic()
+        critic_model = Merged_Critic()
         actor_fn = get_apply_fn_flax_module(policy_model)
         critic_fn = get_apply_fn_flax_module(critic_model)
         if key is not None:

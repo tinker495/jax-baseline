@@ -64,7 +64,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
     policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
 
     def model_builder(key=None, print_model=False):
-        class ActorMerged(nn.Module):
+        class Merged_Actor(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
                 self.act = Actor(action_size, **policy_kwargs)
@@ -79,7 +79,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
             def actor(self, x, training: bool = True):
                 return self.act(x, training)
 
-        class CriticsMerged(nn.Module):
+        class Merged_Critic(nn.Module):
             def setup(self):
                 self.crit1 = Critic(**policy_kwargs)
                 self.crit2 = Critic(**policy_kwargs)
@@ -87,8 +87,8 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
             def __call__(self, x, a, training: bool = True):
                 return self.crit1(x, a, training), self.crit2(x, a, training)
 
-        actor_model = ActorMerged()
-        critics_model = CriticsMerged()
+        actor_model = Merged_Actor()
+        critics_model = Merged_Critic()
         preproc_fn = get_apply_fn_flax_module(actor_model, actor_model.preprocess)
         actor_fn = get_apply_fn_flax_module(actor_model, actor_model.actor)
         critic_fn = get_apply_fn_flax_module(critics_model)

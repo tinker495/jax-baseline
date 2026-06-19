@@ -63,7 +63,7 @@ class Model(nn.Module):
                     ]
                     + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))]
                 )(mul_embedding)
-                q = v + a - jnp.max(a, axis=1, keepdims=True)
+                q = v + a - jnp.mean(a, axis=1, keepdims=True)
                 return q
 
         out = jax.vmap(qnet, in_axes=(None, 2), out_axes=2)(
