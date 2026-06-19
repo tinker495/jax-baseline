@@ -29,6 +29,4 @@ variants:
   - {algo: TQC, simba: true}
   - {algo: TQC, simbav2: true}
   - {algo: TD7}
-  - {algo: TD7, simba: true}
-  - {algo: TD7, simbav2: true}
   - {algo: CrossQ}
