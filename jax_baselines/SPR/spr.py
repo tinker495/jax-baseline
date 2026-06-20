@@ -3,9 +3,14 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from jax_baselines.core.bulk_training import flatten_bulk_batch
 from jax_baselines.core.replay_protocol import require_replay_factory
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.DQN.training import QNetTrainReport, QNetTrainResult
+from jax_baselines.DQN.training import (
+    QNetTrainContext,
+    QNetTrainReport,
+    QNetTrainResult,
+)
 from jax_baselines.math.distributional import (
     CategoricalBackend,
     MunchausenSpec,
@@ -21,7 +26,7 @@ from jax_baselines.math.param_updates import (
 
 
 class SPR(Q_Network_Family):
-    _qnet_handles_train_pulse = True
+    supports_bulk_training = True
 
     def __init__(
         self,
@@ -164,14 +169,32 @@ class SPR(Q_Network_Family):
             metrics={"loss/rprloss": rprloss},
         )
 
+    def _train_on_bulk(self, data, contexts):
+        result = self._train_on_batch(
+            flatten_bulk_batch(data),
+            QNetTrainContext(
+                steps=contexts[0].steps,
+                train_steps_count=contexts[0].train_steps_count,
+                gradient_steps=len(contexts),
+            ),
+        )
+        result.report.update_count = len(contexts)
+        return result
+
     def _aggregate_train_reports(self, reports):
-        mean_loss = jnp.mean(jnp.array([report.loss for report in reports]))
-        mean_target = jnp.mean(jnp.array([report.target for report in reports]))
-        mean_rprloss = jnp.mean(jnp.array([report.metrics["loss/rprloss"] for report in reports]))
+        counts = jnp.array([report.update_count for report in reports])
+        total = jnp.sum(counts)
+        mean_loss = jnp.sum(jnp.array([report.loss for report in reports]) * counts) / total
+        mean_target = jnp.sum(jnp.array([report.target for report in reports]) * counts) / total
+        mean_rprloss = (
+            jnp.sum(jnp.array([report.metrics["loss/rprloss"] for report in reports]) * counts)
+            / total
+        )
         return QNetTrainReport(
             loss=mean_loss,
             target=mean_target,
             metrics={"loss/rprloss": mean_rprloss},
+            update_count=int(total),
         )
 
     def _image_augmentation(self, obs, key):

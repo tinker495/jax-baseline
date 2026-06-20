@@ -77,6 +77,7 @@ def add_args(parser):
     parser.add_argument("--optimizer", type=str, default="adamw", help="optimaizer")
     parser.add_argument("--train_freq", type=int, default=1, help="train_frequancy")
     parser.add_argument("--gradient_steps", type=int, default=1, help="gradient steps")
+    parser.add_argument("--max_bulk_updates_per_pulse", type=int, default=32)
     parser.add_argument("--learning_starts", type=int, default=5000, help="learning start")
     parser.add_argument(
         "--exploration_fraction", type=float, default=0.3, help="exploration fraction"
@@ -114,6 +115,7 @@ def _common(a):
         "n_step": a.n_step,
         "munchausen": a.munchausen,
         "gradient_steps": a.gradient_steps,
+        "max_bulk_updates_per_pulse": a.max_bulk_updates_per_pulse,
         "train_freq": a.train_freq,
         "learning_starts": a.learning_starts,
         "exploration_fraction": a.exploration_fraction,
@@ -187,6 +189,7 @@ ALGOS = {
             "scaled_by_reset": a.scaled_by_reset,
             "munchausen": a.munchausen,
             "gradient_steps": a.gradient_steps,
+            "max_bulk_updates_per_pulse": a.max_bulk_updates_per_pulse,
             "learning_starts": a.learning_starts,
             "categorial_max": a.max,
             "categorial_min": a.min,
@@ -214,6 +217,7 @@ ALGOS = {
             "off_policy_fix": a.off_policy_fix,
             "munchausen": a.munchausen,
             "gradient_steps": a.gradient_steps,
+            "max_bulk_updates_per_pulse": a.max_bulk_updates_per_pulse,
             "train_freq": a.train_freq,
             "learning_starts": a.learning_starts,
             "categorial_max": a.max,

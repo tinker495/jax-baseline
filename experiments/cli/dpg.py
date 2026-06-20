@@ -65,6 +65,7 @@ def add_args(parser):
     parser.add_argument("--action_noise", type=float, default=0.1, help="action_noise")
     parser.add_argument("--optimizer", type=str, default="adopt", help="optimaizer")
     parser.add_argument("--gradient_steps", type=int, default=1, help="gradient_steps")
+    parser.add_argument("--max_bulk_updates_per_pulse", type=int, default=32)
     parser.add_argument("--train_freq", type=int, default=1, help="train_frequancy")
     parser.add_argument("--critic_num", type=int, default=2, help="tqc critic number")
     parser.add_argument("--ent_coef", type=str, default="auto", help="sac entropy coefficient")
@@ -109,6 +110,7 @@ def _common(a):
         "train_freq": a.train_freq,
         "seed": a.seed,
         "gradient_steps": a.gradient_steps,
+        "max_bulk_updates_per_pulse": a.max_bulk_updates_per_pulse,
         "log_dir": a.logdir,
         "optimizer_factory": make_batch_scaled_optimizer_factory(a.optimizer, a.batch),
         "replay_factory": default_replay_factory(),
@@ -181,6 +183,7 @@ ALGOS = {
             "simba_v2": a.simbav2,
             "seed": a.seed,
             "gradient_steps": a.gradient_steps,
+            "max_bulk_updates_per_pulse": a.max_bulk_updates_per_pulse,
             "log_dir": a.logdir,
             "optimizer_factory": make_batch_scaled_optimizer_factory(a.optimizer, a.batch),
             "replay_factory": default_replay_factory(),

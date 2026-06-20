@@ -1,6 +1,7 @@
 from copy import deepcopy
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 
 from jax_baselines.core.checkpoint import make_checkpoint_scaffold
@@ -19,13 +20,13 @@ from jax_baselines.core.rollout_stats import EpisodeTracker
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.serialization import restore, save
 from jax_baselines.core.training_session import TrainingSession, off_policy_loop
-from jax_baselines.DQN.training import QNetTrainingLifecycle
+from jax_baselines.DQN.training import QNetTrainingLifecycle, QNetTrainReport
 from jax_baselines.math.schedules import ConstantSchedule, LinearSchedule
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 class Q_Network_Family:
-    _qnet_handles_train_pulse = False
+    supports_bulk_training = False
 
     def __init__(
         self,
@@ -41,6 +42,7 @@ class Q_Network_Family:
         exploration_initial_eps=1.0,
         train_freq=1,
         gradient_steps=1,
+        max_bulk_updates_per_pulse=32,
         batch_size=32,
         double_q=False,
         dueling_model=False,
@@ -83,6 +85,7 @@ class Q_Network_Family:
         self.learning_starts = learning_starts
         self.train_freq = train_freq
         self.gradient_steps = gradient_steps
+        self.max_bulk_updates_per_pulse = max_bulk_updates_per_pulse
         self.prioritized_replay = prioritized_replay
         self.prioritized_replay_eps = prioritized_replay_eps
         self.batch_size = batch_size
@@ -202,7 +205,35 @@ class Q_Network_Family:
         raise NotImplementedError
 
     def _aggregate_train_reports(self, reports):
-        return reports[-1]
+        if len(reports) == 1:
+            return reports[-1]
+        counts = jnp.array([report.update_count for report in reports])
+        total = jnp.sum(counts)
+        metrics = {
+            name: jnp.sum(jnp.array([report.metrics[name] for report in reports]) * counts) / total
+            for name in reports[-1].metrics
+            if all(name in report.metrics for report in reports)
+        }
+        histograms = {
+            name: jnp.sum(
+                jnp.stack([report.histograms[name] for report in reports])
+                * counts.reshape((-1, *([1] * len(reports[-1].histograms[name].shape)))),
+                axis=0,
+            )
+            / total
+            for name in reports[-1].histograms
+            if all(name in report.histograms for report in reports)
+        }
+        target = None
+        if all(report.target is not None for report in reports):
+            target = jnp.sum(jnp.array([report.target for report in reports]) * counts) / total
+        return QNetTrainReport(
+            loss=jnp.sum(jnp.array([report.loss for report in reports]) * counts) / total,
+            target=target,
+            metrics=metrics,
+            histograms=histograms,
+            update_count=int(total),
+        )
 
     def _get_actions(self, params, obses) -> np.ndarray:
         raise NotImplementedError

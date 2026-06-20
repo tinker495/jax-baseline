@@ -158,6 +158,16 @@ def test_dpg_td7_build_omits_forced_internal_defaults():
         assert forced not in built, f"TD7 build() must not pass {forced}: TD7 forces it internally"
 
 
+def test_dpg_td7_build_forwards_bulk_chunk_cap():
+    from experiments.cli.dpg import DPG_RUNNER
+
+    built = DPG_RUNNER.algos["TD7"].build(
+        _parse(DPG_RUNNER, ["--algo", "TD7", "--max_bulk_updates_per_pulse", "3"])
+    )
+
+    assert built["max_bulk_updates_per_pulse"] == 3
+
+
 # ---------------------------------------------------------------------------
 # qnet-specific
 # ---------------------------------------------------------------------------
@@ -177,6 +187,17 @@ def test_qnet_hl_gauss_selects_class(algo: str, base: str, hl: str):
     spec = QNET_RUNNER.algos[algo]
     assert spec.resolve_cls(_parse(QNET_RUNNER, ["--algo", algo])).__name__ == base
     assert spec.resolve_cls(_parse(QNET_RUNNER, ["--algo", algo, "--hl_gauss"])).__name__ == hl
+
+
+@pytest.mark.parametrize("algo", ["DQN", "SPR", "BBF"])
+def test_qnet_build_forwards_bulk_chunk_cap(algo: str):
+    from experiments.cli.qnet import QNET_RUNNER
+
+    built = QNET_RUNNER.algos[algo].build(
+        _parse(QNET_RUNNER, ["--algo", algo, "--max_bulk_updates_per_pulse", "3"])
+    )
+
+    assert built["max_bulk_updates_per_pulse"] == 3
 
 
 def test_qnet_bbf_optimizer_policy_preserves_plain_bbf_cli_optimizer(monkeypatch):

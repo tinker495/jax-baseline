@@ -21,12 +21,14 @@ from jax_baselines.core.rollout_stats import EpisodeTracker
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.serialization import restore, save
 from jax_baselines.core.training_session import TrainingSession, off_policy_loop
-from jax_baselines.DDPG.training import DPGTrainingLifecycle
+from jax_baselines.DDPG.training import DPGTrainingLifecycle, DPGTrainReport
 from jax_baselines.math.statistics import RunningMeanStd
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 class Deteministic_Policy_Gradient_Family(object):
+    supports_bulk_training = False
+
     def __init__(
         self,
         env_builder: callable,
@@ -38,6 +40,7 @@ class Deteministic_Policy_Gradient_Family(object):
         buffer_size=50000,
         train_freq=1,
         gradient_steps=1,
+        max_bulk_updates_per_pulse=32,
         batch_size=32,
         n_step=1,
         learning_starts=1000,
@@ -78,6 +81,7 @@ class Deteministic_Policy_Gradient_Family(object):
         self.learning_starts = learning_starts
         self.train_freq = train_freq
         self.gradient_steps = gradient_steps
+        self.max_bulk_updates_per_pulse = max_bulk_updates_per_pulse
         self.prioritized_replay = prioritized_replay
         self.prioritized_replay_eps = prioritized_replay_eps
         self.batch_size = batch_size
@@ -280,7 +284,24 @@ class Deteministic_Policy_Gradient_Family(object):
         raise NotImplementedError
 
     def _aggregate_train_reports(self, reports):
-        return reports[-1]
+        if len(reports) == 1:
+            return reports[-1]
+        counts = jnp.array([report.update_count for report in reports])
+        total = jnp.sum(counts)
+        metrics = {
+            name: jnp.sum(jnp.array([report.metrics[name] for report in reports]) * counts) / total
+            for name in reports[-1].metrics
+            if all(name in report.metrics for report in reports)
+        }
+        target = None
+        if all(report.target is not None for report in reports):
+            target = jnp.sum(jnp.array([report.target for report in reports]) * counts) / total
+        return DPGTrainReport(
+            loss=jnp.sum(jnp.array([report.loss for report in reports]) * counts) / total,
+            target=target,
+            metrics=metrics,
+            update_count=int(total),
+        )
 
     def get_behavior_state(self):
         """Get state dict to use for behavior (training-time actions).

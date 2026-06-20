@@ -10,6 +10,16 @@ tuple returns and translate them into a lifecycle result on the Python side via
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from jax_baselines.core.bulk_training import (
+    bulk_chunk_size,
+    bulk_train_hook,
+    flatten_priority_values,
+    make_train_contexts,
+    normalize_bulk_weights,
+    reshape_bulk_batch,
+    uses_bulk_pulse,
+)
+
 
 @dataclass(frozen=True)
 class QNetTrainContext:
@@ -28,6 +38,7 @@ class QNetTrainReport:
     target: object = None
     metrics: dict = field(default_factory=dict)
     histograms: dict = field(default_factory=dict)
+    update_count: int = 1
 
     def __post_init__(self):
         metrics = dict(self.metrics)
@@ -58,6 +69,7 @@ class QNetTrainResult:
         replay_priorities=None,
         metrics=None,
         histograms=None,
+        update_count=1,
     ):
         return cls(
             report=QNetTrainReport(
@@ -65,6 +77,7 @@ class QNetTrainResult:
                 target=target,
                 metrics={} if metrics is None else metrics,
                 histograms={} if histograms is None else histograms,
+                update_count=update_count,
             ),
             replay_priorities=replay_priorities,
         )
@@ -78,7 +91,6 @@ class QNetTrainingAgentProtocol(Protocol):
     cadence.
     """
 
-    _qnet_handles_train_pulse: bool
     batch_size: int
     gradient_steps: int
     log_interval: int
@@ -88,6 +100,7 @@ class QNetTrainingAgentProtocol(Protocol):
     replay_buffer: object
     train_steps_count: int
     _last_log_step: int
+    max_bulk_updates_per_pulse: int
 
     def _sample_batch(self, batch_size=None):
         pass
@@ -109,7 +122,7 @@ class QNetTrainingLifecycle:
         if gradient_steps <= 0:
             raise ValueError("gradient_steps must be greater than 0")
 
-        if self.agent._qnet_handles_train_pulse:
+        if self._uses_bulk_pulse(gradient_steps):
             report = self._train_one_pulse(steps, gradient_steps)
         else:
             reports = []
@@ -120,6 +133,9 @@ class QNetTrainingLifecycle:
 
         self._log_report(report, steps)
         return report.loss
+
+    def _uses_bulk_pulse(self, gradient_steps):
+        return uses_bulk_pulse(self.agent, gradient_steps)
 
     def _train_one_batch(self, steps, gradient_steps):
         self.agent.train_steps_count += 1
@@ -134,34 +150,40 @@ class QNetTrainingLifecycle:
         return result.report
 
     def _train_one_pulse(self, steps, gradient_steps):
-        fixed_chunk_size = self.agent.gradient_steps
-        if fixed_chunk_size <= 0:
-            raise ValueError("agent.gradient_steps must be greater than 0")
-        if gradient_steps % fixed_chunk_size != 0:
-            raise ValueError(
-                "chunked Q-Net training requires gradient_steps to be divisible by "
-                f"agent.gradient_steps ({fixed_chunk_size}); got {gradient_steps}"
-            )
+        """Run chunked bulk updates.
 
-        num_chunks = gradient_steps // fixed_chunk_size
+        Bulk mode is a throughput path: one replay sample is split into mini-updates,
+        then PER priorities are written back once for the sampled chunk.
+        """
+        max_chunk = bulk_chunk_size(self.agent)
+        train_on_bulk = bulk_train_hook(self.agent)
 
         reports = []
-        for _ in range(num_chunks):
-            data = self.agent._sample_batch(fixed_chunk_size * self.agent.batch_size)
-            context = QNetTrainContext(
-                steps=steps,
-                train_steps_count=self.agent.train_steps_count,
-                gradient_steps=fixed_chunk_size,
+        remaining = int(gradient_steps)
+        while remaining >= max_chunk:
+            contexts = make_train_contexts(
+                self.agent,
+                QNetTrainContext,
+                steps,
+                max_chunk,
+                gradient_steps=max_chunk,
             )
-            result = self._normalise_train_result(self.agent._train_on_batch(data, context))
-            self.agent.train_steps_count += fixed_chunk_size
+            data = self.agent._sample_batch(max_chunk * self.agent.batch_size)
+            data = self._reshape_bulk_batch(data, max_chunk)
+            data = normalize_bulk_weights(data)
+            result = self._normalise_train_result(train_on_bulk(data, contexts))
             self._update_priorities(data, result)
             reports.append(result.report)
+            remaining -= max_chunk
 
-        if len(reports) == 0:
-            raise ValueError("gradient_steps must include at least one training chunk")
+        while remaining > 0:
+            reports.append(self._train_one_batch(steps, gradient_steps))
+            remaining -= 1
 
         return self.agent._aggregate_train_reports(reports)
+
+    def _reshape_bulk_batch(self, data, chunk_size):
+        return reshape_bulk_batch(data, chunk_size, self.agent.batch_size)
 
     def _normalise_train_result(self, result):
         if isinstance(result, QNetTrainResult):
@@ -187,7 +209,9 @@ class QNetTrainingLifecycle:
                 "when prioritized_replay is enabled"
             )
 
-        self.agent.replay_buffer.update_priorities(data["indexes"], result.replay_priorities)
+        indexes = flatten_priority_values(data["indexes"])
+        priorities = flatten_priority_values(result.replay_priorities)
+        self.agent.replay_buffer.update_priorities(indexes, priorities)
 
     def _log_report(self, report, steps):
         logger_run = self.agent.logger_run

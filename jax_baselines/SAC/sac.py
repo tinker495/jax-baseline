@@ -22,6 +22,8 @@ class SACCheckpointParams:
 
 
 class SAC(Deteministic_Policy_Gradient_Family):
+    supports_bulk_training = True
+
     def __init__(self, env_builder: callable, model_builder_maker, ent_coef="auto", **kwargs):
 
         self._ent_coef = ent_coef
@@ -53,6 +55,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
         self._train_ent_coef = jax.jit(self._train_ent_coef)
+        self._bulk_scan = jax.jit(self._bulk_scan)
 
     def checkpoint_params(self):
         return SACCheckpointParams(
@@ -115,6 +118,75 @@ class SAC(Deteministic_Policy_Gradient_Family):
             new_priorities=new_priorities,
             metrics={"loss/ent_coef": np.exp(self.log_ent_coef)},
         )
+
+    def _train_on_bulk(self, data, contexts):
+        steps = jnp.asarray([context.train_steps_count for context in contexts])
+        keys = jax.random.split(next(self.key_seq), len(contexts))
+        carry = (
+            self.policy_params,
+            self.critic_params,
+            self.target_critic_params,
+            self.opt_policy_state,
+            self.opt_critic_state,
+            self.log_ent_coef,
+        )
+        (
+            self.policy_params,
+            self.critic_params,
+            self.target_critic_params,
+            self.opt_policy_state,
+            self.opt_critic_state,
+            self.log_ent_coef,
+        ), (losses, targets, ent_coefs, priorities) = self._bulk_scan(carry, keys, steps, data)
+        return DPGTrainReport(
+            loss=losses[-1],
+            target=targets[-1],
+            new_priorities=priorities,
+            metrics={"loss/ent_coef": np.exp(ent_coefs[-1])},
+        )
+
+    def _bulk_scan(self, carry, keys, steps, data):
+        def train_one(carry, xs):
+            (
+                policy_params,
+                critic_params,
+                target_critic_params,
+                opt_policy_state,
+                opt_critic_state,
+                log_ent_coef,
+            ) = carry
+            key, step, batch = xs
+            (
+                policy_params,
+                critic_params,
+                target_critic_params,
+                opt_policy_state,
+                opt_critic_state,
+                loss,
+                t_mean,
+                log_ent_coef,
+                priorities,
+            ) = self._train_step(
+                policy_params,
+                critic_params,
+                target_critic_params,
+                opt_policy_state,
+                opt_critic_state,
+                key,
+                step,
+                log_ent_coef,
+                **batch,
+            )
+            return (
+                policy_params,
+                critic_params,
+                target_critic_params,
+                opt_policy_state,
+                opt_critic_state,
+                log_ent_coef,
+            ), (loss, t_mean, log_ent_coef, priorities)
+
+        return jax.lax.scan(train_one, carry, (keys, steps, data))
 
     def _train_step(
         self,

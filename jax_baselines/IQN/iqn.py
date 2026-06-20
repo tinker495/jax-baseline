@@ -14,6 +14,8 @@ from jax_baselines.math.policy_math import q_log_pi
 
 
 class IQN(Q_Network_Family):
+    supports_bulk_training = True
+
     def __init__(
         self,
         env_builder: callable,
@@ -46,6 +48,7 @@ class IQN(Q_Network_Family):
 
         # Use common JIT compilation
         self._compile_common_functions()
+        self._bulk_scan = jax.jit(self._bulk_scan)
 
     def get_q(self, params, obses, tau, key=None) -> jnp.ndarray:
         return self.model(params, key, self.preproc(params, key, obses), tau)
@@ -93,6 +96,39 @@ class IQN(Q_Network_Family):
             replay_priorities=new_priorities,
             metrics={"loss/target_stds": t_std},
         )
+
+    def _train_on_bulk(self, data, contexts):
+        steps = jnp.asarray([context.train_steps_count for context in contexts])
+        keys = jax.random.split(next(self.key_seq), len(contexts))
+        carry = (self.params, self.target_params, self.opt_state)
+        (self.params, self.target_params, self.opt_state), (
+            losses,
+            targets,
+            target_stds,
+            priorities,
+        ) = self._bulk_scan(carry, keys, steps, data)
+        return QNetTrainResult.from_values(
+            loss=losses[-1],
+            target=targets[-1],
+            replay_priorities=priorities,
+            metrics={"loss/target_stds": target_stds[-1]},
+        )
+
+    def _bulk_scan(self, carry, keys, steps, data):
+        def train_one(carry, xs):
+            params, target_params, opt_state = carry
+            step, key, batch = xs
+            params, target_params, opt_state, loss, t_mean, t_std, priorities = self._train_step(
+                params,
+                target_params,
+                opt_state,
+                step,
+                key,
+                **batch,
+            )
+            return (params, target_params, opt_state), (loss, t_mean, t_std, priorities)
+
+        return jax.lax.scan(train_one, carry, (steps, keys, data))
 
     def _train_step(
         self,

@@ -26,6 +26,8 @@ class TD7CheckpointParams:
 
 
 class TD7(Deteministic_Policy_Gradient_Family):
+    supports_bulk_training = True
+
     def __init__(
         self,
         env_builder: callable,
@@ -90,6 +92,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.opt_critic_state = self.optimizer.init(self.critic_params)
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
+        self._bulk_scan = jax.jit(self._bulk_scan)
 
     def checkpoint_params(self):
         return TD7CheckpointParams(
@@ -179,15 +182,114 @@ class TD7(Deteministic_Policy_Gradient_Family):
             metrics={"loss/encoder_loss": repr_loss},
         )
 
-    def _aggregate_train_reports(self, reports):
-        mean_repr_loss = jnp.mean(
-            jnp.array([report.metrics["loss/encoder_loss"] for report in reports])
+    def _train_on_bulk(self, data, contexts):
+        steps = jnp.asarray([context.train_steps_count for context in contexts])
+        keys = jax.random.split(next(self.key_seq), len(contexts))
+        carry = (
+            self.encoder_params,
+            self.policy_params,
+            self.critic_params,
+            self.fixed_encoder_params,
+            self.fixed_encoder_target_params,
+            self.target_policy_params,
+            self.target_critic_params,
+            self.encoder_opt_state,
+            self.opt_policy_state,
+            self.opt_critic_state,
         )
-        mean_loss = jnp.mean(jnp.array([report.loss for report in reports]))
-        mean_target = jnp.mean(jnp.array([report.target for report in reports]))
+        (
+            self.encoder_params,
+            self.policy_params,
+            self.critic_params,
+            self.fixed_encoder_params,
+            self.fixed_encoder_target_params,
+            self.target_policy_params,
+            self.target_critic_params,
+            self.encoder_opt_state,
+            self.opt_policy_state,
+            self.opt_critic_state,
+        ), (repr_losses, losses, targets, priorities) = self._bulk_scan(carry, keys, steps, data)
+        return DPGTrainReport(
+            loss=jnp.mean(losses),
+            target=jnp.mean(targets),
+            new_priorities=priorities,
+            metrics={"loss/encoder_loss": jnp.mean(repr_losses)},
+            update_count=len(contexts),
+        )
+
+    def _bulk_scan(self, carry, keys, steps, data):
+        def train_one(carry, xs):
+            (
+                encoder_params,
+                policy_params,
+                critic_params,
+                fixed_encoder_params,
+                fixed_encoder_target_params,
+                target_policy_params,
+                target_critic_params,
+                encoder_opt_state,
+                opt_policy_state,
+                opt_critic_state,
+            ) = carry
+            key, step, batch = xs
+            (
+                encoder_params,
+                policy_params,
+                critic_params,
+                fixed_encoder_params,
+                fixed_encoder_target_params,
+                target_policy_params,
+                target_critic_params,
+                encoder_opt_state,
+                opt_policy_state,
+                opt_critic_state,
+                repr_loss,
+                loss,
+                t_mean,
+                priorities,
+            ) = self._train_step(
+                encoder_params,
+                policy_params,
+                critic_params,
+                fixed_encoder_params,
+                fixed_encoder_target_params,
+                target_policy_params,
+                target_critic_params,
+                encoder_opt_state,
+                opt_policy_state,
+                opt_critic_state,
+                key,
+                step,
+                **batch,
+            )
+            return (
+                encoder_params,
+                policy_params,
+                critic_params,
+                fixed_encoder_params,
+                fixed_encoder_target_params,
+                target_policy_params,
+                target_critic_params,
+                encoder_opt_state,
+                opt_policy_state,
+                opt_critic_state,
+            ), (repr_loss, loss, t_mean, priorities)
+
+        return jax.lax.scan(train_one, carry, (keys, steps, data))
+
+    def _aggregate_train_reports(self, reports):
+        counts = jnp.array([report.update_count for report in reports])
+        total = jnp.sum(counts)
+        mean_repr_loss = (
+            jnp.sum(jnp.array([report.metrics["loss/encoder_loss"] for report in reports]) * counts)
+            / total
+        )
+        mean_loss = jnp.sum(jnp.array([report.loss for report in reports]) * counts) / total
+        mean_target = jnp.sum(jnp.array([report.target for report in reports]) * counts) / total
         return DPGTrainReport(
             loss=mean_loss,
             target=mean_target,
+            update_count=int(total),
             metrics={
                 "loss/encoder_loss": mean_repr_loss,
                 "loss/min_value": self.critic_params["values"]["min_value"],

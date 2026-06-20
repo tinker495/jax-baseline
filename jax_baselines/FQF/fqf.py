@@ -15,6 +15,8 @@ from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 class FQF(Q_Network_Family):
+    supports_bulk_training = True
+
     def __init__(
         self,
         env_builder: callable,
@@ -58,6 +60,7 @@ class FQF(Q_Network_Family):
 
         # Use common JIT compilation
         self._compile_common_functions()
+        self._bulk_scan = jax.jit(self._bulk_scan)
 
     def actions(self, obs, epsilon, eval_mode=False):
         params_to_use = self.get_behavior_params()
@@ -123,6 +126,68 @@ class FQF(Q_Network_Family):
             metrics={"loss/fqf_loss": fqf_loss, "loss/target_stds": t_std},
             histograms={"loss/tau": tau},
         )
+
+    def _train_on_bulk(self, data, contexts):
+        steps = jnp.asarray([context.train_steps_count for context in contexts])
+        keys = jax.random.split(next(self.key_seq), len(contexts))
+        carry = (
+            self.params,
+            self.fqf_params,
+            self.target_params,
+            self.opt_state,
+            self.fqf_opt_state,
+        )
+        (self.params, self.fqf_params, self.target_params, self.opt_state, self.fqf_opt_state), (
+            losses,
+            fqf_losses,
+            targets,
+            target_stds,
+            taus,
+            priorities,
+        ) = self._bulk_scan(carry, keys, steps, data)
+        return QNetTrainResult.from_values(
+            loss=losses[-1],
+            target=targets[-1],
+            replay_priorities=priorities,
+            metrics={"loss/fqf_loss": fqf_losses[-1], "loss/target_stds": target_stds[-1]},
+            histograms={"loss/tau": taus[-1]},
+        )
+
+    def _bulk_scan(self, carry, keys, steps, data):
+        def train_one(carry, xs):
+            params, fqf_params, target_params, opt_state, fqf_opt_state = carry
+            step, key, batch = xs
+            (
+                params,
+                fqf_params,
+                target_params,
+                opt_state,
+                fqf_opt_state,
+                loss,
+                fqf_loss,
+                t_mean,
+                t_std,
+                tau,
+                priorities,
+            ) = self._train_step(
+                params,
+                fqf_params,
+                target_params,
+                opt_state,
+                fqf_opt_state,
+                step,
+                key,
+                **batch,
+            )
+            return (
+                params,
+                fqf_params,
+                target_params,
+                opt_state,
+                fqf_opt_state,
+            ), (loss, fqf_loss, t_mean, t_std, tau, priorities)
+
+        return jax.lax.scan(train_one, carry, (steps, keys, data))
 
     def _train_step(
         self,

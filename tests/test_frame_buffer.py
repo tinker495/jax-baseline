@@ -6,6 +6,8 @@ from collections import deque
 import numpy as np
 import pytest
 
+from jax_baselines.core.bulk_training import iter_bulk_batches
+from jax_baselines.DQN.training import QNetTrainingLifecycle, QNetTrainResult
 from replay_memory.cpprb_buffers import NstepReplayBuffer
 from replay_memory.frame_buffers import (
     FrameStackReplayBuffer,
@@ -103,6 +105,53 @@ def test_prioritized_sample_consistent_with_ground_truth():
     assert (s["weights"] > 0).all() and (s["weights"] <= 1.0 + 1e-6).all()
     pri.update_priorities(leaves, np.abs(np.random.randn(64)).astype(np.float32) + 0.1)
     assert pri.sample(16)["obses"][0].shape == (16, H, W, S)
+
+
+class _FrameBufferBulkAgent:
+    def __init__(self, replay_buffer):
+        self.replay_buffer = replay_buffer
+        self.batch_size = 4
+        self.max_bulk_updates_per_pulse = 2
+        self.prioritized_replay = True
+        self.prioritized_replay_beta0 = 0.4
+        self.train_steps_count = 0
+        self.logger_run = None
+        self._last_log_step = 0
+        self.log_interval = 1_000_000
+
+    def _sample_batch(self, batch_size=None):
+        return self.replay_buffer.sample(self.batch_size if batch_size is None else batch_size)
+
+    def _train_on_batch(self, data, context):
+        return QNetTrainResult.from_values(
+            loss=float(context.train_steps_count),
+            replay_priorities=np.repeat(context.train_steps_count, self.batch_size),
+        )
+
+    def _train_on_bulk(self, data, contexts):
+        results = [
+            self._train_on_batch(batch, context)
+            for batch, context in zip(iter_bulk_batches(data, contexts), contexts)
+        ]
+        report = self._aggregate_train_reports([result.report for result in results])
+        report.update_count = sum(result.report.update_count for result in results)
+        priorities = np.stack([result.replay_priorities for result in results])
+        return QNetTrainResult(report=report, replay_priorities=priorities)
+
+    def _aggregate_train_reports(self, reports):
+        return reports[-1]
+
+
+def test_qnet_bulk_priority_updates_flatten_for_prioritized_frame_buffer():
+    pri = PrioritizedFrameStackReplayBuffer(1000, OBS, 1, NSTEP, GAMMA, alpha=0.6, n_frames=S)
+    _feed(pri)
+    agent = _FrameBufferBulkAgent(pri)
+
+    loss = QNetTrainingLifecycle(agent).train(steps=10, gradient_steps=2)
+
+    assert loss == 2.0
+    assert agent.train_steps_count == 2
+    assert pri.sample(4)["obses"][0].shape == (4, H, W, S)
 
 
 def test_truncation_bootstraps_without_crash():

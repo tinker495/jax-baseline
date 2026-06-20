@@ -4,11 +4,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from jax_baselines.core.bulk_training import flatten_bulk_batch, iter_bulk_batches
+from jax_baselines.DQN.base_class import Q_Network_Family
+from jax_baselines.DQN.dqn import DQN
 from jax_baselines.DQN.training import (
+    QNetTrainContext,
     QNetTrainingLifecycle,
     QNetTrainReport,
     QNetTrainResult,
 )
+from jax_baselines.SPR.spr import SPR
 
 
 class FakeReplayBuffer:
@@ -27,6 +32,29 @@ class FakeReplayBuffer:
         self.priority_update_calls.append((indexes, priorities))
 
 
+def _aggregate_bulk_results(agent, results):
+    report = agent._aggregate_train_reports([result.report for result in results])
+    report.update_count = sum(result.report.update_count for result in results)
+    priorities = [result.replay_priorities for result in results]
+    replay_priorities = None
+    if all(priority is not None for priority in priorities):
+        replay_priorities = np.stack(priorities)
+    return QNetTrainResult(report=report, replay_priorities=replay_priorities)
+
+
+class FakeBulkReplayBuffer(FakeReplayBuffer):
+    def sample(self, batch_size, beta=None):
+        self.sample_calls.append((batch_size, beta))
+        update_count = batch_size // 4
+        indexes = np.arange(update_count * 4).reshape(update_count, 4)
+        weights = np.arange(1, update_count * 4 + 1, dtype=np.float32)
+        return {
+            "obses": np.ones((update_count, 4)),
+            "indexes": indexes,
+            "weights": weights,
+        }
+
+
 class FakeLoggerRun:
     def __init__(self):
         self.metrics = []
@@ -40,8 +68,6 @@ class FakeLoggerRun:
 
 
 class FakeAgent:
-    _qnet_handles_train_pulse = False
-
     def __init__(self):
         self.replay_buffer = FakeReplayBuffer()
         self.batch_size = 4
@@ -138,42 +164,213 @@ def test_qnet_training_lifecycle_accepts_report_only_when_per_disabled():
 
 
 class FakePulseAgent(FakeAgent):
-    _qnet_handles_train_pulse = True
+    supports_bulk_training = True
 
     def __init__(self):
         super().__init__()
         self.gradient_steps = 2
+        self.max_bulk_updates_per_pulse = 2
+        self.replay_buffer = FakeBulkReplayBuffer()
+        self.bulk_contexts = []
+        self.bulk_batches = []
 
     def _train_on_batch(self, data, context):
-        assert data["indexes"] is not None
-        assert context.gradient_steps == self.gradient_steps
+        self.contexts.append(context)
+        self.batches.append(data)
         return QNetTrainResult.from_values(
-            loss=float(context.train_steps_count + self.gradient_steps),
+            loss=float(context.train_steps_count),
             target=25.0,
-            replay_priorities=np.array([context.train_steps_count + self.gradient_steps]),
+            replay_priorities=np.repeat(context.train_steps_count, self.batch_size),
         )
+
+    def _train_on_bulk(self, data, contexts):
+        assert data["indexes"] is not None
+        self.bulk_batches.append(data)
+        self.bulk_contexts.append(contexts)
+        results = [
+            self._train_on_batch(batch, context)
+            for batch, context in zip(iter_bulk_batches(data, contexts), contexts)
+        ]
+        return _aggregate_bulk_results(self, results)
 
 
 def test_qnet_training_lifecycle_handles_priority_update_calls_for_chunked_pulses():
     agent = FakePulseAgent()
     lifecycle = QNetTrainingLifecycle(agent)
 
-    loss = lifecycle.train(steps=10, gradient_steps=4)
+    loss = lifecycle.train(steps=10, gradient_steps=5)
 
-    assert loss == 4.0
-    assert agent.train_steps_count == 4
-    assert agent.replay_buffer.sample_calls == [(8, 0.4), (8, 0.4)]
-    assert len(agent.replay_buffer.priority_update_calls) == 2
-    assert np.array_equal(agent.replay_buffer.priority_update_calls[-1][0], np.array([3]))
-    assert np.array_equal(agent.replay_buffer.priority_update_calls[-1][1], np.array([4]))
+    assert loss == 5.0
+    assert agent.train_steps_count == 5
+    assert agent.replay_buffer.sample_calls == [(8, 0.4), (8, 0.4), (4, 0.4)]
+    assert [[ctx.train_steps_count for ctx in chunk] for chunk in agent.bulk_contexts] == [
+        [1, 2],
+        [3, 4],
+    ]
+    assert np.array_equal(
+        agent.bulk_batches[0]["weights"],
+        np.array([[0.25, 0.5, 0.75, 1.0], [0.625, 0.75, 0.875, 1.0]], dtype=np.float32),
+    )
+    assert [ctx.train_steps_count for ctx in agent.contexts] == [1, 2, 3, 4, 5]
+    assert len(agent.replay_buffer.priority_update_calls) == 3
+    assert np.array_equal(
+        agent.replay_buffer.priority_update_calls[0][0],
+        np.arange(8),
+    )
+    assert np.array_equal(
+        agent.replay_buffer.priority_update_calls[0][1],
+        np.array([1, 1, 1, 1, 2, 2, 2, 2]),
+    )
+    assert np.array_equal(
+        agent.replay_buffer.priority_update_calls[-1][0],
+        np.arange(4),
+    )
+    assert np.array_equal(
+        agent.replay_buffer.priority_update_calls[-1][1],
+        np.array([5, 5, 5, 5]),
+    )
 
 
-def test_qnet_training_lifecycle_rejects_partial_chunked_pulses():
+class FakeMissingBulkHookPulseAgent(FakeAgent):
+    def __init__(self):
+        super().__init__()
+        self.max_bulk_updates_per_pulse = 2
+
+
+def test_qnet_training_lifecycle_uses_scalar_path_without_bulk_hook():
+    agent = FakeMissingBulkHookPulseAgent()
+    lifecycle = QNetTrainingLifecycle(agent)
+
+    lifecycle.train(steps=10, gradient_steps=2)
+
+    assert agent.replay_buffer.sample_calls == [(4, 0.4), (4, 0.4)]
+    assert [ctx.train_steps_count for ctx in agent.contexts] == [1, 2]
+
+
+def test_qnet_training_lifecycle_requires_explicit_bulk_marker():
+    agent = FakePulseAgent()
+    agent.supports_bulk_training = False
+    lifecycle = QNetTrainingLifecycle(agent)
+
+    lifecycle.train(steps=10, gradient_steps=2)
+
+    assert agent.bulk_contexts == []
+    assert [ctx.train_steps_count for ctx in agent.contexts] == [1, 2]
+
+
+def test_qnet_training_lifecycle_uses_scalar_tail_after_full_bulk_chunks():
     agent = FakePulseAgent()
     lifecycle = QNetTrainingLifecycle(agent)
 
-    with pytest.raises(ValueError, match="divisible"):
-        lifecycle.train(steps=10, gradient_steps=3)
+    lifecycle.train(steps=10, gradient_steps=3)
+
+    assert agent.replay_buffer.sample_calls == [(8, 0.4), (4, 0.4)]
+    assert [[ctx.train_steps_count for ctx in chunk] for chunk in agent.bulk_contexts] == [
+        [1, 2],
+    ]
+    assert [ctx.train_steps_count for ctx in agent.contexts] == [1, 2, 3]
+
+
+def test_qnet_training_lifecycle_uses_scalar_path_for_single_pulse_update():
+    agent = FakePulseAgent()
+    lifecycle = QNetTrainingLifecycle(agent)
+
+    lifecycle.train(steps=10, gradient_steps=1)
+
+    assert agent.replay_buffer.sample_calls == [(4, 0.4)]
+    assert agent.bulk_contexts == []
+    assert [ctx.train_steps_count for ctx in agent.contexts] == [1]
+
+
+def test_qnet_training_lifecycle_uses_scalar_path_when_pulse_is_smaller_than_cap():
+    agent = FakePulseAgent()
+    agent.max_bulk_updates_per_pulse = 8
+    lifecycle = QNetTrainingLifecycle(agent)
+
+    lifecycle.train(steps=10, gradient_steps=2)
+
+    assert agent.replay_buffer.sample_calls == [(4, 0.4), (4, 0.4)]
+    assert agent.bulk_contexts == []
+    assert [ctx.train_steps_count for ctx in agent.contexts] == [1, 2]
+
+
+def test_qnet_training_lifecycle_uses_scalar_path_when_cap_is_one():
+    agent = FakePulseAgent()
+    agent.max_bulk_updates_per_pulse = 1
+    lifecycle = QNetTrainingLifecycle(agent)
+
+    lifecycle.train(steps=10, gradient_steps=3)
+
+    assert agent.replay_buffer.sample_calls == [(4, 0.4), (4, 0.4), (4, 0.4)]
+    assert agent.bulk_contexts == []
+    assert [ctx.train_steps_count for ctx in agent.contexts] == [1, 2, 3]
+
+
+def test_qnet_training_lifecycle_keeps_non_positive_bulk_cap_invalid():
+    agent = FakePulseAgent()
+    agent.max_bulk_updates_per_pulse = 0
+    lifecycle = QNetTrainingLifecycle(agent)
+
+    with pytest.raises(ValueError, match="max_bulk_updates_per_pulse"):
+        lifecycle.train(steps=10, gradient_steps=2)
+
+
+def test_spr_lineage_single_update_uses_scalar_path_without_bulk_hook():
+    agent = SPR.__new__(SPR)
+    agent.max_bulk_updates_per_pulse = 8
+    agent.replay_buffer = FakeReplayBuffer()
+    agent.batch_size = 4
+    agent.prioritized_replay = True
+    agent.prioritized_replay_beta0 = 0.4
+    agent.train_steps_count = 0
+    agent.logger_run = None
+    agent._last_log_step = 0
+    agent.log_interval = 5
+    contexts = []
+
+    def sample_batch(batch_size=None):
+        batch_size = agent.batch_size if batch_size is None else batch_size
+        return agent.replay_buffer.sample(batch_size, agent.prioritized_replay_beta0)
+
+    def train_on_batch(data, context):
+        contexts.append(context)
+        return QNetTrainResult.from_values(
+            loss=float(context.train_steps_count),
+            replay_priorities=np.array([context.train_steps_count]),
+        )
+
+    def train_on_bulk(data, contexts):
+        raise AssertionError("single-update SPR pulse must not call _train_on_bulk")
+
+    agent._sample_batch = sample_batch
+    agent._train_on_batch = train_on_batch
+    agent._train_on_bulk = train_on_bulk
+    agent._aggregate_train_reports = lambda reports: reports[-1]
+    lifecycle = QNetTrainingLifecycle(agent)
+
+    loss = lifecycle.train(steps=10, gradient_steps=1)
+
+    assert loss == 1.0
+    assert agent.replay_buffer.sample_calls == [(4, 0.4)]
+    assert contexts == [QNetTrainContext(steps=10, train_steps_count=1, gradient_steps=1)]
+
+
+def test_qnet_bulk_reshape_handles_list_leaves_and_batch_size_one():
+    agent = FakePulseAgent()
+    agent.batch_size = 1
+    lifecycle = QNetTrainingLifecycle(agent)
+    data = {
+        "obses": [np.ones((2, 3))],
+        "indexes": np.arange(2),
+    }
+
+    reshaped = lifecycle._reshape_bulk_batch(data, chunk_size=2)
+
+    assert reshaped["obses"][0].shape == (2, 1, 3)
+    assert reshaped["indexes"].shape == (2, 1)
+    sliced = list(iter_bulk_batches(reshaped, (object(), object())))
+    assert sliced[0]["obses"][0].shape == (1, 3)
+    assert sliced[0]["indexes"].shape == (1,)
 
 
 def test_local_qnet_algorithms_use_train_on_batch_and_inherit_train_step():
@@ -200,6 +397,129 @@ def test_local_qnet_algorithms_use_train_on_batch_and_inherit_train_step():
 
         assert "_train_on_batch" in method_names
         assert "train_step" not in method_names
+
+
+def test_dqn_train_on_bulk_scans_updates_and_stacks_priorities():
+    agent = DQN.__new__(DQN)
+    agent.params = np.asarray(0)
+    agent.target_params = np.asarray(10)
+    agent.opt_state = np.asarray(20)
+    agent.param_noise = False
+
+    def train_step(params, target_params, opt_state, step, key, obses, indexes):
+        del key, indexes
+        priorities = np.repeat(step, obses.shape[0])
+        return (
+            params + 1,
+            target_params + 1,
+            opt_state + 1,
+            step.astype(float),
+            step.astype(float) + 10.0,
+            priorities,
+        )
+
+    agent._train_step = train_step
+    data = {
+        "obses": np.ones((2, 4, 3)),
+        "indexes": np.arange(8).reshape(2, 4),
+    }
+    contexts = [
+        type("Context", (), {"train_steps_count": 1})(),
+        type("Context", (), {"train_steps_count": 2})(),
+    ]
+
+    result = agent._train_on_bulk(data, contexts)
+
+    assert agent.params == 2
+    assert agent.target_params == 12
+    assert agent.opt_state == 22
+    assert result.report.loss == 2.0
+    assert result.report.target == 12.0
+    assert np.array_equal(result.replay_priorities, np.array([[1, 1, 1, 1], [2, 2, 2, 2]]))
+
+
+def test_flatten_bulk_batch_collapses_chunk_and_batch_axes():
+    data = {
+        "obses": [np.ones((2, 4, 3))],
+        "actions": np.arange(8).reshape(2, 4, 1),
+        "weights": 1,
+    }
+
+    flattened = flatten_bulk_batch(data)
+
+    assert flattened["obses"][0].shape == (8, 3)
+    assert flattened["actions"].shape == (8, 1)
+    assert flattened["weights"] == 1
+
+
+def test_qnet_family_default_aggregation_weights_bulk_chunks():
+    agent = Q_Network_Family.__new__(Q_Network_Family)
+    reports = [
+        QNetTrainReport(
+            loss=2.0,
+            target=4.0,
+            metrics={"loss/extra": 6.0},
+            histograms={"loss/tau": np.array([2.0, 4.0])},
+            update_count=2,
+        ),
+        QNetTrainReport(
+            loss=5.0,
+            target=7.0,
+            metrics={"loss/extra": 9.0},
+            histograms={"loss/tau": np.array([5.0, 7.0])},
+            update_count=1,
+        ),
+    ]
+
+    report = Q_Network_Family._aggregate_train_reports(agent, reports)
+
+    assert report.loss == pytest.approx(3.0)
+    assert report.target == pytest.approx(5.0)
+    assert report.metrics["loss/extra"] == pytest.approx(7.0)
+    assert np.allclose(report.histograms["loss/tau"], np.array([3.0, 5.0]))
+    assert report.update_count == 3
+
+
+def test_spr_lineage_bulk_hook_flattens_and_delegates_to_existing_pulse_train_step():
+    agent = SPR.__new__(SPR)
+    calls = []
+
+    def train_on_batch(data, context):
+        calls.append((data, context))
+        return QNetTrainResult.from_values(loss=1.0, replay_priorities=np.ones(8))
+
+    agent._train_on_batch = train_on_batch
+    data = {
+        "obses": [np.ones((2, 4, 3))],
+        "actions": np.arange(8).reshape(2, 4, 1),
+    }
+    contexts = (
+        QNetTrainContext(steps=10, train_steps_count=3, gradient_steps=2),
+        QNetTrainContext(steps=10, train_steps_count=4, gradient_steps=2),
+    )
+
+    result = SPR._train_on_bulk(agent, data, contexts)
+
+    assert result.report.loss == 1.0
+    assert result.report.update_count == 2
+    assert calls[0][0]["obses"][0].shape == (8, 3)
+    assert calls[0][0]["actions"].shape == (8, 1)
+    assert calls[0][1] == QNetTrainContext(steps=10, train_steps_count=3, gradient_steps=2)
+
+
+def test_spr_aggregate_weights_bulk_chunks_by_update_count():
+    agent = SPR.__new__(SPR)
+    reports = [
+        QNetTrainReport(loss=2.0, target=4.0, metrics={"loss/rprloss": 6.0}, update_count=2),
+        QNetTrainReport(loss=5.0, target=7.0, metrics={"loss/rprloss": 9.0}, update_count=1),
+    ]
+
+    report = SPR._aggregate_train_reports(agent, reports)
+
+    assert report.loss == pytest.approx(3.0)
+    assert report.target == pytest.approx(5.0)
+    assert report.metrics["loss/rprloss"] == pytest.approx(7.0)
+    assert report.update_count == 3
 
 
 def test_apex_qnet_actor_builders_close_over_nstep_gamma():
