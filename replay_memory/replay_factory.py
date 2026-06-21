@@ -6,6 +6,7 @@ don't need to duplicate branching logic for prioritized / n-step / multi.
 
 from typing import Any
 
+from jax_baselines.core.replay_protocol import LocalReplayNeed, SelfPredictionReplayNeed
 from replay_memory.cpprb_buffers import (
     MultiPrioritizedReplayBuffer,
     NstepReplayBuffer,
@@ -38,20 +39,22 @@ def _frame_compress_applicable(observation_space, worker_size, n_step, n_frames)
     )
 
 
-def make_replay_buffer(
-    buffer_size: int,
-    observation_space: Any,
-    action_shape_or_n,
-    worker_size: int = 1,
-    n_step: int = 1,
-    gamma: float = 0.99,
-    prioritized: bool = False,
-    alpha: float = 0.6,
-    eps: float = 1e-3,
-    compress_memory: bool = False,
-    n_frames: int = 4,
-    prediction_depth: int | None = None,
-):
+def _validate_self_prediction_replay_need(need: SelfPredictionReplayNeed) -> None:
+    unsupported = []
+    if need.compress_observations:
+        unsupported.append("compress_observations=True")
+    if need.worker_size != 1:
+        unsupported.append(f"worker_size={need.worker_size}")
+    if not unsupported:
+        return
+    joined = ", ".join(unsupported)
+    raise ValueError(
+        "SelfPredictionReplayNeed does not support "
+        f"{joined}; transition replay buffers are single-worker and uncompressed"
+    )
+
+
+def make_replay_buffer(need: LocalReplayNeed):
     """Create an appropriate replay buffer based on flags.
 
     - compress_memory + n_step + single-worker image -> Frame(Prioritized)StackReplayBuffer
@@ -62,13 +65,26 @@ def make_replay_buffer(
     - For n_step only -> NstepReplayBuffer
     - Otherwise -> ReplayBuffer
     """
-    if prediction_depth is not None:
+    buffer_size = need.buffer_size
+    observation_space = need.observation_space
+    action_shape_or_n = need.action_shape_or_n
+    worker_size = need.worker_size
+    n_step = need.n_step
+    gamma = need.gamma
+    prioritized = need.priority is not None
+    alpha = need.priority.alpha if need.priority is not None else 0.6
+    eps = need.priority.eps if need.priority is not None else 1e-3
+    compress_memory = need.compress_observations
+    n_frames = need.n_frames
+
+    if isinstance(need, SelfPredictionReplayNeed):
+        _validate_self_prediction_replay_need(need)
         if prioritized:
             return PrioritizedTransitionReplayBuffer(
                 buffer_size,
                 observation_space,
                 action_shape_or_n,
-                prediction_depth=prediction_depth,
+                prediction_depth=need.prediction_depth,
                 alpha=alpha,
                 eps=eps,
             )
@@ -76,7 +92,7 @@ def make_replay_buffer(
             buffer_size,
             observation_space,
             action_shape_or_n,
-            prediction_depth=prediction_depth,
+            prediction_depth=need.prediction_depth,
         )
 
     if compress_memory and _frame_compress_applicable(

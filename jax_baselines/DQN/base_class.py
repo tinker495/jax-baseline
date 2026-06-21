@@ -8,6 +8,8 @@ from jax_baselines.core.checkpoint import make_checkpoint_scaffold
 from jax_baselines.core.env_info import get_local_env_info
 from jax_baselines.core.eval import evaluate_policy, record_and_test
 from jax_baselines.core.replay_protocol import (
+    LocalReplayNeed,
+    PriorityNeed,
     ReplayBufferFactory,
     require_replay_factory,
 )
@@ -178,17 +180,22 @@ class Q_Network_Family:
 
     def get_memory_setup(self):
         replay_factory = require_replay_factory(self.replay_factory, "ReplayBufferFactory")
+        priority = (
+            PriorityNeed(alpha=self.prioritized_replay_alpha, eps=self.prioritized_replay_eps)
+            if self.prioritized_replay
+            else None
+        )
         self.replay_buffer = replay_factory(
-            buffer_size=self.buffer_size,
-            observation_space=self.observation_space,
-            action_shape_or_n=1,
-            worker_size=self.worker_size,
-            n_step=self.n_step if self.n_step_method else 1,
-            gamma=self.gamma,
-            prioritized=self.prioritized_replay,
-            alpha=self.prioritized_replay_alpha,
-            eps=self.prioritized_replay_eps,
-            compress_memory=self.compress_memory,
+            LocalReplayNeed(
+                buffer_size=self.buffer_size,
+                observation_space=self.observation_space,
+                action_shape_or_n=1,
+                worker_size=self.worker_size,
+                n_step=self.n_step if self.n_step_method else 1,
+                gamma=self.gamma,
+                priority=priority,
+                compress_observations=self.compress_memory,
+            )
         )
 
     def setup_model(self):

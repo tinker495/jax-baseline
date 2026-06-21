@@ -9,6 +9,7 @@ stored transitions (reconstructed by cpprb) are element-wise identical. cpprb's
 import numpy as np
 import pytest
 
+from jax_baselines.core.replay_protocol import LocalReplayNeed, PriorityNeed
 from replay_memory.cpprb_buffers import (
     MultiPrioritizedReplayBuffer,
     NstepReplayBuffer,
@@ -47,6 +48,34 @@ def _episode(base, length):
 
 
 EPISODES = [(10, 5), (100, 7), (200, 4)]  # disjoint frame ranges -> bleed is visible
+
+
+def _need(
+    *,
+    buffer_size=500,
+    observation_space=OBS,
+    action_shape_or_n=1,
+    worker_size=1,
+    n_step=1,
+    gamma=0.99,
+    prioritized=False,
+    alpha=0.6,
+    eps=1e-3,
+    compress_memory=False,
+    n_frames=S,
+):
+    priority = PriorityNeed(alpha=alpha, eps=eps) if prioritized else None
+    return LocalReplayNeed(
+        buffer_size=buffer_size,
+        observation_space=observation_space,
+        action_shape_or_n=action_shape_or_n,
+        worker_size=worker_size,
+        n_step=n_step,
+        gamma=gamma,
+        priority=priority,
+        compress_observations=compress_memory,
+        n_frames=n_frames,
+    )
 
 
 def _feed_single(buf):
@@ -163,8 +192,8 @@ def test_factory_forwards_compress_memory_single_step(prioritized):
         alpha=0.6,
         eps=1e-3,
     )
-    comp = make_replay_buffer(500, OBS, 1, compress_memory=True, **common)
-    ref = make_replay_buffer(500, OBS, 1, compress_memory=False, **common)
+    comp = make_replay_buffer(_need(compress_memory=True, **common))
+    ref = make_replay_buffer(_need(compress_memory=False, **common))
     _feed_single(comp)
     _feed_single(ref)
     assert comp._compress_active is True
@@ -181,16 +210,15 @@ def test_factory_routes_nstep_image_compress_to_frame_buffer(prioritized):
     )
 
     buf = make_replay_buffer(
-        500,
-        OBS,
-        1,
-        worker_size=1,
-        n_step=3,
-        gamma=0.99,
-        prioritized=prioritized,
-        alpha=0.6,
-        eps=1e-3,
-        compress_memory=True,
+        _need(
+            worker_size=1,
+            n_step=3,
+            gamma=0.99,
+            prioritized=prioritized,
+            alpha=0.6,
+            eps=1e-3,
+            compress_memory=True,
+        )
     )
     expected = PrioritizedFrameStackReplayBuffer if prioritized else FrameStackReplayBuffer
     assert isinstance(buf, expected)

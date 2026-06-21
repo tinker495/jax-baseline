@@ -5,26 +5,36 @@ Algorithm-family code depends on these minimal callable seams instead of naming
 cpprb-backed implementations directly.
 """
 
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 
+@dataclass(frozen=True)
+class PriorityNeed:
+    alpha: float
+    eps: float
+
+
+@dataclass(frozen=True, kw_only=True)
+class LocalReplayNeed:
+    buffer_size: int
+    observation_space: Any
+    action_shape_or_n: Any
+    worker_size: int = 1
+    n_step: int = 1
+    gamma: float = 0.99
+    priority: PriorityNeed | None = None
+    compress_observations: bool = False
+    n_frames: int = 4
+
+
+@dataclass(frozen=True, kw_only=True)
+class SelfPredictionReplayNeed(LocalReplayNeed):
+    prediction_depth: int
+
+
 class ReplayBufferFactory(Protocol):
-    def __call__(
-        self,
-        *,
-        buffer_size: int,
-        observation_space: Any,
-        action_shape_or_n: Any,
-        worker_size: int = 1,
-        n_step: int = 1,
-        gamma: float = 0.99,
-        prioritized: bool = False,
-        alpha: float = 0.6,
-        eps: float = 1e-3,
-        compress_memory: bool = False,
-        n_frames: int = 4,
-        prediction_depth: int | None = None,
-    ) -> Any:
+    def __call__(self, need: LocalReplayNeed) -> Any:
         ...
 
 

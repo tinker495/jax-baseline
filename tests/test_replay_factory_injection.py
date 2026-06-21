@@ -5,9 +5,24 @@ import pytest
 
 from jax_baselines.APE_X.base_class import Ape_X_Family
 from jax_baselines.APE_X.dpg_base_class import Ape_X_Deteministic_Policy_Gradient_Family
-from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
+from jax_baselines.core.replay_protocol import (
+    LocalReplayNeed,
+    PriorityNeed,
+    SelfPredictionReplayNeed,
+    make_worker_local_replay_buffer,
+)
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DQN.base_class import Q_Network_Family
+
+
+class FakeLocalReplayFactory:
+    def __init__(self, buffer):
+        self.buffer = buffer
+        self.calls = []
+
+    def __call__(self, need):
+        self.calls.append(need)
+        return self.buffer
 
 
 class FakeReplayFactory:
@@ -33,7 +48,7 @@ class FakeWorkerReplayFactory:
 def test_q_network_family_uses_injected_replay_factory():
     agent = Q_Network_Family.__new__(Q_Network_Family)
     fake_buffer = object()
-    factory = FakeReplayFactory(fake_buffer)
+    factory = FakeLocalReplayFactory(fake_buffer)
     agent.replay_factory = factory
     agent.buffer_size = 123
     agent.observation_space = [[4]]
@@ -50,25 +65,23 @@ def test_q_network_family_uses_injected_replay_factory():
 
     assert agent.replay_buffer is fake_buffer
     assert factory.calls == [
-        {
-            "buffer_size": 123,
-            "observation_space": [[4]],
-            "action_shape_or_n": 1,
-            "worker_size": 2,
-            "n_step": 3,
-            "gamma": 0.9,
-            "prioritized": True,
-            "alpha": 0.7,
-            "eps": 0.01,
-            "compress_memory": True,
-        }
+        LocalReplayNeed(
+            buffer_size=123,
+            observation_space=[[4]],
+            action_shape_or_n=1,
+            worker_size=2,
+            n_step=3,
+            gamma=0.9,
+            priority=PriorityNeed(alpha=0.7, eps=0.01),
+            compress_observations=True,
+        )
     ]
 
 
 def test_dpg_family_uses_injected_replay_factory():
     agent = Deteministic_Policy_Gradient_Family.__new__(Deteministic_Policy_Gradient_Family)
     fake_buffer = object()
-    factory = FakeReplayFactory(fake_buffer)
+    factory = FakeLocalReplayFactory(fake_buffer)
     agent.replay_factory = factory
     agent.buffer_size = 456
     agent.observation_space = [[8]]
@@ -85,17 +98,15 @@ def test_dpg_family_uses_injected_replay_factory():
 
     assert agent.replay_buffer is fake_buffer
     assert factory.calls == [
-        {
-            "buffer_size": 456,
-            "observation_space": [[8]],
-            "action_shape_or_n": [2],
-            "worker_size": 4,
-            "n_step": 2,
-            "gamma": 0.95,
-            "prioritized": False,
-            "alpha": 0.6,
-            "eps": 0.001,
-        }
+        LocalReplayNeed(
+            buffer_size=456,
+            observation_space=[[8]],
+            action_shape_or_n=[2],
+            worker_size=4,
+            n_step=2,
+            gamma=0.95,
+            priority=None,
+        )
     ]
 
 
@@ -145,7 +156,7 @@ def test_spr_uses_injected_transition_replay_factory():
 
     agent = SPR.__new__(SPR)
     fake_buffer = object()
-    factory = FakeReplayFactory(fake_buffer)
+    factory = FakeLocalReplayFactory(fake_buffer)
     agent.replay_factory = factory
     agent.buffer_size = 321
     agent.observation_space = [[84, 84, 4]]
@@ -163,19 +174,17 @@ def test_spr_uses_injected_transition_replay_factory():
 
     assert agent.replay_buffer is fake_buffer
     assert factory.calls == [
-        {
-            "buffer_size": 321,
-            "observation_space": [[84, 84, 4]],
-            "action_shape_or_n": 1,
-            "worker_size": 1,
-            "n_step": 3,
-            "gamma": 0.99,
-            "prioritized": True,
-            "alpha": 0.6,
-            "eps": 0.01,
-            "compress_memory": False,
-            "prediction_depth": 5,
-        }
+        SelfPredictionReplayNeed(
+            buffer_size=321,
+            observation_space=[[84, 84, 4]],
+            action_shape_or_n=1,
+            worker_size=1,
+            n_step=3,
+            gamma=0.99,
+            priority=PriorityNeed(alpha=0.6, eps=0.01),
+            compress_observations=False,
+            prediction_depth=5,
+        )
     ]
 
 
@@ -185,6 +194,58 @@ def test_transition_replay_buffers_live_in_replay_adapter():
     assert "TransitionReplayBuffer" not in source
     assert "require_replay_factory" in source
     assert Path("replay_memory/transition_buffers.py").exists()
+
+
+def test_replay_factory_builds_self_prediction_buffer_from_need():
+    from replay_memory.replay_factory import make_replay_buffer
+    from replay_memory.transition_buffers import PrioritizedTransitionReplayBuffer
+
+    buf = make_replay_buffer(
+        SelfPredictionReplayNeed(
+            buffer_size=321,
+            observation_space=[[84, 84, 4]],
+            action_shape_or_n=1,
+            n_step=3,
+            gamma=0.99,
+            priority=PriorityNeed(alpha=0.6, eps=0.01),
+            prediction_depth=5,
+        )
+    )
+
+    assert isinstance(buf, PrioritizedTransitionReplayBuffer)
+    assert buf.prediction_depth == 5
+
+
+@pytest.mark.parametrize(
+    "need,match",
+    [
+        (
+            SelfPredictionReplayNeed(
+                buffer_size=321,
+                observation_space=[[84, 84, 4]],
+                action_shape_or_n=1,
+                compress_observations=True,
+                prediction_depth=5,
+            ),
+            "compress_observations=True",
+        ),
+        (
+            SelfPredictionReplayNeed(
+                buffer_size=321,
+                observation_space=[[84, 84, 4]],
+                action_shape_or_n=1,
+                worker_size=2,
+                prediction_depth=5,
+            ),
+            "worker_size=2",
+        ),
+    ],
+)
+def test_replay_factory_rejects_unsupported_self_prediction_options(need, match):
+    from replay_memory.replay_factory import make_replay_buffer
+
+    with pytest.raises(ValueError, match=match):
+        make_replay_buffer(need)
 
 
 @pytest.mark.parametrize(

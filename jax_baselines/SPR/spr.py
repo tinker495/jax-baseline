@@ -4,7 +4,11 @@ import jax.numpy as jnp
 import optax
 
 from jax_baselines.core.bulk_training import flatten_bulk_batch
-from jax_baselines.core.replay_protocol import require_replay_factory
+from jax_baselines.core.replay_protocol import (
+    PriorityNeed,
+    SelfPredictionReplayNeed,
+    require_replay_factory,
+)
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import (
     QNetTrainContext,
@@ -72,18 +76,23 @@ class SPR(Q_Network_Family):
 
     def get_memory_setup(self):
         replay_factory = require_replay_factory(self.replay_factory, "ReplayBufferFactory")
+        priority = (
+            PriorityNeed(alpha=self.prioritized_replay_alpha, eps=self.prioritized_replay_eps)
+            if self.prioritized_replay
+            else None
+        )
         self.replay_buffer = replay_factory(
-            buffer_size=self.buffer_size,
-            observation_space=self.observation_space,
-            action_shape_or_n=1,
-            worker_size=self.worker_size,
-            n_step=self.n_step if self.n_step_method else 1,
-            gamma=self.gamma,
-            prioritized=self.prioritized_replay,
-            alpha=self.prioritized_replay_alpha,
-            eps=self.prioritized_replay_eps,
-            compress_memory=self.compress_memory,
-            prediction_depth=max(self.prediction_depth, self.n_step),
+            SelfPredictionReplayNeed(
+                buffer_size=self.buffer_size,
+                observation_space=self.observation_space,
+                action_shape_or_n=1,
+                worker_size=self.worker_size,
+                n_step=self.n_step if self.n_step_method else 1,
+                gamma=self.gamma,
+                priority=priority,
+                compress_observations=self.compress_memory,
+                prediction_depth=max(self.prediction_depth, self.n_step),
+            )
         )
 
     def setup_model(self):

@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 from jax_baselines.core.bulk_training import iter_bulk_batches
+from jax_baselines.core.replay_protocol import LocalReplayNeed, PriorityNeed
 from jax_baselines.DQN.training import QNetTrainingLifecycle, QNetTrainResult
 from replay_memory.cpprb_buffers import NstepReplayBuffer
 from replay_memory.frame_buffers import (
@@ -21,6 +22,34 @@ NSTEP = 3
 GAMMA = 0.99
 OBS = [[H, W, S]]  # Cf = 1 (Atari grayscale frame stack)
 EPISODES = [(10, 5), (40, 7), (80, 6)]
+
+
+def _need(
+    *,
+    buffer_size=500,
+    observation_space=OBS,
+    action_shape_or_n=1,
+    worker_size=1,
+    n_step=1,
+    gamma=GAMMA,
+    prioritized=False,
+    alpha=0.6,
+    eps=1e-3,
+    compress_memory=False,
+    n_frames=S,
+):
+    priority = PriorityNeed(alpha=alpha, eps=eps) if prioritized else None
+    return LocalReplayNeed(
+        buffer_size=buffer_size,
+        observation_space=observation_space,
+        action_shape_or_n=action_shape_or_n,
+        worker_size=worker_size,
+        n_step=n_step,
+        gamma=gamma,
+        priority=priority,
+        compress_observations=compress_memory,
+        n_frames=n_frames,
+    )
 
 
 def _frame(v):
@@ -176,15 +205,13 @@ def test_truncation_bootstraps_without_crash():
 @pytest.mark.parametrize("prioritized", [False, True])
 def test_factory_selects_frame_buffer_for_image_nstep_compress(prioritized):
     buf = make_replay_buffer(
-        500,
-        OBS,
-        1,
-        worker_size=1,
-        n_step=NSTEP,
-        gamma=GAMMA,
-        prioritized=prioritized,
-        compress_memory=True,
-        n_frames=S,
+        _need(
+            n_step=NSTEP,
+            gamma=GAMMA,
+            prioritized=prioritized,
+            compress_memory=True,
+            n_frames=S,
+        )
     )
     expected = PrioritizedFrameStackReplayBuffer if prioritized else FrameStackReplayBuffer
     assert isinstance(buf, expected)
@@ -194,9 +221,12 @@ def test_factory_keeps_cpprb_for_vector_or_singlestep():
     from replay_memory.cpprb_buffers import NstepReplayBuffer as Cpprb
 
     # vector obs -> not frame-compressible
-    assert isinstance(make_replay_buffer(500, [[4]], 1, n_step=NSTEP, compress_memory=True), Cpprb)
+    assert isinstance(
+        make_replay_buffer(_need(observation_space=[[4]], n_step=NSTEP, compress_memory=True)),
+        Cpprb,
+    )
     # single-step image -> cpprb next_of+stack_compress path, not the frame buffer
     assert not isinstance(
-        make_replay_buffer(500, OBS, 1, n_step=1, compress_memory=True),
+        make_replay_buffer(_need(n_step=1, compress_memory=True)),
         FrameStackReplayBuffer,
     )
