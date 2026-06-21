@@ -1,6 +1,18 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Protocol
+
+
+@dataclass(frozen=True, kw_only=True)
+class ImpalaRolloutNeed:
+    replay_size: int
+    actor_num: int
+    observation_space: Any
+    discrete: bool = True
+    action_space: Any = 1
+    sample_size: int = 32
+    seed: Any = None
 
 
 class DistributedEvent(Protocol):
@@ -85,16 +97,7 @@ class DistributedRuntime(Protocol):
     ) -> LoggerServerHandle:
         ...
 
-    def create_impala_buffer(
-        self,
-        replay_size: int,
-        actor_num: int,
-        observation_space: list,
-        discrete=True,
-        action_space=1,
-        sample_size=32,
-        seed=None,
-    ) -> ImpalaRolloutBuffer:
+    def create_impala_buffer(self, need: ImpalaRolloutNeed) -> ImpalaRolloutBuffer:
         ...
 
     def wait(self, jobs, timeout=None) -> Any:

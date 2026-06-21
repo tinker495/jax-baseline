@@ -8,6 +8,8 @@ from jax_baselines.core.env_info import get_worker_env_info
 from jax_baselines.core.hparams import get_hyper_params
 from jax_baselines.core.replay_protocol import (
     MultiPrioritizedReplayBufferFactory,
+    PriorityNeed,
+    SharedPrioritizedReplayNeed,
     WorkerReplayBufferFactory,
     require_replay_factory,
 )
@@ -126,15 +128,19 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         )
         require_replay_factory(self.worker_replay_factory, "WorkerReplayBufferFactory")
         self.replay_buffer = multi_replay_factory(
-            buffer_size=self.buffer_size,
-            observation_space=self.observation_space,
-            alpha=self.prioritized_replay_alpha,
-            action_shape_or_n=self.action_size,
-            n_step=self.n_step,
-            gamma=self.gamma,
-            manager=self.runtime.replay_manager(),
-            compress_memory=self.compress_memory,
-            eps=self.prioritized_replay_eps,
+            SharedPrioritizedReplayNeed(
+                buffer_size=self.buffer_size,
+                observation_space=self.observation_space,
+                priority=PriorityNeed(
+                    alpha=self.prioritized_replay_alpha,
+                    eps=self.prioritized_replay_eps,
+                ),
+                action_shape_or_n=self.action_size,
+                n_step=self.n_step,
+                gamma=self.gamma,
+                manager=self.runtime.replay_manager(),
+                compress_observations=self.compress_memory,
+            )
         )
 
     def setup_model(self):

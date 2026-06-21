@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from jax_baselines.core.distributed_runtime import ImpalaRolloutNeed
 from jax_baselines.core.env_info import get_worker_env_info
 from jax_baselines.core.replay_protocol import (
     WorkerReplayBufferFactory,
@@ -159,13 +160,15 @@ class IMPALA_Family(object):
 
     def get_memory_setup(self):
         self.buffer = self.runtime.create_impala_buffer(
-            self.buffer_size,
-            self.worker_num,
-            self.observation_space,
-            discrete=(self.action_type == "discrete"),
-            action_space=self.action_size,
-            sample_size=self.sample_size,
-            seed=self.seed,
+            ImpalaRolloutNeed(
+                replay_size=self.buffer_size,
+                actor_num=self.worker_num,
+                observation_space=self.observation_space,
+                discrete=(self.action_type == "discrete"),
+                action_space=self.action_size,
+                sample_size=self.sample_size,
+                seed=self.seed,
+            )
         )
 
     def setup_model(self):

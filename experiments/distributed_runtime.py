@@ -8,6 +8,7 @@ from importlib import import_module
 import numpy as np
 
 from jax_baselines.APE_X.common_servers import Logger_server, Param_server
+from jax_baselines.core.distributed_runtime import ImpalaRolloutNeed
 from jax_baselines.core.seeding import seed_prngs
 from jax_baselines.IMPALA.vtrace_queue import batch
 
@@ -189,8 +190,16 @@ class RayDistributedRuntime:
         )
         return _RayLoggerServerHandle(actor)
 
-    def create_impala_buffer(self, *args, **kwargs):
-        return RayImpalaBuffer(*args, **kwargs)
+    def create_impala_buffer(self, need: ImpalaRolloutNeed):
+        return RayImpalaBuffer(
+            need.replay_size,
+            need.actor_num,
+            need.observation_space,
+            discrete=need.discrete,
+            action_space=need.action_space,
+            sample_size=need.sample_size,
+            seed=need.seed,
+        )
 
     def wait(self, jobs, timeout=None):
         return _ray().wait(jobs, timeout=timeout)

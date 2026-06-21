@@ -4,9 +4,11 @@ This wraps constructors in `replay_memory.cpprb_buffers` so callers
 don't need to duplicate branching logic for prioritized / n-step / multi.
 """
 
-from typing import Any
-
-from jax_baselines.core.replay_protocol import LocalReplayNeed, SelfPredictionReplayNeed
+from jax_baselines.core.replay_protocol import (
+    LocalReplayNeed,
+    SelfPredictionReplayNeed,
+    SharedPrioritizedReplayNeed,
+)
 from replay_memory.cpprb_buffers import (
     MultiPrioritizedReplayBuffer,
     NstepReplayBuffer,
@@ -150,30 +152,18 @@ def make_replay_buffer(need: LocalReplayNeed):
             return ReplayBuffer(buffer_size, observation_space, action_shape_or_n, compress_memory)
 
 
-def make_multi_prioritized_buffer(
-    buffer_size: int,
-    observation_space: Any,
-    alpha: float,
-    action_shape_or_n,
-    n_step: int,
-    gamma: float,
-    manager,
-    compress_memory: bool = False,
-    eps: float | None = None,
-):
+def make_multi_prioritized_buffer(need: SharedPrioritizedReplayNeed):
     """Factory wrapper for MultiPrioritizedReplayBuffer used in distributed setups."""
-    # eps=None defers to MultiPrioritizedReplayBuffer's own default.
-    extra = {} if eps is None else {"eps": eps}
     return MultiPrioritizedReplayBuffer(
-        buffer_size,
-        observation_space,
-        alpha,
-        action_shape_or_n,
-        n_step,
-        gamma,
-        manager,
-        compress_memory,
-        **extra,
+        need.buffer_size,
+        need.observation_space,
+        need.priority.alpha,
+        need.action_shape_or_n,
+        need.n_step,
+        need.gamma,
+        need.manager,
+        need.compress_observations,
+        eps=need.priority.eps,
     )
 
 

@@ -5,14 +5,17 @@ import pytest
 
 from jax_baselines.APE_X.base_class import Ape_X_Family
 from jax_baselines.APE_X.dpg_base_class import Ape_X_Deteministic_Policy_Gradient_Family
+from jax_baselines.core.distributed_runtime import ImpalaRolloutNeed
 from jax_baselines.core.replay_protocol import (
     LocalReplayNeed,
     PriorityNeed,
     SelfPredictionReplayNeed,
+    SharedPrioritizedReplayNeed,
     make_worker_local_replay_buffer,
 )
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DQN.base_class import Q_Network_Family
+from jax_baselines.IMPALA.base_class import IMPALA_Family
 
 
 class FakeLocalReplayFactory:
@@ -30,8 +33,8 @@ class FakeReplayFactory:
         self.buffer = buffer
         self.calls = []
 
-    def __call__(self, **kwargs):
-        self.calls.append(kwargs)
+    def __call__(self, need):
+        self.calls.append(need)
         return self.buffer
 
 
@@ -137,17 +140,124 @@ def test_apex_families_use_injected_shared_and_worker_factories(family_cls, acti
 
     assert agent.replay_buffer is fake_buffer
     assert multi_factory.calls == [
-        {
-            "buffer_size": 789,
-            "observation_space": [[5]],
-            "alpha": 0.8,
-            "action_shape_or_n": action_shape_or_n,
-            "n_step": 4,
-            "gamma": 0.91,
-            "manager": "manager",
-            "compress_memory": True,
-            "eps": 0.02,
-        }
+        SharedPrioritizedReplayNeed(
+            buffer_size=789,
+            observation_space=[[5]],
+            action_shape_or_n=action_shape_or_n,
+            n_step=4,
+            gamma=0.91,
+            manager="manager",
+            priority=PriorityNeed(alpha=0.8, eps=0.02),
+            compress_observations=True,
+        )
+    ]
+
+
+def test_multi_prioritized_replay_factory_builds_from_need(monkeypatch):
+    from replay_memory import replay_factory
+
+    calls = []
+
+    class FakeMultiPrioritizedReplayBuffer:
+        def __init__(self, *args, **kwargs):
+            calls.append((args, kwargs))
+
+    monkeypatch.setattr(
+        replay_factory, "MultiPrioritizedReplayBuffer", FakeMultiPrioritizedReplayBuffer
+    )
+
+    need = SharedPrioritizedReplayNeed(
+        buffer_size=789,
+        observation_space=[[5]],
+        action_shape_or_n=1,
+        n_step=4,
+        gamma=0.91,
+        manager="manager",
+        priority=PriorityNeed(alpha=0.8, eps=0.02),
+        compress_observations=True,
+    )
+
+    buffer = replay_factory.make_multi_prioritized_buffer(need)
+
+    assert isinstance(buffer, FakeMultiPrioritizedReplayBuffer)
+    assert calls == [
+        (
+            (789, [[5]], 0.8, 1, 4, 0.91, "manager", True),
+            {"eps": 0.02},
+        )
+    ]
+
+
+def test_impala_family_uses_rollout_need_for_runtime_buffer():
+    class FakeImpalaRuntime:
+        def __init__(self, buffer):
+            self.buffer = buffer
+            self.calls = []
+
+        def create_impala_buffer(self, need):
+            self.calls.append(need)
+            return self.buffer
+
+    agent = IMPALA_Family.__new__(IMPALA_Family)
+    fake_buffer = object()
+    runtime = FakeImpalaRuntime(fake_buffer)
+    agent.runtime = runtime
+    agent.buffer_size = 64
+    agent.worker_num = 2
+    agent.observation_space = [[4]]
+    agent.action_type = "continuous"
+    agent.action_size = [3]
+    agent.sample_size = 5
+    agent.seed = 7
+
+    agent.get_memory_setup()
+
+    assert agent.buffer is fake_buffer
+    assert runtime.calls == [
+        ImpalaRolloutNeed(
+            replay_size=64,
+            actor_num=2,
+            observation_space=[[4]],
+            discrete=False,
+            action_space=[3],
+            sample_size=5,
+            seed=7,
+        )
+    ]
+
+
+def test_ray_distributed_runtime_builds_impala_buffer_from_need(monkeypatch):
+    from experiments import distributed_runtime
+
+    calls = []
+
+    class FakeRayImpalaBuffer:
+        def __init__(self, *args, **kwargs):
+            calls.append((args, kwargs))
+
+    monkeypatch.setattr(distributed_runtime, "RayImpalaBuffer", FakeRayImpalaBuffer)
+    runtime = distributed_runtime.RayDistributedRuntime.__new__(
+        distributed_runtime.RayDistributedRuntime
+    )
+
+    need = ImpalaRolloutNeed(
+        replay_size=64,
+        actor_num=2,
+        observation_space=[[4]],
+        discrete=False,
+        action_space=[3],
+        sample_size=5,
+        seed=7,
+    )
+
+    buffer = runtime.create_impala_buffer(need)
+
+    assert isinstance(buffer, FakeRayImpalaBuffer)
+    assert calls == [
+        (
+            (64, 2, [[4]]),
+            {"discrete": False, "action_space": [3], "sample_size": 5, "seed": 7},
+        )
     ]
 
 

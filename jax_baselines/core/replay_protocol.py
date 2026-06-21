@@ -33,25 +33,25 @@ class SelfPredictionReplayNeed(LocalReplayNeed):
     prediction_depth: int
 
 
+@dataclass(frozen=True, kw_only=True)
+class SharedPrioritizedReplayNeed:
+    buffer_size: int
+    observation_space: Any
+    action_shape_or_n: Any
+    n_step: int
+    gamma: float
+    manager: Any
+    priority: PriorityNeed
+    compress_observations: bool = False
+
+
 class ReplayBufferFactory(Protocol):
     def __call__(self, need: LocalReplayNeed) -> Any:
         ...
 
 
 class MultiPrioritizedReplayBufferFactory(Protocol):
-    def __call__(
-        self,
-        *,
-        buffer_size: int,
-        observation_space: Any,
-        alpha: float,
-        action_shape_or_n: Any,
-        n_step: int,
-        gamma: float,
-        manager: Any,
-        compress_memory: bool = False,
-        eps: float | None = None,
-    ) -> Any:
+    def __call__(self, need: SharedPrioritizedReplayNeed) -> Any:
         ...
 
 

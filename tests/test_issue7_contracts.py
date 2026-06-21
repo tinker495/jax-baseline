@@ -156,7 +156,7 @@ def test_apex_dpg_constructors_initialize_model_setup_dependencies(monkeypatch, 
         def get_buffer_info(self):
             return object()
 
-    def _multi_replay_factory(**_kwargs):
+    def _multi_replay_factory(_need):
         return _Replay()
 
     def _worker_replay_factory(*_args, **_kwargs):
