@@ -114,19 +114,19 @@ def prepare_worker_env(env_builder, seed=None):
     return prepared.env, env_info
 
 
-def get_remote_env_info(workers, remote_get, include_action_type=False):
-    """Get standardized environment info from remote worker references.
+def get_worker_env_info(workers, worker_info, include_action_type=False):
+    """Get standardized environment info from distributed worker handles.
 
     Args:
-        workers: List of remote workers with get_info.remote() method
-        remote_get: Runtime adapter callable that resolves one remote reference
+        workers: List of worker handles with normal get_info semantics.
+        worker_info: Runtime adapter callable that returns one worker's info.
         include_action_type: If True, also return action_type
 
     Returns:
         observation_space, action_size, env_type [, action_type]
     """
     if isinstance(workers, list):
-        env_dict = remote_get(workers[0].get_info.remote())
+        env_dict = worker_info(workers[0])
         env_info = _require_env_info(env_dict)
         observation_space = env_info["observation_space"]
         action_size = env_info["action_size"]

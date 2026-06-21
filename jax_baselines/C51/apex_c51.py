@@ -25,7 +25,7 @@ class APE_X_C51(Ape_X_Family):
         self,
         workers,
         model_builder_maker,
-        manager=None,
+        runtime,
         categorial_bar_n=51,
         categorial_max=250,
         categorial_min=-250,
@@ -65,7 +65,7 @@ class APE_X_C51(Ape_X_Family):
         super().__init__(
             workers,
             model_builder_maker,
-            manager=manager,
+            runtime=runtime,
             gamma=gamma,
             learning_rate=learning_rate,
             buffer_size=buffer_size,

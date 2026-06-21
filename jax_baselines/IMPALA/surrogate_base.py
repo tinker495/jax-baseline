@@ -66,7 +66,7 @@ class SurrogateIMPALA(IMPALA_Family):
                 "loss/mean_rho": float(rho),
                 "loss/mean_target": float(targets),
             }
-            self.logger_server.log_trainer.remote(steps, log_dict)
+            self.logger_server.log_trainer(steps, log_dict)
         return critic_loss, float(rho)
 
     def preprocess(

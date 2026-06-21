@@ -1,12 +1,10 @@
 import time
 from collections import deque
-from importlib import import_module
 
 import jax
 import numpy as np
 
-from jax_baselines.APE_X.common_servers import Logger_server, Param_server
-from jax_baselines.core.env_info import get_remote_env_info
+from jax_baselines.core.env_info import get_worker_env_info
 from jax_baselines.core.hparams import get_hyper_params
 from jax_baselines.core.replay_protocol import (
     MultiPrioritizedReplayBufferFactory,
@@ -20,10 +18,6 @@ from jax_baselines.math.jax_utils import convert_jax
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
-def _ray():
-    return import_module("ray")
-
-
 class Ape_X_Deteministic_Policy_Gradient_Family(object):
     _run_name = "APE_X_DPG"
 
@@ -31,7 +25,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         self,
         workers,
         model_builder_maker,
-        manager=None,
+        runtime,
         gamma=0.995,
         learning_rate=5e-5,
         buffer_size=50000,
@@ -61,7 +55,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
     ):
         self.workers = workers
         self.model_builder_maker = model_builder_maker
-        self.m = manager
+        self.runtime = runtime
         self.multi_replay_factory = multi_replay_factory
         self.worker_replay_factory = worker_replay_factory
         self.log_interval = log_interval
@@ -118,8 +112,8 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         return self.optimizer_factory(learning_rate)
 
     def get_env_setup(self):
-        self.observation_space, self.action_size, self.env_type = get_remote_env_info(
-            self.workers, _ray().get
+        self.observation_space, self.action_size, self.env_type = get_worker_env_info(
+            self.workers, self.runtime.worker_info
         )
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
@@ -138,7 +132,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
             action_shape_or_n=self.action_size,
             n_step=self.n_step,
             gamma=self.gamma,
-            manager=self.m,
+            manager=self.runtime.replay_manager(),
             compress_memory=self.compress_memory,
             eps=self.prioritized_replay_eps,
         )
@@ -175,7 +169,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
 
         if steps % self.log_interval == 0:
             log_dict = {"loss/qloss": float(loss), "loss/targets": float(t_mean)}
-            self.logger_server.log_trainer.remote(steps, log_dict)
+            self.logger_server.log_trainer(steps, log_dict)
 
         return loss
 
@@ -199,30 +193,29 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         progress_factory = progress_factory or make_progress
         pbar = progress_factory(total_trainstep, miniters=log_interval)
 
-        self.logger_server = Logger_server.remote(
+        self.logger_server = self.runtime.create_logger_server(
             self.log_dir, run_name, experiment_name, logger_factory
         )
         hparams = get_hyper_params(self)
-        self.logger_server.register_hparams.remote(hparams)
+        self.logger_server.register_hparams(hparams)
 
         if self.env_type == "SingleEnv":
             self.learn_SingleEnv(pbar, callback, log_interval)
 
-        self.save_params(_ray().get(self.logger_server.get_log_dir.remote()))
+        self.save_params(self.logger_server.get_log_dir())
 
     def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
-        stop = self.m.Event()
-        ray = _ray()
+        stop = self.runtime.create_event()
         worker_num = len(self.workers)
-        update = [self.m.Event() for i in range(worker_num)]
+        update = [self.runtime.create_event() for i in range(worker_num)]
         stop.clear()
         for u in update:
             u.clear()
 
         cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
-        param_server = Param_server.remote(cpu_param)
+        param_server = self.runtime.create_param_server(cpu_param)
 
-        self.logger_server.add_multiline.remote(
+        self.logger_server.add_multiline(
             [
                 self.exploration_initial_eps
                 ** (1 + self.exploration_decay * idx / (worker_num - 1))
@@ -235,7 +228,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
                 1 + self.exploration_decay * idx / (worker_num - 1)
             )
             jobs.append(
-                self.workers[idx].run.remote(
+                self.workers[idx].run(
                     2000,
                     self.replay_buffer.buffer_info(),
                     self.worker_replay_factory,
@@ -256,8 +249,8 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
             time.sleep(1)
             if stop.is_set():
                 print("Stop Training")
-                ray.wait(jobs, timeout=300)
-                self.m.shutdown()
+                self.runtime.wait(jobs, timeout=300)
+                self.runtime.shutdown()
                 return
 
         print("Start Training")
@@ -272,12 +265,12 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
                 pbar.set_description(self.description())
             if steps % self.param_broadcast_freq == 0:
                 cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
-                param_server.update_params.remote(cpu_param)
+                param_server.update_params(cpu_param)
                 for u in update:
                     u.set()
-        self.logger_server.last_update.remote()
-        ray.get(self.logger_server.close.remote())
+        self.logger_server.last_update()
+        self.logger_server.close()
         stop.set()
-        ray.wait(jobs, timeout=300)
+        self.runtime.wait(jobs, timeout=300)
         time.sleep(1)
-        self.m.shutdown()
+        self.runtime.shutdown()

@@ -117,13 +117,13 @@ def run_family(runner: FamilyRunner, argv=None):
 class DistributedFamilyRunner:
     """Sibling of FamilyRunner for Ray-based families (APE-X / IMPALA).
 
-    The agent is built as ``cls(workers, maker, manager, **build)`` (not from an
-    env_builder), needs a Ray runtime plus an mp.Manager and a list of worker
-    actors, and runs ``learn(steps)`` only (no experiment_name, no test()).
+    The agent is built as ``cls(workers, maker, runtime, **build)`` (not from an
+    env_builder), gets worker handles from the distributed runtime adapter, and
+    runs ``learn(steps)`` only (no experiment_name, no test()).
     """
 
     add_args: Callable[[ArgumentParser], None]
-    make_workers: Callable[[Namespace], list]  # args -> list of Ray worker actors
+    make_workers: Callable[[Namespace, object], list]
     policy_kwargs: Callable[[Namespace], dict]
     algos: dict[str, AlgoSpec]
     maker_pkg: str  # builder package with a "{lib}" placeholder
@@ -132,9 +132,7 @@ class DistributedFamilyRunner:
 
 
 def run_distributed_family(runner: DistributedFamilyRunner, argv=None):
-    import multiprocessing as mp
-
-    import ray
+    from experiments.distributed_runtime import RayDistributedRuntime
 
     load_runtime_env()
     parser = ArgumentParser()
@@ -146,13 +144,12 @@ def run_distributed_family(runner: DistributedFamilyRunner, argv=None):
     spec = runner.algos[args.algo]
     maker = resolve_maker(runner, spec, args)
     logger_factory = resolve_logger_factory(args)
-    manager = mp.get_context().Manager()
-    ray.init(num_cpus=args.worker + runner.ray_cpu_headroom, num_gpus=0)
-    workers = runner.make_workers(args)
+    runtime = RayDistributedRuntime(num_cpus=args.worker + runner.ray_cpu_headroom, num_gpus=0)
+    workers = runner.make_workers(args, runtime)
     agent = spec.resolve_cls(args)(
         workers,
         maker,
-        manager,
+        runtime,
         policy_kwargs=runner.policy_kwargs(args),
         **spec.build(args),
     )

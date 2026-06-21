@@ -41,9 +41,12 @@ def add_args(parser):
     parser.add_argument("--val_coef", type=float, default=0.6, help="val coefficient")
 
 
-def make_workers(args):
+def make_workers(args, runtime):
     env_builder, _ = get_env_builder(args.env)
-    return [Impala_Worker.remote(env_builder, seed=args.seed + i) for i in range(args.worker)]
+    return [
+        runtime.create_worker(Impala_Worker, env_builder, seed=args.seed + i)
+        for i in range(args.worker)
+    ]
 
 
 def _common(a):

@@ -51,30 +51,7 @@ class AllowedImport:
         return self.path, self.token
 
 
-# Issue #13 finalized the migration ledger for static imports; the issue #7 audit
-# then extended the ratchet to dynamic ``import_module`` calls (see the main test
-# below) and surfaced the distributed families' Ray wiring, which had been hiding
-# from the static-only scan behind function-local dynamic imports.
-#
-# The remaining entries are the consciously declared distributed-runtime Ray
-# exemption that ADR 0002 anticipated with the ``DISTRIBUTED_RUNTIME_EXEMPTION``
-# tag: APE-X / IMPALA keep distributed *algorithm* semantics in the core (ADR
-# 0001), and the Ray actor/queue plumbing those families need is declared here
-# rather than concealed. env_builder, gymnasium, and cpprb were removed from these
-# files in the same audit (env via the injected Environment Adapter callable,
-# replay via the WorkerReplayBufferFactory seam), so Ray is the only token left.
-_DISTRIBUTED_RAY = "DISTRIBUTED_RUNTIME_EXEMPTION"
-_RAY_SLICE = "distributed runtime: Ray actor/queue wiring (ADR 0001; issue #7 audit)"
-ALLOWED_IMPORTS: tuple[AllowedImport, ...] = (
-    AllowedImport("jax_baselines/APE_X/base_class.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
-    AllowedImport("jax_baselines/APE_X/common_servers.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
-    AllowedImport("jax_baselines/APE_X/dpg_base_class.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
-    AllowedImport("jax_baselines/APE_X/dpg_worker.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
-    AllowedImport("jax_baselines/APE_X/worker.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
-    AllowedImport("jax_baselines/IMPALA/base_class.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
-    AllowedImport("jax_baselines/IMPALA/vtrace_queue.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
-    AllowedImport("jax_baselines/IMPALA/worker.py", "ray", _DISTRIBUTED_RAY, _RAY_SLICE),
-)
+ALLOWED_IMPORTS: tuple[AllowedImport, ...] = ()
 
 
 def _iter_python_files(root: Path) -> Iterable[Path]:
@@ -353,10 +330,35 @@ def test_import_boundary_final_slice_has_no_common_or_migration_debt_allowlist_e
 
 
 def test_import_boundary_remaining_exemptions_are_distributed_ray_only():
+    assert ALLOWED_IMPORTS == ()
     for entry in ALLOWED_IMPORTS:
         assert entry.tag == "DISTRIBUTED_RUNTIME_EXEMPTION"
         assert entry.token == "ray"
         assert "distributed" in entry.retiring_slice.lower()
+
+
+def test_algorithm_core_has_no_ray_shaped_distributed_interface():
+    offenders: list[str] = []
+    for path in _iter_python_files(SCAN_ROOT):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        relative_path = path.relative_to(REPO_ROOT).as_posix()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == "remote":
+                offenders.append(f"{relative_path}: function remote")
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr == "remote"
+            ):
+                offenders.append(f"{relative_path}: .remote() call")
+            if (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "ray"
+            ):
+                offenders.append(f"{relative_path}: ray.{node.attr}")
+
+    assert offenders == []
 
 
 def test_import_boundary_failure_message_distinguishes_undeclared_and_stale_entries():

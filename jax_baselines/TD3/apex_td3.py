@@ -18,7 +18,7 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
         self,
         workers,
         model_builder_maker,
-        manager=None,
+        runtime,
         target_action_noise_mul=1.5,
         policy_delay=3,
         gamma=0.995,
@@ -56,7 +56,7 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
         super().__init__(
             workers,
             model_builder_maker,
-            manager=manager,
+            runtime=runtime,
             gamma=gamma,
             learning_rate=learning_rate,
             buffer_size=buffer_size,

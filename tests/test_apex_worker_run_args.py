@@ -23,12 +23,7 @@ def _find_run_remote_call(tree):
         if not isinstance(node, ast.Call):
             continue
         func = node.func
-        if (
-            isinstance(func, ast.Attribute)
-            and func.attr == "remote"
-            and isinstance(func.value, ast.Attribute)
-            and func.value.attr == "run"
-        ):
+        if isinstance(func, ast.Attribute) and func.attr == "run":
             return node
     return None
 
@@ -39,8 +34,8 @@ def test_apex_run_passes_eps_and_seed_by_keyword(relative_path):
     tree = ast.parse((repo_root / relative_path).read_text())
 
     call = _find_run_remote_call(tree)
-    assert call is not None, f"no worker.run.remote(...) call found in {relative_path}"
+    assert call is not None, f"no worker.run(...) call found in {relative_path}"
 
     keyword_args = {kw.arg for kw in call.keywords}
-    assert "eps" in keyword_args, f"{relative_path}: run.remote must pass eps= by keyword"
-    assert "seed" in keyword_args, f"{relative_path}: run.remote must pass seed= by keyword"
+    assert "eps" in keyword_args, f"{relative_path}: run must pass eps= by keyword"
+    assert "seed" in keyword_args, f"{relative_path}: run must pass seed= by keyword"

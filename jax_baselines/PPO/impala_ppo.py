@@ -9,7 +9,7 @@ class IMPALA_PPO(SurrogateIMPALA):
         self,
         workers,
         model_builder_maker,
-        manager=None,
+        runtime,
         ppo_eps=0.2,
         epoch_num=3,
         buffer_size=0,
@@ -40,7 +40,7 @@ class IMPALA_PPO(SurrogateIMPALA):
         super().__init__(
             workers,
             model_builder_maker,
-            manager=manager,
+            runtime=runtime,
             buffer_size=buffer_size,
             gamma=gamma,
             lamda=lamda,

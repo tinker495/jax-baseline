@@ -5,19 +5,7 @@ import numpy as np
 from jax_baselines.core.runtime_adapters import NoOpLogger
 
 
-def _ray():
-    from importlib import import_module
-
-    return import_module("ray")
-
-
-class _RayActor:
-    @classmethod
-    def remote(cls, *args, **kwargs):
-        return _ray().remote(cls).remote(*args, **kwargs)
-
-
-class Param_server(_RayActor):
+class Param_server:
     def __init__(self, params) -> None:
         self.params = params
 
@@ -28,11 +16,11 @@ class Param_server(_RayActor):
         self.params = params
 
 
-class Logger_server(_RayActor):
+class Logger_server:
     def __init__(
         self, log_dir, log_name, experiment_name="experiment", logger_factory=None
     ) -> None:
-        # Pass None as the agent to avoid attempting to extract hparams from this Ray actor
+        # Pass None as the agent to avoid attempting to extract hparams from this server
         # (which would serialize the whole actor). Hyperparameters should be
         # registered explicitly via `register_hparams` with a plain dict.
         logger_factory = logger_factory or NoOpLogger
@@ -85,8 +73,6 @@ class Logger_server(_RayActor):
         """Register hyperparameters (plain dict) to be logged.
 
         This should be called from the trainer/process that has the real agent
-        object, using `get_hyper_params(agent)` to build a serializable dict,
-        and then `logger.register_hparams.remote(hparams)` to send it to this
-        Ray actor.
+        object, using `get_hyper_params(agent)` to build a serializable dict.
         """
         self.logger.log_hparams(hparams)

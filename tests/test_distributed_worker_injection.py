@@ -78,7 +78,7 @@ def test_worker_builds_env_through_injected_adapter(worker_cls):
     assert info["observation_space"] == [[4]]
     assert info["action_size"] == [2]
     assert info["action_type"] == "discrete"
-    # get_remote_env_info normalizes distributed envs to SingleEnv; the worker
+    # get_worker_env_info normalizes distributed envs to SingleEnv; the worker
     # reports that directly instead of inferring a backend-specific env_type.
     assert info["core_env_type"] == "SingleEnv"
 
@@ -147,7 +147,7 @@ def test_apex_worker_replay_factory_satisfies_seam():
 )
 def test_distributed_base_class_threads_worker_replay_factory(relative_path):
     """Regression: every distributed learner must thread ``worker_replay_factory``
-    into ``worker.run.remote(...)`` so the worker never falls back to a core
+    into ``worker.run(...)`` so the worker never falls back to a core
     buffer. IMPALA passes a local variable; APE-X passes
     ``self.worker_replay_factory`` — accept a Name or an attribute access."""
     repo_root = Path(__file__).resolve().parents[1]
@@ -158,9 +158,7 @@ def test_distributed_base_class_threads_worker_replay_factory(relative_path):
         for node in ast.walk(tree)
         if isinstance(node, ast.Call)
         and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "remote"
-        and isinstance(node.func.value, ast.Attribute)
-        and node.func.value.attr == "run"
+        and node.func.attr == "run"
     )
     passed = {
         arg.id if isinstance(arg, ast.Name) else arg.attr
@@ -169,4 +167,4 @@ def test_distributed_base_class_threads_worker_replay_factory(relative_path):
     }
     assert (
         "worker_replay_factory" in passed
-    ), f"{relative_path}: run.remote must pass worker_replay_factory"
+    ), f"{relative_path}: run must pass worker_replay_factory"

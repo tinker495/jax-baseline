@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -118,7 +119,7 @@ def test_apex_families_use_injected_shared_and_worker_factories(family_cls, acti
     agent.prioritized_replay_eps = 0.02
     agent.n_step = 4
     agent.gamma = 0.91
-    agent.m = "manager"
+    agent.runtime = SimpleNamespace(replay_manager=lambda: "manager")
     agent.compress_memory = True
 
     agent.get_memory_setup()

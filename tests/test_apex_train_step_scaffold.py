@@ -51,9 +51,7 @@ def _base_fake():
             prioritized_replay_beta0=0.4,
             log_interval=1,
             replay_buffer=_RecordingReplay(),
-            logger_server=SimpleNamespace(
-                log_trainer=SimpleNamespace(remote=lambda steps, d: logged.append((steps, d)))
-            ),
+            logger_server=SimpleNamespace(log_trainer=lambda steps, d: logged.append((steps, d))),
             _invoke_train_step=lambda steps, data: (
                 invoked.append((steps, data)) or ("P", "TP", "OPT", 0.5, 1.5, [0.1, 0.2])
             ),

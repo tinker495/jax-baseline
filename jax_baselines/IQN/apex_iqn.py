@@ -21,7 +21,7 @@ class APE_X_IQN(Ape_X_Family):
         self,
         workers,
         model_builder_maker,
-        manager=None,
+        runtime,
         CVaR=1.0,
         n_support=200,
         delta=1.0,
@@ -62,7 +62,7 @@ class APE_X_IQN(Ape_X_Family):
         super().__init__(
             workers,
             model_builder_maker,
-            manager=manager,
+            runtime=runtime,
             gamma=gamma,
             learning_rate=learning_rate,
             buffer_size=buffer_size,

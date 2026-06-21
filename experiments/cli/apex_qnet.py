@@ -60,9 +60,12 @@ def add_args(parser):
     parser.add_argument("--compress_memory", action="store_true")
 
 
-def make_workers(args):
+def make_workers(args, runtime):
     env_builder, _ = get_env_builder(args.env)
-    return [Ape_X_Worker.remote(env_builder, seed=args.seed + i) for i in range(args.worker)]
+    return [
+        runtime.create_worker(Ape_X_Worker, env_builder, seed=args.seed + i)
+        for i in range(args.worker)
+    ]
 
 
 def _common(a):

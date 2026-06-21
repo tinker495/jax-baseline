@@ -15,7 +15,7 @@ class IMPALA_TPPO(IMPALA_Family):
         self,
         workers,
         model_builder_maker,
-        manager=None,
+        runtime,
         kl_range=0.05,
         kl_coef=5,
         mu_ratio=0.0,
@@ -49,7 +49,7 @@ class IMPALA_TPPO(IMPALA_Family):
         super().__init__(
             workers,
             model_builder_maker,
-            manager=manager,
+            runtime=runtime,
             buffer_size=buffer_size,
             gamma=gamma,
             lamda=lamda,
@@ -122,7 +122,7 @@ class IMPALA_TPPO(IMPALA_Family):
                 "loss/mean_rho": float(rho),
                 "loss/mean_target": float(targets),
             }
-            self.logger_server.log_trainer.remote(steps, log_dict)
+            self.logger_server.log_trainer(steps, log_dict)
         return critic_loss, float(rho)
 
     def preprocess(

@@ -412,18 +412,22 @@ def test_dist_policy_kwargs_uses_shared_normal_embedding(family: str):
 
 
 def test_run_distributed_family_wires_agent(monkeypatch):
-    import types
     from dataclasses import replace
 
     import experiments.cli._run as run_mod
+    import experiments.distributed_runtime as dist_runtime
     from experiments.cli.apex_dpg import APEX_DPG_RUNNER
     from experiments.runtime_adapters import TensorboardLogger
 
     captured: dict = {}
 
+    class FakeRuntime:
+        def __init__(self, **kwargs):
+            captured["runtime_kwargs"] = kwargs
+
     class FakeAgent:
-        def __init__(self, workers, maker, manager, **kwargs):
-            captured.update(workers=workers, maker=maker, manager=manager, kwargs=kwargs)
+        def __init__(self, workers, maker, runtime, **kwargs):
+            captured.update(workers=workers, maker=maker, runtime=runtime, kwargs=kwargs)
 
         def learn(self, steps, experiment_name=None, logger_factory=None, progress_factory=None):
             captured.update(
@@ -437,21 +441,18 @@ def test_run_distributed_family_wires_agent(monkeypatch):
     fake_runner = replace(
         APEX_DPG_RUNNER,
         algos={**APEX_DPG_RUNNER.algos, "DDPG": fake_spec},
-        make_workers=lambda a: ["W0", "W1"],
+        make_workers=lambda a, runtime: ["W0", "W1"],
         policy_kwargs=lambda a: {"pk": 1},
     )
     monkeypatch.setattr(run_mod, "resolve_maker", lambda r, s, a: "MAKER")
-    monkeypatch.setattr("ray.init", lambda **k: None)
-    monkeypatch.setattr(
-        "multiprocessing.get_context",
-        lambda *a: types.SimpleNamespace(Manager=lambda: "MGR"),
-    )
+    monkeypatch.setattr(dist_runtime, "RayDistributedRuntime", FakeRuntime)
 
     run_mod.run_distributed_family(fake_runner, ["--algo", "DDPG", "--steps", "11"])
 
     assert captured["workers"] == ["W0", "W1"]
     assert captured["maker"] == "MAKER"
-    assert captured["manager"] == "MGR"
+    assert isinstance(captured["runtime"], FakeRuntime)
+    assert captured["runtime_kwargs"] == {"num_cpus": 3, "num_gpus": 0}
     assert captured["steps"] == 11
     assert captured["experiment_name"] == "APEX_DPG"  # threaded from --experiment_name default
     assert captured["logger_factory"] is TensorboardLogger

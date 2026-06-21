@@ -11,7 +11,7 @@ class IMPALA(IMPALA_Family):
         self,
         workers,
         model_builder_maker,
-        manager=None,
+        runtime,
         buffer_size=0,
         gamma=0.995,
         lamda=0.95,
@@ -36,7 +36,7 @@ class IMPALA(IMPALA_Family):
         super().__init__(
             workers,
             model_builder_maker,
-            manager=manager,
+            runtime=runtime,
             buffer_size=buffer_size,
             gamma=gamma,
             lamda=lamda,
@@ -109,7 +109,7 @@ class IMPALA(IMPALA_Family):
                 "loss/mean_rho": float(rho),
                 "loss/mean_target": float(targets),
             }
-            self.logger_server.log_trainer.remote(steps, log_dict)
+            self.logger_server.log_trainer(steps, log_dict)
         return critic_loss, float(rho)
 
     def preprocess(

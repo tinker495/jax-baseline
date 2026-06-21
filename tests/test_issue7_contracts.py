@@ -102,8 +102,8 @@ def test_distributed_learn_overrides_forward_driver_factories(_runner, _algo, _s
         assert "logger_factory" in inspect.signature(cls.learn).parameters
         assert "progress_factory" in inspect.signature(cls.learn).parameters
         assert "experiment_name" in inspect.signature(cls.learn).parameters
-        # logger_factory + experiment_name thread into the logger server (not hardcoded).
-        assert "Logger_server.remote(" in source
+        # logger_factory + experiment_name thread into the runtime logger (not hardcoded).
+        assert "create_logger_server(" in source
         assert "experiment_name, logger_factory" in source
         assert "progress_factory or make_progress" in source
 
@@ -133,8 +133,8 @@ def test_distributed_constructor_kwargs_are_explicit_and_reject_unknown(
 def test_apex_dpg_constructors_initialize_model_setup_dependencies(monkeypatch, algo):
     from experiments.cli.apex_dpg import APEX_DPG_RUNNER
 
-    class _RemoteMethod:
-        def remote(self):
+    class _Worker:
+        def get_info(self):
             return {
                 "observation_space": [[3]],
                 "action_size": [1],
@@ -145,8 +145,12 @@ def test_apex_dpg_constructors_initialize_model_setup_dependencies(monkeypatch, 
                 "core_env_type": "SingleEnv",
             }
 
-    class _Worker:
-        get_info = _RemoteMethod()
+    class _Runtime:
+        def replay_manager(self):
+            return None
+
+        def worker_info(self, worker):
+            return worker.get_info()
 
     class _Replay:
         def get_buffer_info(self):
@@ -171,11 +175,6 @@ def test_apex_dpg_constructors_initialize_model_setup_dependencies(monkeypatch, 
 
         return _builder
 
-    monkeypatch.setattr(
-        "jax_baselines.APE_X.dpg_base_class._ray",
-        lambda: type("R", (), {"get": staticmethod(lambda value: value)})(),
-    )
-
     args = _parse(APEX_DPG_RUNNER, ["--algo", algo])
     spec = APEX_DPG_RUNNER.algos[algo]
     built = spec.build(args)
@@ -187,7 +186,7 @@ def test_apex_dpg_constructors_initialize_model_setup_dependencies(monkeypatch, 
         }
     )
 
-    agent = spec.resolve_cls(args)([_Worker()], _model_builder_maker, object(), **built)
+    agent = spec.resolve_cls(args)([_Worker()], _model_builder_maker, _Runtime(), **built)
 
     assert agent.actor_builder is not None
     if algo == "TD3":

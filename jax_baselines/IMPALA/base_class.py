@@ -1,14 +1,11 @@
-import multiprocessing as mp
 import time
 from collections import deque
-from importlib import import_module
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from jax_baselines.APE_X.common_servers import Logger_server, Param_server
-from jax_baselines.core.env_info import get_remote_env_info
+from jax_baselines.core.env_info import get_worker_env_info
 from jax_baselines.core.replay_protocol import (
     WorkerReplayBufferFactory,
     require_replay_factory,
@@ -16,14 +13,9 @@ from jax_baselines.core.replay_protocol import (
 from jax_baselines.core.runtime_adapters import make_progress
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.serialization import restore, save
-from jax_baselines.IMPALA.vtrace_queue import ImpalaBuffer
 from jax_baselines.math.jax_utils import convert_jax
 from jax_baselines.math.returns import get_vtrace
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
-
-
-def _ray():
-    return import_module("ray")
 
 
 class IMPALA_Family(object):
@@ -31,7 +23,7 @@ class IMPALA_Family(object):
         self,
         workers,
         model_builder_maker,
-        manager=None,
+        runtime,
         buffer_size=0,
         gamma=0.995,
         lamda=0.95,
@@ -55,7 +47,7 @@ class IMPALA_Family(object):
         self.workers = workers
         self.model_builder_maker = model_builder_maker
         self.worker_replay_factory = worker_replay_factory
-        self.m = manager if manager is not None else mp.Manager()
+        self.runtime = runtime
         self.buffer_size = buffer_size
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
@@ -107,7 +99,7 @@ class IMPALA_Family(object):
             self.action_size,
             self.env_type,
             self.action_type,
-        ) = get_remote_env_info(self.workers, _ray().get, include_action_type=True)
+        ) = get_worker_env_info(self.workers, self.runtime.worker_info, include_action_type=True)
         self.worker_num = len(self.workers)
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
@@ -166,7 +158,7 @@ class IMPALA_Family(object):
         return vs, rho, adv
 
     def get_memory_setup(self):
-        self.buffer = ImpalaBuffer(
+        self.buffer = self.runtime.create_impala_buffer(
             self.buffer_size,
             self.worker_num,
             self.observation_space,
@@ -249,25 +241,24 @@ class IMPALA_Family(object):
         progress_factory = progress_factory or make_progress
         pbar = progress_factory(total_trainstep, miniters=log_interval)
 
-        self.logger_server = Logger_server.remote(
+        self.logger_server = self.runtime.create_logger_server(
             self.log_dir, run_name, experiment_name, logger_factory
         )
 
         if self.env_type == "SingleEnv":
             self.learn_SingleEnv(pbar, callback, log_interval)
 
-        self.save_params(_ray().get(self.logger_server.get_log_dir.remote()))
+        self.save_params(self.logger_server.get_log_dir())
 
     def learn_SingleEnv(self, pbar, callback, log_interval):
-        stop = self.m.Event()
-        ray = _ray()
-        update = [self.m.Event() for i in range(self.worker_num)]
+        stop = self.runtime.create_event()
+        update = [self.runtime.create_event() for i in range(self.worker_num)]
         stop.clear()
         for u in update:
             u.set()
 
         cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
-        param_server = Param_server.remote(ray.put(cpu_param))
+        param_server = self.runtime.create_param_server(cpu_param)
 
         worker_replay_factory = require_replay_factory(
             self.worker_replay_factory, "WorkerReplayBufferFactory"
@@ -275,7 +266,7 @@ class IMPALA_Family(object):
         jobs = []
         for idx in range(self.worker_num):
             jobs.append(
-                self.workers[idx].run.remote(
+                self.workers[idx].run(
                     self.batch_size,
                     self.buffer.queue_info(),
                     worker_replay_factory,
@@ -294,8 +285,8 @@ class IMPALA_Family(object):
             time.sleep(1)
             if stop.is_set():
                 print("Stop Training")
-                ray.wait(jobs, timeout=300)
-                self.m.shutdown()
+                self.runtime.wait(jobs, timeout=300)
+                self.runtime.shutdown()
                 return
 
         print("Start Training")
@@ -311,14 +302,13 @@ class IMPALA_Family(object):
 
             if steps % self.update_freq == 0:
                 cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
-                param_server.update_params.remote(ray.put(cpu_param))
+                param_server.update_params(cpu_param)
                 for u in update:
                     u.set()
-        self.logger_server.last_update.remote()
-        ray.get(self.logger_server.close.remote())
+        self.logger_server.last_update()
+        self.logger_server.close()
         stop.set()
-        while not self.buffer.queue.empty():
-            self.buffer.queue.get()
-        ray.wait(jobs, timeout=300)
+        self.buffer.clear()
+        self.runtime.wait(jobs, timeout=300)
         time.sleep(1)
-        self.m.shutdown()
+        self.runtime.shutdown()

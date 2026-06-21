@@ -5,7 +5,7 @@ Both backends are optional extras that are NOT installed in the test env, so:
 - selecting one uninstalled raises a clear, actionable ``SystemExit``;
 - against a fake SDK module injected into ``sys.modules``, each backend satisfies
   the ``LoggerRun`` protocol and routes metrics / histograms / hparams / multiline
-  correctly, mapping the re-entrant distributed Ray actor to exactly ONE run.
+  correctly, mapping the re-entrant distributed logger server to exactly ONE run.
 """
 
 from __future__ import annotations
