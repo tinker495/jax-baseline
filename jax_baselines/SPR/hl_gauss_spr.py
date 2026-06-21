@@ -50,6 +50,9 @@ class HL_GAUSS_SPR(SPR):
             "train_freq": 1,
             "double_q": True,
             "dueling_model": True,
+            # NOTE: diverges from the SPR parent default (n_step=3, tuned "better than
+            # 10 in breakout"). Kept at 10 as the HL-Gauss variant's own default; not yet
+            # re-tuned. Align to 3 only with experimental confirmation.
             "n_step": 10,
             "prioritized_replay": True,
             "param_noise": True,
@@ -78,6 +81,9 @@ class HL_GAUSS_SPR(SPR):
             self.prediction,
             self.params,
         ) = model_builder(next(self.key_seq), print_model=True)
+        # NOTE: diverges from the SPR parent, which seeds the target net with
+        # tree_random_normal_like (random re-init). This variant uses a plain copy of
+        # the online params. Both are valid target-init regimes; difference is intentional.
         self.target_params = deepcopy(self.params)
         if self.scaled_by_reset:
             self.reset_hardsoft = filter_like_tree(

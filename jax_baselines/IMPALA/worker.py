@@ -76,6 +76,9 @@ class Impala_Worker(object):
             len_label = "rollout/episode_length"
             to_label = "rollout/timeout_rate"
 
+            # Eager initial fetch so `params` is always bound before first use,
+            # mirroring the APE-X workers (avoids reliance on update being pre-set).
+            params = ray.get(param_server.get_params.remote())
             while not stop.is_set():
                 if update.is_set():
                     params = ray.get(param_server.get_params.remote())
@@ -133,7 +136,7 @@ class Impala_Worker(object):
             )
         finally:
             if stop.is_set():
-                print("worker stoped")
+                print("worker stopped")
             else:
                 stop.set()
         return None

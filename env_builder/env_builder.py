@@ -424,18 +424,17 @@ class GymVectorizedEnv(VectorizedEnv):
 
             return _make
 
-        if hasattr(gym, "make_vec") and env_type != "atari_env":
-            # For non-Atari, try efficient make_vec if available
+        if env_type != "atari_env":
+            # Non-Atari: prefer the registry's efficient make_vec, falling back to
+            # explicit AsyncVectorEnv if the env has no vectorized entry point.
             try:
                 self.env = gym.make_vec(env_id, num_envs=worker_num, vectorization_mode="async")
             except Exception:
                 self.env = gym.vector.AsyncVectorEnv([make_env(i) for i in range(worker_num)])
-        elif hasattr(gym.vector, "AsyncVectorEnv"):
-            # For Atari or if make_vec fails/not avail, use AsyncVectorEnv manually to ensure wrappers applied
-            self.env = gym.vector.AsyncVectorEnv([make_env(i) for i in range(worker_num)])
         else:
-            # Last resort fallback
-            self.env = gym.vector.make(env_id, num_envs=worker_num, asynchronous=True)
+            # Atari needs the custom wrappers, so build AsyncVectorEnv from the
+            # explicit per-env constructors.
+            self.env = gym.vector.AsyncVectorEnv([make_env(i) for i in range(worker_num)])
 
         # Store environment info
         action_size, action_type = _action_meta(self.env.single_action_space)

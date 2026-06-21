@@ -146,29 +146,19 @@ def make_multi_prioritized_buffer(
     eps: float | None = None,
 ):
     """Factory wrapper for MultiPrioritizedReplayBuffer used in distributed setups."""
-    if eps is None:
-        return MultiPrioritizedReplayBuffer(
-            buffer_size,
-            observation_space,
-            alpha,
-            action_shape_or_n,
-            n_step,
-            gamma,
-            manager,
-            compress_memory,
-        )
-    else:
-        return MultiPrioritizedReplayBuffer(
-            buffer_size,
-            observation_space,
-            alpha,
-            action_shape_or_n,
-            n_step,
-            gamma,
-            manager,
-            compress_memory,
-            eps,
-        )
+    # eps=None defers to MultiPrioritizedReplayBuffer's own default.
+    extra = {} if eps is None else {"eps": eps}
+    return MultiPrioritizedReplayBuffer(
+        buffer_size,
+        observation_space,
+        alpha,
+        action_shape_or_n,
+        n_step,
+        gamma,
+        manager,
+        compress_memory,
+        **extra,
+    )
 
 
 def make_worker_replay_buffer(local_size: int, *, env_dict: dict, n_s: dict | None = None):

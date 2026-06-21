@@ -11,6 +11,7 @@ from jax_baselines.core.seeding import key_gen
 from jax_baselines.math.distributional import (
     CategoricalBackend,
     MunchausenSpec,
+    categorical_projection,
     distributional_td_target,
 )
 from jax_baselines.math.jax_utils import convert_jax
@@ -165,43 +166,17 @@ class APE_X_C51(Ape_X_Family):
                     axis=(1, 2),
                 )
                 next_distribution = jnp.squeeze(jnp.take_along_axis(next_q, next_actions, axis=1))
-                next_categorial = (1.0 - terminateds) * categorial_bar
-                target_categorial = (next_categorial * gamma) + rewards
-
-                Tz = jnp.clip(target_categorial, categorial_min, categorial_max)
-                C51_B = ((Tz - categorial_min) / delta_bar).astype(jnp.float32)
-                C51_L = jnp.floor(C51_B).astype(jnp.int32)
-                C51_H = jnp.ceil(C51_B).astype(jnp.int32)
-                C51_L = jnp.where(
-                    (C51_H > 0) * (C51_L == C51_H), C51_L - 1, C51_L
-                )  # C51_L.at[].add(-1)
-                C51_H = jnp.where(
-                    (C51_L < (categorial_bar_n - 1)) * (C51_L == C51_H),
-                    C51_H + 1,
-                    C51_H,
-                )  # C51_H.at[].add(1)
-
-                def tdist(next_distribution, C51_L, C51_H, C51_B):
-                    exact = C51_L == C51_H
-                    target_distribution = jnp.zeros((self.categorial_bar_n))
-
-                    w_l = jnp.where(
-                        exact,
-                        next_distribution,
-                        next_distribution * (C51_H.astype(jnp.float32) - C51_B),
-                    )
-                    w_u = jnp.where(
-                        exact,
-                        jnp.zeros_like(next_distribution),
-                        next_distribution * (C51_B - C51_L.astype(jnp.float32)),
-                    )
-
-                    target_distribution = target_distribution.at[C51_L].add(w_l)
-                    target_distribution = target_distribution.at[C51_H].add(w_u)
-                    return target_distribution
-
-                target_distribution = jax.vmap(tdist, in_axes=(0, 0, 0, 0))(
-                    next_distribution, C51_L, C51_H, C51_B
+                # Bellman-shift the fixed support, then reuse the canonical C51
+                # projection (the integer-bracket form is numerically equivalent
+                # to the inlined l-=1/u+=1 form, per math/distributional.py).
+                shifted_atoms = gamma * ((1.0 - terminateds) * categorial_bar) + rewards
+                target_distribution = categorical_projection(
+                    next_distribution,
+                    shifted_atoms,
+                    categorial_min,
+                    categorial_max,
+                    delta_bar,
+                    categorial_bar_n,
                 )
                 loss = jnp.mean(target_distribution * (-jnp.log(distribution + 1e-5)), axis=1)
                 return jnp.squeeze(loss)

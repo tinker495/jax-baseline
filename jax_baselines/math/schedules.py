@@ -1,7 +1,7 @@
 """Schedules that evolve over time during training (e.g. exploration epsilon)."""
 
 
-class Schedule(object):
+class Schedule:
     def value(self, step):
         """Value of the schedule for a given timestep.
 

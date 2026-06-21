@@ -276,7 +276,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         if self.prioritized_replay:
             new_priorities = abs_error
         if self.scaled_by_reset:
-            policy_params = scaled_by_reset(
+            policy_params, opt_policy_state = scaled_by_reset(
                 policy_params,
                 opt_policy_state,
                 self.optimizer,
@@ -285,7 +285,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
                 self.reset_freq,
                 0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
             )
-            critic_params = scaled_by_reset(
+            critic_params, opt_critic_state = scaled_by_reset(
                 critic_params,
                 opt_critic_state,
                 self.optimizer,

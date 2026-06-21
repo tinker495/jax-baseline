@@ -123,6 +123,7 @@ class APE_X_IQN(Ape_X_Family):
         param_noise = self.param_noise
         delta = self.delta
         n_support = self.n_support
+        CVaR = self.CVaR
 
         def builder():
             key_seq = key_gen(random.randint(0, 1000000))
@@ -152,7 +153,10 @@ class APE_X_IQN(Ape_X_Family):
                 return jnp.squeeze(loss)
 
             def actor(model, preproc, params, obses, key):
-                tau = jax.random.uniform(key, (1, n_support))
+                # CVaR-distorted quantile sampling for risk-averse acting,
+                # mirroring local IQN._get_actions; the priority/TD-error path
+                # (get_abs_td_error) deliberately uses plain U[0,1] like iqn.py _loss/_target.
+                tau = jax.random.uniform(key, (1, n_support)) * CVaR
                 q_values = model(params, key, preproc(params, key, convert_jax(obses)), tau)
                 return jnp.expand_dims(jnp.argmax(jnp.mean(q_values, axis=2), axis=1), axis=1)
 

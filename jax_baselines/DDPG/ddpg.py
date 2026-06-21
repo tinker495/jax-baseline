@@ -125,13 +125,14 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             self.opt_policy_state,
             self.opt_critic_state,
             context.train_steps_count,
-            None,
+            next(self.key_seq),
             **data,
         )
         return DPGTrainReport(loss=loss, target=t_mean, new_priorities=new_priorities)
 
     def _train_on_bulk(self, data, contexts):
         steps = jnp.asarray([context.train_steps_count for context in contexts])
+        keys = jax.random.split(next(self.key_seq), len(contexts))
         carry = (
             self.policy_params,
             self.critic_params,
@@ -147,14 +148,14 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             self.target_critic_params,
             self.opt_policy_state,
             self.opt_critic_state,
-        ), (losses, targets, priorities) = self._bulk_scan(carry, steps, data)
+        ), (losses, targets, priorities) = self._bulk_scan(carry, keys, steps, data)
         return DPGTrainReport(
             loss=losses[-1],
             target=targets[-1],
             new_priorities=priorities,
         )
 
-    def _bulk_scan(self, carry, steps, data):
+    def _bulk_scan(self, carry, keys, steps, data):
         def train_one(carry, xs):
             (
                 policy_params,
@@ -164,7 +165,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                 opt_policy_state,
                 opt_critic_state,
             ) = carry
-            step, batch = xs
+            key, step, batch = xs
             (
                 policy_params,
                 critic_params,
@@ -183,7 +184,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                 opt_policy_state,
                 opt_critic_state,
                 step,
-                None,
+                key,
                 **batch,
             )
             return (
@@ -195,7 +196,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                 opt_critic_state,
             ), (loss, t_mean, priorities)
 
-        return jax.lax.scan(train_one, carry, (steps, data))
+        return jax.lax.scan(train_one, carry, (keys, steps, data))
 
     def _train_step(
         self,
@@ -251,7 +252,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         if self.prioritized_replay:
             new_priorities = abs_error
         if self.scaled_by_reset:
-            policy_params = scaled_by_reset(
+            policy_params, opt_policy_state = scaled_by_reset(
                 policy_params,
                 opt_policy_state,
                 self.optimizer,
@@ -260,7 +261,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                 self.reset_freq,
                 0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
             )
-            critic_params = scaled_by_reset(
+            critic_params, opt_critic_state = scaled_by_reset(
                 critic_params,
                 opt_critic_state,
                 self.optimizer,

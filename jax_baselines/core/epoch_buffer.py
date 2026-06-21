@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 
 
-class EpochBuffer(object):
+class EpochBuffer:
     def __init__(self, epoch_size: int, observation_space: list, worker_size=1, action_space=1):
         self.epoch_size = epoch_size
         self.observation_space = observation_space

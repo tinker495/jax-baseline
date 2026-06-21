@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from jax_baselines.core.rollout import CheckpointTrainPulse
+from jax_baselines.core.seeding import key_gen
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.ddpg import DDPG
 from jax_baselines.DDPG.training import DPGTrainingLifecycle, DPGTrainReport
@@ -249,6 +250,7 @@ def test_td3_train_on_batch_uses_ordered_train_step_count():
 
 def test_ddpg_train_on_bulk_scans_updates_and_stacks_priorities():
     agent = DDPG.__new__(DDPG)
+    agent.key_seq = key_gen(0)
     agent.policy_params = np.asarray(0)
     agent.critic_params = np.asarray(10)
     agent.target_policy_params = np.asarray(20)
