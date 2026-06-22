@@ -342,12 +342,39 @@ class RolloutEngine:
         # (action ignored, reward 0, fresh obs); exclude it from returns,
         # episode lengths, and the replay buffer.
         prev_done = None
+        defer_checkpoint_pulses = not spec.has_true_reset()
+        pending_checkpoint_pulses = deque()
+        pending_eval_steps = deque()
+
+        def checkpoint_pulse_callback(pulse_steps, accumulated_timesteps):
+            if defer_checkpoint_pulses:
+                pending_checkpoint_pulses.append((pulse_steps, accumulated_timesteps))
+            else:
+                spec.checkpoint_pulse(pulse_steps, accumulated_timesteps)
+
+        def run_eval(eval_steps):
+            nonlocal eval_result
+            eval_result = spec.evaluate(eval_steps)
+
+        def schedule_eval(eval_steps):
+            if pending_checkpoint_pulses:
+                pending_eval_steps.append(eval_steps)
+            else:
+                run_eval(eval_steps)
+
+        def flush_checkpoint_pulses():
+            while pending_checkpoint_pulses:
+                pulse_steps, accumulated_timesteps = pending_checkpoint_pulses.popleft()
+                spec.checkpoint_pulse(pulse_steps, accumulated_timesteps)
+            while pending_eval_steps:
+                run_eval(pending_eval_steps.popleft())
 
         for steps in pbar:
             spec.refresh_exploration(steps)
             obs = spec.env.current_obs()
             sel = spec.vector_action(obs, steps)
             spec.env.step(sel.env_action)
+            flush_checkpoint_pulses()
 
             next_obses, rewards, terminateds, truncateds, infos = spec.env.get_result()
             done = np.logical_or(terminateds, truncateds)
@@ -388,7 +415,7 @@ class RolloutEngine:
                         steps,
                         float(scores[idx]),
                         int(eplens[idx]),
-                        spec.checkpoint_pulse,
+                        checkpoint_pulse_callback,
                         advance_criterion=advance,
                     )
                     if advance and not ckpt_success:
@@ -416,7 +443,9 @@ class RolloutEngine:
             prev_done = done & active
 
             if steps % spec.eval_freq == 0:
-                eval_result = spec.evaluate(steps)
+                schedule_eval(steps)
 
             if steps % log_interval == 0 and eval_result is not None and len(lossque) > 0:
                 pbar.set_description(spec.describe(eval_result))
+
+        flush_checkpoint_pulses()

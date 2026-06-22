@@ -10,12 +10,14 @@ needed. This is the test surface the typed module exists to provide; the former
 import tempfile
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from jax_baselines.core.checkpoint import make_checkpoint_scaffold
+from jax_baselines.core.checkpoint import make_checkpoint_scaffold, snapshot_pytree
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DDPG.ddpg import DDPG
+from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.math.statistics import RunningMeanStd
 from jax_baselines.SAC.sac import SAC
 from jax_baselines.TD3.td3 import TD3
@@ -71,6 +73,44 @@ def _field_value(name, i):
 def _assert_tree_equal(a, b):
     for la, lb in zip(jax.tree_util.tree_leaves(a), jax.tree_util.tree_leaves(b)):
         np.testing.assert_array_equal(np.asarray(la), np.asarray(lb))
+
+
+def test_snapshot_pytree_rebuilds_containers_without_copying_jax_array_leaves():
+    jax_leaf = jnp.asarray([1.0, 2.0])
+    numpy_leaf = np.asarray([3.0, 4.0])
+    params = {"nested": {"jax": jax_leaf, "numpy": numpy_leaf}}
+
+    snapshot = snapshot_pytree(params)
+
+    assert snapshot is not params
+    assert snapshot["nested"] is not params["nested"]
+    assert snapshot["nested"]["jax"] is jax_leaf
+    assert snapshot["nested"]["numpy"] is not numpy_leaf
+    numpy_leaf[0] = 99.0
+    np.testing.assert_array_equal(snapshot["nested"]["numpy"], np.asarray([3.0, 4.0]))
+
+
+def test_family_checkpoint_snapshots_use_pytree_snapshot():
+    qnet = Q_Network_Family.__new__(Q_Network_Family)
+    qnet_params = {"policy": {"w": jnp.asarray([1.0]), "b": np.asarray([2.0])}}
+    qnet.get_eval_params = lambda: qnet_params
+
+    Q_Network_Family._checkpoint_update_snapshot(qnet)
+    qnet_params["policy"]["w"] = jnp.asarray([9.0])
+    qnet_params["policy"]["b"][0] = 9.0
+
+    np.testing.assert_array_equal(np.asarray(qnet.checkpoint_params["policy"]["w"]), [1.0])
+    np.testing.assert_array_equal(qnet.checkpoint_params["policy"]["b"], [2.0])
+
+    dpg = DDPG.__new__(DDPG)
+    dpg.simba = False
+    eval_state = {"encoder": None, "policy": {"w": jnp.asarray([3.0])}}
+    dpg.get_eval_state = lambda: eval_state
+
+    DDPG._checkpoint_update_snapshot(dpg)
+    eval_state["policy"]["w"] = jnp.asarray([7.0])
+
+    np.testing.assert_array_equal(np.asarray(dpg.eval_snapshot["policy"]["w"]), [3.0])
 
 
 @pytest.mark.parametrize("cls", list(ALGO_FIELDS), ids=lambda c: c.__name__)

@@ -1,10 +1,8 @@
-from copy import deepcopy
-
 import jax
 import jax.numpy as jnp
 import numpy as np
 
-from jax_baselines.core.checkpoint import make_checkpoint_scaffold
+from jax_baselines.core.checkpoint import make_checkpoint_scaffold, snapshot_pytree
 from jax_baselines.core.env_info import get_local_env_info
 from jax_baselines.core.eval import evaluate_policy, record_and_test
 from jax_baselines.core.replay_protocol import (
@@ -464,7 +462,7 @@ class Q_Network_Family:
 
         Subclasses override to customise which parameters are snapshotted.
         """
-        self.checkpoint_params = deepcopy(self.get_eval_params())
+        self.checkpoint_params = snapshot_pytree(self.get_eval_params())
 
     def _has_true_reset(self):
         return False

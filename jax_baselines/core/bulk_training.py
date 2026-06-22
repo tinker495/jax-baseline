@@ -1,5 +1,10 @@
 """Small helpers for chunked replay training pulses."""
 
+from functools import lru_cache
+
+import jax
+import numpy as np
+
 
 def bulk_train_hook(agent):
     if not getattr(agent, "supports_bulk_training", False):
@@ -27,15 +32,66 @@ def bulk_chunk_schedule(agent, gradient_steps):
 
 
 def iter_bulk_chunk_sizes(gradient_steps, max_chunk):
-    """Yield bounded bulk chunk sizes, leaving unsupported leftovers scalar."""
-    remaining = int(gradient_steps)
+    """Yield bounded bulk chunk sizes, avoiding scalar leftovers when supported."""
     buckets = bulk_chunk_buckets(max_chunk)
-    while remaining > 1:
-        chunk_size = next((bucket for bucket in buckets if bucket <= remaining), None)
-        if chunk_size is None:
-            break
-        yield chunk_size
+    yield from bulk_chunk_plan(int(gradient_steps), buckets)
+
+
+@lru_cache(maxsize=128)
+def bulk_chunk_plan(gradient_steps, buckets):
+    calls = [0] + [gradient_steps + 1] * gradient_steps
+    scalar_counts = [0] + [gradient_steps + 1] * gradient_steps
+    first_chunks = [0] * (gradient_steps + 1)
+
+    for steps in range(1, gradient_steps + 1):
+        calls[steps] = calls[steps - 1] + 1
+        scalar_counts[steps] = scalar_counts[steps - 1] + 1
+
+        for bucket in buckets:
+            if bucket <= steps:
+                candidate_calls = calls[steps - bucket] + 1
+                candidate_scalars = scalar_counts[steps - bucket]
+                if _is_better_chunk_plan(
+                    candidate_calls,
+                    candidate_scalars,
+                    bucket,
+                    calls[steps],
+                    scalar_counts[steps],
+                    first_chunks[steps],
+                ):
+                    calls[steps] = candidate_calls
+                    scalar_counts[steps] = candidate_scalars
+                    first_chunks[steps] = bucket
+
+    chunks = []
+    remaining = gradient_steps
+    while remaining > 0:
+        chunk_size = first_chunks[remaining]
+        if chunk_size <= 0:
+            remaining -= 1
+            continue
+        chunks.append(chunk_size)
         remaining -= chunk_size
+    return tuple(chunks)
+
+
+def _is_better_chunk_plan(
+    candidate_calls,
+    candidate_scalars,
+    candidate_chunk,
+    current_calls,
+    current_scalars,
+    current_chunk,
+):
+    return (
+        candidate_calls < current_calls
+        or (candidate_calls == current_calls and candidate_scalars < current_scalars)
+        or (
+            candidate_calls == current_calls
+            and candidate_scalars == current_scalars
+            and candidate_chunk > current_chunk
+        )
+    )
 
 
 def bulk_chunk_buckets(max_chunk):
@@ -44,6 +100,8 @@ def bulk_chunk_buckets(max_chunk):
     while chunk_size >= 2:
         buckets.append(chunk_size)
         chunk_size //= 2
+    if buckets and buckets[-1] != 2:
+        buckets.append(2)
     return tuple(buckets)
 
 
@@ -135,3 +193,7 @@ def flatten_priority_values(values):
     if shape is None or len(shape) <= 1:
         return values
     return values.reshape((-1,))
+
+
+def host_priority_values(values):
+    return np.asarray(jax.device_get(flatten_priority_values(values)))

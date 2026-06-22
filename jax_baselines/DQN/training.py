@@ -13,7 +13,7 @@ from typing import Protocol
 from jax_baselines.core.bulk_training import (
     bulk_chunk_schedule,
     bulk_train_hook,
-    flatten_priority_values,
+    host_priority_values,
     make_train_contexts,
     normalize_bulk_weights,
     reshape_bulk_batch,
@@ -212,8 +212,8 @@ class QNetTrainingLifecycle:
                 "when prioritized_replay is enabled"
             )
 
-        indexes = flatten_priority_values(data["indexes"])
-        priorities = flatten_priority_values(result.replay_priorities)
+        indexes = host_priority_values(data["indexes"])
+        priorities = host_priority_values(result.replay_priorities)
         self.agent.replay_buffer.update_priorities(indexes, priorities)
 
     def _log_report(self, report, steps):

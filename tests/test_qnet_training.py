@@ -1,10 +1,12 @@
 import ast
 from pathlib import Path
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from jax_baselines.core.bulk_training import (
+    bulk_chunk_plan,
     flatten_bulk_batch,
     iter_bulk_batches,
     iter_bulk_chunk_sizes,
@@ -125,6 +127,24 @@ def test_qnet_training_lifecycle_samples_updates_priorities_and_logs():
     ]
     assert len(agent.logger_run.histograms) == 1
     assert agent.logger_run.histograms[0][0] == "loss/tau"
+
+
+def test_qnet_priority_update_materializes_jax_values_on_host():
+    agent = FakeAgent()
+    lifecycle = QNetTrainingLifecycle(agent)
+    data = {"indexes": jnp.arange(4).reshape(2, 2)}
+    result = QNetTrainResult.from_values(
+        loss=1.0,
+        replay_priorities=jnp.arange(4, dtype=jnp.float32).reshape(2, 2),
+    )
+
+    lifecycle._update_priorities(data, result)
+
+    indexes, priorities = agent.replay_buffer.priority_update_calls[-1]
+    assert isinstance(indexes, np.ndarray)
+    assert isinstance(priorities, np.ndarray)
+    assert np.array_equal(indexes, np.arange(4))
+    assert np.array_equal(priorities, np.arange(4, dtype=np.float32))
 
 
 def test_qnet_train_report_keeps_replay_priorities_out_of_report_surface():
@@ -258,15 +278,27 @@ def test_qnet_training_lifecycle_uses_scalar_path_without_bulk_hook():
         (8, 2, (2,)),
         (8, 7, (4, 2)),
         (8, 13, (8, 4)),
-        (3, 5, (3,)),
+        (3, 4, (2, 2)),
+        (3, 5, (3, 2)),
         (5, 9, (5, 2, 2)),
         (5, 8, (5, 2)),
         (7, 10, (7, 3)),
-        (7, 9, (7,)),
+        (7, 9, (7, 2)),
     ),
 )
 def test_bulk_chunk_schedule_uses_bounded_greedy_buckets(max_chunk, gradient_steps, expected):
     assert tuple(iter_bulk_chunk_sizes(gradient_steps, max_chunk)) == expected
+
+
+def test_bulk_chunk_plan_is_cached_for_repeated_pulses():
+    bulk_chunk_plan.cache_clear()
+
+    assert bulk_chunk_plan(5, (3, 2)) == (3, 2)
+    assert bulk_chunk_plan(5, (3, 2)) == (3, 2)
+
+    cache_info = bulk_chunk_plan.cache_info()
+    assert cache_info.hits == 1
+    assert cache_info.maxsize == 128
 
 
 def test_qnet_training_lifecycle_requires_explicit_bulk_marker():
@@ -343,9 +375,10 @@ def test_qnet_training_lifecycle_uses_scalar_tail_larger_than_one_after_full_bul
 
     lifecycle.train(steps=10, gradient_steps=5)
 
-    assert agent.replay_buffer.sample_calls == [(12, 0.4), (4, 0.4), (4, 0.4)]
+    assert agent.replay_buffer.sample_calls == [(12, 0.4), (8, 0.4)]
     assert [[ctx.train_steps_count for ctx in chunk] for chunk in agent.bulk_contexts] == [
         [1, 2, 3],
+        [4, 5],
     ]
     assert [ctx.train_steps_count for ctx in agent.contexts] == [1, 2, 3, 4, 5]
 

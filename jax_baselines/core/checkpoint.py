@@ -26,11 +26,31 @@ save/load). The training-cadence residual is *not* owned here — it belongs to
 :class:`~jax_baselines.core.rollout.CheckpointTrainPulse`.
 """
 
+from copy import deepcopy
 from typing import Callable, Optional
 
+import jax
 import numpy as np
 
 from jax_baselines.math.statistics import compute_ckpt_window_stat
+
+_JAX_ARRAY_TYPE = getattr(jax, "Array", ())
+
+
+def snapshot_pytree(tree):
+    """Snapshot a parameter PyTree without copying immutable JAX array leaves."""
+    return jax.tree_util.tree_map(_snapshot_leaf, tree)
+
+
+def _snapshot_leaf(leaf):
+    if _JAX_ARRAY_TYPE and isinstance(leaf, _JAX_ARRAY_TYPE):
+        return leaf
+
+    copy_leaf = getattr(leaf, "copy", None)
+    if callable(copy_leaf):
+        return copy_leaf()
+
+    return deepcopy(leaf)
 
 
 class CheckpointScaffold:

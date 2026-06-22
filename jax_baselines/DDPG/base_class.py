@@ -4,7 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from jax_baselines.core.checkpoint import make_checkpoint_scaffold
+from jax_baselines.core.checkpoint import make_checkpoint_scaffold, snapshot_pytree
 from jax_baselines.core.checkpoint_state import CheckpointState
 from jax_baselines.core.env_info import get_local_env_info
 from jax_baselines.core.eval import evaluate_policy, record_and_test
@@ -518,7 +518,7 @@ class Deteministic_Policy_Gradient_Family(object):
         Snapshots the eval behaviour-state (mirrors eval action selection).
         Subclasses can override for custom snapshot strategies.
         """
-        self.eval_snapshot = deepcopy(self.get_eval_state())
+        self.eval_snapshot = snapshot_pytree(self.get_eval_state())
 
         # If using SIMBA normalization, snapshot obs_rms for eval-time consistency.
         if self.simba:

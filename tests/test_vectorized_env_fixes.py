@@ -23,7 +23,11 @@ import numpy as np
 import pytest
 
 from env_builder import env_builder as eb
-from replay_memory.cpprb_buffers import NstepReplayBuffer, ReplayBuffer
+from replay_memory.cpprb_buffers import (
+    NstepReplayBuffer,
+    ReplayBuffer,
+    _active_worker_indices,
+)
 
 
 # --- Fix 1: CLI default env ids are gymnasium-canonical ------------------
@@ -69,6 +73,18 @@ def test_replay_buffer_all_dummy_mask_adds_nothing():
     obs, act, rew, nxt, term, trunc = _batch(2)
     buf.add([obs], act, rew, [nxt], term, trunc, store_mask=np.array([False, False]))
     assert len(buf) == 0
+
+
+def test_active_worker_indices_uses_sparse_store_mask_subset():
+    assert list(_active_worker_indices(4, None)) == [0, 1, 2, 3]
+    assert list(_active_worker_indices(4, np.array([True, True, True, True]))) == [0, 1, 2, 3]
+    assert list(_active_worker_indices(4, np.array([False, True, False, True]))) == [1, 3]
+    assert list(_active_worker_indices(4, np.array([False, False, False, False]))) == []
+
+
+def test_active_worker_indices_rejects_mismatched_store_mask_length():
+    with pytest.raises(ValueError, match="store_mask length"):
+        list(_active_worker_indices(4, np.array([True, False])))
 
 
 def test_nstep_multiworker_add_store_mask_skips_dummy_worker():

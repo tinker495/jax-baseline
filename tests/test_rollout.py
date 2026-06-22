@@ -17,6 +17,8 @@ Behaviors deliberately pinned here:
   vectorized loops; DPG never refreshes epsilon;
 - checkpointing loops skip the cadence ``train_step`` and train only via the
   checkpoint pulse callback;
+- vectorized checkpointing defers pulse training until after the next
+  ``env.step`` only when true-reset semantics are not needed;
 - Q-Net single/vectorized checkpointing honor ``true_reset`` on a failed
   checkpoint, DPG does not.
 
@@ -673,10 +675,10 @@ GOLDEN = {
             ("arr", [True, False]),
         ),
         ("checkpoint_on_episode_end", 3, 3.0, 3),
-        ("ckpt_train_and_reset", 3, 3),
-        ("eval", 3),
         ("actions", [("arr", [5.0, 5.0])], 4),
         ("env_step", ("arr", [[0.5, 0.5]])),
+        ("ckpt_train_and_reset", 3, 3),
+        ("eval", 3),
         (
             "buffer_add",
             ("arr", [[0.5, 0.5]]),
@@ -703,6 +705,34 @@ def test_rollout_loop_call_trace_matches_golden(name):
     rec = []
     SCENARIOS[name](rec)
     assert rec == GOLDEN[name]
+
+
+def test_vectorized_checkpointing_defers_pulse_until_after_next_env_step_without_true_reset():
+    rec = []
+    _run_dpg_vec_ckpt(rec)
+
+    pulse_index = rec.index(("ckpt_train_and_reset", 3, 3))
+    assert rec[pulse_index - 1] == ("env_step", ("arr", [[0.5, 0.5]]))
+    assert rec[pulse_index + 1] == ("eval", 3)
+    assert rec[pulse_index + 2][0] == "buffer_add"
+
+
+def test_vectorized_checkpointing_keeps_pulse_immediate_when_true_reset_can_follow_failure():
+    rec = []
+    _run_qnet_vec_ckpt(rec)
+
+    checkpoint_index = rec.index(("checkpoint_on_episode_end", 3, 3.0, 3))
+    assert rec[checkpoint_index + 1] == ("ckpt_train_and_reset", 3, 3)
+    assert rec[checkpoint_index + 2] == ("true_reset",)
+
+
+def test_vectorized_checkpointing_flushes_deferred_pulse_after_normal_loop_exit():
+    rec = []
+    agent = FakeAgent(rec, FakeVecEnv(rec, _vec_script(2), 2), "dpg")
+
+    _dpg_runner(agent).learn_vectorized_env_checkpointing(FakePbar(range(0, 4)))
+
+    assert rec[-2:] == [("ckpt_train_and_reset", 3, 3), ("eval", 3)]
 
 
 # --- CheckpointTrainPulse ------------------------------------------------

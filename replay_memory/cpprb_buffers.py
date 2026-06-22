@@ -77,6 +77,18 @@ def _nstep_env_dicts(obsdict, nextobsdict, env_nextobsdict, action_space, n_step
     return n_s, central_env_dict, local_env_dict
 
 
+def _active_worker_indices(worker_size, store_mask):
+    if store_mask is None:
+        return range(worker_size)
+
+    store_mask = np.asarray(store_mask, dtype=bool)
+    if store_mask.shape != (worker_size,):
+        raise ValueError("store_mask length must match worker_size")
+    if store_mask.all():
+        return range(worker_size)
+    return np.flatnonzero(store_mask)
+
+
 class ReplayBuffer(object):
     def __init__(
         self,
@@ -226,10 +238,7 @@ class NstepReplayBuffer(ReplayBuffer):
         truncated=False,
         store_mask=None,
     ):
-        for w in range(self.worker_size):
-            # Skip workers emitting an autoreset dummy step (terminated last step).
-            if store_mask is not None and not store_mask[w]:
-                continue
+        for w in _active_worker_indices(self.worker_size, store_mask):
             obsdict = dict(zip(self.obsdict, [o[w] for o in obs_t]))
             nextobsdict = dict(zip(self.nextobsdict, [no[w] for no in nxtobs_t]))
             self.local_buffers[w].add(

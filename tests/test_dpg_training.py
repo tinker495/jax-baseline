@@ -1,6 +1,7 @@
 import ast
 from pathlib import Path
 
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -142,6 +143,24 @@ def test_dpg_training_lifecycle_samples_normalizes_updates_priorities_and_logs()
         ("loss/qloss", 2.0, 10),
         ("loss/targets", 22.0, 10),
     ]
+
+
+def test_dpg_priority_update_materializes_jax_values_on_host():
+    agent = FakeAgent()
+    lifecycle = DPGTrainingLifecycle(agent)
+    data = {"indexes": jnp.arange(4).reshape(2, 2)}
+    report = DPGTrainReport(
+        loss=1.0,
+        new_priorities=jnp.arange(4, dtype=jnp.float32).reshape(2, 2),
+    )
+
+    lifecycle._update_priorities(data, report)
+
+    indexes, priorities = agent.replay_buffer.priority_updates[-1]
+    assert isinstance(indexes, np.ndarray)
+    assert isinstance(priorities, np.ndarray)
+    assert np.array_equal(indexes, np.arange(4))
+    assert np.array_equal(priorities, np.arange(4, dtype=np.float32))
 
 
 def test_dpg_training_lifecycle_falls_back_to_live_rms_before_policy_snapshot():
@@ -424,11 +443,12 @@ def test_dpg_training_lifecycle_uses_scalar_tail_larger_than_one_after_full_bulk
 
     lifecycle.train(steps=10, gradient_steps=5)
 
-    assert agent.replay_buffer.sample_calls == [(12, 0.4), (4, 0.4), (4, 0.4)]
+    assert agent.replay_buffer.sample_calls == [(12, 0.4), (8, 0.4)]
     assert [[ctx.train_steps_count for ctx in chunk] for chunk in agent.bulk_contexts] == [
         [1, 2, 3],
+        [4, 5],
     ]
-    assert [ctx.train_steps_count for ctx in agent.contexts] == [4, 5]
+    assert agent.contexts == []
 
 
 def test_dpg_training_lifecycle_uses_scalar_path_when_cap_is_one():
