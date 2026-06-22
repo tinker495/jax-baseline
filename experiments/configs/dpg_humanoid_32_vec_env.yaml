@@ -8,13 +8,15 @@ base:
   eval_num: 20
   experiment_name: DPG_Humanoid
   env: Humanoid-v5
+  worker: 32
+  # Default backend is gymnasium; keep EnvPool for this Atari sweep's throughput.
+  env_backend: envpool
   learning_rate: 0.0003
   steps: 5e6
   buffer_size: 1e6
   batch: 256
   target_update_tau: 5e-3
   learning_starts: 50000
-  use_checkpointing: true
   node: 256
   hidden_n: 2
   optimizer: adam
@@ -29,4 +31,3 @@ variants:
   - {algo: TQC, simba: true}
   - {algo: TQC, simbav2: true}
   - {algo: CrossQ}
-  - {algo: TD7}
