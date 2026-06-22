@@ -101,10 +101,11 @@ class QRDQN(Q_Network_Family):
             priorities,
         ) = self._bulk_scan(carry, keys, steps, data)
         return QNetTrainResult.from_values(
-            loss=losses[-1],
-            target=targets[-1],
+            loss=jnp.mean(losses),
+            target=jnp.mean(targets),
             replay_priorities=priorities,
-            metrics={"loss/target_stds": target_stds[-1]},
+            metrics={"loss/target_stds": jnp.mean(target_stds)},
+            update_count=len(contexts),
         )
 
     def _bulk_scan(self, carry, keys, steps, data):

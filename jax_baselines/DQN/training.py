@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from jax_baselines.core.bulk_training import (
-    bulk_chunk_size,
+    bulk_chunk_schedule,
     bulk_train_hook,
     flatten_priority_values,
     make_train_contexts,
@@ -101,11 +101,15 @@ class QNetTrainingAgentProtocol(Protocol):
     train_steps_count: int
     _last_log_step: int
     max_bulk_updates_per_pulse: int
+    supports_bulk_training: bool
 
     def _sample_batch(self, batch_size=None):
         pass
 
     def _train_on_batch(self, data, context):
+        pass
+
+    def _train_on_bulk(self, data, contexts):
         pass
 
     def _aggregate_train_reports(self, reports):
@@ -155,26 +159,25 @@ class QNetTrainingLifecycle:
         Bulk mode is a throughput path: one replay sample is split into mini-updates,
         then PER priorities are written back once for the sampled chunk.
         """
-        max_chunk = bulk_chunk_size(self.agent)
         train_on_bulk = bulk_train_hook(self.agent)
 
         reports = []
         remaining = int(gradient_steps)
-        while remaining >= max_chunk:
+        for chunk_size in bulk_chunk_schedule(self.agent, gradient_steps):
             contexts = make_train_contexts(
                 self.agent,
                 QNetTrainContext,
                 steps,
-                max_chunk,
-                gradient_steps=max_chunk,
+                chunk_size,
+                gradient_steps=chunk_size,
             )
-            data = self.agent._sample_batch(max_chunk * self.agent.batch_size)
-            data = self._reshape_bulk_batch(data, max_chunk)
+            data = self.agent._sample_batch(chunk_size * self.agent.batch_size)
+            data = self._reshape_bulk_batch(data, chunk_size)
             data = normalize_bulk_weights(data)
             result = self._normalise_train_result(train_on_bulk(data, contexts))
             self._update_priorities(data, result)
             reports.append(result.report)
-            remaining -= max_chunk
+            remaining -= chunk_size
 
         while remaining > 0:
             reports.append(self._train_one_batch(steps, gradient_steps))

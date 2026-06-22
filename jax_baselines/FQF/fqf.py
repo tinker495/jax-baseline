@@ -146,11 +146,15 @@ class FQF(Q_Network_Family):
             priorities,
         ) = self._bulk_scan(carry, keys, steps, data)
         return QNetTrainResult.from_values(
-            loss=losses[-1],
-            target=targets[-1],
+            loss=jnp.mean(losses),
+            target=jnp.mean(targets),
             replay_priorities=priorities,
-            metrics={"loss/fqf_loss": fqf_losses[-1], "loss/target_stds": target_stds[-1]},
-            histograms={"loss/tau": taus[-1]},
+            metrics={
+                "loss/fqf_loss": jnp.mean(fqf_losses),
+                "loss/target_stds": jnp.mean(target_stds),
+            },
+            histograms={"loss/tau": jnp.mean(taus, axis=0)},
+            update_count=len(contexts),
         )
 
     def _bulk_scan(self, carry, keys, steps, data):

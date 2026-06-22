@@ -4,7 +4,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from jax_baselines.core.bulk_training import flatten_bulk_batch, iter_bulk_batches
+from jax_baselines.core.bulk_training import (
+    flatten_bulk_batch,
+    iter_bulk_batches,
+    iter_bulk_chunk_sizes,
+)
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.dqn import DQN
 from jax_baselines.DQN.training import (
@@ -185,6 +189,7 @@ class FakePulseAgent(FakeAgent):
 
     def _train_on_bulk(self, data, contexts):
         assert data["indexes"] is not None
+        assert all(context.gradient_steps == len(contexts) for context in contexts)
         self.bulk_batches.append(data)
         self.bulk_contexts.append(contexts)
         results = [
@@ -247,6 +252,23 @@ def test_qnet_training_lifecycle_uses_scalar_path_without_bulk_hook():
     assert [ctx.train_steps_count for ctx in agent.contexts] == [1, 2]
 
 
+@pytest.mark.parametrize(
+    ("max_chunk", "gradient_steps", "expected"),
+    (
+        (8, 2, (2,)),
+        (8, 7, (4, 2)),
+        (8, 13, (8, 4)),
+        (3, 5, (3,)),
+        (5, 9, (5, 2, 2)),
+        (5, 8, (5, 2)),
+        (7, 10, (7, 3)),
+        (7, 9, (7,)),
+    ),
+)
+def test_bulk_chunk_schedule_uses_bounded_greedy_buckets(max_chunk, gradient_steps, expected):
+    assert tuple(iter_bulk_chunk_sizes(gradient_steps, max_chunk)) == expected
+
+
 def test_qnet_training_lifecycle_requires_explicit_bulk_marker():
     agent = FakePulseAgent()
     agent.supports_bulk_training = False
@@ -282,16 +304,36 @@ def test_qnet_training_lifecycle_uses_scalar_path_for_single_pulse_update():
     assert [ctx.train_steps_count for ctx in agent.contexts] == [1]
 
 
-def test_qnet_training_lifecycle_uses_scalar_path_when_pulse_is_smaller_than_cap():
+def test_qnet_training_lifecycle_uses_bucket_when_pulse_is_smaller_than_cap():
     agent = FakePulseAgent()
     agent.max_bulk_updates_per_pulse = 8
     lifecycle = QNetTrainingLifecycle(agent)
 
     lifecycle.train(steps=10, gradient_steps=2)
 
-    assert agent.replay_buffer.sample_calls == [(4, 0.4), (4, 0.4)]
-    assert agent.bulk_contexts == []
+    assert agent.replay_buffer.sample_calls == [(8, 0.4)]
+    assert [[ctx.train_steps_count for ctx in chunk] for chunk in agent.bulk_contexts] == [[1, 2]]
+    assert [[ctx.gradient_steps for ctx in chunk] for chunk in agent.bulk_contexts] == [[2, 2]]
     assert [ctx.train_steps_count for ctx in agent.contexts] == [1, 2]
+
+
+def test_qnet_training_lifecycle_uses_smaller_buckets_before_scalar_tail():
+    agent = FakePulseAgent()
+    agent.max_bulk_updates_per_pulse = 8
+    lifecycle = QNetTrainingLifecycle(agent)
+
+    lifecycle.train(steps=10, gradient_steps=7)
+
+    assert agent.replay_buffer.sample_calls == [(16, 0.4), (8, 0.4), (4, 0.4)]
+    assert [[ctx.train_steps_count for ctx in chunk] for chunk in agent.bulk_contexts] == [
+        [1, 2, 3, 4],
+        [5, 6],
+    ]
+    assert [[ctx.gradient_steps for ctx in chunk] for chunk in agent.bulk_contexts] == [
+        [4, 4, 4, 4],
+        [2, 2],
+    ]
+    assert [ctx.train_steps_count for ctx in agent.contexts] == [1, 2, 3, 4, 5, 6, 7]
 
 
 def test_qnet_training_lifecycle_uses_scalar_tail_larger_than_one_after_full_bulk_chunk():
@@ -447,8 +489,9 @@ def test_dqn_train_on_bulk_scans_updates_and_stacks_priorities():
     assert agent.params == 2
     assert agent.target_params == 12
     assert agent.opt_state == 22
-    assert result.report.loss == 2.0
-    assert result.report.target == 12.0
+    assert result.report.loss == pytest.approx(1.5)
+    assert result.report.target == pytest.approx(11.5)
+    assert result.report.update_count == 2
     assert np.array_equal(result.replay_priorities, np.array([[1, 1, 1, 1], [2, 2, 2, 2]]))
 
 
@@ -470,17 +513,24 @@ def test_qnet_family_default_aggregation_weights_bulk_chunks():
     agent = Q_Network_Family.__new__(Q_Network_Family)
     reports = [
         QNetTrainReport(
+            loss=4.0,
+            target=14.0,
+            metrics={"loss/extra": 24.0},
+            histograms={"loss/tau": np.array([4.0, 14.0])},
+            update_count=4,
+        ),
+        QNetTrainReport(
             loss=2.0,
-            target=4.0,
-            metrics={"loss/extra": 6.0},
-            histograms={"loss/tau": np.array([2.0, 4.0])},
+            target=12.0,
+            metrics={"loss/extra": 22.0},
+            histograms={"loss/tau": np.array([2.0, 12.0])},
             update_count=2,
         ),
         QNetTrainReport(
-            loss=5.0,
-            target=7.0,
-            metrics={"loss/extra": 9.0},
-            histograms={"loss/tau": np.array([5.0, 7.0])},
+            loss=1.0,
+            target=11.0,
+            metrics={"loss/extra": 21.0},
+            histograms={"loss/tau": np.array([1.0, 11.0])},
             update_count=1,
         ),
     ]
@@ -488,10 +538,10 @@ def test_qnet_family_default_aggregation_weights_bulk_chunks():
     report = Q_Network_Family._aggregate_train_reports(agent, reports)
 
     assert report.loss == pytest.approx(3.0)
-    assert report.target == pytest.approx(5.0)
-    assert report.metrics["loss/extra"] == pytest.approx(7.0)
-    assert np.allclose(report.histograms["loss/tau"], np.array([3.0, 5.0]))
-    assert report.update_count == 3
+    assert report.target == pytest.approx(13.0)
+    assert report.metrics["loss/extra"] == pytest.approx(23.0)
+    assert np.allclose(report.histograms["loss/tau"], np.array([3.0, 13.0]))
+    assert report.update_count == 7
 
 
 def test_spr_lineage_bulk_hook_flattens_and_delegates_to_existing_pulse_train_step():

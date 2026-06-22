@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from jax_baselines.core.bulk_training import (
-    bulk_chunk_size,
+    bulk_chunk_schedule,
     bulk_train_hook,
     flatten_priority_values,
     make_train_contexts,
@@ -55,6 +55,7 @@ class DPGTrainingAgentProtocol(Protocol):
     prioritized_replay_beta0: float
     replay_buffer: object
     simba: bool
+    supports_bulk_training: bool
     train_steps_count: int
     _last_log_step: int
 
@@ -65,6 +66,9 @@ class DPGTrainingAgentProtocol(Protocol):
         pass
 
     def _train_on_batch(self, data, context):
+        pass
+
+    def _train_on_bulk(self, data, contexts):
         pass
 
 
@@ -100,14 +104,13 @@ class DPGTrainingLifecycle:
         Bulk mode is a throughput path: one replay sample is split into mini-updates,
         then PER priorities are written back once for the sampled chunk.
         """
-        max_chunk = bulk_chunk_size(self.agent)
         train_on_bulk = bulk_train_hook(self.agent)
 
         reports = []
         remaining = int(gradient_steps)
-        while remaining >= max_chunk:
-            reports.append(self._train_one_bulk_chunk(steps, max_chunk, train_on_bulk))
-            remaining -= max_chunk
+        for chunk_size in bulk_chunk_schedule(self.agent, gradient_steps):
+            reports.append(self._train_one_bulk_chunk(steps, chunk_size, train_on_bulk))
+            remaining -= chunk_size
 
         while remaining > 0:
             reports.append(self._train_one_batch(steps))

@@ -100,9 +100,10 @@ class HL_GAUSS_C51(Q_Network_Family):
             priorities,
         ) = self._bulk_scan(carry, keys, steps, data)
         return QNetTrainResult.from_values(
-            loss=losses[-1],
-            target=targets[-1],
+            loss=jnp.mean(losses),
+            target=jnp.mean(targets),
             replay_priorities=priorities,
+            update_count=len(contexts),
         )
 
     def _bulk_scan(self, carry, keys, steps, data):

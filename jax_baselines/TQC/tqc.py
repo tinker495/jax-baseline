@@ -170,10 +170,11 @@ class TQC(Deteministic_Policy_Gradient_Family):
             self.log_ent_coef,
         ), (losses, targets, ent_coefs, priorities) = self._bulk_scan(carry, keys, steps, data)
         return DPGTrainReport(
-            loss=losses[-1],
-            target=targets[-1],
+            loss=jnp.mean(losses),
+            target=jnp.mean(targets),
             new_priorities=priorities,
-            metrics={"loss/ent_coef": np.exp(ent_coefs[-1])},
+            metrics={"loss/ent_coef": jnp.mean(jnp.exp(ent_coefs))},
+            update_count=len(contexts),
         )
 
     def _bulk_scan(self, carry, keys, steps, data):

@@ -18,7 +18,33 @@ def uses_bulk_pulse(agent, gradient_steps):
     if bulk_train_hook(agent) is None or gradient_steps <= 1:
         return False
     max_chunk = bulk_chunk_size(agent)
-    return max_chunk > 1 and gradient_steps >= max_chunk
+    return max_chunk > 1
+
+
+def bulk_chunk_schedule(agent, gradient_steps):
+    max_chunk = bulk_chunk_size(agent)
+    return tuple(iter_bulk_chunk_sizes(gradient_steps, max_chunk))
+
+
+def iter_bulk_chunk_sizes(gradient_steps, max_chunk):
+    """Yield bounded bulk chunk sizes, leaving unsupported leftovers scalar."""
+    remaining = int(gradient_steps)
+    buckets = bulk_chunk_buckets(max_chunk)
+    while remaining > 1:
+        chunk_size = next((bucket for bucket in buckets if bucket <= remaining), None)
+        if chunk_size is None:
+            break
+        yield chunk_size
+        remaining -= chunk_size
+
+
+def bulk_chunk_buckets(max_chunk):
+    chunk_size = int(max_chunk)
+    buckets = []
+    while chunk_size >= 2:
+        buckets.append(chunk_size)
+        chunk_size //= 2
+    return tuple(buckets)
 
 
 def make_train_contexts(agent, context_type, steps, chunk_size, **kwargs):

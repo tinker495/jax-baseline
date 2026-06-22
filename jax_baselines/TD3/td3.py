@@ -138,9 +138,10 @@ class TD3(Deteministic_Policy_Gradient_Family):
             self.opt_critic_state,
         ), (losses, targets, priorities) = self._bulk_scan(carry, keys, steps, data)
         return DPGTrainReport(
-            loss=losses[-1],
-            target=targets[-1],
+            loss=jnp.mean(losses),
+            target=jnp.mean(targets),
             new_priorities=priorities,
+            update_count=len(contexts),
         )
 
     def _bulk_scan(self, carry, keys, steps, data):

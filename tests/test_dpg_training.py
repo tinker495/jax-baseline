@@ -109,6 +109,7 @@ class FakeBulkAgent(FakeAgent):
             loss=float(train_counts[-1]),
             target=20.0 + float(train_counts[-1]),
             new_priorities=np.repeat(train_counts[:, None], self.batch_size, axis=1),
+            update_count=len(contexts),
         )
 
     def _train_on_batch(self, data, context):
@@ -302,8 +303,9 @@ def test_ddpg_train_on_bulk_scans_updates_and_stacks_priorities():
     assert agent.target_critic_params == 32
     assert agent.opt_policy_state == 42
     assert agent.opt_critic_state == 52
-    assert report.loss == 2.0
-    assert report.target == 12.0
+    assert report.loss == pytest.approx(1.5)
+    assert report.target == pytest.approx(11.5)
+    assert report.update_count == 2
     assert np.array_equal(report.new_priorities, np.array([[1, 1, 1, 1], [2, 2, 2, 2]]))
 
 
@@ -336,16 +338,17 @@ def test_td7_aggregate_weights_bulk_chunks_by_update_count():
 def test_dpg_family_default_aggregation_weights_bulk_chunks():
     agent = Deteministic_Policy_Gradient_Family.__new__(Deteministic_Policy_Gradient_Family)
     reports = [
-        DPGTrainReport(loss=2.0, target=4.0, metrics={"loss/extra": 6.0}, update_count=2),
-        DPGTrainReport(loss=5.0, target=7.0, metrics={"loss/extra": 9.0}, update_count=1),
+        DPGTrainReport(loss=3.0, target=13.0, metrics={"loss/extra": 23.0}, update_count=3),
+        DPGTrainReport(loss=1.0, target=11.0, metrics={"loss/extra": 21.0}, update_count=1),
+        DPGTrainReport(loss=5.0, target=15.0, metrics={"loss/extra": 25.0}, update_count=1),
     ]
 
     report = Deteministic_Policy_Gradient_Family._aggregate_train_reports(agent, reports)
 
     assert report.loss == pytest.approx(3.0)
-    assert report.target == pytest.approx(5.0)
-    assert report.metrics["loss/extra"] == pytest.approx(7.0)
-    assert report.update_count == 3
+    assert report.target == pytest.approx(13.0)
+    assert report.metrics["loss/extra"] == pytest.approx(23.0)
+    assert report.update_count == 5
 
 
 def test_checkpoint_train_pulse_drives_dpg_bulk_chunks_under_cap():
@@ -387,16 +390,31 @@ def test_dpg_training_lifecycle_uses_scalar_tail_after_full_bulk_chunks():
     assert [ctx.train_steps_count for ctx in agent.contexts] == [3]
 
 
-def test_dpg_training_lifecycle_uses_scalar_path_when_pulse_is_smaller_than_cap():
+def test_dpg_training_lifecycle_uses_bucket_when_pulse_is_smaller_than_cap():
     agent = FakeBulkAgent()
     agent.max_bulk_updates_per_pulse = 8
     lifecycle = DPGTrainingLifecycle(agent)
 
     lifecycle.train(steps=10, gradient_steps=2)
 
-    assert agent.replay_buffer.sample_calls == [(4, 0.4), (4, 0.4)]
-    assert agent.bulk_contexts == []
-    assert [ctx.train_steps_count for ctx in agent.contexts] == [1, 2]
+    assert agent.replay_buffer.sample_calls == [(8, 0.4)]
+    assert [[ctx.train_steps_count for ctx in chunk] for chunk in agent.bulk_contexts] == [[1, 2]]
+    assert agent.contexts == []
+
+
+def test_dpg_training_lifecycle_uses_smaller_buckets_before_scalar_tail():
+    agent = FakeBulkAgent()
+    agent.max_bulk_updates_per_pulse = 8
+    lifecycle = DPGTrainingLifecycle(agent)
+
+    lifecycle.train(steps=10, gradient_steps=7)
+
+    assert agent.replay_buffer.sample_calls == [(16, 0.4), (8, 0.4), (4, 0.4)]
+    assert [[ctx.train_steps_count for ctx in chunk] for chunk in agent.bulk_contexts] == [
+        [1, 2, 3, 4],
+        [5, 6],
+    ]
+    assert [ctx.train_steps_count for ctx in agent.contexts] == [7]
 
 
 def test_dpg_training_lifecycle_uses_scalar_tail_larger_than_one_after_full_bulk_chunk():
