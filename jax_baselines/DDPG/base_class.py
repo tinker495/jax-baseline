@@ -496,7 +496,7 @@ class Deteministic_Policy_Gradient_Family(object):
             self.test_eval_env(episode)
 
     def test_action(self, obs):
-        return self.actions(obs, np.inf)
+        return self.actions(obs, np.inf, eval=True)
 
     def test_eval_env(self, episode):
         # Use common test helper: (env_builder, logger_run, actions_eval_fn, episode, conv_action=None)

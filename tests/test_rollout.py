@@ -30,7 +30,7 @@ import numpy as np
 import pytest
 
 from jax_baselines.core.checkpoint import CheckpointController
-from jax_baselines.core.eval import evaluate_policy
+from jax_baselines.core.eval import evaluate_policy, run_test_episodes
 from jax_baselines.core.rollout import (
     ActionSelection,
     CheckpointTrainPulse,
@@ -39,6 +39,7 @@ from jax_baselines.core.rollout import (
 )
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DQN.base_class import Q_Network_Family
+from jax_baselines.TD3.td3 import TD3
 from jax_baselines.TD7.td7 import TD7
 
 
@@ -930,6 +931,22 @@ def test_dpg_eval_warmup_action_matches_single_eval_env_shape():
     env = _ShapeCheckingEvalEnv((17,))
 
     evaluate_policy(env, 1, lambda obs: agent.actions(obs, steps=0, eval=True))
+
+    assert env.actions[0].shape == (17,)
+
+
+def test_td3_test_action_uses_eval_action_shape_with_many_workers():
+    agent = TD3.__new__(TD3)
+    agent.simba = False
+    agent.learning_starts = 0
+    agent.worker_size = 32
+    agent.action_size = (17,)
+    agent.action_noise = 0.1
+    agent._select_action_state = lambda eval, steps: {"encoder": None, "policy": None}
+    agent._policy_action_from_state = lambda state, obs, eval, steps: np.ones((1, 17))
+    env = _ShapeCheckingEvalEnv((17,))
+
+    run_test_episodes(env, agent.test_action, episode=1)
 
     assert env.actions[0].shape == (17,)
 
