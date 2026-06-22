@@ -27,6 +27,7 @@ action-selection seam directly.
 import numpy as np
 import pytest
 
+from jax_baselines.core.checkpoint import CheckpointController
 from jax_baselines.core.rollout import (
     ActionSelection,
     CheckpointTrainPulse,
@@ -223,8 +224,12 @@ class FakeAgent:
     def _has_true_reset(self):
         return self._has_tr
 
-    def _checkpoint_on_episode_end(self, steps, score, eplen, train_and_reset_callback=None):
+    def _checkpoint_on_episode_end(
+        self, steps, score, eplen, train_and_reset_callback=None, advance_criterion=True
+    ):
         self.rec.append(("checkpoint_on_episode_end", steps, rep(float(score)), int(eplen)))
+        if not advance_criterion:
+            return True
         if callable(train_and_reset_callback):
             train_and_reset_callback(steps, eplen)
         if self._ckpt_success_script:
@@ -381,8 +386,7 @@ GOLDEN = {
         ),
         ("actions", [("arr", [3.0, 3.0])], 0.88),
         ("env_step", ("arr", [[7, 7]])),
-        ("train_step", 2, 1),
-        ("train_step", 3, 1),
+        ("train_step", 2, 2),
         (
             "buffer_add",
             ("arr", [[7, 7]]),
@@ -403,8 +407,7 @@ GOLDEN = {
         ("eval", 3),
         ("actions", [("arr", [5.0, 5.0])], 0.86),
         ("env_step", ("arr", [[7, 7]])),
-        ("train_step", 4, 1),
-        ("train_step", 5, 1),
+        ("train_step", 4, 2),
         (
             "buffer_add",
             ("arr", [[7, 7]]),
@@ -562,8 +565,7 @@ GOLDEN = {
         ),
         ("actions", [("arr", [3.0, 3.0])], 2),
         ("env_step", ("arr", [[0.5, 0.5]])),
-        ("train_step", 2, 1),
-        ("train_step", 3, 1),
+        ("train_step", 2, 2),
         (
             "buffer_add",
             ("arr", [[0.5, 0.5]]),
@@ -584,8 +586,7 @@ GOLDEN = {
         ("eval", 3),
         ("actions", [("arr", [5.0, 5.0])], 4),
         ("env_step", ("arr", [[0.5, 0.5]])),
-        ("train_step", 4, 1),
-        ("train_step", 5, 1),
+        ("train_step", 4, 2),
         (
             "buffer_add",
             ("arr", [[0.5, 0.5]]),
@@ -941,3 +942,57 @@ def test_checkpointing_loop_drives_real_pulse_to_train_step():
     assert train_events == [("train_step", 3, 1)]
     assert agent._ckpt_update_residual == 0
     assert list(agent.lossque) == [0.1]
+
+
+def test_vectorized_checkpointing_pools_same_step_worker_lengths_before_pulse():
+    rec = []
+    worker_size = 2
+    zeros = np.zeros(worker_size, dtype=bool)
+    script = [
+        (np.ones(worker_size), zeros.copy(), zeros.copy()),
+        (np.ones(worker_size), zeros.copy(), zeros.copy()),
+        (np.ones(worker_size), zeros.copy(), np.ones(worker_size, dtype=bool)),
+    ]
+    env = FakeVecEnv(rec, script, worker_size)
+    agent = FakeAgent(rec, env, "qnet")
+    pulse_calls = []
+    controller = CheckpointController(
+        use_checkpointing=True,
+        steps_before_checkpointing=1000,
+        max_eps_before_checkpointing=1,
+        initial_window=1,
+        baseline_q=0.2,
+        baseline_mode="mean",
+        use_return_standardization=False,
+        snapshot=lambda: None,
+        log_metric=lambda *args: None,
+    )
+
+    def vector_action(obs, steps):
+        actions = agent.actions([obs], agent.update_eps)
+        return ActionSelection(actions, actions)
+
+    spec = RolloutSpec(
+        env=env,
+        replay_buffer=agent.replay_buffer,
+        learning_starts=agent.learning_starts,
+        train_freq=agent.train_freq,
+        gradient_steps=agent.gradient_steps,
+        eval_freq=agent.eval_freq,
+        worker_size=worker_size,
+        single_action=vector_action,
+        vector_action=vector_action,
+        refresh_exploration=lambda steps: None,
+        has_true_reset=lambda: False,
+        train=agent.train_step,
+        evaluate=agent.eval,
+        describe=agent.description,
+        bind_loss_window=lambda window: setattr(agent, "lossque", window),
+        record_rollout_episode=lambda *args, **kwargs: None,
+        checkpoint_on_episode_end=controller.on_episode_end,
+        checkpoint_pulse=lambda steps, accumulated: pulse_calls.append((steps, accumulated)),
+    )
+
+    RolloutEngine(spec).learn_vectorized_env_checkpointing(FakePbar(range(0, 3)))
+
+    assert pulse_calls == [(2, 6)]

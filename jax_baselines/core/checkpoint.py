@@ -228,18 +228,34 @@ class CheckpointController:
         self._log_metric("ckpt/ckpt_baseline", float(self._baseline), int(steps))
         self._log_metric("ckpt/update_count", float(self._update_count), int(steps))
 
-    def on_episode_end(self, steps, episode_return, episode_len, train_and_reset_callback=None):
+    def on_episode_end(
+        self,
+        steps,
+        episode_return,
+        episode_len,
+        train_and_reset_callback=None,
+        advance_criterion=True,
+    ):
         """Advance the checkpoint schedule at an episode boundary.
 
         Returns True when the episode did not trigger a checkpoint failure, and
         False when the window fell below the baseline (the Q-Net family uses this
         to gate ``env.true_reset()``; the DPG family ignores it).
+
+        ``advance_criterion=False`` records the episode's timesteps toward the
+        training pulse volume but leaves the assessment criterion untouched. The
+        vectorized loop uses this so only the monitored worker's clean
+        single-policy episode stream drives the checkpoint baseline, while every
+        worker's collected timesteps still scale the pulse.
         """
         if not self.use_checkpointing:
             return True
 
-        self._eps_since_update += 1
         self._timesteps_since_update += int(episode_len)
+        if not advance_criterion:
+            return True
+
+        self._eps_since_update += 1
         self._returns_window.append(float(episode_return))
 
         self._maybe_enable(steps)

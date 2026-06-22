@@ -294,6 +294,20 @@ def test_qnet_training_lifecycle_uses_scalar_path_when_pulse_is_smaller_than_cap
     assert [ctx.train_steps_count for ctx in agent.contexts] == [1, 2]
 
 
+def test_qnet_training_lifecycle_uses_scalar_tail_larger_than_one_after_full_bulk_chunk():
+    agent = FakePulseAgent()
+    agent.max_bulk_updates_per_pulse = 3
+    lifecycle = QNetTrainingLifecycle(agent)
+
+    lifecycle.train(steps=10, gradient_steps=5)
+
+    assert agent.replay_buffer.sample_calls == [(12, 0.4), (4, 0.4), (4, 0.4)]
+    assert [[ctx.train_steps_count for ctx in chunk] for chunk in agent.bulk_contexts] == [
+        [1, 2, 3],
+    ]
+    assert [ctx.train_steps_count for ctx in agent.contexts] == [1, 2, 3, 4, 5]
+
+
 def test_qnet_training_lifecycle_uses_scalar_path_when_cap_is_one():
     agent = FakePulseAgent()
     agent.max_bulk_updates_per_pulse = 1

@@ -61,6 +61,23 @@ def test_warmup_snapshots_and_returns_without_arming():
     assert all(k != "ckpt/ckpt_baseline" for k, _, _ in calls["logs"])
 
 
+def test_non_monitored_worker_feeds_pulse_volume_without_arming():
+    # advance_criterion=False (a non-monitored vectorized worker) records its
+    # timesteps toward the pulse volume but must not snapshot, fire, or advance
+    # the assessment window. The monitored worker's later pulse then carries the
+    # pooled timesteps (3 + 4 == 7).
+    controller, calls, pulse = make_controller(steps_before_checkpointing=1000)
+
+    assert controller.on_episode_end(10, 5.0, 3, pulse, advance_criterion=False) is True
+    assert calls["snapshot"] == 0
+    assert calls["pulse"] == []
+    assert calls["logs"] == []
+
+    controller.on_episode_end(20, 7.0, 4, pulse, advance_criterion=True)
+    assert calls["snapshot"] == 1
+    assert calls["pulse"] == [(20, 7)]
+
+
 def test_enable_transition():
     controller, _, pulse = make_controller(steps_before_checkpointing=100)
     controller.on_episode_end(50, 1.0, 1, pulse)

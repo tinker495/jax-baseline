@@ -120,6 +120,7 @@ class RolloutSpec:
     # checkpoint seam
     checkpoint_on_episode_end: Callable[..., bool]
     checkpoint_pulse: Callable[[int, int], None]
+    checkpoint_monitor_worker: int = 0
 
 
 class RolloutEngine:
@@ -208,9 +209,10 @@ class RolloutEngine:
             spec.env.step(sel.env_action)
 
             if steps > spec.learning_starts and steps % spec.train_freq == 0:
-                for idx in range(spec.worker_size):
-                    loss = spec.train(steps + idx, spec.gradient_steps)
-                    lossque.append(loss)
+                # One pulse of worker_size * gradient_steps keeps the replay ratio
+                # of the per-worker loop while letting the bulk path chunk it.
+                loss = spec.train(steps, spec.worker_size * spec.gradient_steps)
+                lossque.append(loss)
 
             next_obses, rewards, terminateds, truncateds, infos = spec.env.get_result()
             done = np.logical_or(terminateds, truncateds)
@@ -372,15 +374,25 @@ class RolloutEngine:
             )
             if steps > spec.learning_starts:
                 done_idx = np.where(done & active)[0]
-                ckpt_results = []
-                for idx in done_idx:
+                monitor_worker = spec.checkpoint_monitor_worker
+                # Only the monitor worker advances the checkpoint criterion, so the
+                # assessment sees a clean single-policy episode stream; every
+                # finished episode still feeds its timesteps into the pulse volume.
+                monitor_failed = False
+                checkpoint_order = [idx for idx in done_idx if idx != monitor_worker]
+                if monitor_worker in done_idx:
+                    checkpoint_order.append(monitor_worker)
+                for idx in checkpoint_order:
+                    advance = idx == monitor_worker
                     ckpt_success = spec.checkpoint_on_episode_end(
                         steps,
                         float(scores[idx]),
                         int(eplens[idx]),
                         spec.checkpoint_pulse,
+                        advance_criterion=advance,
                     )
-                    ckpt_results.append((idx, ckpt_success))
+                    if advance and not ckpt_success:
+                        monitor_failed = True
                     emit_original = original_present[idx] and (
                         not lives_present[idx] or lives[idx] == 0
                     )
@@ -398,7 +410,7 @@ class RolloutEngine:
                         originals[idx] = 0.0
                         original_present[idx] = False
 
-                if spec.has_true_reset() and any(not success for _, success in ckpt_results):
+                if spec.has_true_reset() and monitor_failed:
                     spec.env.true_reset()
 
             prev_done = done & active
