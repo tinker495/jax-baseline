@@ -28,6 +28,7 @@ import numpy as np
 import pytest
 
 from jax_baselines.core.checkpoint import CheckpointController
+from jax_baselines.core.eval import evaluate_policy
 from jax_baselines.core.rollout import (
     ActionSelection,
     CheckpointTrainPulse,
@@ -833,6 +834,24 @@ class _OffsetNormalizer:
         self.calls.append(("update", obs))
 
 
+class _ShapeCheckingEvalEnv:
+    def __init__(self, action_shape):
+        self.action_shape = action_shape
+        self.actions = []
+
+    def reset(self):
+        return np.zeros(3), {}
+
+    def step(self, action):
+        action = np.asarray(action)
+        if action.shape != self.action_shape:
+            raise ValueError(
+                f"Action dimension mismatch. Expected {self.action_shape}, found {action.shape}"
+            )
+        self.actions.append(action)
+        return np.zeros(3), 0.0, True, False, {}
+
+
 def _dpg_action_agent():
     agent = Deteministic_Policy_Gradient_Family.__new__(Deteministic_Policy_Gradient_Family)
     agent.simba = True
@@ -870,6 +889,19 @@ def test_dpg_eval_actions_use_checkpoint_normalizer():
     assert agent.obs_rms.calls == []
     assert agent.action_obs_rms.calls == []
     assert agent.checkpoint_obs_rms.calls == [("normalize", [np.array([1.0])])]
+
+
+def test_dpg_eval_warmup_action_matches_single_eval_env_shape():
+    agent = Deteministic_Policy_Gradient_Family.__new__(Deteministic_Policy_Gradient_Family)
+    agent.simba = False
+    agent.learning_starts = 100
+    agent.worker_size = 32
+    agent.action_size = (17,)
+    env = _ShapeCheckingEvalEnv((17,))
+
+    evaluate_policy(env, 1, lambda obs: agent.actions(obs, steps=0, eval=True))
+
+    assert env.actions[0].shape == (17,)
 
 
 def test_td7_eval_snapshot_waits_for_checkpoint_enabled_gate():

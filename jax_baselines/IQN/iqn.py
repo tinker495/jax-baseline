@@ -64,10 +64,12 @@ class IQN(Q_Network_Family):
         return actions
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        tau = jax.random.uniform(key, (self.worker_size, self.n_support)) * self.CVaR
+        conv_obses = convert_jax(obses)
+        batch_size = conv_obses[0].shape[0]
+        tau = jax.random.uniform(key, (batch_size, self.n_support)) * self.CVaR
         return jnp.expand_dims(
             jnp.argmax(
-                jnp.mean(self.get_q(params, convert_jax(obses), tau, key), axis=2),
+                jnp.mean(self.get_q(params, conv_obses, tau, key), axis=2),
                 axis=1,
             ),
             axis=1,

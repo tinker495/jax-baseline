@@ -11,6 +11,8 @@ The methods are exercised against a lightweight stub so no JAX model is built;
 is observable.
 """
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 from jax_baselines.FQF.fqf import FQF
@@ -64,6 +66,32 @@ def test_iqn_actions_ignores_checkpoint_when_checkpointing_disabled():
     stub = _ActorStub(use_checkpointing=False)
     IQN.actions(stub, np.zeros((1, 4)), 0.0, eval_mode=True)
     assert stub.used_params == [BEHAVIOR_PARAMS]
+
+
+def test_iqn_get_actions_uses_observation_batch_for_tau_not_worker_size():
+    stub = IQN.__new__(IQN)
+    stub.worker_size = 32
+    stub.n_support = 8
+    stub.CVaR = 1.0
+    stub.action_size = [3]
+    seen = {}
+
+    def get_q(params, obses, tau, key=None):
+        del params, obses, key
+        seen["tau_shape"] = tuple(tau.shape)
+        return jnp.zeros((tau.shape[0], stub.action_size[0], tau.shape[1]))
+
+    stub.get_q = get_q
+
+    actions = IQN._get_actions(
+        stub,
+        BEHAVIOR_PARAMS,
+        [np.zeros((1, 4), dtype=np.float32)],
+        jax.random.PRNGKey(0),
+    )
+
+    assert seen["tau_shape"] == (1, stub.n_support)
+    assert np.asarray(actions).shape == (1, 1)
 
 
 def test_fqf_actions_uses_checkpoint_params_in_eval_mode():

@@ -328,13 +328,14 @@ class Deteministic_Policy_Gradient_Family(object):
     def actions(self, obs, steps, eval=False):
         obs = self._apply_simba_normalization(obs, eval, steps)
         if steps <= self.learning_starts:
-            return self._random_warmup_actions()
+            return self._random_warmup_actions(eval=eval)
         state = self._select_action_state(eval, steps)
         actions = self._policy_action_from_state(state, obs, eval, steps)
         return self._apply_action_noise(actions, steps, eval)
 
-    def _random_warmup_actions(self):
-        return np.random.uniform(-1.0, 1.0, size=(self.worker_size, self.action_size[0]))
+    def _random_warmup_actions(self, eval=False):
+        worker_size = 1 if eval else self.worker_size
+        return np.random.uniform(-1.0, 1.0, size=(worker_size, self.action_size[0]))
 
     def _select_action_state(self, eval, steps):
         if eval and self.use_checkpointing and self.ckpt.enabled and self.eval_snapshot is not None:
