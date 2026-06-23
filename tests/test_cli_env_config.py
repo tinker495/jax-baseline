@@ -12,14 +12,27 @@ restored on teardown (kept hermetic).
 from __future__ import annotations
 
 import argparse
+import ast
+import importlib
 import os
+from pathlib import Path
 
 import pytest
 
+import experiments.cli._common as cli_common
 from experiments.cli._common import load_runtime_env
 from experiments.cli._loggers import add_logger_args
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
 ENV_VARS = ("JAXBL_LOGGER", "WANDB_ENTITY", "WANDB_MODE", "AIM_REPO")
+CLI_ENTRYPOINTS = (
+    "experiments/cli/apex_dpg.py",
+    "experiments/cli/apex_qnet.py",
+    "experiments/cli/dpg.py",
+    "experiments/cli/impala.py",
+    "experiments/cli/pg.py",
+    "experiments/cli/qnet.py",
+)
 
 
 @pytest.fixture(autouse=True)
@@ -37,6 +50,39 @@ def _parsed(argv):
     parser = argparse.ArgumentParser()
     add_logger_args(parser)
     return parser.parse_args(argv)
+
+
+def test_common_import_applies_xla_flags_before_cli_imports_jax(monkeypatch):
+    monkeypatch.delenv("XLA_FLAGS", raising=False)
+
+    reloaded = importlib.reload(cli_common)
+
+    assert os.environ["XLA_FLAGS"] == reloaded.XLA_FLAGS
+
+
+def test_cli_entrypoints_import_common_before_env_or_algorithm_modules():
+    for relative_path in CLI_ENTRYPOINTS:
+        path = REPO_ROOT / relative_path
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        common_line = None
+        first_jax_related_line = None
+
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom):
+                module = node.module or ""
+            elif isinstance(node, ast.Import):
+                module = node.names[0].name
+            else:
+                continue
+
+            if module == "experiments.cli._common":
+                common_line = node.lineno
+            elif module == "env_builder.env_builder" or module.startswith("jax_baselines."):
+                first_jax_related_line = node.lineno
+                break
+
+        assert common_line is not None, f"{relative_path} does not import CLI common"
+        assert first_jax_related_line is None or common_line < first_jax_related_line
 
 
 def test_load_runtime_env_reads_dotenv_file(tmp_path, monkeypatch):

@@ -1,9 +1,8 @@
 from env_builder.env_builder import get_env_builder
-from experiments.cli._common import default_logdir, set_default_xla_flags
+from experiments.cli._common import default_logdir
 from experiments.cli._run import (
     AlgoSpec,
     DistributedFamilyRunner,
-    default_impala_worker_replay_factory,
     default_policy_kwargs,
     run_distributed_family,
 )
@@ -13,8 +12,7 @@ from jax_baselines.IMPALA.worker import Impala_Worker
 from jax_baselines.PPO.impala_ppo import IMPALA_PPO
 from jax_baselines.SPO.impala_spo import IMPALA_SPO
 from jax_baselines.TPPO.impala_tppo import IMPALA_TPPO
-
-set_default_xla_flags()
+from replay_memory.replay_factory import make_impala_worker_buffer
 
 
 def add_args(parser):
@@ -64,7 +62,7 @@ def _common(a):
         "rho_max": a.rho_max,
         "log_dir": a.logdir,
         "seed": a.seed,
-        "worker_replay_factory": default_impala_worker_replay_factory(),
+        "worker_replay_factory": make_impala_worker_buffer,
     }
 
 

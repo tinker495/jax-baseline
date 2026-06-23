@@ -105,13 +105,8 @@ def make_batch_scaled_optimizer_factory(
     )
 
 
-def make_fqf_optimizer_factory() -> OptimizerFactory:
-    return make_optimizer_factory("rmsprop", grad_max=5.0)
-
-
 __all__ = [
     "make_batch_scaled_optimizer_factory",
-    "make_fqf_optimizer_factory",
     "make_optimizer_factory",
     "select_optimizer",
 ]

@@ -1,11 +1,6 @@
 from env_builder.env_builder import get_env_builder
-from experiments.cli._common import default_logdir, set_default_xla_flags
-from experiments.cli._run import (
-    AlgoSpec,
-    FamilyRunner,
-    default_replay_factory,
-    run_family,
-)
+from experiments.cli._common import default_logdir
+from experiments.cli._run import AlgoSpec, FamilyRunner, run_family
 from experiments.optimizers import make_batch_scaled_optimizer_factory
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DDPG.ddpg import DDPG
@@ -13,8 +8,7 @@ from jax_baselines.SAC.sac import SAC
 from jax_baselines.TD3.td3 import TD3
 from jax_baselines.TD7.td7 import TD7
 from jax_baselines.TQC.tqc import TQC
-
-set_default_xla_flags()
+from replay_memory.replay_factory import make_replay_buffer
 
 
 def add_args(parser):
@@ -113,7 +107,7 @@ def _common(a):
         "max_bulk_updates_per_pulse": a.max_bulk_updates_per_pulse,
         "log_dir": a.logdir,
         "optimizer_factory": make_batch_scaled_optimizer_factory(a.optimizer, a.batch),
-        "replay_factory": default_replay_factory(),
+        "replay_factory": make_replay_buffer,
         "use_checkpointing": a.use_checkpointing,
     }
 
@@ -186,7 +180,7 @@ ALGOS = {
             "max_bulk_updates_per_pulse": a.max_bulk_updates_per_pulse,
             "log_dir": a.logdir,
             "optimizer_factory": make_batch_scaled_optimizer_factory(a.optimizer, a.batch),
-            "replay_factory": default_replay_factory(),
+            "replay_factory": make_replay_buffer,
         },
     ),
 }

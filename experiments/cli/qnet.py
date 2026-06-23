@@ -1,14 +1,8 @@
 from env_builder.env_builder import get_env_builder
-from experiments.cli._common import default_logdir, set_default_xla_flags
-from experiments.cli._run import (
-    AlgoSpec,
-    FamilyRunner,
-    default_replay_factory,
-    run_family,
-)
+from experiments.cli._common import default_logdir
+from experiments.cli._run import AlgoSpec, FamilyRunner, run_family
 from experiments.optimizers import (
     make_batch_scaled_optimizer_factory,
-    make_fqf_optimizer_factory,
     make_optimizer_factory,
 )
 from jax_baselines.BBF.bbf import BBF
@@ -21,8 +15,7 @@ from jax_baselines.IQN.iqn import IQN
 from jax_baselines.QRDQN.qrdqn import QRDQN
 from jax_baselines.SPR.hl_gauss_spr import HL_GAUSS_SPR
 from jax_baselines.SPR.spr import SPR
-
-set_default_xla_flags()
+from replay_memory.replay_factory import make_replay_buffer
 
 
 def add_args(parser):
@@ -122,7 +115,7 @@ def _common(a):
         "log_dir": a.logdir,
         "optimizer_factory": make_batch_scaled_optimizer_factory(a.optimizer, a.batch),
         "compress_memory": a.compress_memory,
-        "replay_factory": default_replay_factory(),
+        "replay_factory": make_replay_buffer,
         "use_checkpointing": a.use_checkpointing,
     }
 
@@ -168,7 +161,7 @@ ALGOS = {
             **_common(a),
             "delta": a.delta,
             "n_support": a.n_support,
-            "fqf_optimizer_factory": make_fqf_optimizer_factory(),
+            "fqf_optimizer_factory": make_optimizer_factory("rmsprop", grad_max=5.0),
         },
     ),
     # SPR forces a self-prediction loop: its old construction block carries a
@@ -196,7 +189,7 @@ ALGOS = {
             "log_dir": a.logdir,
             "optimizer_factory": make_batch_scaled_optimizer_factory(a.optimizer, a.batch),
             "compress_memory": a.compress_memory,
-            "replay_factory": default_replay_factory(),
+            "replay_factory": make_replay_buffer,
             "use_checkpointing": a.use_checkpointing,
         },
     ),
@@ -226,7 +219,7 @@ ALGOS = {
             "log_dir": a.logdir,
             "optimizer_factory": _bbf_optimizer_factory(a),
             "compress_memory": a.compress_memory,
-            "replay_factory": default_replay_factory(),
+            "replay_factory": make_replay_buffer,
             "use_checkpointing": a.use_checkpointing,
         },
     ),

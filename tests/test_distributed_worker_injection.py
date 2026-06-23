@@ -86,8 +86,8 @@ def test_worker_builds_env_through_injected_adapter(worker_cls):
 def test_impala_worker_replay_factory_satisfies_seam():
     """The IMPALA worker-local buffer is reachable through the core
     ``WorkerReplayBufferFactory`` seam and the experiments composition default."""
-    from experiments.replay_factories import make_impala_worker_buffer
     from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
+    from replay_memory.replay_factory import make_impala_worker_buffer
 
     env_dict = {
         "obs0": {"shape": (4,)},
@@ -119,8 +119,8 @@ def test_impala_worker_replay_factory_satisfies_seam():
 def test_apex_worker_replay_factory_satisfies_seam():
     """The APE-X worker-local buffer is reachable through the same core
     ``WorkerReplayBufferFactory`` seam and the experiments composition default."""
-    from experiments.replay_factories import make_worker_replay_buffer
     from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
+    from replay_memory.replay_factory import make_worker_replay_buffer
 
     env_dict = {
         "obs0": {"shape": (4,)},
@@ -133,7 +133,13 @@ def test_apex_worker_replay_factory_satisfies_seam():
     buffer = make_worker_local_replay_buffer(make_worker_replay_buffer, 8, env_dict, None)
 
     assert len(buffer) == 0
-    buffer.add([np.zeros((4,))], action=0, reward=1.0, nxtobs_t=[np.ones((4,))], terminated=False)
+    buffer.add(
+        [np.zeros((4,))],
+        action=0,
+        reward=1.0,
+        nxtobs_t=[np.ones((4,))],
+        terminated=False,
+    )
     assert len(buffer) == 1
 
 

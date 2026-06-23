@@ -58,26 +58,6 @@ def resolve_maker(runner: _MakerRunner, spec: AlgoSpec, args: Namespace):
     return mod.model_builder_maker
 
 
-def _replay_factories():
-    return import_module("experiments.replay_factories")
-
-
-def default_replay_factory():
-    return _replay_factories().make_replay_buffer
-
-
-def default_multi_replay_factory():
-    return _replay_factories().make_multi_prioritized_buffer
-
-
-def default_worker_replay_factory():
-    return _replay_factories().make_worker_replay_buffer
-
-
-def default_impala_worker_replay_factory():
-    return _replay_factories().make_impala_worker_buffer
-
-
 def default_policy_kwargs(args: Namespace) -> dict:
     """Network policy kwargs shared by the distributed families (APE-X / IMPALA).
 

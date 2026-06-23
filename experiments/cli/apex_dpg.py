@@ -1,19 +1,19 @@
 from env_builder.env_builder import get_env_builder
-from experiments.cli._common import default_logdir, set_default_xla_flags
+from experiments.cli._common import default_logdir
 from experiments.cli._run import (
     AlgoSpec,
     DistributedFamilyRunner,
-    default_multi_replay_factory,
     default_policy_kwargs,
-    default_worker_replay_factory,
     run_distributed_family,
 )
 from experiments.optimizers import make_batch_scaled_optimizer_factory
 from jax_baselines.APE_X.dpg_worker import Ape_X_Worker
 from jax_baselines.DDPG.apex_ddpg import APE_X_DDPG
 from jax_baselines.TD3.apex_td3 import APE_X_TD3
-
-set_default_xla_flags()
+from replay_memory.replay_factory import (
+    make_multi_prioritized_buffer,
+    make_worker_replay_buffer,
+)
 
 
 def add_args(parser):
@@ -76,8 +76,8 @@ def _common(a):
         "optimizer_factory": make_batch_scaled_optimizer_factory(
             a.optimizer, a.batch_num * a.batch_size
         ),
-        "multi_replay_factory": default_multi_replay_factory(),
-        "worker_replay_factory": default_worker_replay_factory(),
+        "multi_replay_factory": make_multi_prioritized_buffer,
+        "worker_replay_factory": make_worker_replay_buffer,
     }
 
 

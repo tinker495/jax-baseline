@@ -40,3 +40,6 @@ def default_logdir(family: str) -> str:
     """
     root = os.environ.get(LOG_DIR_ENV, "runs")
     return os.path.join(root, family)
+
+
+set_default_xla_flags()

@@ -27,7 +27,6 @@ EXPECTED_CORE_MODULES = (
     "jax_baselines.core.epoch_buffer",
     "jax_baselines.core.eval",
     "jax_baselines.core.hparams",
-    "jax_baselines.core.logger",
     "jax_baselines.core.replay_protocol",
     "jax_baselines.core.rollout",
     "jax_baselines.core.rollout_stats",
@@ -76,6 +75,7 @@ def test_representative_symbols_resolve_from_new_homes():
     from jax_baselines.core.checkpoint import CheckpointController
     from jax_baselines.core.env_protocols import EnvInfo
     from jax_baselines.core.replay_protocol import ReplayBufferFactory
+    from jax_baselines.core.runtime_adapters import NoOpLogger
     from jax_baselines.core.training_session import TrainingSession
     from jax_baselines.math.distributional import HLGaussTransform
     from jax_baselines.math.losses import QuantileHuberLosses
@@ -86,6 +86,7 @@ def test_representative_symbols_resolve_from_new_homes():
     assert EnvInfo
     assert HLGaussTransform
     assert QuantileHuberLosses
+    assert NoOpLogger
     assert ReplayBufferFactory
     assert RunningMeanStd
     assert TrainingSession
