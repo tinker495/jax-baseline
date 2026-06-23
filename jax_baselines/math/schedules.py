@@ -1,17 +1,7 @@
 """Schedules that evolve over time during training (e.g. exploration epsilon)."""
 
 
-class Schedule:
-    def value(self, step):
-        """Value of the schedule for a given timestep.
-
-        :param step: (int) the timestep
-        :return: (float) the output value for the given timestep
-        """
-        raise NotImplementedError
-
-
-class ConstantSchedule(Schedule):
+class ConstantSchedule:
     """Value remains constant over time.
 
     :param value: (float) Constant value of the schedule
@@ -24,7 +14,7 @@ class ConstantSchedule(Schedule):
         return self._value
 
 
-class LinearSchedule(Schedule):
+class LinearSchedule:
     """Linear interpolation between initial_p and final_p over schedule_timesteps. After this many timesteps pass
     final_p is returned.
 

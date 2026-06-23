@@ -7,7 +7,6 @@ in `jax_baselines.core.rollout`.
 """
 
 from dataclasses import dataclass, field
-from typing import Protocol
 
 from jax_baselines.core.bulk_training import (
     bulk_chunk_schedule,
@@ -46,36 +45,10 @@ class DPGTrainReport:
         self.metrics = metrics
 
 
-class DPGTrainingAgentProtocol(Protocol):
-    batch_size: int
-    log_interval: int
-    logger_run: object
-    max_bulk_updates_per_pulse: int
-    prioritized_replay: bool
-    prioritized_replay_beta0: float
-    replay_buffer: object
-    simba: bool
-    supports_bulk_training: bool
-    train_steps_count: int
-    _last_log_step: int
-
-    def _aggregate_train_reports(self, reports):
-        pass
-
-    def _policy_update_obs_rms(self):
-        pass
-
-    def _train_on_batch(self, data, context):
-        pass
-
-    def _train_on_bulk(self, data, contexts):
-        pass
-
-
 class DPGTrainingLifecycle:
     """Replay-driven local DPG training lifecycle."""
 
-    def __init__(self, agent: DPGTrainingAgentProtocol):
+    def __init__(self, agent):
         self.agent = agent
 
     def train(self, steps, gradient_steps):

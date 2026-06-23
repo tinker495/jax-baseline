@@ -8,7 +8,6 @@ tuple returns and translate them into a lifecycle result on the Python side via
 """
 
 from dataclasses import dataclass, field
-from typing import Protocol
 
 from jax_baselines.core.bulk_training import (
     bulk_chunk_schedule,
@@ -83,43 +82,10 @@ class QNetTrainResult:
         )
 
 
-class QNetTrainingAgentProtocol(Protocol):
-    """Private protocol required by `QNetTrainingLifecycle`.
-
-    Q-Net algorithms provide the algorithm-specific `_train_on_batch` hook.
-    The base family owns replay sampling, report aggregation, and logging
-    cadence.
-    """
-
-    batch_size: int
-    gradient_steps: int
-    log_interval: int
-    logger_run: object
-    prioritized_replay: bool
-    prioritized_replay_beta0: float
-    replay_buffer: object
-    train_steps_count: int
-    _last_log_step: int
-    max_bulk_updates_per_pulse: int
-    supports_bulk_training: bool
-
-    def _sample_batch(self, batch_size=None):
-        pass
-
-    def _train_on_batch(self, data, context):
-        pass
-
-    def _train_on_bulk(self, data, contexts):
-        pass
-
-    def _aggregate_train_reports(self, reports):
-        pass
-
-
 class QNetTrainingLifecycle:
     """Replay-driven local Q-Net training lifecycle."""
 
-    def __init__(self, agent: QNetTrainingAgentProtocol):
+    def __init__(self, agent):
         self.agent = agent
 
     def train(self, steps, gradient_steps):
