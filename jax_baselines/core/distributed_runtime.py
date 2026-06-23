@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, NamedTuple, Protocol
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -13,6 +13,19 @@ class ImpalaRolloutNeed:
     action_space: Any = 1
     sample_size: int = 32
     seed: Any = None
+
+
+class ImpalaBatch(NamedTuple):
+    obses: Any
+    actions: Any
+    mu_log_prob: Any
+    rewards: Any
+    nxtobses: Any
+    terminateds: Any
+    truncateds: Any
+
+
+batch = ImpalaBatch
 
 
 class DistributedEvent(Protocol):

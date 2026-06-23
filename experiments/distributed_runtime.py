@@ -8,9 +8,8 @@ from importlib import import_module
 import numpy as np
 
 from jax_baselines.APE_X.common_servers import Logger_server, Param_server
-from jax_baselines.core.distributed_runtime import ImpalaRolloutNeed
+from jax_baselines.core.distributed_runtime import ImpalaRolloutNeed, batch
 from jax_baselines.core.seeding import seed_prngs
-from jax_baselines.IMPALA.vtrace_queue import batch
 
 
 def _ray():

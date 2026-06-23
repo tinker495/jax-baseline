@@ -5,13 +5,13 @@ family reaches it only through the ``WorkerReplayBufferFactory`` seam, never by
 importing cpprb directly. Unlike the generic off-policy ``ReplayBuffer`` this one
 stores the behaviour-policy ``log_prob`` needed for V-trace importance sampling,
 so it is a distinct class rather than a flag on the shared buffer. The shared
-``batch`` record is owned by the core queue module
-(``jax_baselines.IMPALA.vtrace_queue``); this adapter depends on the core.
+``batch`` record is owned by the core distributed-runtime protocol module; this
+adapter depends on the core.
 """
 
 import cpprb
 
-from jax_baselines.IMPALA.vtrace_queue import batch
+from jax_baselines.core.distributed_runtime import batch
 
 
 class EpochBuffer:

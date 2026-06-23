@@ -2,11 +2,11 @@
 
 Locks the Flax param-tree keypaths + shapes that ``ddpg_builder``/``td3_builder``
 produce after their deterministic ``Actor``/``Critic`` were extracted into the
-shared ``ddpg_td3_blocks`` module, and that ``sac_builder``/``dac_builder``/
-``tqc_builder`` produce after their squashed-Gaussian ``Actor`` + plain ``Critic``
-were extracted into the shared ``gaussian_blocks`` module. Flax param keys depend
-on the enclosing module attribute names (``act``, ``crit1``, ``crit2``) and the
-inner class identifiers; a future rename or layer-count change that silently broke
+shared ``ddpg_td3_blocks`` module, and that ``sac_builder``/``tqc_builder``
+produce after their squashed-Gaussian ``Actor`` + plain ``Critic`` were extracted
+into the shared ``gaussian_blocks`` module. Flax param keys depend on the
+enclosing module attribute names (``act``, ``crit1``, ``crit2``) and the inner
+class identifiers; a future rename or layer-count change that silently broke
 checkpoint compatibility would change this structure and fail here.
 """
 
@@ -14,9 +14,6 @@ from __future__ import annotations
 
 import jax
 
-from model_builder.flax.dpg.dac_builder import (
-    model_builder_maker as dac_model_builder_maker,
-)
 from model_builder.flax.dpg.ddpg_builder import (
     model_builder_maker as ddpg_model_builder_maker,
 )
@@ -76,18 +73,6 @@ _GAUSSIAN_ACTOR_STRUCTURE = {
     ("['params']['act']['Dense_3']['bias']", (2,)),
 }
 
-# DAC's Optimistic_Actor is a standalone tower (its own param dict): a shared
-# 2*hidden_n MLP stack plus a single mu_additional head. Untouched by the
-# gaussian_blocks extraction, but pinned here so the DAC return contract holds.
-_OPTIMISTIC_ACTOR_STRUCTURE = {
-    ("['params']['Dense_0']['kernel']", (4, 16)),
-    ("['params']['Dense_0']['bias']", (16,)),
-    ("['params']['Dense_1']['kernel']", (16, 16)),
-    ("['params']['Dense_1']['bias']", (16,)),
-    ("['params']['Dense_2']['kernel']", (16, 2)),
-    ("['params']['Dense_2']['bias']", (2,)),
-}
-
 
 def _quantile_critic_tower(support_n):
     # tqc's Critic mirrors the plain Critic MLP but emits ``support_n`` quantiles
@@ -134,22 +119,6 @@ def test_td3_builder_param_tree_structure():
 def test_sac_builder_param_tree_structure():
     policy_params, critic_params = _build(sac_model_builder_maker)
     assert _param_structure(policy_params) == _GAUSSIAN_ACTOR_STRUCTURE
-    assert _param_structure(critic_params) == _twin_tower("crit1") | _twin_tower("crit2")
-
-
-def test_dac_builder_param_tree_structure():
-    builder = dac_model_builder_maker(_OBSERVATION_SPACE, _ACTION_SIZE, dict(_POLICY_KWARGS))
-    (
-        _preproc,
-        _actor,
-        _optimistic_actor,
-        _critic,
-        policy_params,
-        optimistic_actor_params,
-        critic_params,
-    ) = builder(jax.random.PRNGKey(0))
-    assert _param_structure(policy_params) == _GAUSSIAN_ACTOR_STRUCTURE
-    assert _param_structure(optimistic_actor_params) == _OPTIMISTIC_ACTOR_STRUCTURE
     assert _param_structure(critic_params) == _twin_tower("crit1") | _twin_tower("crit2")
 
 
