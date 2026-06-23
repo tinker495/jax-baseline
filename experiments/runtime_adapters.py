@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import glob
 import os
+from pathlib import Path
 from typing import Any, Optional
 
 from tensorboardX import SummaryWriter
@@ -16,10 +16,9 @@ def _get_latest_run_id(local_dir, experiment_name, run_name):
     """Return the latest numbered TensorBoard run id for a run name."""
 
     max_run_id = 0
-    for path in glob.glob(f"{local_dir}/{experiment_name}/{run_name}_[0-9]*"):
-        file_name = path.split(os.sep)[-1]
-        ext = file_name.split("_")[-1]
-        if run_name == "_".join(file_name.split("_")[:-1]) and ext.isdigit():
+    for path in (Path(local_dir) / experiment_name).glob(f"{run_name}_[0-9]*"):
+        prefix, _, ext = path.name.rpartition("_")
+        if prefix == run_name and ext.isdigit():
             max_run_id = max(max_run_id, int(ext))
     return max_run_id
 
