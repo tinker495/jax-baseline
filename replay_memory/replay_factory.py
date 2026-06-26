@@ -62,6 +62,8 @@ def make_replay_buffer(need: LocalReplayNeed):
     - compress_memory + n_step + single-worker image -> Frame(Prioritized)StackReplayBuffer
       (stores one frame per observation; reconstructs the stack and the n-step
       next_obs by index, so 1e6 Atari n-step replay costs ~7GB instead of ~35GB)
+    - compress_memory + single-step + multi-worker image -> NstepReplayBuffer with n_step=1
+      (reuses worker-local staging so cpprb stack compression sees per-worker episode streams)
     - For prioritized + n_step -> PrioritizedNstepReplayBuffer
     - For prioritized only -> PrioritizedReplayBuffer
     - For n_step only -> NstepReplayBuffer
@@ -113,6 +115,34 @@ def make_replay_buffer(need: LocalReplayNeed):
             )
         return FrameStackReplayBuffer(
             buffer_size, observation_space, action_shape_or_n, n_step, gamma, n_frames
+        )
+
+    if (
+        compress_memory
+        and worker_size > 1
+        and n_step == 1
+        and any(len(shape) >= 3 for shape in observation_space)
+    ):
+        if prioritized:
+            return PrioritizedNstepReplayBuffer(
+                buffer_size,
+                observation_space,
+                action_shape_or_n,
+                worker_size,
+                n_step,
+                gamma,
+                alpha,
+                compress_memory,
+                eps,
+            )
+        return NstepReplayBuffer(
+            buffer_size,
+            observation_space,
+            action_shape_or_n,
+            worker_size,
+            n_step,
+            gamma,
+            compress_memory,
         )
 
     if prioritized:

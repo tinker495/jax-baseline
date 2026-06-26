@@ -2,7 +2,6 @@ from copy import deepcopy
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import optax
 
 from jax_baselines.DQN.base_class import Q_Network_Family
@@ -57,11 +56,10 @@ class IQN(Q_Network_Family):
         params_to_use = self.get_behavior_params()
         if eval_mode and self.use_checkpointing and self.ckpt.enabled:
             params_to_use = self.checkpoint_params
-        if epsilon <= np.random.uniform(0, 1):
-            actions = np.asarray(self._get_actions(params_to_use, obs, next(self.key_seq)))
-        else:
-            actions = np.random.choice(self.action_size[0], [self.worker_size, 1])
-        return actions
+        if epsilon >= 1:
+            return self._random_actions()
+        greedy_actions = self._get_actions(params_to_use, obs, next(self.key_seq))
+        return self._epsilon_greedy_actions(greedy_actions, epsilon)
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         conv_obses = convert_jax(obses)

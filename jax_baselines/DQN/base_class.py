@@ -268,21 +268,34 @@ class Q_Network_Family:
         """Get parameters to use for evaluation (eval-time actions)."""
         return self.get_behavior_params()
 
+    def _random_actions(self, shape=None):
+        if shape is None:
+            shape = (self.worker_size, 1)
+        return np.random.choice(self.action_size[0], shape)
+
+    def _epsilon_greedy_actions(self, greedy_actions, epsilon):
+        greedy_actions = np.asarray(greedy_actions)
+        if epsilon <= 0:
+            return greedy_actions
+        random_actions = self._random_actions(greedy_actions.shape)
+        if epsilon >= 1:
+            return random_actions
+        random_mask = np.random.uniform(size=greedy_actions.shape) < epsilon
+        return np.where(random_mask, random_actions, greedy_actions)
+
     def actions(self, obs, epsilon, eval_mode=False):
         # Select params: during eval with checkpointing prefer snapshot
         params_to_use = self.get_behavior_params()
         if eval_mode and self.use_checkpointing and self.ckpt.enabled:
             params_to_use = self.checkpoint_params
 
-        if epsilon <= np.random.uniform(0, 1):
-            actions = np.asarray(
-                self._get_actions(
-                    params_to_use, obs, next(self.key_seq) if self.param_noise else None
-                )
-            )
-        else:
-            actions = np.random.choice(self.action_size[0], [self.worker_size, 1])
-        return actions
+        if epsilon >= 1:
+            return self._random_actions()
+
+        greedy_actions = self._get_actions(
+            params_to_use, obs, next(self.key_seq) if self.param_noise else None
+        )
+        return self._epsilon_greedy_actions(greedy_actions, epsilon)
 
     def description(self, eval_result=None):
         description = ""

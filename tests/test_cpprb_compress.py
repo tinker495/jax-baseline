@@ -200,6 +200,129 @@ def test_factory_forwards_compress_memory_single_step(prioritized):
     _assert_lossless(comp, ref)
 
 
+@pytest.mark.parametrize(
+    "prioritized,expected",
+    [
+        (False, NstepReplayBuffer),
+        (True, PrioritizedNstepReplayBuffer),
+    ],
+)
+def test_factory_routes_multiworker_single_step_image_compress_to_staged_cpprb(
+    prioritized, expected
+):
+    buf = make_replay_buffer(
+        _need(worker_size=2, n_step=1, prioritized=prioritized, compress_memory=True)
+    )
+
+    assert isinstance(buf, expected)
+    assert buf.worker_size == 2
+
+
+@pytest.mark.parametrize("prioritized", [False, True])
+def test_multiworker_single_step_image_compress_accepts_vector_done_arrays(prioritized):
+    buf = make_replay_buffer(
+        _need(worker_size=2, n_step=1, prioritized=prioritized, compress_memory=True)
+    )
+
+    obs = np.concatenate([_stack([10, 10, 10, 10]), _stack([100, 100, 100, 100])], axis=0)
+    nxt = np.concatenate([_stack([10, 10, 10, 11]), _stack([100, 100, 100, 101])], axis=0)
+    action = np.ones((2, 1), dtype=np.float32)
+    reward = np.ones(2, dtype=np.float32)
+    no_done = np.array([False, False])
+
+    buf.add([obs], action, reward, [nxt], no_done, no_done)
+    buf.add([obs], action, reward, [nxt], np.array([True, False]), no_done)
+
+    assert len(buf) == 4
+    sample = buf.sample(1, 0.4) if prioritized else buf.sample(1)
+    assert sample["obses"][0].shape == (1, H, W, S)
+    assert sample["nxtobses"][0].shape == (1, H, W, S)
+
+
+@pytest.mark.parametrize("prioritized", [False, True])
+def test_multiworker_single_step_image_compress_is_available_before_done(prioritized):
+    buf = make_replay_buffer(
+        _need(worker_size=2, n_step=1, prioritized=prioritized, compress_memory=True)
+    )
+
+    obs = np.concatenate([_stack([10, 10, 10, 10]), _stack([100, 100, 100, 100])], axis=0)
+    nxt = np.concatenate([_stack([10, 10, 10, 11]), _stack([100, 100, 100, 101])], axis=0)
+    action = np.ones((2, 1), dtype=np.float32)
+    reward = np.ones(2, dtype=np.float32)
+    no_done = np.array([False, False])
+
+    buf.add([obs], action, reward, [nxt], no_done, no_done)
+
+    assert len(buf) == 2
+    sample = buf.sample(1, 0.4) if prioritized else buf.sample(1)
+    assert sample["obses"][0].shape == (1, H, W, S)
+    assert sample["nxtobses"][0].shape == (1, H, W, S)
+
+
+@pytest.mark.parametrize("prioritized", [False, True])
+def test_multiworker_single_step_image_compress_store_mask_is_lossless(prioritized):
+    comp = make_replay_buffer(
+        _need(worker_size=2, n_step=1, prioritized=prioritized, compress_memory=True)
+    )
+    ref = make_replay_buffer(
+        _need(worker_size=2, n_step=1, prioritized=prioritized, compress_memory=False)
+    )
+    action = np.ones((2, 1), dtype=np.float32)
+    reward = np.ones(2, dtype=np.float32)
+    no_done = np.array([False, False])
+
+    for step, store_mask in enumerate(
+        [
+            np.array([True, True]),
+            np.array([False, True]),
+            np.array([True, True]),
+        ]
+    ):
+        obs = np.concatenate(
+            [
+                _stack([10 + step, 10 + step, 10 + step, 10 + step]),
+                _stack([100 + step, 100 + step, 100 + step, 100 + step]),
+            ],
+            axis=0,
+        )
+        nxt = np.concatenate(
+            [
+                _stack([10 + step, 10 + step, 10 + step, 11 + step]),
+                _stack([100 + step, 100 + step, 100 + step, 101 + step]),
+            ],
+            axis=0,
+        )
+        comp.add([obs], action, reward, [nxt], no_done, no_done, store_mask=store_mask)
+        ref.add([obs], action, reward, [nxt], no_done, no_done, store_mask=store_mask)
+
+    _assert_lossless(comp, ref)
+
+
+@pytest.mark.parametrize("prioritized", [False, True])
+def test_multiworker_single_step_image_compress_does_not_cap_long_episode(prioritized):
+    buf = make_replay_buffer(
+        _need(
+            buffer_size=2505,
+            worker_size=2,
+            n_step=1,
+            prioritized=prioritized,
+            compress_memory=True,
+        )
+    )
+    obs = np.concatenate([_stack([10, 10, 10, 10]), _stack([100, 100, 100, 100])], axis=0)
+    nxt = np.concatenate([_stack([10, 10, 10, 11]), _stack([100, 100, 100, 101])], axis=0)
+    action = np.ones((2, 1), dtype=np.float32)
+    reward = np.ones(2, dtype=np.float32)
+    truncated = np.array([False, False])
+    store_mask = np.array([True, False])
+
+    for step in range(2501):
+        terminated = np.array([step == 2500, False])
+        buf.add([obs], action, reward, [nxt], terminated, truncated, store_mask=store_mask)
+
+    assert len(buf) == 2501
+
+
 @pytest.mark.parametrize("prioritized", [False, True])
 def test_factory_routes_nstep_image_compress_to_frame_buffer(prioritized):
     # n-step image + compress can't use cpprb (stack_compress breaks the n-step

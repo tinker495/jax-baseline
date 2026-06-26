@@ -154,9 +154,8 @@ class ReplayBuffer(object):
         # next_of / stack_compress reconstruct observations from sequentially
         # stored rows, so the episode boundary must be marked or the terminal
         # frame window would bleed into the next episode. Compression assumes a
-        # single contiguous stream and is unsupported with worker > 1 (interleaved
-        # workers break stack_compress reconstruction regardless), so scalar flags
-        # are expected here; the batched-array case is intentionally not handled.
+        # single contiguous stream here; multi-worker image compression is routed
+        # through NstepReplayBuffer.multiworker_single_step_add instead.
         if self._compress_active and (terminated or truncated):
             self.buffer.on_episode_end()
 
@@ -215,11 +214,17 @@ class NstepReplayBuffer(ReplayBuffer):
 
         if worker_size > 1:
             self.buffer = cpprb.ReplayBuffer(size, env_dict=central_env_dict, **comp_kw)
-            self.local_buffers = [
-                cpprb.ReplayBuffer(2000, env_dict=local_env_dict, Nstep=n_s)
-                for _ in range(worker_size)
-            ]
-            self.add = self.multiworker_add
+            # ponytail: row isolation preserves immediate sampling;
+            # per-worker central buffers if compression ratio matters.
+            self._isolate_multiworker_steps = n_step == 1 and bool(comp_kw)
+            if n_step == 1:
+                self.add = self.multiworker_single_step_add
+            else:
+                self.local_buffers = [
+                    cpprb.ReplayBuffer(2000, env_dict=local_env_dict, Nstep=n_s)
+                    for _ in range(worker_size)
+                ]
+                self.add = self.multiworker_add
         else:
             self.buffer = cpprb.ReplayBuffer(size, env_dict=central_env_dict, Nstep=n_s, **comp_kw)
 
@@ -255,6 +260,29 @@ class NstepReplayBuffer(ReplayBuffer):
                 # worker's frame window without bleeding across episodes.
                 self.buffer.on_episode_end()
                 self.local_buffers[w].clear()
+
+    def multiworker_single_step_add(
+        self,
+        obs_t,
+        action,
+        reward,
+        nxtobs_t,
+        terminated,
+        truncated=False,
+        store_mask=None,
+    ):
+        for w in _active_worker_indices(self.worker_size, store_mask):
+            obsdict = dict(zip(self.obsdict, [o[w] for o in obs_t]))
+            nextobsdict = dict(zip(self.nextobsdict, [no[w] for no in nxtobs_t]))
+            self.buffer.add(
+                **obsdict,
+                action=action[w],
+                reward=reward[w],
+                **nextobsdict,
+                done=terminated[w],
+            )
+            if self._isolate_multiworker_steps or terminated[w] or truncated[w]:
+                self.buffer.on_episode_end()
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):
@@ -333,11 +361,17 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
             self.buffer = cpprb.PrioritizedReplayBuffer(
                 size, env_dict=central_env_dict, alpha=alpha, eps=eps, **comp_kw
             )
-            self.local_buffers = [
-                cpprb.ReplayBuffer(2000, env_dict=local_env_dict, Nstep=n_s)
-                for _ in range(worker_size)
-            ]
-            self.add = self.multiworker_add
+            # ponytail: row isolation preserves immediate sampling;
+            # per-worker central buffers if compression ratio matters.
+            self._isolate_multiworker_steps = n_step == 1 and bool(comp_kw)
+            if n_step == 1:
+                self.add = self.multiworker_single_step_add
+            else:
+                self.local_buffers = [
+                    cpprb.ReplayBuffer(2000, env_dict=local_env_dict, Nstep=n_s)
+                    for _ in range(worker_size)
+                ]
+                self.add = self.multiworker_add
         else:
             self.buffer = cpprb.PrioritizedReplayBuffer(
                 size,

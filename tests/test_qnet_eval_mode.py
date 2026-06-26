@@ -15,6 +15,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.FQF.fqf import FQF
 from jax_baselines.IQN.iqn import IQN
 
@@ -49,6 +50,9 @@ class _ActorStub:
         self.used_params.append(params)
         return np.zeros((1, 1))
 
+    _random_actions = Q_Network_Family._random_actions
+    _epsilon_greedy_actions = Q_Network_Family._epsilon_greedy_actions
+
 
 def test_iqn_actions_uses_checkpoint_params_in_eval_mode():
     stub = _ActorStub()
@@ -66,6 +70,29 @@ def test_iqn_actions_ignores_checkpoint_when_checkpointing_disabled():
     stub = _ActorStub(use_checkpointing=False)
     IQN.actions(stub, np.zeros((1, 4)), 0.0, eval_mode=True)
     assert stub.used_params == [BEHAVIOR_PARAMS]
+
+
+def test_qnet_epsilon_greedy_is_sampled_per_worker_action(monkeypatch):
+    stub = _ActorStub()
+    greedy = np.array([[0], [1], [2]])
+    stub.worker_size = 3
+    stub._random_actions = lambda shape=None: np.full(shape, 9)
+    monkeypatch.setattr(np.random, "uniform", lambda size: np.array([[0.1], [0.9], [0.2]]))
+
+    actions = Q_Network_Family._epsilon_greedy_actions(stub, greedy, epsilon=0.5)
+
+    assert actions.tolist() == [[9], [1], [9]]
+
+
+def test_qnet_actions_epsilon_one_skips_greedy_inference():
+    stub = _ActorStub()
+    stub.worker_size = 2
+    stub._random_actions = lambda shape=None: np.full(shape or (stub.worker_size, 1), 7)
+
+    actions = Q_Network_Family.actions(stub, np.zeros((2, 4)), 1.0)
+
+    assert actions.tolist() == [[7], [7]]
+    assert stub.used_params == []
 
 
 def test_iqn_get_actions_uses_observation_batch_for_tau_not_worker_size():

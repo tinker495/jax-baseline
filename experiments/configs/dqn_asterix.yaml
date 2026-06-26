@@ -20,7 +20,7 @@ base:
   use_checkpointing: true
   node: 512
   hidden_n: 1
-  optimizer: adamw
+  optimizer: adam
   target_update: 1000
 variants:
   - {algo: DQN}
