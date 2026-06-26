@@ -52,7 +52,6 @@ class APE_X_QRDQN(Ape_X_Family):
         multi_replay_factory=None,
         worker_replay_factory=None,
     ):
-
         self.n_support = n_support
         self.delta = delta
 
@@ -138,7 +137,15 @@ class APE_X_QRDQN(Ape_X_Family):
                 key_seq = repeat(None)
 
             def get_abs_td_error(
-                model, preproc, params, obses, actions, rewards, nxtobses, terminateds, key
+                model,
+                preproc,
+                params,
+                obses,
+                actions,
+                rewards,
+                nxtobses,
+                terminateds,
+                key,
             ):
                 q_values = jnp.take_along_axis(
                     model(params, key, preproc(params, key, convert_jax(obses))),
@@ -185,7 +192,12 @@ class APE_X_QRDQN(Ape_X_Family):
 
     def _invoke_train_step(self, steps, data):
         return self._train_step(
-            self.params, self.target_params, self.opt_state, steps, next(self.key_seq), **data
+            self.params,
+            self.target_params,
+            self.opt_state,
+            steps,
+            next(self.key_seq),
+            **data,
         )
 
     def _train_step(
@@ -250,7 +262,14 @@ class APE_X_QRDQN(Ape_X_Family):
         )
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = jnp.reshape(abs_error, (-1,))
-        return params, target_params, opt_state, jnp.mean(loss), jnp.mean(targets), new_priorities
+        return (
+            params,
+            target_params,
+            opt_state,
+            jnp.mean(loss),
+            jnp.mean(targets),
+            new_priorities,
+        )
 
     def _loss(self, params, obses, actions, targets, weights, key):
         theta_loss_tile = jnp.take_along_axis(
@@ -264,7 +283,15 @@ class APE_X_QRDQN(Ape_X_Family):
         )  # remove weight multiply cpprb weight is something wrong
 
     def _target(
-        self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
+        self,
+        params,
+        target_params,
+        obses,
+        actions,
+        rewards,
+        nxtobses,
+        not_terminateds,
+        key,
     ):
         next_q = self.get_q(target_params, nxtobses, key)
 
@@ -280,22 +307,16 @@ class APE_X_QRDQN(Ape_X_Family):
             next_vals = next_q - jnp.expand_dims(
                 tau_log_pi_next, axis=2
             )  # batch x actions x support
-            sample_pi = jax.random.categorical(
-                key, jnp.tile(pi_next, (1, 1, self.n_support)), 1
-            )  # batch x 1 x support
-            next_vals = jnp.take_along_axis(
-                next_vals, jnp.expand_dims(sample_pi, axis=1), axis=1
-            )  # batch x 1 x support
-            next_vals = not_terminateds * jnp.squeeze(next_vals, axis=1)
+            next_vals = not_terminateds * jnp.sum(pi_next * next_vals, axis=1)
 
             if self.double_q:
                 q_k_targets = jnp.mean(self.get_q(params, obses, key), axis=2)
             else:
                 q_k_targets = jnp.mean(self.get_q(target_params, obses, key), axis=2)
-            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau, clip=True)
             munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
-            rewards = rewards + self.munchausen_alpha * jnp.clip(munchausen_addon, min=-1, max=0)
+            rewards = rewards + self.munchausen_alpha * munchausen_addon
         else:
             if self.double_q:
                 next_actions = jnp.expand_dims(

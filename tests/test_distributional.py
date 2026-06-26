@@ -243,9 +243,9 @@ def _canonical_c51_munchausen(
     next_categorials = bar - jnp.expand_dims(tau_log_pi_next, axis=2)
 
     q_k_targets = jnp.sum(behavior_dists * bar, axis=2)
-    _, tau_log_pi = q_log_pi(q_k_targets, tau)
+    _, tau_log_pi = q_log_pi(q_k_targets, tau, clip=True)
     addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
-    rewards = reward + alpha * jnp.clip(addon, -1, 0)
+    rewards = reward + alpha * addon
 
     target_categorials = jnp.expand_dims(
         gamma * not_term, axis=2
@@ -331,9 +331,9 @@ def _canonical_hlgauss_munchausen(
     next_vals = jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True) * not_term
 
     q_k_targets = hl.to_scalar(behavior_dists)
-    _, tau_log_pi = q_log_pi(q_k_targets, tau)
+    _, tau_log_pi = q_log_pi(q_k_targets, tau, clip=True)
     addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=1), axis=1)
-    rewards = reward + alpha * jnp.clip(addon, -1, 0)
+    rewards = reward + alpha * addon
     target_q = next_vals * gamma + rewards
     return hl.to_probs(target_q)
 

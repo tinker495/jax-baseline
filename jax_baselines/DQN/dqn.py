@@ -15,7 +15,6 @@ class DQN(Q_Network_Family):
     supports_bulk_training = True
 
     def __init__(self, env_builder: callable, model_builder_maker, **kwargs):
-
         super().__init__(env_builder, model_builder_maker, **kwargs)
 
     def setup_model(self):
@@ -67,10 +66,13 @@ class DQN(Q_Network_Family):
         steps = jnp.asarray([context.train_steps_count for context in contexts])
         keys = jax.random.split(next(self.key_seq), len(contexts)) if self.param_noise else None
         carry = (self.params, self.target_params, self.opt_state)
-        (self.params, self.target_params, self.opt_state), (
-            losses,
-            targets,
-            priorities,
+        (
+            (self.params, self.target_params, self.opt_state),
+            (
+                losses,
+                targets,
+                priorities,
+            ),
         ) = self._bulk_scan(carry, keys, steps, data)
         return QNetTrainResult.from_values(
             loss=jnp.mean(losses),
@@ -178,10 +180,10 @@ class DQN(Q_Network_Family):
                 q_k_targets = self.get_q(params, obses, key)
             else:
                 q_k_targets = self.get_q(target_params, obses, key)
-            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
-            munchausen_addon = jnp.take_along_axis(tau_log_pi, actions, axis=1)
+            _, clipped_tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau, clip=True)
+            munchausen_addon = jnp.take_along_axis(clipped_tau_log_pi, actions, axis=1)
 
-            rewards = rewards + self.munchausen_alpha * jnp.clip(munchausen_addon, min=-1, max=0)
+            rewards = rewards + self.munchausen_alpha * munchausen_addon
         else:
             if self.double_q:
                 next_actions = jnp.argmax(self.get_q(params, nxtobses, key), axis=1, keepdims=True)

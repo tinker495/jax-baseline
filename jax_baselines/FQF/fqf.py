@@ -25,7 +25,6 @@ class FQF(Q_Network_Family):
         fqf_optimizer_factory: OptimizerFactory | None = None,
         **kwargs,
     ):
-
         self.fqf_optimizer_factory = require_optimizer_factory(fqf_optimizer_factory)
         self.n_support = n_support
         self.delta = delta
@@ -133,13 +132,22 @@ class FQF(Q_Network_Family):
             self.opt_state,
             self.fqf_opt_state,
         )
-        (self.params, self.fqf_params, self.target_params, self.opt_state, self.fqf_opt_state), (
-            losses,
-            fqf_losses,
-            targets,
-            target_stds,
-            taus,
-            priorities,
+        (
+            (
+                self.params,
+                self.fqf_params,
+                self.target_params,
+                self.opt_state,
+                self.fqf_opt_state,
+            ),
+            (
+                losses,
+                fqf_losses,
+                targets,
+                target_stds,
+                taus,
+                priorities,
+            ),
         ) = self._bulk_scan(carry, keys, steps, data)
         return QNetTrainResult.from_values(
             loss=jnp.mean(losses),
@@ -211,16 +219,19 @@ class FQF(Q_Network_Family):
         actions = jnp.expand_dims(actions.astype(jnp.int32), axis=2)
         not_terminateds = 1.0 - terminateds
         (
-            loss,
             (
-                abs_error,
-                feature,
-                tau_hats,
-                theta_loss_tile,
-                targets,
-                target_weights,
+                loss,
+                (
+                    abs_error,
+                    feature,
+                    tau_hats,
+                    theta_loss_tile,
+                    targets,
+                    target_weights,
+                ),
             ),
-        ), grad = jax.value_and_grad(self._loss, has_aux=True)(
+            grad,
+        ) = jax.value_and_grad(self._loss, has_aux=True)(
             params,
             fqf_params,
             target_params,
@@ -376,13 +387,7 @@ class FQF(Q_Network_Family):
             next_vals = next_quantiles - jnp.expand_dims(
                 tau_log_pi_next, axis=2
             )  # batch x actions x support
-            sample_pi = jax.random.categorical(
-                key, jnp.tile(pi_next, (1, 1, self.n_support)), 1
-            )  # batch x 1 x support
-            next_vals = jnp.take_along_axis(
-                next_vals, jnp.expand_dims(sample_pi, axis=1), axis=1
-            )  # batch x 1 x support
-            next_vals = not_terminateds * jnp.squeeze(next_vals, axis=1)
+            next_vals = not_terminateds * jnp.sum(pi_next * next_vals, axis=1)
 
             if self.double_q:
                 feature = self.preproc(params, key, obses)
@@ -390,10 +395,10 @@ class FQF(Q_Network_Family):
             else:
                 feature = self.preproc(target_params, key, obses)
                 q_k_targets = self.get_q(target_params, feature, taus, tau_hats, key)
-            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau, clip=True)
             munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
-            rewards = rewards + self.munchausen_alpha * jnp.clip(munchausen_addon, min=-1, max=0)
+            rewards = rewards + self.munchausen_alpha * munchausen_addon
         else:
             next_actions = jnp.expand_dims(jnp.argmax(next_q, axis=1), axis=(1, 2))
             next_vals = not_terminateds * jnp.squeeze(

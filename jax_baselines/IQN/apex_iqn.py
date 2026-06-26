@@ -53,7 +53,6 @@ class APE_X_IQN(Ape_X_Family):
         multi_replay_factory=None,
         worker_replay_factory=None,
     ):
-
         self.n_support = n_support
         self.delta = delta
         self.CVaR = CVaR
@@ -129,7 +128,15 @@ class APE_X_IQN(Ape_X_Family):
             key_seq = key_gen(random.randint(0, 1000000))
 
             def get_abs_td_error(
-                model, preproc, params, obses, actions, rewards, nxtobses, terminateds, key
+                model,
+                preproc,
+                params,
+                obses,
+                actions,
+                rewards,
+                nxtobses,
+                terminateds,
+                key,
             ):
                 key1, key2, key3 = jax.random.split(key, 3)
                 conv_obses = convert_jax(obses)
@@ -212,7 +219,14 @@ class APE_X_IQN(Ape_X_Family):
         not_terminateds = 1.0 - terminateds
         key1, key2 = jax.random.split(key, 2)
         targets = self._target(
-            params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key1
+            params,
+            target_params,
+            obses,
+            actions,
+            rewards,
+            nxtobses,
+            not_terminateds,
+            key1,
         )
         (loss, abs_error), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params, obses, actions, targets, weights, key2
@@ -235,7 +249,15 @@ class APE_X_IQN(Ape_X_Family):
         return jnp.mean(loss * weights), loss
 
     def _target(
-        self, params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
+        self,
+        params,
+        target_params,
+        obses,
+        actions,
+        rewards,
+        nxtobses,
+        not_terminateds,
+        key,
     ):
         target_tau = jax.random.uniform(key, (self.batch_size, self.n_support))
         next_q = self.get_q(target_params, nxtobses, target_tau, key)
@@ -252,26 +274,24 @@ class APE_X_IQN(Ape_X_Family):
             next_vals = next_q - jnp.expand_dims(
                 tau_log_pi_next, axis=2
             )  # batch x actions x support
-            sample_pi = jax.random.categorical(
-                key, jnp.tile(pi_next, (1, 1, self.n_support)), 1
-            )  # batch x 1 x support
-            next_vals = jnp.take_along_axis(
-                next_vals, jnp.expand_dims(sample_pi, axis=1), axis=1
-            )  # batch x 1 x support
-            next_vals = not_terminateds * jnp.squeeze(next_vals, axis=1)
+            next_vals = not_terminateds * jnp.sum(pi_next * next_vals, axis=1)
 
             if self.double_q:
                 q_k_targets = jnp.mean(self.get_q(params, obses, target_tau, key), axis=2)
             else:
                 q_k_targets = jnp.mean(self.get_q(target_params, obses, target_tau, key), axis=2)
-            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau, clip=True)
             munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
-            rewards = rewards + self.munchausen_alpha * jnp.clip(munchausen_addon, min=-1, max=0)
+            rewards = rewards + self.munchausen_alpha * munchausen_addon
         else:
             if self.double_q:
                 next_actions = jnp.argmax(
-                    jnp.mean(self.get_q(params, nxtobses, target_tau, key), axis=2, keepdims=True),
+                    jnp.mean(
+                        self.get_q(params, nxtobses, target_tau, key),
+                        axis=2,
+                        keepdims=True,
+                    ),
                     axis=1,
                     keepdims=True,
                 )

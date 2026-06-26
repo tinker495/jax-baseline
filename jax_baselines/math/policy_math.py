@@ -19,10 +19,14 @@ def truncated_mixture(quantiles, cut):
     return sorted_quantiles[:, :-cut]
 
 
-def q_log_pi(q, entropy_tau):
+def q_log_pi(q, entropy_tau, clip=False, min_clip=-1.0, max_clip=0.0):
     q_submax = q - jnp.max(q, axis=1, keepdims=True)
     logsum = jax.nn.logsumexp(q_submax / entropy_tau, axis=1, keepdims=True)
     tau_log_pi = q_submax - entropy_tau * logsum
+    # Munchausen RL (arXiv:2007.14430, Eq. 3): the scaled log-policy is unclipped by
+    # default (soft-bootstrap term); the reward log-policy term passes clip=True to bound it.
+    if clip:
+        tau_log_pi = jnp.clip(tau_log_pi, min_clip, max_clip)
     return q_submax, tau_log_pi
 
 

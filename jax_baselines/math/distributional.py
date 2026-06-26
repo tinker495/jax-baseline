@@ -306,9 +306,9 @@ def distributional_td_target(
     if behavior_dists is None:
         raise ValueError("munchausen target requires behavior_dists")
     q_k = backend.action_values(behavior_dists)
-    _, tau_log_pi = q_log_pi(q_k, tau)
-    addon = jnp.take_along_axis(tau_log_pi, actions, axis=1)
-    shaped_reward = reward + munchausen.alpha * jnp.clip(addon, -1, 0)
+    _, clipped_tau_log_pi = q_log_pi(q_k, tau, clip=True)
+    addon = jnp.take_along_axis(clipped_tau_log_pi, actions, axis=1)
+    shaped_reward = reward + munchausen.alpha * addon
 
     return backend.project(
         next_dists,

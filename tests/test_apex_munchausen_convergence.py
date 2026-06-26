@@ -1,7 +1,7 @@
 """Canonical-equivalence regression guard for the APE-X Munchausen `_target` fork.
 
 CONTEXT.md ("Canonical-semantics decisions") declares the canonical Munchausen target
-to be the local (non-distributed) form: the addon is the raw ``tau_log_pi[actions]``
+to be the local (non-distributed) form: the addon is the clipped ``tau_log_pi[actions]``
 returned by ``q_log_pi``, and ``q_k_targets`` is sourced from the online params under
 double-Q. The APE-X scalar/quantile variants (apex_dqn / apex_qrdqn / apex_iqn) had
 forked onto ``log_pi = q_sub - tau * tau_log_pi`` with no double-Q branch, exactly the
@@ -64,7 +64,16 @@ def _common_inputs(action_shape):
     rewards = jnp.asarray(rng.standard_normal((BATCH, 1)), dtype=jnp.float32)
     not_terminateds = jnp.asarray(rng.integers(0, 2, size=(BATCH, 1)), dtype=jnp.float32)
     key = jax.random.PRNGKey(42)
-    return params, target_params, obses, actions, rewards, nxtobses, not_terminateds, key
+    return (
+        params,
+        target_params,
+        obses,
+        actions,
+        rewards,
+        nxtobses,
+        not_terminateds,
+        key,
+    )
 
 
 def _assert_equiv(apex_cls, canon_cls, get_q, action_shape, munchausen, double_q):

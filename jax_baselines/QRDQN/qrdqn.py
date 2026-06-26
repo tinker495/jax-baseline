@@ -23,7 +23,6 @@ class QRDQN(Q_Network_Family):
         delta=1.0,
         **kwargs,
     ):
-
         self.n_support = n_support
         self.delta = delta
 
@@ -94,11 +93,14 @@ class QRDQN(Q_Network_Family):
         steps = jnp.asarray([context.train_steps_count for context in contexts])
         keys = jax.random.split(next(self.key_seq), len(contexts)) if self.param_noise else None
         carry = (self.params, self.target_params, self.opt_state)
-        (self.params, self.target_params, self.opt_state), (
-            losses,
-            targets,
-            target_stds,
-            priorities,
+        (
+            (self.params, self.target_params, self.opt_state),
+            (
+                losses,
+                targets,
+                target_stds,
+                priorities,
+            ),
         ) = self._bulk_scan(carry, keys, steps, data)
         return QNetTrainResult.from_values(
             loss=jnp.mean(losses),
@@ -210,22 +212,16 @@ class QRDQN(Q_Network_Family):
             next_vals = next_q - jnp.expand_dims(
                 tau_log_pi_next, axis=2
             )  # batch x actions x support
-            sample_pi = jax.random.categorical(
-                key, jnp.tile(pi_next, (1, 1, self.n_support)), 1
-            )  # batch x 1 x support
-            next_vals = jnp.take_along_axis(
-                next_vals, jnp.expand_dims(sample_pi, axis=1), axis=1
-            )  # batch x 1 x support
-            next_vals = not_terminateds * jnp.squeeze(next_vals, axis=1)
+            next_vals = not_terminateds * jnp.sum(pi_next * next_vals, axis=1)
 
             if self.double_q:
                 q_k_targets = jnp.mean(self.get_q(params, obses, key), axis=2)
             else:
                 q_k_targets = jnp.mean(self.get_q(target_params, obses, key), axis=2)
-            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau)
+            _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau, clip=True)
             munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
-            rewards = rewards + self.munchausen_alpha * jnp.clip(munchausen_addon, min=-1, max=0)
+            rewards = rewards + self.munchausen_alpha * munchausen_addon
         else:
             if self.double_q:
                 next_actions = jnp.argmax(
