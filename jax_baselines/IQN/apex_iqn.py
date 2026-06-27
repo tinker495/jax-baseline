@@ -274,7 +274,7 @@ class APE_X_IQN(Ape_X_Family):
             next_vals = next_q - jnp.expand_dims(
                 tau_log_pi_next, axis=2
             )  # batch x actions x support
-            next_vals = not_terminateds * jnp.sum(pi_next * next_vals, axis=1)
+            next_vals = jnp.sum(pi_next * next_vals, axis=1)
 
             if self.double_q:
                 q_k_targets = jnp.mean(self.get_q(params, obses, target_tau, key), axis=2)
@@ -299,7 +299,7 @@ class APE_X_IQN(Ape_X_Family):
                 next_actions = jnp.argmax(
                     jnp.mean(next_q, axis=2, keepdims=True), axis=1, keepdims=True
                 )
-            next_vals = not_terminateds * jnp.squeeze(
+            next_vals = jnp.squeeze(
                 jnp.take_along_axis(next_q, next_actions, axis=1)
             )  # batch x support
-        return (next_vals * self._gamma) + rewards  # batch x support
+        return (not_terminateds * next_vals * self._gamma) + rewards  # batch x support

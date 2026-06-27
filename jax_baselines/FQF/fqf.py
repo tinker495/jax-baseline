@@ -387,7 +387,7 @@ class FQF(Q_Network_Family):
             next_vals = next_quantiles - jnp.expand_dims(
                 tau_log_pi_next, axis=2
             )  # batch x actions x support
-            next_vals = not_terminateds * jnp.sum(pi_next * next_vals, axis=1)
+            next_vals = jnp.sum(pi_next * next_vals, axis=1)
 
             if self.double_q:
                 feature = self.preproc(params, key, obses)
@@ -401,10 +401,10 @@ class FQF(Q_Network_Family):
             rewards = rewards + self.munchausen_alpha * munchausen_addon
         else:
             next_actions = jnp.expand_dims(jnp.argmax(next_q, axis=1), axis=(1, 2))
-            next_vals = not_terminateds * jnp.squeeze(
+            next_vals = jnp.squeeze(
                 jnp.take_along_axis(next_quantiles, next_actions, axis=1)
             )  # batch x support
-        return (next_vals * self._gamma) + rewards, target_weights
+        return (not_terminateds * next_vals * self._gamma) + rewards, target_weights
 
     def learn(
         self,

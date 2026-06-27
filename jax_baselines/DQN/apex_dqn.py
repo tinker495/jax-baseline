@@ -213,10 +213,7 @@ class APE_X_DQN(Ape_X_Family):
             else:
                 next_sub_q, tau_log_pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
-            next_vals = (
-                jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True)
-                * not_terminateds
-            )
+            next_vals = jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True)
 
             if self.double_q:
                 q_k_targets = self.get_q(params, obses, key)
@@ -231,5 +228,5 @@ class APE_X_DQN(Ape_X_Family):
                 next_actions = jnp.argmax(self.get_q(params, nxtobses, key), axis=1, keepdims=True)
             else:
                 next_actions = jnp.argmax(next_q, axis=1, keepdims=True)
-            next_vals = not_terminateds * jnp.take_along_axis(next_q, next_actions, axis=1)
-        return (next_vals * self._gamma) + rewards
+            next_vals = jnp.take_along_axis(next_q, next_actions, axis=1)
+        return (not_terminateds * next_vals * self._gamma) + rewards
