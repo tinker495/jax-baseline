@@ -1,5 +1,8 @@
-from env_builder.env_builder import get_env_builder
+# isort: off
 from experiments.cli._common import default_logdir
+from env_builder.env_builder import get_env_builder
+
+# isort: on
 from experiments.cli._run import (
     AlgoSpec,
     DistributedFamilyRunner,

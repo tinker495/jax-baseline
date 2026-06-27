@@ -28,7 +28,7 @@ def load_runtime_env() -> None:
 
 def set_default_xla_flags() -> None:
     """Apply the shared XLA GPU flags used by every runner entry point."""
-    os.environ["XLA_FLAGS"] = XLA_FLAGS
+    os.environ.setdefault("XLA_FLAGS", XLA_FLAGS)
 
 
 def default_logdir(family: str) -> str:

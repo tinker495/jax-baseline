@@ -60,6 +60,14 @@ def test_common_import_applies_xla_flags_before_cli_imports_jax(monkeypatch):
     assert os.environ["XLA_FLAGS"] == reloaded.XLA_FLAGS
 
 
+def test_common_import_preserves_existing_xla_flags(monkeypatch):
+    monkeypatch.setenv("XLA_FLAGS", "--xla_force_host_platform_device_count=8")
+
+    importlib.reload(cli_common)
+
+    assert os.environ["XLA_FLAGS"] == "--xla_force_host_platform_device_count=8"
+
+
 def test_cli_entrypoints_import_common_before_env_or_algorithm_modules():
     for relative_path in CLI_ENTRYPOINTS:
         path = REPO_ROOT / relative_path

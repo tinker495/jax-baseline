@@ -1,5 +1,8 @@
-from env_builder.env_builder import get_env_builder
+# isort: off
 from experiments.cli._common import default_logdir
+from env_builder.env_builder import get_env_builder
+
+# isort: on
 from experiments.cli._run import AlgoSpec, FamilyRunner, run_family
 from experiments.optimizers import make_optimizer_factory
 from jax_baselines.A2C.a2c import A2C

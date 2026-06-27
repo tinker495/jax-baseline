@@ -62,7 +62,6 @@ class Buffer:
             data[k] = self.buffer[k][traj_idxs]
         terminated = self.buffer["terminated"][traj_idxs, 0]
         filled = np.equal(self.buffer["ep_idx"][idxs], self.buffer["ep_idx"][traj_idxs])[..., 0]
-        filled = np.logical_and(filled, np.logical_not(terminated))
         return obs, data, terminated, filled
 
     @property

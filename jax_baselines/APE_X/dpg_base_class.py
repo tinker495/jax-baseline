@@ -4,6 +4,7 @@ from collections import deque
 import jax
 import numpy as np
 
+from jax_baselines.APE_X.exploration import worker_epsilons
 from jax_baselines.core.env_info import get_worker_env_info
 from jax_baselines.core.hparams import get_hyper_params
 from jax_baselines.core.replay_protocol import (
@@ -221,18 +222,11 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
         param_server = self.runtime.create_param_server(cpu_param)
 
-        self.logger_server.add_multiline(
-            [
-                self.exploration_initial_eps
-                ** (1 + self.exploration_decay * idx / (worker_num - 1))
-                for idx in range(worker_num)
-            ]
-        )
+        epsilons = worker_epsilons(self.exploration_initial_eps, self.exploration_decay, worker_num)
+        self.logger_server.add_multiline(epsilons)
         jobs = []
         for idx in range(worker_num):
-            eps = self.exploration_initial_eps ** (
-                1 + self.exploration_decay * idx / (worker_num - 1)
-            )
+            eps = epsilons[idx]
             jobs.append(
                 self.workers[idx].run(
                     2000,
