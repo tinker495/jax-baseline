@@ -6,13 +6,16 @@ import numpy as np
 import optax
 
 from jax_baselines.core.env_info import get_local_env_info, infer_action_meta
+from jax_baselines.core.env_protocols import (
+    vector_autoreset_mask,
+    vector_real_reset_mask,
+)
 from jax_baselines.core.epoch_buffer import EpochBuffer
 from jax_baselines.core.eval import (
     _normalize_action_for_step,
     evaluate_policy,
     extract_lives,
     extract_original_reward,
-    extract_vector_lives,
     extract_vector_original_rewards,
     record_and_test,
 )
@@ -363,14 +366,15 @@ class Actor_Critic_Policy_Gradient_Family(object):
             next_actions = self.actions([next_obses])
             self.env.step(next_actions)
 
-            real_done = np.logical_or(terminateds, truncateds)
+            done = np.logical_or(terminateds, truncateds)
+            real_reset = vector_real_reset_mask(self.env, terminateds, truncateds, infos)
+            autoreset = vector_autoreset_mask(self.env, terminateds, truncateds, infos)
             active = np.ones(self.worker_size, dtype=bool) if prev_done is None else ~prev_done
             scores[active] += rewards[active]
             eplens[active] += 1
             step_original, step_original_present = extract_vector_original_rewards(
                 infos, self.worker_size
             )
-            lives, lives_present = extract_vector_lives(infos, self.worker_size)
             active_original = active & step_original_present
             originals[active_original] += step_original[active_original]
             original_present[active_original] = True
@@ -383,10 +387,8 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 rewards = np.where(prev_done, np.float32(0.0), rewards)
             self.buffer.add([obs], actions, rewards, [next_obses], terminateds, truncateds)
 
-            for idx in np.where(real_done & active)[0]:
-                emit_original = original_present[idx] and (
-                    not lives_present[idx] or lives[idx] == 0
-                )
+            for idx in np.where(done & active)[0]:
+                emit_original = original_present[idx] and real_reset[idx]
                 self.rollout_tracker.record(
                     steps,
                     episode_reward=float(scores[idx]),
@@ -400,7 +402,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                     originals[idx] = 0.0
                     original_present[idx] = False
 
-            prev_done = real_done & active
+            prev_done = done & autoreset & active
 
             # Advance the pipeline: the action just sent belongs to next_obses.
             obs = next_obses

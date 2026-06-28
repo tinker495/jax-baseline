@@ -176,6 +176,32 @@ class _ScriptEnv:
         return nxt, rewards, terms, truncs, {}
 
 
+class _LivesScriptEnv(_ScriptEnv):
+    def __init__(self, rows):
+        self._rows = rows
+        self._t = 0
+
+    def get_result(self):
+        terms, truncs, lives = self._rows[self._t]
+        self._t += 1
+        return (
+            np.ones((self.ws, 2), dtype=np.float32),
+            np.ones(self.ws, dtype=np.float32),
+            np.asarray(terms, dtype=bool),
+            np.asarray(truncs, dtype=bool),
+            {"lives": np.asarray(lives, dtype=np.int32)},
+        )
+
+    def real_reset_mask(self, terminateds, truncateds, infos):
+        lives = np.asarray(infos["lives"], dtype=np.int32)
+        return np.asarray(truncateds, dtype=bool) | (
+            np.asarray(terminateds, dtype=bool) & (lives == 0)
+        )
+
+    def autoreset_mask(self, terminateds, truncateds, infos):
+        return self.real_reset_mask(terminateds, truncateds, infos)
+
+
 class _RecordingBuffer:
     def __init__(self):
         self.terminateds = []
@@ -239,6 +265,60 @@ def test_a2c_vectorized_flags_autoreset_dummy_step_as_terminal():
     assert stored_term == [[False, False], [True, False], [True, False]]
     assert stored_rew == [[1.0, 1.0], [1.0, 1.0], [0.0, 1.0]]
     assert stored_trunc == [[False, False], [False, False], [False, False]]
+
+
+def test_a2c_vectorized_keeps_post_lifeloss_step_real():
+    agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.env = _LivesScriptEnv(
+        [
+            ([False, False], [False, False], [3, 3]),
+            ([True, False], [False, False], [2, 3]),
+            ([False, False], [False, False], [2, 3]),
+        ]
+    )
+    agent.buffer = _RecordingBuffer()
+    agent.worker_size = 2
+    agent.batch_size = 10_000
+    agent.lossque = deque(maxlen=10)
+    agent.actions = lambda obs: np.zeros((2, 1), dtype=np.float32)
+    agent.train_step = lambda steps: 0.0
+    agent.eval = lambda ctx, steps: None
+    agent.description = lambda eval_result: "desc"
+
+    Actor_Critic_Policy_Gradient_Family.learn_VectorizedEnv(agent, _Ctx([0, 1, 2]))
+
+    assert agent.buffer.terminateds[2].tolist() == [False, False]
+    assert agent.buffer.rewards[2].tolist() == [1.0, 1.0]
+
+
+def test_a2c_vectorized_drops_gymnasium_lifeloss_autoreset_dummy():
+    agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    env = _LivesScriptEnv(
+        [
+            ([False, False], [False, False], [3, 3]),
+            ([True, False], [False, False], [2, 3]),
+            ([False, False], [False, False], [2, 3]),
+        ]
+    )
+
+    def autoreset_mask(terminateds, truncateds, infos):
+        return np.logical_or(terminateds, truncateds)
+
+    env.autoreset_mask = autoreset_mask
+    agent.env = env
+    agent.buffer = _RecordingBuffer()
+    agent.worker_size = 2
+    agent.batch_size = 10_000
+    agent.lossque = deque(maxlen=10)
+    agent.actions = lambda obs: np.zeros((2, 1), dtype=np.float32)
+    agent.train_step = lambda steps: 0.0
+    agent.eval = lambda ctx, steps: None
+    agent.description = lambda eval_result: "desc"
+
+    Actor_Critic_Policy_Gradient_Family.learn_VectorizedEnv(agent, _Ctx([0, 1, 2]))
+
+    assert agent.buffer.terminateds[2].tolist() == [True, False]
+    assert agent.buffer.rewards[2].tolist() == [0.0, 1.0]
 
 
 class _ScriptSingleEnv:

@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
 
+import numpy as np
+
 
 class EnvInfo(TypedDict):
     """Environment metadata shared across adapter and core layers."""
@@ -81,3 +83,24 @@ class VectorizedEnv(Protocol):
 
 # Backward-compatible name exported by env_builder; no separate ABC needed.
 Env = VectorizedEnv
+
+
+def _done_mask(terminateds: Any, truncateds: Any) -> np.ndarray:
+    return np.logical_or(
+        np.asarray(terminateds, dtype=bool),
+        np.asarray(truncateds, dtype=bool),
+    )
+
+
+def vector_real_reset_mask(env: Any, terminateds: Any, truncateds: Any, infos: Any) -> np.ndarray:
+    real_reset_mask = getattr(env, "real_reset_mask", None)
+    if callable(real_reset_mask):
+        return np.asarray(real_reset_mask(terminateds, truncateds, infos), dtype=bool)
+    return _done_mask(terminateds, truncateds)
+
+
+def vector_autoreset_mask(env: Any, terminateds: Any, truncateds: Any, infos: Any) -> np.ndarray:
+    autoreset_mask = getattr(env, "autoreset_mask", None)
+    if callable(autoreset_mask):
+        return np.asarray(autoreset_mask(terminateds, truncateds, infos), dtype=bool)
+    return _done_mask(terminateds, truncateds)

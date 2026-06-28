@@ -390,7 +390,6 @@ GOLDEN = {
         ),
         ("actions", [("arr", [3.0, 3.0])], 0.88),
         ("env_step", ("arr", [[7, 7]])),
-        ("train_step", 2, 2),
         (
             "buffer_add",
             ("arr", [[7, 7]]),
@@ -401,6 +400,7 @@ GOLDEN = {
         ),
         ("actions", [("arr", [4.0, 4.0])], 0.87),
         ("env_step", ("arr", [[7, 7]])),
+        ("train_step", 3, 1),
         (
             "buffer_add",
             ("arr", [[7, 7]]),
@@ -411,7 +411,7 @@ GOLDEN = {
         ("eval", 3),
         ("actions", [("arr", [5.0, 5.0])], 0.86),
         ("env_step", ("arr", [[7, 7]])),
-        ("train_step", 4, 2),
+        ("train_step", 4, 1),
         (
             "buffer_add",
             ("arr", [[7, 7]]),
@@ -422,6 +422,7 @@ GOLDEN = {
         ),
         ("actions", [("arr", [6.0, 6.0])], 0.85),
         ("env_step", ("arr", [[7, 7]])),
+        ("train_step", 5, 1),
         (
             "buffer_add",
             ("arr", [[7, 7]]),
@@ -569,7 +570,6 @@ GOLDEN = {
         ),
         ("actions", [("arr", [3.0, 3.0])], 2),
         ("env_step", ("arr", [[0.5, 0.5]])),
-        ("train_step", 2, 2),
         (
             "buffer_add",
             ("arr", [[0.5, 0.5]]),
@@ -580,6 +580,7 @@ GOLDEN = {
         ),
         ("actions", [("arr", [4.0, 4.0])], 3),
         ("env_step", ("arr", [[0.5, 0.5]])),
+        ("train_step", 3, 1),
         (
             "buffer_add",
             ("arr", [[0.5, 0.5]]),
@@ -590,7 +591,7 @@ GOLDEN = {
         ("eval", 3),
         ("actions", [("arr", [5.0, 5.0])], 4),
         ("env_step", ("arr", [[0.5, 0.5]])),
-        ("train_step", 4, 2),
+        ("train_step", 4, 1),
         (
             "buffer_add",
             ("arr", [[0.5, 0.5]]),
@@ -601,6 +602,7 @@ GOLDEN = {
         ),
         ("actions", [("arr", [6.0, 6.0])], 5),
         ("env_step", ("arr", [[0.5, 0.5]])),
+        ("train_step", 5, 1),
         (
             "buffer_add",
             ("arr", [[0.5, 0.5]]),
@@ -1075,3 +1077,108 @@ def test_vectorized_checkpointing_pools_same_step_worker_lengths_before_pulse():
     RolloutEngine(spec).learn_vectorized_env_checkpointing(FakePbar(range(0, 3)))
 
     assert pulse_calls == [(2, 6)]
+
+
+# --- Atari episodic_life autoreset: only a real reset spawns a dummy ---------
+class _LivesVecEnv:
+    """Vec env that scripts per-step (terminated, truncated, lives) and emits
+    ``lives`` in info, exercising the Atari episodic_life autoreset path."""
+
+    def __init__(self, rec, steps):
+        self.rec = rec
+        self.steps = steps  # list of (terms, truncs, lives), each length ws
+        self.ws = len(steps[0][0])
+        self.t = 0
+        self.c = 0
+        self._last = None
+
+    def current_obs(self):
+        self.c += 1
+        return np.array([float(self.c)] * self.ws)
+
+    def step(self, actions):
+        self.rec.append(("env_step", rep(actions)))
+        self._last = self.steps[self.t]
+        self.t += 1
+
+    def get_result(self):
+        terms, truncs, lives = self._last
+        nxt = np.array([float(self.c) + 0.5] * self.ws)
+        rewards = np.ones(self.ws)
+        infos = {"lives": np.asarray(lives, dtype=np.int32)}
+        return (
+            nxt,
+            rewards,
+            np.asarray(terms, dtype=bool),
+            np.asarray(truncs, dtype=bool),
+            infos,
+        )
+
+    def real_reset_mask(self, terminateds, truncateds, infos):
+        lives = np.asarray(infos["lives"], dtype=np.int32)
+        return np.asarray(truncateds, dtype=bool) | (
+            np.asarray(terminateds, dtype=bool) & (lives == 0)
+        )
+
+    def autoreset_mask(self, terminateds, truncateds, infos):
+        return self.real_reset_mask(terminateds, truncateds, infos)
+
+
+def _store_mask_of(buffer_add_event):
+    if len(buffer_add_event) == 6 and buffer_add_event[-1][0] == "store_mask":
+        return buffer_add_event[-1][1]
+    return None
+
+
+def test_vectorized_rollout_retains_post_lifeloss_step_drops_real_reset_dummy():
+    # Under Atari episodic_life, envpool reports ``terminated`` on a LIFE LOSS
+    # (lives>0) but keeps the same episode running -- the next step is a real,
+    # action-applied transition and must NOT be store_masked. Only a truncation
+    # or the lives==0 game-over spawns an autoreset dummy that IS dropped. Pins
+    # the bug where ``store_mask = ~prev_done`` dropped the post-life-loss step.
+    rec = []
+    steps = [
+        ([False, False], [False, False], [3, 3]),  # 0 normal
+        ([True, False], [False, False], [2, 3]),  # 1 worker0 life-loss (lives>0)
+        ([False, False], [False, False], [2, 3]),  # 2 worker0 real continuation
+        ([True, False], [False, False], [0, 3]),  # 3 worker0 game-over (lives==0)
+        ([False, False], [False, False], [3, 3]),  # 4 worker0 autoreset dummy
+        ([False, False], [True, False], [2, 3]),  # 5 worker0 truncation (lives>0)
+        ([False, False], [False, False], [3, 3]),  # 6 worker0 dummy after truncation
+    ]
+    agent = FakeAgent(rec, _LivesVecEnv(rec, steps), "qnet")
+    _qnet_runner(agent).learn_vectorized_env(FakePbar(range(0, 7)))
+
+    adds = [e for e in rec if e[0] == "buffer_add"]
+    assert len(adds) == 7
+    # step2: the real post-life-loss transition is kept (no worker masked out).
+    assert _store_mask_of(adds[2]) is None
+    # step4: the genuine lives==0 game-over autoreset dummy is dropped (worker0).
+    assert _store_mask_of(adds[4]) == ("arr", [False, True])
+    # step6: the truncation autoreset dummy is dropped (worker0).
+    assert _store_mask_of(adds[6]) == ("arr", [False, True])
+
+
+def test_vectorized_rollout_preserves_train_freq_replay_ratio():
+    rec = []
+    worker_size = 8
+    script = [
+        (
+            np.ones(worker_size),
+            np.zeros(worker_size, dtype=bool),
+            np.zeros(worker_size, dtype=bool),
+        )
+        for _ in range(3)
+    ]
+    agent = FakeAgent(rec, FakeVecEnv(rec, script, worker_size), "qnet")
+    agent.learning_starts = 0
+    agent.train_freq = 4
+    agent.gradient_steps = 1
+
+    _qnet_runner(agent).learn_vectorized_env(FakePbar(range(8, 32, 8)))
+
+    assert [event for event in rec if event[0] == "train_step"] == [
+        ("train_step", 8, 2),
+        ("train_step", 16, 2),
+        ("train_step", 24, 2),
+    ]

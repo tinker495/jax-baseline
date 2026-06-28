@@ -40,6 +40,21 @@ def _action_meta(action_space) -> tuple[list[int], str]:
     raise ValueError(f"Unsupported action space type: {type(action_space)}")
 
 
+def _real_reset_mask(is_atari, terminateds, truncateds, infos):
+    terminateds = np.asarray(terminateds, dtype=bool)
+    truncateds = np.asarray(truncateds, dtype=bool)
+    if not (is_atari and isinstance(infos, dict) and "lives" in infos):
+        return terminateds | truncateds
+    lives = np.asarray(infos["lives"], dtype=np.int32)
+    if lives.shape == ():
+        lives = np.full(terminateds.shape, lives.item(), dtype=np.int32)
+    return truncateds | (terminateds & (lives.reshape(-1) == 0))
+
+
+def _autoreset_mask(terminateds, truncateds):
+    return np.asarray(terminateds, dtype=bool) | np.asarray(truncateds, dtype=bool)
+
+
 def _single_env_info(env, env_id: str) -> EnvInfo:
     if not isinstance(env, SingleEnv):
         raise ValueError("Single env must satisfy the SingleEnv protocol")
@@ -356,6 +371,12 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
 
         return next_obs, rewards, terminateds, truncateds, infos
 
+    def real_reset_mask(self, terminateds, truncateds, infos):
+        return _real_reset_mask(self._is_atari, terminateds, truncateds, infos)
+
+    def autoreset_mask(self, terminateds, truncateds, infos):
+        return _real_reset_mask(self._is_atari, terminateds, truncateds, infos)
+
     def _reorder_info(self, infos, order):
         """Re-sort per-env info arrays into the canonical 0..N-1 layout.
 
@@ -410,10 +431,11 @@ class GymVectorizedEnv(VectorizedEnv):
         from env_builder.atari_wrappers import get_env_type, make_wrap_atari
 
         env_type, _ = get_env_type(env_id)
+        self._is_atari = env_type == "atari_env"
 
         def make_env(seed_offset=0):
             def _make():
-                if env_type == "atari_env":
+                if self._is_atari:
                     env = make_wrap_atari(env_id, clip_rewards=True)
                 else:
                     env = gym.make(env_id)
@@ -491,6 +513,12 @@ class GymVectorizedEnv(VectorizedEnv):
         self.obs = next_obs
 
         return next_obs, rewards, terminateds, truncateds, infos
+
+    def real_reset_mask(self, terminateds, truncateds, infos):
+        return _real_reset_mask(self._is_atari, terminateds, truncateds, infos)
+
+    def autoreset_mask(self, terminateds, truncateds, infos):
+        return _autoreset_mask(terminateds, truncateds)
 
     def close(self):
         if hasattr(self, "env") and self.env is not None:

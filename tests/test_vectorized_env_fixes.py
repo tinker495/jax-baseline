@@ -199,6 +199,46 @@ def test_envpool_non_atari_does_not_alias_info_reward():
     assert "original_reward" not in result_infos
 
 
+def test_envpool_atari_real_reset_mask_excludes_lifeloss():
+    env = eb.EnvPoolVectorizedEnv.__new__(eb.EnvPoolVectorizedEnv)
+    env._is_atari = True
+    env.worker_num = 3
+
+    mask = env.real_reset_mask(
+        terminateds=np.array([True, True, False]),
+        truncateds=np.array([False, False, True]),
+        infos={"lives": np.array([2, 0, 2], dtype=np.int32)},
+    )
+
+    assert mask.tolist() == [False, True, True]
+
+
+def test_envpool_atari_autoreset_mask_excludes_lifeloss():
+    env = eb.EnvPoolVectorizedEnv.__new__(eb.EnvPoolVectorizedEnv)
+    env._is_atari = True
+    env.worker_num = 3
+
+    mask = env.autoreset_mask(
+        terminateds=np.array([True, True, False]),
+        truncateds=np.array([False, False, True]),
+        infos={"lives": np.array([2, 0, 2], dtype=np.int32)},
+    )
+
+    assert mask.tolist() == [False, True, True]
+
+
+def test_gym_atari_autoreset_mask_keeps_lifeloss_dummy_separate_from_real_reset():
+    env = eb.GymVectorizedEnv.__new__(eb.GymVectorizedEnv)
+    env._is_atari = True
+
+    terminateds = np.array([True, True, False])
+    truncateds = np.array([False, False, True])
+    infos = {"lives": np.array([2, 0, 2], dtype=np.int32)}
+
+    assert env.real_reset_mask(terminateds, truncateds, infos).tolist() == [False, True, True]
+    assert env.autoreset_mask(terminateds, truncateds, infos).tolist() == [True, True, True]
+
+
 def test_envpool_get_result_resorts_recv_into_canonical_env_order():
     # recv() may hand envs back in completion order; get_result() must re-sort
     # every per-env array by info["env_id"] so worker i always occupies row i --

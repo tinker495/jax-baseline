@@ -28,10 +28,13 @@ from typing import Callable, Optional
 
 import numpy as np
 
+from jax_baselines.core.env_protocols import (
+    vector_autoreset_mask,
+    vector_real_reset_mask,
+)
 from jax_baselines.core.eval import (
     extract_lives,
     extract_original_reward,
-    extract_vector_lives,
     extract_vector_original_rewards,
 )
 
@@ -196,23 +199,16 @@ class RolloutEngine:
         eplens = np.zeros([spec.worker_size], dtype=np.int32)
         originals = np.zeros([spec.worker_size], dtype=np.float64)
         original_present = np.zeros([spec.worker_size], dtype=bool)
-        # Workers that ended an episode last step emit an autoreset dummy step
-        # (action ignored, reward 0, fresh obs); ``store_mask`` keeps that bogus
-        # terminal->reset transition out of the replay buffer, and the same
-        # ``active`` mask keeps it out of the rollout episode statistics.
+        # Adapters classify two backend quirks separately: whether this done row
+        # is a real game reset, and whether the next row is an autoreset dummy.
         prev_done = None
+        train_residual = 0
 
         for steps in pbar:
             spec.refresh_exploration(steps)
             obs = spec.env.current_obs()
             sel = spec.vector_action(obs, steps)
             spec.env.step(sel.env_action)
-
-            if steps > spec.learning_starts and steps % spec.train_freq == 0:
-                # One pulse of worker_size * gradient_steps keeps the replay ratio
-                # of the per-worker loop while letting the bulk path chunk it.
-                loss = spec.train(steps, spec.worker_size * spec.gradient_steps)
-                lossque.append(loss)
 
             next_obses, rewards, terminateds, truncateds, infos = spec.env.get_result()
             done = np.logical_or(terminateds, truncateds)
@@ -222,10 +218,18 @@ class RolloutEngine:
             step_original, step_original_present = extract_vector_original_rewards(
                 infos, spec.worker_size
             )
-            lives, lives_present = extract_vector_lives(infos, spec.worker_size)
+            real_reset = vector_real_reset_mask(spec.env, terminateds, truncateds, infos)
+            autoreset = vector_autoreset_mask(spec.env, terminateds, truncateds, infos)
             active_original = active & step_original_present
             originals[active_original] += step_original[active_original]
             original_present[active_original] = True
+
+            if steps > spec.learning_starts:
+                train_residual += int(active.sum())
+                update_iters, train_residual = divmod(train_residual, spec.train_freq)
+                if update_iters > 0:
+                    loss = spec.train(steps, update_iters * spec.gradient_steps)
+                    lossque.append(loss)
 
             store_mask = None if prev_done is None or not prev_done.any() else ~prev_done
             spec.replay_buffer.add(
@@ -239,9 +243,7 @@ class RolloutEngine:
             )
 
             for idx in np.where(done & active)[0]:
-                emit_original = original_present[idx] and (
-                    not lives_present[idx] or lives[idx] == 0
-                )
+                emit_original = original_present[idx] and real_reset[idx]
                 spec.record_rollout_episode(
                     steps,
                     episode_reward=float(scores[idx]),
@@ -255,7 +257,7 @@ class RolloutEngine:
                     originals[idx] = 0.0
                     original_present[idx] = False
 
-            prev_done = done & active
+            prev_done = done & autoreset & active
 
             if steps % spec.eval_freq == 0:
                 eval_result = spec.evaluate(steps)
@@ -338,9 +340,8 @@ class RolloutEngine:
         eplens = np.zeros([spec.worker_size], dtype=np.int32)
         originals = np.zeros([spec.worker_size], dtype=np.float64)
         original_present = np.zeros([spec.worker_size], dtype=bool)
-        # Workers that ended an episode last step emit an autoreset dummy step
-        # (action ignored, reward 0, fresh obs); exclude it from returns,
-        # episode lengths, and the replay buffer.
+        # Adapters classify two backend quirks separately: whether this done row
+        # is a real game reset, and whether the next row is an autoreset dummy.
         prev_done = None
         defer_checkpoint_pulses = not spec.has_true_reset()
         pending_checkpoint_pulses = deque()
@@ -384,7 +385,8 @@ class RolloutEngine:
             step_original, step_original_present = extract_vector_original_rewards(
                 infos, spec.worker_size
             )
-            lives, lives_present = extract_vector_lives(infos, spec.worker_size)
+            real_reset = vector_real_reset_mask(spec.env, terminateds, truncateds, infos)
+            autoreset = vector_autoreset_mask(spec.env, terminateds, truncateds, infos)
             active_original = active & step_original_present
             originals[active_original] += step_original[active_original]
             original_present[active_original] = True
@@ -420,9 +422,7 @@ class RolloutEngine:
                     )
                     if advance and not ckpt_success:
                         monitor_failed = True
-                    emit_original = original_present[idx] and (
-                        not lives_present[idx] or lives[idx] == 0
-                    )
+                    emit_original = original_present[idx] and real_reset[idx]
                     if active[idx]:
                         spec.record_rollout_episode(
                             steps,
@@ -440,7 +440,7 @@ class RolloutEngine:
                 if spec.has_true_reset() and monitor_failed:
                     spec.env.true_reset()
 
-            prev_done = done & active
+            prev_done = done & autoreset & active
 
             if steps % spec.eval_freq == 0:
                 schedule_eval(steps)

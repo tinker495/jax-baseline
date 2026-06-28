@@ -144,6 +144,17 @@ class _ScriptedVecEnv:
             infos,
         )
 
+    def real_reset_mask(self, terminateds, truncateds, infos):
+        terminateds = np.asarray(terminateds, dtype=bool)
+        truncateds = np.asarray(truncateds, dtype=bool)
+        if isinstance(infos, dict) and "lives" in infos:
+            lives = np.asarray(infos["lives"], dtype=np.int32).reshape(-1)
+            return truncateds | (terminateds & (lives == 0))
+        return terminateds | truncateds
+
+    def autoreset_mask(self, terminateds, truncateds, infos):
+        return self.real_reset_mask(terminateds, truncateds, infos)
+
 
 class _NoopBuffer:
     def add(self, *args, **kwargs):
@@ -376,6 +387,18 @@ def test_vectorized_env_respects_original_reward_presence_mask():
 
 
 def test_vectorized_env_original_reward_waits_for_zero_lives():
+    # Atari episodic_life on envpool: a life-loss reports terminated with
+    # lives>0 but the SAME game keeps running, so the step after it is a real,
+    # action-applied transition -- its reward and original_reward must count.
+    # Only the lives==0 game-over emits the accumulated (cross-life) game score.
+    #   step0: life-loss (term, lives=2) -> per-life episode reward 1, original
+    #          withheld (lives!=0);
+    #   step1: REAL continuation (lives=2) -> reward 5 and original 500 count;
+    #   step2: game-over (lives=0) -> life-2 episode reward 5+1=6, full game
+    #          original 10+500+20=530.
+    # Pre-fix, prev_done flagged the life-loss successor as an autoreset dummy
+    # and dropped step1 from both totals ((1.0, 30.0)) -- a silent undercount of
+    # the true game score.
     ws = 1
 
     def row(reward, term, trunc):
@@ -403,7 +426,7 @@ def test_vectorized_env_original_reward_waits_for_zero_lives():
 
     assert [(r["reward"], r["original"]) for r in records] == [
         (1.0, None),
-        (1.0, 30.0),
+        (6.0, 530.0),
     ]
 
 
