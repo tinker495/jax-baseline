@@ -12,7 +12,11 @@ checkpoint compatibility would change this structure and fail here.
 
 from __future__ import annotations
 
+import importlib
+
 import jax
+import jax.numpy as jnp
+import pytest
 
 from model_builder.flax.dpg.ddpg_builder import (
     model_builder_maker as ddpg_model_builder_maker,
@@ -31,6 +35,23 @@ _POLICY_KWARGS = {"node": 16, "hidden_n": 2, "embedding_mode": "normal"}
 _OBSERVATION_SPACE = [[4]]
 _ACTION_SIZE = [2]
 _SUPPORT_N = 25
+
+_DETERMINISTIC_BUILDERS = [
+    ("ddpg_builder", {"Dense_0", "Dense_1", "Dense_2"}, False),
+    (
+        "simba_ddpg_builder",
+        {"Dense_0", "ResidualBlock_0", "ResidualBlock_1", "LayerNorm_0", "Dense_1"},
+        False,
+    ),
+    (
+        "simbav2_ddpg_builder",
+        {"SimbaV2Embedding_0", "SimbaV2Block_0", "SimbaV2Block_1", "SimbaV2Head_0"},
+        False,
+    ),
+    ("td3_builder", {"crit1", "crit2"}, True),
+    ("simba_td3_builder", {"crit1", "crit2"}, True),
+    ("simbav2_td3_builder", {"crit1", "crit2"}, True),
+]
 
 _ACTOR_STRUCTURE = {
     ("['params']['act']['Dense_0']['kernel']", (4, 16)),
@@ -102,6 +123,32 @@ def _build(maker):
     builder = maker(_OBSERVATION_SPACE, _ACTION_SIZE, dict(_POLICY_KWARGS))
     _preproc, _actor, _critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
     return policy_params, critic_params
+
+
+@pytest.mark.parametrize("module_name, critic_roots, twin", _DETERMINISTIC_BUILDERS)
+def test_deterministic_builders_preserve_public_contract_and_param_roots(
+    module_name, critic_roots, twin
+):
+    module = importlib.import_module(f"model_builder.flax.dpg.{module_name}")
+    assert hasattr(module, "Actor")
+    assert hasattr(module, "Critic")
+
+    builder = module.model_builder_maker(_OBSERVATION_SPACE, _ACTION_SIZE, dict(_POLICY_KWARGS))
+    assert len(builder()) == 3
+    preproc, actor, critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
+    assert set(policy_params["params"]) == {"act"}
+    assert set(critic_params["params"]) == critic_roots
+
+    key = jax.random.PRNGKey(1)
+    feature = preproc(policy_params, key, [jnp.zeros((1, 4), dtype=jnp.float32)])
+    action = actor(policy_params, key, feature)
+    values = critic(critic_params, key, feature, action)
+    assert feature.shape == (1, 4)
+    assert action.shape == (1, 2)
+    if twin:
+        assert tuple(value.shape for value in values) == ((1, 1), (1, 1))
+    else:
+        assert values.shape == (1, 1)
 
 
 def test_ddpg_builder_param_tree_structure():
