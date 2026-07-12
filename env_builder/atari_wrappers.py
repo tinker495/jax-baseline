@@ -1,6 +1,5 @@
 import os
-import re
-from collections import defaultdict, deque
+from collections import deque
 
 import ale_py
 import cv2
@@ -339,31 +338,13 @@ def make_wrap_atari(env_id="Breakout-v0", clip_rewards=False):
 
 
 def get_env_type(env_id):
-    _game_envs = defaultdict(set)
-
-    # Re-parse the gym registry, since we could have new envs since last time.
-    for env in gym.envs.registry.values():
-        try:
-            if "gymnasium" in env.entry_point:
-                env_type = env.entry_point.split(".")[2].split(":")[0]
-            elif "shimmy" in env.entry_point:
-                env_type = env.entry_point.split(".")[1].split(":")[0]
-            elif "ale_py" in env.entry_point:
-                env_type = "atari_env"
-            _game_envs[env_type].add(env.id)  # This is a set so add is idempotent
-        except Exception:
-            pass
-
-    if env_id in _game_envs:
-        env_type = env_id
-        env_id = next(iter(_game_envs[env_type]))
+    module = str(gym.spec(env_id).entry_point).partition(":")[0]
+    if module.startswith("ale_py"):
+        env_type = "atari_env"
+    elif module.startswith("gymnasium.envs."):
+        env_type = module.split(".")[2]
+    elif module.startswith("shimmy."):
+        env_type = module.split(".")[1]
     else:
-        env_type = None
-        for g, e in _game_envs.items():
-            if env_id in e:
-                env_type = g
-                break
-        if ":" in env_id:
-            env_type = re.sub(r":.*", "", env_id)
-
+        env_type = module.split(".")[0]
     return env_type, env_id

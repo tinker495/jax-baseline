@@ -110,6 +110,15 @@ def test_env_builder_package_imports_use_core_protocols_without_common_shims():
     assert hasattr(importlib.import_module("env_builder"), "get_env_builder")
 
 
+@pytest.mark.parametrize(
+    "env_id, expected_type",
+    [("ALE/Pong-v5", "atari_env"), ("CartPole-v1", "classic_control")],
+)
+def test_get_env_type_uses_registered_entry_point(env_id, expected_type):
+    get_env_type = importlib.import_module("env_builder.atari_wrappers").get_env_type
+    assert get_env_type(env_id) == (expected_type, env_id)
+
+
 def test_single_env_protocol_accepts_structural_envs():
     env = _FakeSingleEnv()
 
