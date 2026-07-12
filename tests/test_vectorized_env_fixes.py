@@ -154,6 +154,15 @@ def test_env_builder_envpool_backend_unsupported_env_raises():
         builder(worker=4, seed=0)
 
 
+@pytest.mark.parametrize(
+    "env_id, expected",
+    [("Pong-v5", True), ("CartPole-v1", False)],
+)
+def test_envpool_atari_detection_uses_env_spec_type(env_id, expected):
+    env = eb.EnvPoolVectorizedEnv.__new__(eb.EnvPoolVectorizedEnv)
+    assert env._check_atari_env(env_id) is expected
+
+
 def test_get_env_builder_rejects_unknown_backend():
     with pytest.raises(ValueError, match="env_backend must be"):
         eb.get_env_builder("CartPole-v1", env_backend="nope")

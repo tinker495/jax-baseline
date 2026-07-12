@@ -266,60 +266,8 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
         """Check if the environment is an Atari game."""
         import envpool
 
-        try:
-            spec = envpool.make_spec(env_id)
-            # EnvPool Atari envs have specific attributes
-            return hasattr(spec, "stack_num") or "Atari" in str(type(spec))
-        except (KeyError, ValueError):
-            pass
-
-        # Fallback: check common Atari game names
-        atari_games = [
-            "Pong",
-            "Breakout",
-            "SpaceInvaders",
-            "Qbert",
-            "Seaquest",
-            "BeamRider",
-            "Enduro",
-            "Asterix",
-            "MsPacman",
-            "Freeway",
-            "Assault",
-            "Alien",
-            "BankHeist",
-            "BattleZone",
-            "Boxing",
-            "Centipede",
-            "DemonAttack",
-            "DoubleDunk",
-            "Frostbite",
-            "Gopher",
-            "Hero",
-            "Kangaroo",
-            "Krull",
-            "KungFuMaster",
-            "Phoenix",
-            "Riverraid",
-            "RoadRunner",
-            "Robotank",
-            "Skiing",
-            "Tennis",
-            "TimePilot",
-            "UpNDown",
-            "Venture",
-            "WizardOfWor",
-            "Zaxxon",
-            "Amidar",
-            "Atlantis",
-            "CrazyClimber",
-            "Gravitar",
-            "JamesBond",
-            "MontezumaRevenge",
-            "PrivateEye",
-            "Solaris",
-        ]
-        return any(game.lower() in env_id.lower() for game in atari_games)
+        spec = envpool.make_spec(env_id)
+        return "Atari" in type(spec).__name__
 
     def get_info(self):
         return self.env_info
