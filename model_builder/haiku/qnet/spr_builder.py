@@ -3,7 +3,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from model_builder.haiku.apply import get_apply_fn_haiku_module
 from model_builder.haiku.layers import NoisyLinear
 from model_builder.haiku.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import print_param
@@ -164,11 +163,11 @@ def model_builder_maker(
         transition = hk.transform(lambda x, y: Transition()(x, y))
         projection = hk.transform(lambda x: Projection()(x))
         prediction = hk.transform(lambda x: Prediction()(x))
-        preproc_fn = get_apply_fn_haiku_module(preproc)
-        model_fn = get_apply_fn_haiku_module(model)
-        transition_fn = get_apply_fn_haiku_module(transition)
-        projection_fn = get_apply_fn_haiku_module(projection)
-        prediction_fn = get_apply_fn_haiku_module(prediction)
+        preproc_fn = preproc.apply
+        model_fn = model.apply
+        transition_fn = transition.apply
+        projection_fn = projection.apply
+        prediction_fn = prediction.apply
         if key is not None:
             keys = jax.random.split(key, 8)
             pre_param = preproc.init(

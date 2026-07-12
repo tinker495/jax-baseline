@@ -8,22 +8,12 @@ def get_apply_fn_flax_module(
     method: Optional[Callable] = None,
     mutable: Union[bool, list[str]] = False,
 ):
-    if method is None:
-
-        def apply_fn(params, key, *x):
-            if key is None:
-                return module.apply(params, *x, mutable=mutable)
-            else:
-                return module.apply(params, *x, rngs={"params": key}, mutable=mutable)
-
-    else:
-
-        def apply_fn(params, key, *x):
-            if key is None:
-                return module.apply(params, *x, method=method, mutable=mutable)
-            else:
-                return module.apply(
-                    params, *x, rngs={"params": key}, method=method, mutable=mutable
-                )
+    def apply_fn(params, key, *x):
+        kwargs = {"mutable": mutable}
+        if key is not None:
+            kwargs["rngs"] = {"params": key}
+        if method is not None:
+            kwargs["method"] = method
+        return module.apply(params, *x, **kwargs)
 
     return apply_fn

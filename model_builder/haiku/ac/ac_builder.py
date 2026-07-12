@@ -3,7 +3,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from model_builder.haiku.apply import get_apply_fn_haiku_module
 from model_builder.haiku.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import print_param
 
@@ -58,9 +57,9 @@ def model_builder_maker(observation_space, action_size, action_type, policy_kwar
         )
         actor = hk.transform(lambda x: Actor(action_size, action_type, **policy_kwargs)(x))
         critic = hk.transform(lambda x: Critic(**policy_kwargs)(x))
-        preproc_fn = get_apply_fn_haiku_module(preproc)
-        actor_fn = get_apply_fn_haiku_module(actor)
-        critic_fn = get_apply_fn_haiku_module(critic)
+        preproc_fn = preproc.apply
+        actor_fn = actor.apply
+        critic_fn = critic.apply
         if key is not None:
             key1, key2, key3, key4 = jax.random.split(key, num=4)
             pre_param = preproc.init(
