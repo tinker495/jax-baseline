@@ -13,6 +13,7 @@ from jax_baselines.math.policy_math import q_log_pi
 
 
 class IQN(Q_Network_Family):
+    _run_name = "IQN"
     supports_bulk_training = True
 
     def __init__(
@@ -249,31 +250,10 @@ class IQN(Q_Network_Family):
             )  # batch x support
         return (not_terminateds * next_vals * self._gamma) + rewards  # batch x support
 
-    def learn(
-        self,
-        total_timesteps,
-        callback=None,
-        log_interval=1000,
-        experiment_name="IQN",
-        run_name="IQN",
-        eval_num=100,
-        logger_factory=None,
-        progress_factory=None,
-        record_test_fn=None,
-    ):
-        run_name = run_name + (
-            "({:d})_CVaR({:.2f})".format(self.n_support, self.CVaR)
+    def run_name_update(self, run_name):
+        suffix = (
+            f"({self.n_support:d})_CVaR({self.CVaR:.2f})"
             if self.risk_avoid
-            else "({:d})".format(self.n_support)
+            else f"({self.n_support:d})"
         )
-        super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            experiment_name,
-            run_name,
-            eval_num,
-            logger_factory=logger_factory,
-            progress_factory=progress_factory,
-            record_test_fn=record_test_fn,
-        )
+        return super().run_name_update(run_name + suffix)

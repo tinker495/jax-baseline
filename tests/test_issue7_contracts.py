@@ -72,13 +72,13 @@ def test_distributed_learn_contract_accepts_driver_factories(_runner, _algo, _sp
 
 
 @pytest.mark.parametrize("cls", list(_local_specs()), ids=lambda cls: cls.__name__)
-def test_local_learn_overrides_forward_driver_factories(cls):
+def test_local_learn_inherits_family_driver_factories(cls):
+    assert "learn" not in cls.__dict__
     source = inspect.getsource(cls.learn)
-    if "**kwargs" in source:
-        return
-    assert "logger_factory=logger_factory" in source
-    assert "progress_factory=progress_factory" in source
-    assert "record_test_fn=record_test_fn" in source
+    assert "TrainingSession().run(" in source
+    assert "logger_factory" in inspect.signature(cls.learn).parameters
+    assert "progress_factory" in inspect.signature(cls.learn).parameters
+    assert "record_test_fn" in inspect.signature(cls.learn).parameters
 
 
 @pytest.mark.parametrize(
@@ -86,26 +86,18 @@ def test_local_learn_overrides_forward_driver_factories(cls):
     list(_distributed_specs()),
     ids=lambda item: item.__name__ if isinstance(item, type) else str(item),
 )
-def test_distributed_learn_overrides_forward_driver_factories(_runner, _algo, _spec, _args, cls):
+def test_distributed_learn_inherits_family_driver_factories(_runner, _algo, _spec, _args, cls):
+    assert "learn" not in cls.__dict__
     source = inspect.getsource(cls.learn)
-    if "learn" in cls.__dict__:
-        # Leaf keeps its own override (IMPALA family): it must forward the
-        # injected driver factories down to super().learn(...).
-        assert "logger_factory=logger_factory" in source
-        assert "progress_factory=progress_factory" in source
-        assert "experiment_name=experiment_name" in source
-    else:
-        # APE-X leaves consolidated learn() onto the shared base. The resolved
-        # entrypoint must still consume the injected factories rather than
-        # hardcoding the Ray runtime: logger_factory threads into the logger
-        # server and progress_factory is used (falling back to make_progress).
-        assert "logger_factory" in inspect.signature(cls.learn).parameters
-        assert "progress_factory" in inspect.signature(cls.learn).parameters
-        assert "experiment_name" in inspect.signature(cls.learn).parameters
-        # logger_factory + experiment_name thread into the runtime logger (not hardcoded).
-        assert "create_logger_server(" in source
-        assert "experiment_name, logger_factory" in source
-        assert "progress_factory or make_progress" in source
+    # The resolved family entrypoint must still consume the injected factories
+    # rather than hardcoding the distributed runtime.
+    assert "logger_factory" in inspect.signature(cls.learn).parameters
+    assert "progress_factory" in inspect.signature(cls.learn).parameters
+    assert "experiment_name" in inspect.signature(cls.learn).parameters
+    assert "create_logger_server(" in source
+    assert "logger_factory" in source
+    assert "progress_factory" in source
+    assert "experiment_name" in source
 
 
 @pytest.mark.parametrize(

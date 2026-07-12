@@ -2,7 +2,7 @@
 minibatch/epoch optimization, extracted into a shared surrogate base.
 
 Each pair must resolve its shared methods to the single base implementation (no
-divergent copies), while keeping its own distinct ``__init__``/``_loss_*``/``learn``.
+divergent copies), while keeping its own distinct ``__init__``/``_loss_*`` methods.
 """
 
 import pytest
@@ -20,16 +20,16 @@ _PAIRS = [
         SurrogatePolicyGradient,
         PPO,
         SPO,
-        ("setup_model", "train_step", "_preprocess", "_train_step"),
+        ("setup_model", "train_step", "_preprocess", "_train_step", "learn"),
     ),
     (
         SurrogateIMPALA,
         IMPALA_PPO,
         IMPALA_SPO,
-        ("setup_model", "train_step", "preprocess", "_train_step"),
+        ("setup_model", "train_step", "preprocess", "_train_step", "learn"),
     ),
 ]
-_ALGO_SPECIFIC = ("__init__", "_loss_discrete", "_loss_continuous", "learn")
+_ALGO_SPECIFIC = ("__init__", "_loss_discrete", "_loss_continuous")
 
 
 @pytest.mark.parametrize("base, ppo_cls, spo_cls, shared", _PAIRS)
@@ -50,7 +50,7 @@ def test_shared_methods_are_single_sourced(base, ppo_cls, spo_cls, shared):
 
 
 @pytest.mark.parametrize("base, ppo_cls, spo_cls, shared", _PAIRS)
-def test_loss_and_init_stay_algorithm_specific(base, ppo_cls, spo_cls, shared):
+def test_losses_and_init_stay_algorithm_specific(base, ppo_cls, spo_cls, shared):
     for name in _ALGO_SPECIFIC:
         assert name in ppo_cls.__dict__, f"{ppo_cls.__name__} must define its own {name}"
         assert name in spo_cls.__dict__, f"{spo_cls.__name__} must define its own {name}"

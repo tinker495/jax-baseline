@@ -20,6 +20,9 @@ from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 class IMPALA_Family(object):
+    _run_name = "IMPALA"
+    _learn_log_interval = 1000
+
     def __init__(
         self,
         workers,
@@ -229,18 +232,26 @@ class IMPALA_Family(object):
     def description(self):
         return "loss : {:.3f} |".format(np.mean(self.lossque))
 
+    def run_name_update(self, run_name):
+        return run_name
+
     def learn(
         self,
         total_trainstep,
         callback=None,
-        log_interval=1000,
-        run_name="IMPALA",
+        log_interval=None,
+        run_name=None,
         reset_num_timesteps=True,
         replay_wrapper=None,
         experiment_name="experiment",
         logger_factory=None,
         progress_factory=None,
     ):
+        if log_interval is None:
+            log_interval = self._learn_log_interval
+        if run_name is None:
+            run_name = self._run_name
+        run_name = self.run_name_update(run_name)
         progress_factory = progress_factory or make_progress
         pbar = progress_factory(total_trainstep, miniters=log_interval)
 

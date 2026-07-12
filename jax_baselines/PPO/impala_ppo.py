@@ -5,6 +5,8 @@ from jax_baselines.IMPALA.surrogate_base import SurrogateIMPALA
 
 
 class IMPALA_PPO(SurrogateIMPALA):
+    _run_name = "IMPALA_PPO"
+    _learn_log_interval = 10
     def __init__(
         self,
         workers,
@@ -124,27 +126,3 @@ class IMPALA_PPO(SurrogateIMPALA):
         else:
             total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
-
-    def learn(
-        self,
-        total_trainstep,
-        callback=None,
-        log_interval=10,
-        run_name="IMPALA_PPO",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
-        experiment_name="experiment",
-        logger_factory=None,
-        progress_factory=None,
-    ):
-        super().learn(
-            total_trainstep,
-            callback,
-            log_interval,
-            run_name,
-            reset_num_timesteps,
-            replay_wrapper,
-            experiment_name=experiment_name,
-            logger_factory=logger_factory,
-            progress_factory=progress_factory,
-        )

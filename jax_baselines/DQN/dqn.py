@@ -12,6 +12,7 @@ from jax_baselines.math.policy_math import q_log_pi
 
 
 class DQN(Q_Network_Family):
+    _run_name = "DQN"
     supports_bulk_training = True
 
     def __init__(self, env_builder: callable, model_builder_maker, **kwargs):
@@ -188,27 +189,3 @@ class DQN(Q_Network_Family):
                 next_actions = jnp.argmax(next_q, axis=1, keepdims=True)
             next_vals = jnp.take_along_axis(next_q, next_actions, axis=1)
         return (not_terminateds * next_vals * self._gamma) + rewards
-
-    def learn(
-        self,
-        total_timesteps,
-        callback=None,
-        log_interval=1000,
-        experiment_name="DQN",
-        run_name="DQN",
-        eval_num=100,
-        logger_factory=None,
-        progress_factory=None,
-        record_test_fn=None,
-    ):
-        super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            experiment_name,
-            run_name,
-            eval_num,
-            logger_factory=logger_factory,
-            progress_factory=progress_factory,
-            record_test_fn=record_test_fn,
-        )

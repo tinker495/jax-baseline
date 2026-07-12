@@ -1,6 +1,6 @@
 """Regression tests for the on-policy Actor-Critic ``learn`` keyword contract.
 
-The synchronous PG family (A2C / PPO / TPPO / SPO) all forward to
+The synchronous PG family (A2C / PPO / TPPO / SPO) all inherit
 ``Actor_Critic_Policy_Gradient_Family.learn``, which expects ``experiment_name``
 before ``run_name``. The CLI (``experiments/cli/pg.py``) calls
 ``agent.learn(steps, experiment_name=...)`` by keyword, so every subclass must

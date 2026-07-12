@@ -24,6 +24,7 @@ class DDPGCheckpointParams:
 
 
 class DDPG(Deteministic_Policy_Gradient_Family):
+    _run_name = "DDPG"
     supports_bulk_training = True
 
     def __init__(
@@ -102,6 +103,14 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             return actions
         self.epsilon = self.exploration.value(steps)
         return np.clip(actions + self.noise() * self.epsilon, -1, 1)
+
+    def prepare_run(self, total_timesteps):
+        self.exploration = LinearSchedule(
+            schedule_timesteps=int(self.exploration_fraction * total_timesteps),
+            initial_p=self.exploration_initial_eps,
+            final_p=self.exploration_final_eps,
+        )
+        self.epsilon = 1.0
 
     def test_action(self, obs):
         return self.actions(obs, np.inf, eval=True)
@@ -309,33 +318,3 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         next_action = self.actor(target_policy_params, key, next_feature)
         next_q = self.critic(target_critic_params, key, next_feature, next_action)
         return (not_terminateds * next_q * self._gamma) + rewards
-
-    def learn(
-        self,
-        total_timesteps,
-        callback=None,
-        log_interval=1000,
-        experiment_name="DDPG",
-        run_name="DDPG",
-        eval_num=100,
-        logger_factory=None,
-        progress_factory=None,
-        record_test_fn=None,
-    ):
-        self.exploration = LinearSchedule(
-            schedule_timesteps=int(self.exploration_fraction * total_timesteps),
-            initial_p=self.exploration_initial_eps,
-            final_p=self.exploration_final_eps,
-        )
-        self.epsilon = 1.0
-        super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            experiment_name,
-            run_name,
-            eval_num,
-            logger_factory=logger_factory,
-            progress_factory=progress_factory,
-            record_test_fn=record_test_fn,
-        )

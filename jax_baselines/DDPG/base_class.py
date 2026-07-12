@@ -30,6 +30,8 @@ from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 class Deteministic_Policy_Gradient_Family(object):
+    _run_name = "DPG_network"
+
     supports_bulk_training = False
 
     def __init__(
@@ -412,13 +414,17 @@ class Deteministic_Policy_Gradient_Family(object):
         total_timesteps,
         callback=None,
         log_interval=1000,
-        experiment_name="DPG_network",
-        run_name="DPG_network",
+        experiment_name=None,
+        run_name=None,
         eval_num=100,
         logger_factory=None,
         progress_factory=None,
         record_test_fn=None,
     ):
+        if experiment_name is None:
+            experiment_name = self._run_name
+        if run_name is None:
+            run_name = self._run_name
         return TrainingSession().run(
             self,
             total_timesteps,

@@ -7,6 +7,7 @@ from jax_baselines.math.returns import validate_advantage_normalize_scope
 
 
 class PPO(SurrogatePolicyGradient):
+    _run_name = "PPO"
     def __init__(
         self,
         env_builder,
@@ -111,23 +112,3 @@ class PPO(SurrogatePolicyGradient):
         else:
             total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
-
-    def learn(
-        self,
-        total_timesteps,
-        callback=None,
-        log_interval=1000,
-        experiment_name="PPO",
-        run_name="PPO",
-        eval_num=100,
-        **kwargs,
-    ):
-        return super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            experiment_name,
-            run_name,
-            eval_num,
-            **kwargs,
-        )
