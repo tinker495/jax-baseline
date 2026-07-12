@@ -4,7 +4,6 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.DQN.training import QNetTrainResult
 from jax_baselines.math.distributional import (
     HLGaussBackend,
     HLGaussTransform,
@@ -101,31 +100,6 @@ class HL_GAUSS_SPR(SPR):
 
         # Use common JIT compilation
         self._compile_common_functions()
-
-    def _train_on_batch(self, data, context):
-        (
-            self.params,
-            self.target_params,
-            self.opt_state,
-            loss,
-            t_mean,
-            new_priorities,
-            rprloss,
-        ) = self._train_step(
-            self.params,
-            self.target_params,
-            self.opt_state,
-            context.train_steps_count,
-            next(self.key_seq),
-            **data,
-        )
-
-        return QNetTrainResult.from_values(
-            loss=loss,
-            target=t_mean,
-            replay_priorities=new_priorities,
-            metrics={"loss/rprloss": rprloss},
-        )
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         return jnp.argmax(

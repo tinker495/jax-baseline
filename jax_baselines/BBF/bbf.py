@@ -2,7 +2,6 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.DQN.training import QNetTrainResult
 from jax_baselines.math.jax_utils import convert_jax
 from jax_baselines.math.param_updates import (
     filter_like_tree,
@@ -87,31 +86,6 @@ class BBF(SPR):
     def get_behavior_params(self):
         """BBF uses target_params for behavior (training-time actions)."""
         return self.target_params
-
-    def _train_on_batch(self, data, context):
-        (
-            self.params,
-            self.target_params,
-            self.opt_state,
-            loss,
-            t_mean,
-            new_priorities,
-            rprloss,
-        ) = self._train_step(
-            self.params,
-            self.target_params,
-            self.opt_state,
-            context.train_steps_count,
-            next(self.key_seq),
-            **data,
-        )
-
-        return QNetTrainResult.from_values(
-            loss=loss,
-            target=t_mean,
-            replay_priorities=new_priorities,
-            metrics={"loss/rprloss": rprloss},
-        )
 
     def get_last_idx(self, filled, n_step):
         parsed_filled = jnp.where(jnp.arange(self.n_step) < n_step, filled, 0)
