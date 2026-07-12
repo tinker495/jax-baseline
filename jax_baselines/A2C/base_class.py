@@ -352,13 +352,17 @@ class Actor_Critic_Policy_Gradient_Family(object):
         # two episodes in the return. prev_done chains off the *real* env dones,
         # and the same mask keeps the dummy out of the rollout episode stats.
         prev_done = None
+        convert_action = self.conv_action if self.action_type == "continuous" else None
+
+        def send(actions):
+            self.env.step(convert_action(actions) if convert_action else actions)
 
         # Pipeline the async env between updates. At an update boundary, delay
         # the next send until train_step finishes so the new rollout cannot start
         # with an action sampled from the previous policy.
         obs = self.env.current_obs()
         actions = self.actions([obs])
-        self.env.step(self.conv_action(actions) if self.action_type == "continuous" else actions)
+        send(actions)
 
         for steps in ctx.pbar:
             (
@@ -373,11 +377,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             if not train_due:
                 # Keep the async overlap except when train_step changes the policy.
                 next_actions = self.actions([next_obses])
-                self.env.step(
-                    self.conv_action(next_actions)
-                    if self.action_type == "continuous"
-                    else next_actions
-                )
+                send(next_actions)
 
             done = np.logical_or(terminateds, truncateds)
             real_reset = vector_real_reset_mask(self.env, terminateds, truncateds, infos)
@@ -421,11 +421,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 loss = self.train_step(steps, logger_run=ctx.logger_run)
                 self.lossque.append(loss)
                 next_actions = self.actions([next_obses])
-                self.env.step(
-                    self.conv_action(next_actions)
-                    if self.action_type == "continuous"
-                    else next_actions
-                )
+                send(next_actions)
 
             # Advance the pipeline: the action just sent belongs to next_obses.
             obs = next_obses
