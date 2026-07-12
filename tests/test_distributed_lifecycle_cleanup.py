@@ -1,106 +1,10 @@
 from __future__ import annotations
 
 from importlib import import_module
+from threading import Event
+from unittest.mock import MagicMock, Mock, call
 
 import pytest
-
-
-class _Event:
-    def __init__(self):
-        self.value = False
-
-    def clear(self):
-        self.value = False
-
-    def set(self):
-        self.value = True
-
-    def is_set(self):
-        return self.value
-
-
-class _Logger:
-    def __init__(self, calls):
-        self.calls = calls
-
-    def register_hparams(self, _hparams):
-        self.calls.append("logger.register_hparams")
-
-    def add_multiline(self, _eps):
-        self.calls.append("logger.add_multiline")
-
-    def get_log_dir(self):
-        self.calls.append("logger.get_log_dir")
-        return "/tmp/run"
-
-    def last_update(self):
-        self.calls.append("logger.last_update")
-
-    def close(self):
-        self.calls.append("logger.close")
-
-
-class _Runtime:
-    def __init__(self):
-        self.calls = []
-        self.events = []
-        self.logger = _Logger(self.calls)
-
-    def create_event(self):
-        event = _Event()
-        self.events.append(event)
-        return event
-
-    def create_param_server(self, _params):
-        return object()
-
-    def create_logger_server(self, *_args, **_kwargs):
-        self.calls.append("runtime.create_logger")
-        return self.logger
-
-    def wait(self, jobs, timeout=None):
-        self.calls.append(("runtime.wait", tuple(jobs), timeout))
-
-    def shutdown(self):
-        self.calls.append("runtime.shutdown")
-
-
-class _Worker:
-    def __init__(self, runtime, stop_on_run):
-        self.runtime = runtime
-        self.stop_on_run = stop_on_run
-
-    def run(self, *_args, **_kwargs):
-        if self.stop_on_run:
-            self.runtime.events[0].set()
-        return "job"
-
-
-class _ApexReplay:
-    def __init__(self, ready):
-        self.ready = ready
-
-    def __len__(self):
-        return int(self.ready)
-
-    def buffer_info(self):
-        return "buffer"
-
-
-class _ImpalaBuffer:
-    def __init__(self, ready, calls):
-        self.ready = ready
-        self.calls = calls
-
-    def queue_is_empty(self):
-        return not self.ready
-
-    def queue_info(self):
-        return "queue"
-
-    def clear(self):
-        self.calls.append("buffer.clear")
-
 
 FAMILIES = (
     ("jax_baselines.APE_X.base_class", "Ape_X_Family", "apex"),
@@ -117,7 +21,12 @@ def _make_agent(monkeypatch, module_name, class_name, kind, *, ready, stop_on_ru
     module = import_module(module_name)
     family = getattr(module, class_name)
     agent = family.__new__(family)
-    runtime = _Runtime()
+    stop = Event()
+    runtime = Mock()
+    runtime.create_event.side_effect = [stop, Event()]
+    runtime.create_param_server.return_value = object()
+    logger = runtime.create_logger_server.return_value
+    logger.get_log_dir.return_value = "/tmp/run"
 
     monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(module.jax, "device_put", lambda params, _device: params)
@@ -126,7 +35,9 @@ def _make_agent(monkeypatch, module_name, class_name, kind, *, ready, stop_on_ru
         monkeypatch.setattr(module, "get_hyper_params", lambda _agent: {})
 
     agent.runtime = runtime
-    agent.workers = [_Worker(runtime, stop_on_run)]
+    worker = Mock()
+    worker.run.side_effect = lambda *a, **kw: (stop.set() if stop_on_run else None) or "job"
+    agent.workers = [worker]
     agent.params = {"weight": 1}
     agent.model_builder = object()
     agent.actor_builder = object()
@@ -147,45 +58,58 @@ def _make_agent(monkeypatch, module_name, class_name, kind, *, ready, stop_on_ru
         agent.exploration_decay = 0.7
         agent.gradient_steps = 1
         agent.target_network_update_freq = 10
-        agent.replay_buffer = _ApexReplay(ready)
     elif kind == "apex_dpg":
         agent.learning_starts = 1
         agent.exploration_initial_eps = 0.9
         agent.exploration_decay = 0.7
         agent.gradient_steps = 1
         agent.param_broadcast_freq = 10
-        agent.replay_buffer = _ApexReplay(ready)
     else:
         agent.worker_num = 1
         agent.batch_size = 1
         agent.update_freq = 10
-        agent.buffer = _ImpalaBuffer(ready, runtime.calls)
 
-    agent.save_params = lambda path: runtime.calls.append(("save_params", path))
-    return agent, runtime
+    if kind.startswith("apex"):
+        agent.replay_buffer = MagicMock()
+        agent.replay_buffer.__len__.return_value = int(ready)
+        agent.replay_buffer.buffer_info.return_value = "buffer"
+    else:
+        agent.buffer = Mock()
+        agent.buffer.queue_is_empty.return_value = not ready
+        agent.buffer.queue_info.return_value = "queue"
+
+    lifecycle = Mock()
+    runtime.wait = lifecycle.wait
+    agent.save_params = lifecycle.save_params
+    logger.last_update = lifecycle.last_update
+    logger.close = lifecycle.close
+    runtime.shutdown = lifecycle.shutdown
+    return agent, stop, lifecycle
 
 
 @pytest.mark.parametrize("module_name,class_name,kind", FAMILIES)
 def test_distributed_learn_cleans_up_after_warmup_stop(monkeypatch, module_name, class_name, kind):
-    agent, runtime = _make_agent(
+    agent, stop, lifecycle = _make_agent(
         monkeypatch, module_name, class_name, kind, ready=False, stop_on_run=True
     )
 
     agent.learn(1, progress_factory=lambda *_args, **_kwargs: [])
 
-    assert runtime.events[0].is_set()
-    assert ("runtime.wait", ("job",), 300) in runtime.calls
-    assert runtime.calls.count("logger.close") == 1
-    assert runtime.calls.count("runtime.shutdown") == 1
-    assert runtime.calls.index(("save_params", "/tmp/run")) < runtime.calls.index("logger.close")
-    assert runtime.calls.index("logger.close") < runtime.calls.index("runtime.shutdown")
+    assert stop.is_set()
+    assert lifecycle.mock_calls == [
+        call.wait(["job"], timeout=300),
+        call.save_params("/tmp/run"),
+        call.last_update(),
+        call.close(),
+        call.shutdown(),
+    ]
 
 
 @pytest.mark.parametrize("module_name,class_name,kind", FAMILIES)
 def test_distributed_learn_cleans_up_after_training_exception(
     monkeypatch, module_name, class_name, kind
 ):
-    agent, runtime = _make_agent(
+    agent, stop, lifecycle = _make_agent(
         monkeypatch, module_name, class_name, kind, ready=True, stop_on_run=False
     )
 
@@ -197,10 +121,13 @@ def test_distributed_learn_cleans_up_after_training_exception(
     with pytest.raises(RuntimeError, match="train failed"):
         agent.learn(1, progress_factory=lambda *_args, **_kwargs: [1])
 
-    assert runtime.events[0].is_set()
-    assert ("runtime.wait", ("job",), 300) in runtime.calls
-    assert runtime.calls.count("logger.close") == 1
-    assert runtime.calls.count("runtime.shutdown") == 1
+    assert stop.is_set()
+    assert lifecycle.mock_calls == [
+        call.wait(["job"], timeout=300),
+        call.last_update(),
+        call.close(),
+        call.shutdown(),
+    ]
 
 
 def test_ray_runtime_shutdown_is_idempotent(monkeypatch):
