@@ -5,8 +5,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from jax_baselines.BBF.bbf import BBF
-from jax_baselines.BBF.hl_gauss_bbf import HL_GAUSS_BBF
+from jax_baselines.C51.c51 import C51
+from jax_baselines.C51.hl_gauss_c51 import HL_GAUSS_C51
 from jax_baselines.core.bulk_training import (
     bulk_chunk_plan,
     flatten_bulk_batch,
@@ -21,7 +21,6 @@ from jax_baselines.DQN.training import (
     QNetTrainReport,
     QNetTrainResult,
 )
-from jax_baselines.SPR.hl_gauss_spr import HL_GAUSS_SPR
 from jax_baselines.SPR.spr import SPR
 
 
@@ -467,9 +466,6 @@ def test_qnet_bulk_reshape_handles_list_leaves_and_batch_size_one():
 
 def test_local_qnet_algorithms_use_train_on_batch_and_inherit_train_step():
     targets = {
-        "jax_baselines/DQN/dqn.py": "DQN",
-        "jax_baselines/C51/c51.py": "C51",
-        "jax_baselines/C51/hl_gauss_c51.py": "HL_GAUSS_C51",
         "jax_baselines/QRDQN/qrdqn.py": "QRDQN",
         "jax_baselines/IQN/iqn.py": "IQN",
         "jax_baselines/FQF/fqf.py": "FQF",
@@ -488,10 +484,11 @@ def test_local_qnet_algorithms_use_train_on_batch_and_inherit_train_step():
         assert "train_step" not in method_names
 
 
-@pytest.mark.parametrize("algorithm", [HL_GAUSS_SPR, BBF, HL_GAUSS_BBF])
-def test_spr_children_inherit_train_on_batch(algorithm):
-    assert "_train_on_batch" not in algorithm.__dict__
-    assert algorithm._train_on_batch is SPR._train_on_batch
+@pytest.mark.parametrize("algorithm", [DQN, C51, HL_GAUSS_C51])
+def test_dqn_variants_inherit_common_batch_training(algorithm):
+    for method_name in ("_train_on_batch", "_train_on_bulk", "_bulk_scan"):
+        assert method_name not in algorithm.__dict__
+        assert getattr(algorithm, method_name) is getattr(Q_Network_Family, method_name)
 
 
 def test_dqn_train_on_bulk_scans_updates_and_stacks_priorities():

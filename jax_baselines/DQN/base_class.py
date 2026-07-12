@@ -21,7 +21,11 @@ from jax_baselines.core.rollout_stats import EpisodeTracker
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.serialization import restore, save
 from jax_baselines.core.training_session import TrainingSession, off_policy_loop
-from jax_baselines.DQN.training import QNetTrainingLifecycle, QNetTrainReport
+from jax_baselines.DQN.training import (
+    QNetTrainingLifecycle,
+    QNetTrainReport,
+    QNetTrainResult,
+)
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
@@ -208,8 +212,59 @@ class Q_Network_Family:
         return self.training_lifecycle.train(steps, gradient_steps)
 
     def _train_on_batch(self, data, context):
-        """Run one algorithm-specific update and return a QNetTrainResult."""
-        raise NotImplementedError
+        (
+            self.params,
+            self.target_params,
+            self.opt_state,
+            loss,
+            target,
+            priorities,
+        ) = self._train_step(
+            self.params,
+            self.target_params,
+            self.opt_state,
+            context.train_steps_count,
+            next(self.key_seq) if self.param_noise else None,
+            **data,
+        )
+        return QNetTrainResult.from_values(loss=loss, target=target, replay_priorities=priorities)
+
+    def _train_on_bulk(self, data, contexts):
+        steps = jnp.asarray([context.train_steps_count for context in contexts])
+        keys = jax.random.split(next(self.key_seq), len(contexts)) if self.param_noise else None
+        carry = (self.params, self.target_params, self.opt_state)
+        (self.params, self.target_params, self.opt_state), (
+            losses,
+            targets,
+            priorities,
+        ) = self._bulk_scan(carry, keys, steps, data)
+        return QNetTrainResult.from_values(
+            loss=jnp.mean(losses),
+            target=jnp.mean(targets),
+            replay_priorities=priorities,
+            update_count=len(contexts),
+        )
+
+    def _bulk_scan(self, carry, keys, steps, data):
+        def train_one(carry, xs):
+            params, target_params, opt_state = carry
+            if self.param_noise:
+                step, key, batch = xs
+            else:
+                step, batch = xs
+                key = None
+            params, target_params, opt_state, loss, target, priorities = self._train_step(
+                params,
+                target_params,
+                opt_state,
+                step,
+                key,
+                **batch,
+            )
+            return (params, target_params, opt_state), (loss, target, priorities)
+
+        xs = (steps, keys, data) if self.param_noise else (steps, data)
+        return jax.lax.scan(train_one, carry, xs)
 
     def _aggregate_train_reports(self, reports):
         if len(reports) == 1:
