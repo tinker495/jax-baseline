@@ -20,7 +20,7 @@ dependencies = [
     "flax",
     "optax",
     "numpy",
-    "ray[default]",
+    "ray",
     "cpprb",
     "opencv-python",
     "envpool",
