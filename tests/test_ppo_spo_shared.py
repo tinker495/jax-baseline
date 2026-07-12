@@ -5,6 +5,8 @@ Each pair must resolve its shared methods to the single base implementation (no
 divergent copies), while keeping its own distinct ``__init__``/``_loss_*`` methods.
 """
 
+from unittest.mock import patch
+
 import pytest
 
 from jax_baselines.A2C.surrogate_base import SurrogatePolicyGradient
@@ -55,3 +57,21 @@ def test_losses_and_init_stay_algorithm_specific(base, ppo_cls, spo_cls, shared)
         assert name in ppo_cls.__dict__, f"{ppo_cls.__name__} must define its own {name}"
         assert name in spo_cls.__dict__, f"{spo_cls.__name__} must define its own {name}"
         assert ppo_cls.__dict__[name] is not spo_cls.__dict__[name]
+
+
+@pytest.mark.parametrize("cls", [PPO, SPO])
+def test_local_surrogate_constructor_forwards_explicit_hyperparameters(cls):
+    expected = {
+        "lamda": 0.51,
+        "gae_normalize": True,
+        "gae_normalize_scope": "minibatch",
+        "minibatch_size": 8,
+        "epoch_num": 9,
+        "ppo_eps": 0.07,
+        "value_clip": 0.3,
+    }
+    with patch.object(SurrogatePolicyGradient, "__init__", return_value=None) as parent_init:
+        cls(None, None, **expected)
+
+    forwarded = parent_init.call_args.kwargs
+    assert {key: forwarded[key] for key in expected} == expected

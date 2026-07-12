@@ -65,7 +65,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         self._preprocess = jax.jit(self._preprocess)
         self._train_step = jax.jit(self._train_step)
 
-    def train_step(self, steps):
+    def train_step(self, steps, logger_run=None):
         data = self.buffer.get_buffer()
 
         (
@@ -78,12 +78,12 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             targets,
         ) = self._train_step(self.params, self.opt_state, next(self.key_seq), **data)
 
-        if self.logger_run:
-            self.logger_run.log_metric("loss/critic_loss", critic_loss, steps)
-            self.logger_run.log_metric("loss/actor_loss", actor_loss, steps)
-            self.logger_run.log_metric("loss/entropy_loss", entropy_loss, steps)
-            self.logger_run.log_metric("loss/mean_target", targets, steps)
-            self.logger_run.log_metric("loss/kl_divergence", kls, steps)
+        if logger_run:
+            logger_run.log_metric("loss/critic_loss", critic_loss, steps)
+            logger_run.log_metric("loss/actor_loss", actor_loss, steps)
+            logger_run.log_metric("loss/entropy_loss", entropy_loss, steps)
+            logger_run.log_metric("loss/mean_target", targets, steps)
+            logger_run.log_metric("loss/kl_divergence", kls, steps)
 
         return critic_loss
 
@@ -115,7 +115,10 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         obses = [jnp.vstack(o) for o in obses]
         actions = jnp.vstack(actions)
         value = jnp.vstack(value)
-        prob = jnp.vstack(prob)
+        if self.action_type == "continuous":
+            mu, log_std = prob
+            prob = (mu, jnp.broadcast_to(log_std, mu.shape))
+        prob = jax.tree.map(jnp.vstack, prob)
         pi_prob = jnp.vstack(pi_prob)
         adv = jnp.vstack(adv)
         targets = value + adv
@@ -149,7 +152,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             actions_batch = actions[batch_idxes]
             old_value_batch = old_value[batch_idxes]
             targets_batch = targets[batch_idxes]
-            old_prob_batch = old_prob[batch_idxes]
+            old_prob_batch = jax.tree.map(lambda p: p[batch_idxes], old_prob)
             old_act_prob_batch = old_act_prob[batch_idxes]
             adv_batch = adv[batch_idxes]
 
@@ -256,7 +259,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             self.actor(params, key, feature), actions, key, out_prob=True
         )
         mu, log_std = prob
-        std = jnp.exp(log_std)
+        std = jnp.broadcast_to(jnp.exp(log_std), mu.shape)
         prob_std = (mu, std)
         old_std = jnp.exp(jnp.array(old_prob[1]))
         old_prob_std = (old_prob[0], old_std)

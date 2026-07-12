@@ -89,13 +89,17 @@ def _active_worker_indices(worker_size, store_mask):
     return np.flatnonzero(store_mask)
 
 
+def _terminated_mask(done):
+    return np.clip(done, 0.0, 1.0)
+
+
 def _project_transitions(transitions, obs_keys, next_obs_keys, *, prioritized=False):
     projected = {
         "obses": [transitions[key] for key in obs_keys],
         "actions": transitions["action"],
         "rewards": transitions["reward"],
         "nxtobses": [transitions[key] for key in next_obs_keys],
-        "terminateds": transitions["done"],
+        "terminateds": _terminated_mask(transitions["done"]),
     }
     if prioritized:
         projected["weights"] = transitions["weights"]
@@ -217,12 +221,13 @@ class NstepReplayBuffer(ReplayBuffer):
             self.buffer = self._create_central_buffer(size, central_env_dict, comp_kw)
             # ponytail: row isolation preserves immediate sampling;
             # per-worker central buffers if compression ratio matters.
-            self._isolate_multiworker_steps = n_step == 1 and bool(comp_kw)
+            self._isolate_multiworker_steps = bool(comp_kw)
             if n_step == 1:
                 self.add = self.multiworker_single_step_add
             else:
+                self._local_capacity = n_step + 1
                 self.local_buffers = [
-                    cpprb.ReplayBuffer(2000, env_dict=local_env_dict, Nstep=n_s)
+                    cpprb.ReplayBuffer(self._local_capacity, env_dict=local_env_dict, Nstep=n_s)
                     for _ in range(worker_size)
                 ]
                 self.add = self.multiworker_add
@@ -252,20 +257,32 @@ class NstepReplayBuffer(ReplayBuffer):
         for w in _active_worker_indices(self.worker_size, store_mask):
             obsdict = dict(zip(self.obsdict, [o[w] for o in obs_t]))
             nextobsdict = dict(zip(self.nextobsdict, [no[w] for no in nxtobs_t]))
-            self.local_buffers[w].add(
+            local_buffer = self.local_buffers[w]
+            start = local_buffer.get_next_index()
+            local_buffer.add(
                 **obsdict,
                 action=action[w],
                 reward=reward[w],
                 **nextobsdict,
                 done=terminated[w],
             )
-            if terminated[w] or truncated[w]:
-                self.local_buffers[w].on_episode_end()
-                self.buffer.add(**self.local_buffers[w].get_all_transitions())
-                # Mark the episode boundary so stack_compress reconstructs each
-                # worker's frame window without bleeding across episodes.
+            boundary = terminated[w] or truncated[w]
+            if boundary:
+                local_buffer.on_episode_end()
+
+            count = (local_buffer.get_next_index() - start) % self._local_capacity
+            if count:
+                indexes = (start + np.arange(count)) % self._local_capacity
+                transitions = {
+                    key: value[indexes] for key, value in local_buffer.get_all_transitions().items()
+                }
+                transitions["done"] = _terminated_mask(transitions["done"])
+                self.buffer.add(**transitions)
+
+            if count and (self._isolate_multiworker_steps or boundary):
                 self.buffer.on_episode_end()
-                self.local_buffers[w].clear()
+            if boundary:
+                local_buffer.clear()
 
     def multiworker_single_step_add(
         self,

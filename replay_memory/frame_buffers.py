@@ -61,6 +61,7 @@ class FrameStackReplayBuffer:
         self._truncated = np.zeros((self.max_size,), dtype=np.bool_)
         self._ep_id = np.full((self.max_size,), -1, dtype=np.int64)
         self._ep_step = np.zeros((self.max_size,), dtype=np.int32)
+        self._boundary_next = {}
 
         self._count = 0  # total transitions ever added (monotonic)
         self._ep = 0
@@ -84,6 +85,7 @@ class FrameStackReplayBuffer:
     # ---- add ------------------------------------------------------------
     def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False):
         r = self._count % self.max_size
+        self._boundary_next.pop(r, None)
         self._frame[r] = np.asarray(obs_t[0])[0, :, :, -self.cf :]
         self._action[r] = np.asarray(action, dtype=np.float32).reshape(self.action_shape)
         self._reward[r] = reward
@@ -91,6 +93,8 @@ class FrameStackReplayBuffer:
         self._truncated[r] = bool(truncated)
         self._ep_id[r] = self._ep
         self._ep_step[r] = self._cur_step
+        if terminated or truncated:
+            self._boundary_next[r] = np.asarray(nxtobs_t[0])[0, :, :, -self.cf :].copy()
         self._count += 1
         if terminated or truncated:
             self._ep += 1
@@ -119,7 +123,7 @@ class FrameStackReplayBuffer:
     def _nstep(self, a):
         """Vectorised n-step over absolute start indices a (B,).
 
-        Returns (reward (B,), next_idx (B,), done (B,))."""
+        Returns (reward (B,), next_idx (B,), done (B,), boundary (B,))."""
         b = a.shape[0]
         reward = np.zeros(b, dtype=np.float64)
         steps = np.zeros(b, dtype=np.int64)
@@ -135,14 +139,18 @@ class FrameStackReplayBuffer:
             active = active & ~(term | trunc)
         hit_boundary = ~active
         next_idx = a + steps - hit_boundary.astype(np.int64)
-        return reward.astype(np.float32), next_idx, done
+        return reward.astype(np.float32), next_idx, done, hit_boundary
 
     def _gather(self, a):
         lo = max(0, self._count - self.max_size)
         lo_arr = np.full(a.shape, lo, dtype=np.int64)
-        reward, next_idx, done = self._nstep(a)
+        reward, next_idx, done, hit_boundary = self._nstep(a)
         obses = [self._gather_stack(a, lo_arr)]
-        nxtobses = [self._gather_stack(next_idx, lo_arr)]
+        next_stack = self._gather_stack(next_idx, lo_arr)
+        for row in np.flatnonzero(hit_boundary):
+            next_stack[row, ..., : -self.cf] = next_stack[row, ..., self.cf :]
+            next_stack[row, ..., -self.cf :] = self._boundary_next[next_idx[row] % self.max_size]
+        nxtobses = [next_stack]
         return {
             "obses": obses,
             "actions": self._action[a % self.max_size],

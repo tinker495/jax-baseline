@@ -3,6 +3,7 @@ import warnings
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
+from gymnasium.wrappers.utils import rescale_box
 
 from env_builder.seeding import seed_env
 from jax_baselines.core.env_protocols import (
@@ -38,6 +39,16 @@ def _action_meta(action_space) -> tuple[list[int], str]:
     if hasattr(action_space, "shape") and action_space.shape:
         return [int(action_space.shape[0])], "continuous"
     raise ValueError(f"Unsupported action space type: {type(action_space)}")
+
+
+def _normalize_action_space(env):
+    action_space = env.action_space
+    if not isinstance(action_space, spaces.Box):
+        return env
+    if not (np.isfinite(action_space.low).all() and np.isfinite(action_space.high).all()):
+        return env
+    unit = np.ones(action_space.shape, dtype=action_space.dtype)
+    return gym.wrappers.RescaleAction(env, min_action=-unit, max_action=unit)
 
 
 def _real_reset_mask(is_atari, terminateds, truncateds, infos):
@@ -103,6 +114,7 @@ def get_env_builder(env_name, env_backend="gymnasium"):
                 env = make_wrap_atari(env_name, clip_rewards=True)
             else:
                 env = gym.make(env_name, render_mode=render_mode)
+            env = _normalize_action_space(env)
             seed_env(env, seed)
             return env
 
@@ -243,9 +255,15 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
             "core_env_type": "VectorizedEnv",
         }
 
-        # Set up action conversion for discrete action spaces
+        # Set up action conversion for the normalized [-1, 1] core contract.
         if not isinstance(self.env.action_space, spaces.Box):
             self.action_conv = lambda a: np.asarray(a).flatten().astype(np.int32)
+        elif (
+            np.isfinite(self.env.action_space.low).all()
+            and np.isfinite(self.env.action_space.high).all()
+        ):
+            unit = np.ones(self.env.action_space.shape, dtype=self.env.action_space.dtype)
+            _, _, self.action_conv = rescale_box(self.env.action_space, -unit, unit)
         else:
             self.action_conv = lambda a: np.asarray(a)
 
@@ -381,16 +399,13 @@ class GymVectorizedEnv(VectorizedEnv):
         env_type, _ = get_env_type(env_id)
         self._is_atari = env_type == "atari_env"
 
-        def make_env(seed_offset=0):
+        def make_env():
             def _make():
                 if self._is_atari:
                     env = make_wrap_atari(env_id, clip_rewards=True)
                 else:
                     env = gym.make(env_id)
-
-                if seed is not None:
-                    seed_env(env, seed + seed_offset)
-                return env
+                return _normalize_action_space(env)
 
             return _make
 
@@ -398,13 +413,18 @@ class GymVectorizedEnv(VectorizedEnv):
             # Non-Atari: prefer the registry's efficient make_vec, falling back to
             # explicit AsyncVectorEnv if the env has no vectorized entry point.
             try:
-                self.env = gym.make_vec(env_id, num_envs=worker_num, vectorization_mode="async")
+                self.env = gym.make_vec(
+                    env_id,
+                    num_envs=worker_num,
+                    vectorization_mode="async",
+                    wrappers=(_normalize_action_space,),
+                )
             except Exception:
-                self.env = gym.vector.AsyncVectorEnv([make_env(i) for i in range(worker_num)])
+                self.env = gym.vector.AsyncVectorEnv([make_env() for _ in range(worker_num)])
         else:
             # Atari needs the custom wrappers, so build AsyncVectorEnv from the
             # explicit per-env constructors.
-            self.env = gym.vector.AsyncVectorEnv([make_env(i) for i in range(worker_num)])
+            self.env = gym.vector.AsyncVectorEnv([make_env() for _ in range(worker_num)])
 
         # Store environment info
         action_size, action_type = _action_meta(self.env.single_action_space)
@@ -437,7 +457,7 @@ class GymVectorizedEnv(VectorizedEnv):
             )
 
         # Initialize
-        self.obs, _ = self.env.reset()
+        self.obs, _ = self.env.reset(seed=seed)
         self._awaiting_result = False
 
     def get_info(self):

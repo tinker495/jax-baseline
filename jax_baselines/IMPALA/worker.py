@@ -90,7 +90,7 @@ class Impala_Worker(object):
                         log_prob,
                         reward,
                         next_obs,
-                        terminated or truncated,
+                        terminated,
                         truncated,
                     )
                     if have_original_reward:
@@ -103,7 +103,7 @@ class Impala_Worker(object):
                             log_dict = {
                                 rw_label: score,
                                 len_label: eplen,
-                                to_label: 1 - terminated,
+                                to_label: float(truncated),
                             }
                             if have_original_reward:
                                 if have_lives:
