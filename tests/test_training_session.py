@@ -13,13 +13,36 @@ Behaviors pinned:
 - ``save_params`` is called once with the logger's local path.
 """
 
+import pytest
+
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.core.training_session import RunContext, TrainingSession
+from jax_baselines.DDPG.ddpg import DDPG
+from jax_baselines.DQN.base_class import Q_Network_Family
 
 
 class FakeLoggerRun:
     def get_local_path(self, name):
         return ("local_path", name)
+
+
+def test_off_policy_prepare_run_builds_callable_exploration_schedules():
+    qnet = Q_Network_Family.__new__(Q_Network_Family)
+    qnet.param_noise = False
+    qnet.exploration_fraction = 0.5
+    qnet.exploration_initial_eps = 1.0
+    qnet.exploration_final_eps = 0.1
+    qnet.prepare_run(100)
+
+    ddpg = DDPG.__new__(DDPG)
+    ddpg.exploration_fraction = 0.5
+    ddpg.exploration_initial_eps = 1.0
+    ddpg.exploration_final_eps = 0.1
+    ddpg.prepare_run(100)
+
+    expected = pytest.approx([1.0, 0.55, 0.1])
+    assert [float(qnet.exploration(step)) for step in (0, 25, 50)] == expected
+    assert [float(ddpg.exploration(step)) for step in (0, 25, 50)] == expected
 
 
 class FakeLogger:
