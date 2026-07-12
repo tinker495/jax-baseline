@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
-    "gymnasium[atari,box2d,mujoco]",
+    "gymnasium[atari,box2d,mujoco,other]",
     "autorom[accept-rom-license]",
     "box2d-kengz",
     "tensorboardX",
