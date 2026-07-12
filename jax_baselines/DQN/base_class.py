@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optax
 
 from jax_baselines.core.checkpoint import make_checkpoint_scaffold, snapshot_pytree
 from jax_baselines.core.env_info import get_local_env_info
@@ -21,7 +22,6 @@ from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.serialization import restore, save
 from jax_baselines.core.training_session import TrainingSession, off_policy_loop
 from jax_baselines.DQN.training import QNetTrainingLifecycle, QNetTrainReport
-from jax_baselines.math.schedules import ConstantSchedule, LinearSchedule
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
@@ -374,12 +374,12 @@ class Q_Network_Family:
 
     def prepare_run(self, total_timesteps):
         if self.param_noise:
-            self.exploration = ConstantSchedule(0)
+            self.exploration = optax.constant_schedule(0)
         else:
-            self.exploration = LinearSchedule(
-                schedule_timesteps=int(self.exploration_fraction * total_timesteps),
-                initial_p=self.exploration_initial_eps,
-                final_p=self.exploration_final_eps,
+            self.exploration = optax.linear_schedule(
+                init_value=self.exploration_initial_eps,
+                end_value=self.exploration_final_eps,
+                transition_steps=int(self.exploration_fraction * total_timesteps),
             )
         self.update_eps = 1.0
 
@@ -401,7 +401,7 @@ class Q_Network_Family:
         return ActionSelection(env_action=actions, store_action=actions)
 
     def _refresh_exploration(self, steps):
-        self.update_eps = self.exploration.value(steps)
+        self.update_eps = float(self.exploration(steps))
 
     def make_rollout_spec(self, ctx):
         self.rollout_tracker = EpisodeTracker(ctx.logger_run.log_metric, ctx.log_interval)

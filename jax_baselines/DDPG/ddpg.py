@@ -12,7 +12,6 @@ from jax_baselines.DDPG.ou_noise import OUNoise
 from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.jax_utils import convert_jax
 from jax_baselines.math.param_updates import scaled_by_reset, soft_update
-from jax_baselines.math.schedules import LinearSchedule
 
 
 @struct.dataclass
@@ -100,8 +99,16 @@ class DDPG(Deteministic_Policy_Gradient_Family):
     def _apply_action_noise(self, actions, steps, eval):
         if eval:
             return actions
-        self.epsilon = self.exploration.value(steps)
+        self.epsilon = float(self.exploration(steps))
         return np.clip(actions + self.noise() * self.epsilon, -1, 1)
+
+    def prepare_run(self, total_timesteps):
+        self.exploration = optax.linear_schedule(
+            init_value=self.exploration_initial_eps,
+            end_value=self.exploration_final_eps,
+            transition_steps=int(self.exploration_fraction * total_timesteps),
+        )
+        self.epsilon = 1.0
 
     def test_action(self, obs):
         return self.actions(obs, np.inf, eval=True)
@@ -322,12 +329,6 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         progress_factory=None,
         record_test_fn=None,
     ):
-        self.exploration = LinearSchedule(
-            schedule_timesteps=int(self.exploration_fraction * total_timesteps),
-            initial_p=self.exploration_initial_eps,
-            final_p=self.exploration_final_eps,
-        )
-        self.epsilon = 1.0
         super().learn(
             total_timesteps,
             callback,

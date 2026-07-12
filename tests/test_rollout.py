@@ -817,7 +817,7 @@ def test_qnet_vector_action_passes_array_through():
 
 def test_qnet_refresh_exploration_updates_epsilon():
     agent = Q_Network_Family.__new__(Q_Network_Family)
-    agent.exploration = type("E", (), {"value": staticmethod(lambda steps: 0.42)})()
+    agent.exploration = lambda steps: 0.42
 
     agent._refresh_exploration(steps=10)
 

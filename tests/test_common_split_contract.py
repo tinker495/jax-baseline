@@ -15,7 +15,6 @@ EXPECTED_MATH_MODULES = (
     "jax_baselines.math.param_updates",
     "jax_baselines.math.policy_math",
     "jax_baselines.math.returns",
-    "jax_baselines.math.schedules",
     "jax_baselines.math.statistics",
 )
 
