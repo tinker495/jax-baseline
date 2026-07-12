@@ -237,3 +237,11 @@ def test_default_loggers_support_close(tmp_path):
     tb = TensorboardLogger("run", "exp", str(tmp_path), None)
     tb.close()
     tb.close()  # idempotent
+
+
+def test_noop_logger_supports_default_local_dir():
+    from jax_baselines.core.runtime_adapters import NoOpLogger
+
+    logger = NoOpLogger("run", "exp", None, None)
+
+    assert logger.run.get_local_path("params") == os.path.join(".", "params")

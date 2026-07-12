@@ -5,7 +5,11 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from jax_baselines.core.distributed_runtime import ImpalaRolloutNeed
+from jax_baselines.core.checkpoint_store import (
+    CheckpointStore,
+    checkpoint_store_or_default,
+)
+from jax_baselines.core.distributed_runtime import DistributedRuntime, ImpalaRolloutNeed
 from jax_baselines.core.env_info import get_worker_env_info
 from jax_baselines.core.replay_protocol import (
     WorkerReplayBufferFactory,
@@ -13,7 +17,6 @@ from jax_baselines.core.replay_protocol import (
 )
 from jax_baselines.core.runtime_adapters import make_progress
 from jax_baselines.core.seeding import key_gen, set_global_seeds
-from jax_baselines.core.serialization import restore, save
 from jax_baselines.math.jax_utils import convert_jax
 from jax_baselines.math.returns import get_vtrace
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
@@ -27,7 +30,7 @@ class IMPALA_Family(object):
         self,
         workers,
         model_builder_maker,
-        runtime,
+        runtime: DistributedRuntime,
         buffer_size=0,
         gamma=0.995,
         lamda=0.95,
@@ -47,11 +50,13 @@ class IMPALA_Family(object):
         seed=None,
         optimizer_factory: OptimizerFactory | None = None,
         worker_replay_factory: WorkerReplayBufferFactory | None = None,
+        checkpoint_store: CheckpointStore | None = None,
     ):
         self.workers = workers
         self.model_builder_maker = model_builder_maker
         self.worker_replay_factory = worker_replay_factory
         self.runtime = runtime
+        self.checkpoint_store = checkpoint_store_or_default(checkpoint_store)
         self.buffer_size = buffer_size
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
@@ -89,10 +94,10 @@ class IMPALA_Family(object):
             self.setup_model()
 
     def save_params(self, path):
-        save(path, self.params)
+        self.checkpoint_store.save(path, self.params)
 
     def load_params(self, path):
-        self.params = self.target_params = restore(path)
+        self.params = self.target_params = self.checkpoint_store.restore(path)
 
     def _make_optimizer(self, learning_rate):
         return self.optimizer_factory(learning_rate)
@@ -255,74 +260,84 @@ class IMPALA_Family(object):
         progress_factory = progress_factory or make_progress
         pbar = progress_factory(total_trainstep, miniters=log_interval)
 
-        self.logger_server = self.runtime.create_logger_server(
-            self.log_dir, run_name, experiment_name, logger_factory
-        )
+        logger_server = None
+        try:
+            logger_server = self.runtime.create_logger_server(
+                self.log_dir, run_name, experiment_name, logger_factory
+            )
+            self.logger_server = logger_server
 
-        if self.env_type == "SingleEnv":
-            self.learn_SingleEnv(pbar, callback, log_interval)
+            if self.env_type == "SingleEnv":
+                self.learn_SingleEnv(pbar, callback, log_interval)
 
-        self.save_params(self.logger_server.get_log_dir())
+            self.save_params(logger_server.get_log_dir())
+        finally:
+            try:
+                if logger_server is not None:
+                    try:
+                        logger_server.last_update()
+                    finally:
+                        logger_server.close()
+            finally:
+                self.runtime.shutdown()
 
     def learn_SingleEnv(self, pbar, callback, log_interval):
         stop = self.runtime.create_event()
-        update = [self.runtime.create_event() for i in range(self.worker_num)]
         stop.clear()
-        for u in update:
-            u.set()
-
-        cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
-        param_server = self.runtime.create_param_server(cpu_param)
-
-        worker_replay_factory = require_replay_factory(
-            self.worker_replay_factory, "WorkerReplayBufferFactory"
-        )
         jobs = []
-        for idx in range(self.worker_num):
-            jobs.append(
-                self.workers[idx].run(
-                    self.batch_size,
-                    self.buffer.queue_info(),
-                    worker_replay_factory,
-                    self.model_builder,
-                    self.actor_builder,
-                    param_server,
-                    update[idx],
-                    self.logger_server,
-                    stop,
-                    seed=self.seed + idx,
-                )
+        try:
+            update = [self.runtime.create_event() for _ in range(self.worker_num)]
+            for u in update:
+                u.set()
+
+            cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
+            param_server = self.runtime.create_param_server(cpu_param)
+
+            worker_replay_factory = require_replay_factory(
+                self.worker_replay_factory, "WorkerReplayBufferFactory"
             )
+            for idx in range(self.worker_num):
+                jobs.append(
+                    self.workers[idx].run(
+                        self.batch_size,
+                        self.buffer.queue_info(),
+                        worker_replay_factory,
+                        self.model_builder,
+                        self.actor_builder,
+                        param_server,
+                        update[idx],
+                        self.logger_server,
+                        stop,
+                        seed=self.seed + idx,
+                    )
+                )
 
-        print("Start Warmup")
-        while self.buffer.queue_is_empty():
-            time.sleep(1)
-            if stop.is_set():
-                print("Stop Training")
+            print("Start Warmup")
+            while self.buffer.queue_is_empty():
+                time.sleep(1)
+                if stop.is_set():
+                    print("Stop Training")
+                    return
+
+            print("Start Training")
+            self.lossque = deque(maxlen=10)
+            for steps in pbar:
+                if stop.is_set():
+                    print("Stop Training")
+                    break
+                loss, rho = self.train_step(steps)
+                self.lossque.append(loss)
+                if steps % log_interval == 0:
+                    pbar.set_description(self.description())
+
+                if steps % self.update_freq == 0:
+                    cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
+                    param_server.update_params(cpu_param)
+                    for u in update:
+                        u.set()
+        finally:
+            stop.set()
+            try:
+                self.buffer.clear()
+            finally:
                 self.runtime.wait(jobs, timeout=300)
-                self.runtime.shutdown()
-                return
-
-        print("Start Training")
-        self.lossque = deque(maxlen=10)
-        for steps in pbar:
-            if stop.is_set():
-                print("Stop Training")
-                break
-            loss, rho = self.train_step(steps)
-            self.lossque.append(loss)
-            if steps % log_interval == 0:
-                pbar.set_description(self.description())
-
-            if steps % self.update_freq == 0:
-                cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
-                param_server.update_params(cpu_param)
-                for u in update:
-                    u.set()
-        self.logger_server.last_update()
-        self.logger_server.close()
-        stop.set()
-        self.buffer.clear()
-        self.runtime.wait(jobs, timeout=300)
-        time.sleep(1)
-        self.runtime.shutdown()

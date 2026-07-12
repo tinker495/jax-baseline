@@ -2,8 +2,10 @@
 minibatch/epoch optimization, extracted into a shared surrogate base.
 
 Each pair must resolve its shared methods to the single base implementation (no
-divergent copies), while keeping its own distinct ``__init__``/``_loss_*`` methods.
+divergent copies), while keeping its own distinct ``_loss_*`` methods.
 """
+
+from unittest.mock import patch
 
 import pytest
 
@@ -29,7 +31,7 @@ _PAIRS = [
         ("setup_model", "train_step", "preprocess", "_train_step", "learn"),
     ),
 ]
-_ALGO_SPECIFIC = ("__init__", "_loss_discrete", "_loss_continuous")
+_ALGO_SPECIFIC = ("_loss_discrete", "_loss_continuous")
 
 
 @pytest.mark.parametrize("base, ppo_cls, spo_cls, shared", _PAIRS)
@@ -50,8 +52,26 @@ def test_shared_methods_are_single_sourced(base, ppo_cls, spo_cls, shared):
 
 
 @pytest.mark.parametrize("base, ppo_cls, spo_cls, shared", _PAIRS)
-def test_losses_and_init_stay_algorithm_specific(base, ppo_cls, spo_cls, shared):
+def test_losses_stay_algorithm_specific(base, ppo_cls, spo_cls, shared):
     for name in _ALGO_SPECIFIC:
         assert name in ppo_cls.__dict__, f"{ppo_cls.__name__} must define its own {name}"
         assert name in spo_cls.__dict__, f"{spo_cls.__name__} must define its own {name}"
         assert ppo_cls.__dict__[name] is not spo_cls.__dict__[name]
+
+
+@pytest.mark.parametrize("cls", [PPO, SPO])
+def test_local_surrogate_constructor_forwards_explicit_hyperparameters(cls):
+    expected = {
+        "lamda": 0.51,
+        "gae_normalize": True,
+        "gae_normalize_scope": "minibatch",
+        "minibatch_size": 8,
+        "epoch_num": 9,
+        "ppo_eps": 0.07,
+        "value_clip": 0.3,
+    }
+    with patch.object(SurrogatePolicyGradient, "__init__", return_value=None) as parent_init:
+        cls(None, None, **expected)
+
+    forwarded = parent_init.call_args.kwargs
+    assert {key: forwarded[key] for key in expected} == expected

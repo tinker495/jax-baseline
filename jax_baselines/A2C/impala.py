@@ -10,57 +10,6 @@ class IMPALA(IMPALA_Family):
     _run_name = "IMPALA_AC"
     _learn_log_interval = 10
 
-    def __init__(
-        self,
-        workers,
-        model_builder_maker,
-        runtime,
-        buffer_size=0,
-        gamma=0.995,
-        lamda=0.95,
-        learning_rate=3e-4,
-        update_freq=100,
-        batch_size=1024,
-        sample_size=1,
-        val_coef=0.2,
-        ent_coef=0.01,
-        use_entropy_adv_shaping=True,
-        entropy_adv_shaping_kappa=2.0,
-        rho_max=1.0,
-        log_interval=1,
-        log_dir=None,
-        _init_setup_model=True,
-        policy_kwargs=None,
-        seed=None,
-        optimizer_factory=None,
-        worker_replay_factory=None,
-    ):
-
-        super().__init__(
-            workers,
-            model_builder_maker,
-            runtime=runtime,
-            buffer_size=buffer_size,
-            gamma=gamma,
-            lamda=lamda,
-            learning_rate=learning_rate,
-            update_freq=update_freq,
-            batch_size=batch_size,
-            sample_size=sample_size,
-            val_coef=val_coef,
-            ent_coef=ent_coef,
-            use_entropy_adv_shaping=use_entropy_adv_shaping,
-            entropy_adv_shaping_kappa=entropy_adv_shaping_kappa,
-            rho_max=rho_max,
-            log_interval=log_interval,
-            log_dir=log_dir,
-            _init_setup_model=_init_setup_model,
-            policy_kwargs=policy_kwargs,
-            seed=seed,
-            optimizer_factory=optimizer_factory,
-            worker_replay_factory=worker_replay_factory,
-        )
-
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
             self.observation_space, self.action_size, self.action_type, self.policy_kwargs

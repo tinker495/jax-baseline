@@ -205,6 +205,18 @@ def test_wandb_project_defaults_to_experiment_name(fake_wandb, tmp_path):
     assert fake_wandb.init_kwargs["project"] == "my_experiment"
 
 
+def test_wandb_local_run_directories_are_unique(fake_wandb, tmp_path):
+    from experiments.loggers.wandb_logger import make_wandb_logger_factory
+
+    factory = make_wandb_logger_factory(_args(logger="wandb"))
+
+    first = factory("run", "exp", str(tmp_path), None)
+    second = factory("run", "exp", str(tmp_path), None)
+
+    assert first._local_dir.endswith("exp/run_01")
+    assert second._local_dir.endswith("exp/run_02")
+
+
 def test_wandb_distributed_logger_server_maps_to_one_run(fake_wandb, tmp_path):
     """AC#15: a Ray distributed family logs end-to-end into a single W&B run."""
     from experiments.loggers.wandb_logger import make_wandb_logger_factory
@@ -272,6 +284,18 @@ def test_aim_distributed_logger_server_maps_to_one_run(fake_aim, tmp_path):
     assert (2.0, "loss/qloss", 5) in fake_aim.last_run.tracked
     assert fake_aim.last_run.params["hparams"] == {"learning_rate": 0.1}
     assert fake_aim.last_run.closed is True  # finalized explicitly, not via GC
+
+
+def test_aim_local_run_directories_are_unique(fake_aim, tmp_path):
+    from experiments.loggers.aim_logger import make_aim_logger_factory
+
+    factory = make_aim_logger_factory(_args(logger="aim"))
+
+    first = factory("run", "exp", str(tmp_path), None)
+    second = factory("run", "exp", str(tmp_path), None)
+
+    assert first._local_dir.endswith("exp/run_01")
+    assert second._local_dir.endswith("exp/run_02")
 
 
 # --- --logger registry dispatch ----------------------------------------------

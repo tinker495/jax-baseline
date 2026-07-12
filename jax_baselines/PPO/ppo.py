@@ -1,50 +1,11 @@
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 from jax_baselines.A2C.surrogate_base import SurrogatePolicyGradient
-from jax_baselines.math.returns import validate_advantage_normalize_scope
 
 
 class PPO(SurrogatePolicyGradient):
     _run_name = "PPO"
-
-    def __init__(
-        self,
-        env_builder,
-        model_builder_maker,
-        lamda=0.95,
-        gae_normalize=False,
-        gae_normalize_scope="batch",
-        minibatch_size=32,
-        epoch_num=4,
-        ppo_eps=0.2,
-        value_clip=2.0,
-        **kwargs,
-    ):
-
-        self.lamda = lamda
-        self.gae_normalize = gae_normalize
-        self.gae_normalize_scope = validate_advantage_normalize_scope(gae_normalize_scope)
-        self.ppo_eps = ppo_eps
-        self.value_clip = value_clip
-        self.minibatch_size = minibatch_size
-        # batch_size depends on worker_size which is set in super(); postpone adjustment until after
-        self._post_init_minibatch_size = minibatch_size
-        self.epoch_num = epoch_num
-
-        super().__init__(env_builder, model_builder_maker, **kwargs)
-
-        # Now that worker_size is known, adjust batch_size
-        self.batch_size = int(
-            np.ceil(
-                kwargs.get("batch_size", 256) * self.worker_size / self._post_init_minibatch_size
-            )
-            * self._post_init_minibatch_size
-            / self.worker_size
-        )
-
-        self.get_memory_setup()
 
     def _loss_discrete(self, params, obses, actions, old_value, targets, old_prob, adv, key):
         feature = self.preproc(params, key, obses)

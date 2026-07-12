@@ -5,6 +5,7 @@ don't need to duplicate branching logic for prioritized / n-step / multi.
 """
 
 from jax_baselines.core.replay_protocol import (
+    ApeXReplayTopology,
     LocalReplayNeed,
     SelfPredictionReplayNeed,
     SharedPrioritizedReplayNeed,
@@ -200,6 +201,11 @@ def make_multi_prioritized_buffer(need: SharedPrioritizedReplayNeed):
 def make_worker_replay_buffer(local_size: int, *, env_dict: dict, n_s: dict | None = None):
     """Create the APE-X worker-local replay buffer from shared buffer metadata."""
     return ReplayBuffer(local_size, env_dict=env_dict, n_s=n_s)
+
+
+def make_apex_replay(need: SharedPrioritizedReplayNeed):
+    """Compose the shared APE-X replay and its worker-local buffer factory."""
+    return ApeXReplayTopology(make_multi_prioritized_buffer(need), make_worker_replay_buffer)
 
 
 def make_impala_worker_buffer(local_size: int, *, env_dict: dict, n_s: dict | None = None):

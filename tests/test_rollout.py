@@ -1050,7 +1050,6 @@ def test_vectorized_checkpointing_pools_same_step_worker_lengths_before_pulse():
         baseline_mode="mean",
         use_return_standardization=False,
         snapshot=lambda: None,
-        log_metric=lambda *args: None,
     )
 
     def vector_action(obs, steps):

@@ -20,7 +20,6 @@ def _make(**overrides):
         ckpt_baseline_mode="mean",
         ckpt_baseline_q=None,
         snapshot=_noop,
-        log_metric=_noop,
     )
     defaults.update(overrides)
     return make_checkpoint_scaffold(**defaults)

@@ -40,6 +40,15 @@ def test_to_probs_rows_normalize_to_one():
     assert jnp.allclose(probs.sum(axis=1), 1.0, atol=1e-4)
 
 
+def test_to_probs_clamps_out_of_support_targets_to_finite_edge_distributions():
+    t = HLGaussTransform.build(-1, 1, 51)
+    probs = t.to_probs(jnp.array([[-2.0], [2.0], [-1e6], [1e6]]))
+
+    assert jnp.all(jnp.isfinite(probs))
+    assert jnp.all(probs >= 0.0)
+    assert jnp.allclose(probs.sum(axis=1), 1.0, atol=1e-5)
+
+
 def test_scalar_round_trip_recovers_target_within_support():
     t = HLGaussTransform.build(-10, 10, 100)
     target = jnp.array([[2.0], [-3.0], [0.0], [5.5]])

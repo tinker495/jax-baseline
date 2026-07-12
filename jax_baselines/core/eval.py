@@ -1,5 +1,7 @@
 import numpy as np
 
+from jax_baselines.core.env_info import prepare_worker_env
+
 
 def extract_original_reward(info):
     """Return a single-step original reward from an env info dict, if present."""
@@ -228,7 +230,7 @@ def record_and_test(env_builder, logger_run, actions_eval_fn, episode, conv_acti
     creating video artifacts or importing Gymnasium wrappers.
     """
 
-    test_env = env_builder(1)
+    test_env, _ = prepare_worker_env(env_builder)
     try:
         return run_test_episodes(test_env, actions_eval_fn, episode, conv_action)
     finally:

@@ -12,6 +12,9 @@ Two coupled fixes (2026-06-14):
   bridging two episodes.
 """
 
+import ast
+import inspect
+import textwrap
 from collections import deque
 
 import jax
@@ -21,6 +24,9 @@ import pytest
 
 from env_builder import env_builder as eb
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
+from jax_baselines.APE_X.dpg_worker import Ape_X_Worker as ApeXDPGWorker
+from jax_baselines.APE_X.worker import Ape_X_Worker as ApeXQWorker
+from jax_baselines.IMPALA.worker import Impala_Worker
 from jax_baselines.math.returns import discount_with_terminated, get_vtrace
 
 GAMMA = 0.9
@@ -152,6 +158,24 @@ def test_vtrace_off_policy_ratio_scales_correction():
     assert vs == [4.6431, 4.4282, 3.9256, 2.75]
 
 
+@pytest.mark.parametrize("worker", [ApeXQWorker, ApeXDPGWorker, Impala_Worker])
+def test_distributed_workers_store_termination_and_truncation_separately(worker):
+    tree = ast.parse(textwrap.dedent(inspect.getsource(worker.run)))
+    local_adds = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "local_buffer"
+        and node.func.attr == "add"
+    ]
+
+    assert len(local_adds) == 1
+    assert ast.unparse(local_adds[0].args[-2]) == "terminated"
+    assert ast.unparse(local_adds[0].args[-1]) == "truncated"
+
+
 # --- A2C vectorized loop: dummy-step neutralization -----------------------
 class _ScriptEnv:
     ws = 2
@@ -159,12 +183,13 @@ class _ScriptEnv:
     def __init__(self, term_script):
         self._script = term_script
         self._t = 0
+        self.sent_actions = []
 
     def current_obs(self):
         return np.zeros((self.ws, 2), dtype=np.float32)
 
     def step(self, actions):
-        pass
+        self.sent_actions.append(np.asarray(actions).copy())
 
     def get_result(self):
         terms = self._script[self._t]
@@ -180,6 +205,7 @@ class _LivesScriptEnv(_ScriptEnv):
     def __init__(self, rows):
         self._rows = rows
         self._t = 0
+        self.sent_actions = []
 
     def get_result(self):
         terms, truncs, lives = self._rows[self._t]
@@ -247,6 +273,7 @@ def test_a2c_vectorized_flags_autoreset_dummy_step_as_terminal():
     agent.buffer = _RecordingBuffer()
     agent.worker_size = 2
     agent.batch_size = 10_000  # train cadence never fires
+    agent.action_type = "discrete"
     agent.lossque = deque(maxlen=10)
     agent.actions = lambda obs: np.zeros((2, 1), dtype=np.float32)
     agent.train_step = lambda steps: 0.0
@@ -267,6 +294,56 @@ def test_a2c_vectorized_flags_autoreset_dummy_step_as_terminal():
     assert stored_trunc == [[False, False], [False, False], [False, False]]
 
 
+def test_a2c_vectorized_converts_continuous_actions_before_env_step():
+    agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.env = _ScriptEnv([np.array([False, False])])
+    agent.buffer = _RecordingBuffer()
+    agent.worker_size = 2
+    agent.batch_size = 10_000
+    agent.action_type = "continuous"
+    agent.actions = lambda obs: np.full((2, 1), 6.0, dtype=np.float32)
+    agent.conv_action = lambda actions: np.clip(actions, -3.0, 3.0) / 3.0
+    agent.train_step = lambda steps: 0.0
+    agent.eval = lambda ctx, steps: None
+    agent.description = lambda eval_result: "desc"
+
+    Actor_Critic_Policy_Gradient_Family.learn_VectorizedEnv(agent, _Ctx([0]))
+
+    assert len(agent.env.sent_actions) == 2
+    assert all(np.array_equal(action, np.ones((2, 1))) for action in agent.env.sent_actions)
+    assert np.array_equal(agent.buffer.actions[0], np.full((2, 1), 6.0))
+
+
+def test_a2c_vectorized_recomputes_pipelined_action_after_policy_update():
+    agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.env = _ScriptEnv([np.array([False, False])])
+    agent.buffer = _RecordingBuffer()
+    agent.worker_size = 2
+    agent.batch_size = 1
+    agent.action_type = "discrete"
+    agent.policy_version = 0
+    agent.actions = lambda obs: np.full((2, 1), agent.policy_version, dtype=np.int32)
+
+    train_calls = []
+
+    def train_step(_steps, logger_run=None):
+        train_calls.append((_steps, logger_run))
+        agent.policy_version += 1
+        return 0.0
+
+    agent.train_step = train_step
+    agent.eval = lambda ctx, steps: None
+    agent.description = lambda eval_result: "desc"
+
+    ctx = _Ctx([0])
+    Actor_Critic_Policy_Gradient_Family.learn_VectorizedEnv(agent, ctx)
+
+    sent_versions = [int(actions[0, 0]) for actions in agent.env.sent_actions]
+    assert sent_versions == [0, 1]
+    assert train_calls == [(0, ctx.logger_run)]
+    assert not hasattr(agent, "logger_run")
+
+
 def test_a2c_vectorized_keeps_post_lifeloss_step_real():
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
     agent.env = _LivesScriptEnv(
@@ -279,6 +356,7 @@ def test_a2c_vectorized_keeps_post_lifeloss_step_real():
     agent.buffer = _RecordingBuffer()
     agent.worker_size = 2
     agent.batch_size = 10_000
+    agent.action_type = "discrete"
     agent.lossque = deque(maxlen=10)
     agent.actions = lambda obs: np.zeros((2, 1), dtype=np.float32)
     agent.train_step = lambda steps: 0.0
@@ -309,6 +387,7 @@ def test_a2c_vectorized_drops_gymnasium_lifeloss_autoreset_dummy():
     agent.buffer = _RecordingBuffer()
     agent.worker_size = 2
     agent.batch_size = 10_000
+    agent.action_type = "discrete"
     agent.lossque = deque(maxlen=10)
     agent.actions = lambda obs: np.zeros((2, 1), dtype=np.float32)
     agent.train_step = lambda steps: 0.0
@@ -381,10 +460,11 @@ def test_pipelined_loop_drives_real_async_envpool_end_to_end():
         agent.env = env
         agent.worker_size = worker
         agent.batch_size = 2
+        agent.action_type = "discrete"
         agent.lossque = deque(maxlen=10)
         trained = []
         agent.actions = lambda obs: np.zeros(worker, dtype=np.int32)
-        agent.train_step = lambda steps: (trained.append(steps), 0.0)[1]
+        agent.train_step = lambda steps, logger_run=None: (trained.append(steps), 0.0)[1]
         agent.eval = lambda ctx, steps: None
         agent.description = lambda eval_result: "desc"
         agent.buffer = _RecordingBuffer()

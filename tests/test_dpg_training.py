@@ -146,7 +146,7 @@ def test_dpg_training_lifecycle_samples_normalizes_updates_priorities_and_logs()
     agent = FakeAgent()
     lifecycle = DPGTrainingLifecycle(agent)
 
-    loss = lifecycle.train(steps=10, gradient_steps=2)
+    loss = lifecycle.train(steps=10, gradient_steps=2, logger_run=agent.logger_run)
 
     assert loss == 2.0
     assert agent.train_steps_count == 2

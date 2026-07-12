@@ -161,8 +161,14 @@ class RayImpalaBuffer:
 
 class RayDistributedRuntime:
     def __init__(self, *, num_cpus=None, num_gpus=0):
-        _ray().init(num_cpus=num_cpus, num_gpus=num_gpus, ignore_reinit_error=True)
-        self._manager = mp.get_context().Manager()
+        ray = _ray()
+        ray.init(num_cpus=num_cpus, num_gpus=num_gpus, ignore_reinit_error=True)
+        try:
+            self._manager = mp.get_context().Manager()
+        except BaseException:
+            ray.shutdown()
+            raise
+        self._shutdown = False
 
     def replay_manager(self):
         return self._manager
@@ -204,4 +210,10 @@ class RayDistributedRuntime:
         return _ray().wait(jobs, timeout=timeout)
 
     def shutdown(self):
-        self._manager.shutdown()
+        if getattr(self, "_shutdown", False):
+            return
+        self._shutdown = True
+        try:
+            self._manager.shutdown()
+        finally:
+            _ray().shutdown()

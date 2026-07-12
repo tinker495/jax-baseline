@@ -42,6 +42,7 @@ class IMPALA_TPPO(IMPALA_Family):
         seed=None,
         optimizer_factory=None,
         worker_replay_factory=None,
+        checkpoint_store=None,
     ):
 
         self.mu_ratio = mu_ratio
@@ -72,6 +73,7 @@ class IMPALA_TPPO(IMPALA_Family):
             seed=seed,
             optimizer_factory=optimizer_factory,
             worker_replay_factory=worker_replay_factory,
+            checkpoint_store=checkpoint_store,
         )
 
     def setup_model(self):
@@ -169,7 +171,10 @@ class IMPALA_TPPO(IMPALA_Family):
         obses = [jnp.vstack(o) for o in obses]
         actions = jnp.vstack(actions)
         vs = jnp.vstack(vs)
-        prob = jnp.vstack(prob)
+        if self.action_type == "continuous":
+            mu, log_std = prob
+            prob = (mu, jnp.broadcast_to(log_std, mu.shape))
+        prob = jax.tree.map(jnp.vstack, prob)
         pi_prob = jnp.vstack(pi_prob)
         rho = jnp.vstack(rho)
         adv = jnp.vstack(adv)
@@ -216,7 +221,7 @@ class IMPALA_TPPO(IMPALA_Family):
             obses_batch = [o[batch_idxes] for o in obses]
             actions_batch = actions[batch_idxes]
             vs_batch = vs[batch_idxes]
-            old_prob_batch = old_prob[batch_idxes]
+            old_prob_batch = jax.tree.map(lambda p: p[batch_idxes], old_prob)
             old_act_prob_batch = old_act_prob[batch_idxes]
             adv_batch = adv[batch_idxes]
 
@@ -325,6 +330,8 @@ class IMPALA_TPPO(IMPALA_Family):
             self.actor(params, key, feature), actions, key, out_prob=True
         )
         mu, log_std = prob
+        prob_std = (mu, jnp.broadcast_to(jnp.exp(log_std), mu.shape))
+        old_prob_std = (old_prob[0], jnp.exp(old_prob[1]))
         # Paper's Gaussian entropy: H = sum(log(sigma)) + 0.5*d*(1+log(2*pi))
         dim = mu.shape[-1]
         entropy_h = jnp.sum(log_std, axis=-1, keepdims=True) + 0.5 * dim * (
@@ -339,7 +346,7 @@ class IMPALA_TPPO(IMPALA_Family):
         adv = jax.lax.stop_gradient(adv)
 
         ratio = jnp.exp(log_prob - old_act_prob)
-        kl = jax.vmap(kl_divergence_continuous)(old_prob, prob)
+        kl = jax.vmap(kl_divergence_continuous)(old_prob_std, prob_std)
         actor_loss = -jnp.mean(
             jnp.where(
                 (kl >= self.kl_range) & (adv * (ratio - 1.0) > 0.0),

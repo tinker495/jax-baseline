@@ -17,8 +17,8 @@ Everything family-specific is injected:
 
 - ``snapshot`` captures eval parameters/state (the only thing that varies
   across families behind the seam);
-- ``log_metric`` records ``ckpt/*`` series (late-bound so it tolerates a logger
-  that is created after the controller).
+- ``log_metric`` is supplied to :meth:`on_episode_end` from the active run
+  context and records ``ckpt/*`` series without retaining per-run state.
 
 The controller owns all schedule runtime state and serializes it through
 :meth:`to_state` / :meth:`from_state` (the DPG family persists it across
@@ -62,7 +62,6 @@ def make_checkpoint_scaffold(
     ckpt_baseline_mode: str,
     ckpt_baseline_q: Optional[float],
     snapshot: Callable[[], None],
-    log_metric: Callable[[str, float, int], None],
 ) -> "CheckpointController":
     """Resolve checkpoint config and build its controller.
 
@@ -82,8 +81,6 @@ def make_checkpoint_scaffold(
         ckpt_baseline_q: Quantile for baseline computation; defaults to the
             canonical ``quantile`` (0.2) when ``None``.
         snapshot: Callable that captures the current policy parameters.
-        log_metric: Callable ``(key, value, step)`` forwarded to the run
-            logger.
 
     Returns:
         The :class:`CheckpointController` the base holds as ``self.ckpt``.
@@ -102,7 +99,6 @@ def make_checkpoint_scaffold(
         baseline_mode=ckpt_baseline_mode,
         use_return_standardization=use_return_standardization,
         snapshot=snapshot,
-        log_metric=log_metric,
     )
 
 
@@ -120,7 +116,6 @@ class CheckpointController:
         baseline_mode: str,
         use_return_standardization: bool,
         snapshot: Callable[[], None],
-        log_metric: Callable[[str, float, int], None],
     ):
         # Configuration
         self.use_checkpointing = use_checkpointing
@@ -130,7 +125,6 @@ class CheckpointController:
         self.baseline_mode = baseline_mode
         self.use_return_standardization = use_return_standardization
         self._snapshot = snapshot
-        self._log_metric = log_metric
 
         # Schedule runtime state (owned here; serialized for the DPG family)
         self._enabled = False
@@ -169,11 +163,12 @@ class CheckpointController:
         self._timesteps_since_update = 0
         self._returns_window = []
 
-    def _log_snapshot_update(self, steps):
+    def _log_snapshot_update(self, steps, log_metric):
         self._last_update_step = int(steps)
         self._update_count += int(self._enabled)
-        self._log_metric("ckpt/ckpt_baseline", float(self._baseline), int(steps))
-        self._log_metric("ckpt/update_count", float(self._update_count), int(steps))
+        if log_metric is not None:
+            log_metric("ckpt/ckpt_baseline", float(self._baseline), int(steps))
+            log_metric("ckpt/update_count", float(self._update_count), int(steps))
 
     def on_episode_end(
         self,
@@ -182,6 +177,7 @@ class CheckpointController:
         episode_len,
         train_and_reset_callback=None,
         advance_criterion=True,
+        log_metric=None,
     ):
         """Advance the checkpoint schedule at an episode boundary.
 
@@ -215,7 +211,8 @@ class CheckpointController:
         )
         if window_stat is None:
             return True
-        self._log_metric("ckpt/window_stat", float(window_stat), int(steps))
+        if log_metric is not None:
+            log_metric("ckpt/window_stat", float(window_stat), int(steps))
 
         # Warmup phase: snapshot a baseline, fire one pulse, return.
         if not self._enabled:
@@ -234,7 +231,7 @@ class CheckpointController:
         if self._eps_since_update >= self._max_eps_before_update:
             self._snapshot()
             self._baseline = window_stat
-            self._log_snapshot_update(steps)
+            self._log_snapshot_update(steps, log_metric)
             self._fire(train_and_reset_callback, steps)
             self._reset_window()
 

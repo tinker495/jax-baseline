@@ -41,6 +41,7 @@ class SurrogateIMPALA(IMPALA_Family):
         seed=None,
         optimizer_factory=None,
         worker_replay_factory=None,
+        checkpoint_store=None,
     ):
         self.minibatch_size = 256
         self.epoch_num = epoch_num
@@ -69,6 +70,7 @@ class SurrogateIMPALA(IMPALA_Family):
             seed=seed,
             optimizer_factory=optimizer_factory,
             worker_replay_factory=worker_replay_factory,
+            checkpoint_store=checkpoint_store,
         )
 
     def setup_model(self):

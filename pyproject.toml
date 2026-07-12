@@ -10,61 +10,32 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 dependencies = [
-    "gymnasium[atari,box2d,mujoco,other]",
-    "autorom[accept-rom-license]",
-    "box2d-kengz",
-    "tensorboardX",
-    "jax[cuda12]",
+    "chex",
     "dm_pix",
-    "dm-haiku",
     "flax",
-    "optax",
+    "jax",
     "numpy",
-    "ray",
-    "cpprb",
-    "opencv-python",
-    "envpool",
-    "pyyaml",
-    "python-dotenv",
+    "optax",
 ]
-
-[project.scripts]
-qnet = "experiments.cli.qnet:main"
-dpg = "experiments.cli.dpg:main"
-pg = "experiments.cli.pg:main"
-impala = "experiments.cli.impala:main"
-apex-qnet = "experiments.cli.apex_qnet:main"
-apex-dpg = "experiments.cli.apex_dpg:main"
-exp = "experiments.cli.exp:main"
-dashboard = "experiments.cli.dashboard:main"
 
 [dependency-groups]
 dev = [
+    "jax-baselines-adapters[all]",
     "pre-commit",
     "pytest",
-    # Logging backends (--logger wandb/aim) and the TensorBoard viewer (`dashboard`),
-    # installed by `uv sync` so the console scripts work from a checkout. tensorboard
-    # imports pkg_resources, which setuptools<81 still bundles (81+ dropped it).
-    "wandb",
-    "aim",
-    "tensorboard",
-    "setuptools<81",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
-include = [
-    "env_builder*",
-    "experiments*",
-    "jax_baselines*",
-    "model_builder*",
-    "replay_memory*",
-]
+include = ["jax_baselines*"]
 
 [tool.uv]
 package = true
 
+[tool.uv.workspace]
+members = ["adapters"]
+
 [tool.uv.sources]
-cpprb = { git = "https://github.com/tinker495/cpprb" }
+jax-baselines-adapters = { workspace = true }

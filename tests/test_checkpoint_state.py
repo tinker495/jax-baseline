@@ -14,6 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from experiments.checkpoint_store import FileCheckpointStore
 from jax_baselines.core.checkpoint import make_checkpoint_scaffold, snapshot_pytree
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DDPG.ddpg import DDPG
@@ -52,7 +53,6 @@ def _scaffold():
         ckpt_baseline_mode="min",
         ckpt_baseline_q=None,
         snapshot=lambda: None,
-        log_metric=lambda *a, **k: None,
     )
 
 
@@ -118,6 +118,7 @@ def test_checkpoint_round_trip(cls):
     fields = ALGO_FIELDS[cls]
 
     src = cls.__new__(cls)
+    src.checkpoint_store = FileCheckpointStore()
     src.simba = False
     src.ckpt = _scaffold()
     src.train_steps_count = 11
@@ -133,6 +134,7 @@ def test_checkpoint_round_trip(cls):
     with tempfile.TemporaryDirectory() as d:
         src.save_params(d)
         dst = cls.__new__(cls)
+        dst.checkpoint_store = FileCheckpointStore()
         dst.simba = False
         dst.ckpt = _scaffold()
         dst.load_params(d)
@@ -158,6 +160,7 @@ def test_simba_obs_rms_round_trip():
     fields = ALGO_FIELDS[DDPG]
 
     src = DDPG.__new__(DDPG)
+    src.checkpoint_store = FileCheckpointStore()
     src.ckpt = _scaffold()
     src.train_steps_count = 3
     src._ckpt_update_residual = 0.0
@@ -173,6 +176,7 @@ def test_simba_obs_rms_round_trip():
     with tempfile.TemporaryDirectory() as d:
         src.save_params(d)
         dst = DDPG.__new__(DDPG)
+        dst.checkpoint_store = FileCheckpointStore()
         dst.simba = True
         dst.ckpt = _scaffold()
         dst.load_params(d)

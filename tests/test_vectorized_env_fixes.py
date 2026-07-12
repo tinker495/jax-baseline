@@ -89,31 +89,13 @@ def test_active_worker_indices_rejects_mismatched_store_mask_length():
 
 def test_nstep_multiworker_add_store_mask_skips_dummy_worker():
     buf = NstepReplayBuffer(100, [[2]], 1, worker_size=2, n_step=2)
-
-    calls = [[], []]
-
-    class _Spy:
-        def __init__(self, idx):
-            self.idx = idx
-
-        def add(self, **kw):
-            calls[self.idx].append(kw)
-
-        def on_episode_end(self):
-            pass
-
-        def get_all_transitions(self):
-            return {}
-
-        def clear(self):
-            pass
-
-    buf.local_buffers = [_Spy(0), _Spy(1)]
     obs, act, rew, nxt, term, trunc = _batch(2)
     buf.multiworker_add([obs], act, rew, [nxt], term, trunc, store_mask=np.array([False, True]))
+    buf.multiworker_add([obs], act, rew, [nxt], term, trunc, store_mask=np.array([False, True]))
 
-    assert calls[0] == []  # masked worker's dummy step is skipped
-    assert len(calls[1]) == 1  # real worker is stored
+    transitions = buf.get_buffer()
+    assert len(buf) == 1
+    assert np.array_equal(transitions["obs0"][0], obs[1])
 
 
 # --- Fix 3: explicit --env_backend selection -----------------------------

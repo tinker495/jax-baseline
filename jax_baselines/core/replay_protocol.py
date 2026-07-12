@@ -50,13 +50,19 @@ class ReplayBufferFactory(Protocol):
         ...
 
 
-class MultiPrioritizedReplayBufferFactory(Protocol):
-    def __call__(self, need: SharedPrioritizedReplayNeed) -> Any:
+class WorkerReplayBufferFactory(Protocol):
+    def __call__(self, local_size: int, *, env_dict: dict, n_s: dict | None = None) -> Any:
         ...
 
 
-class WorkerReplayBufferFactory(Protocol):
-    def __call__(self, local_size: int, *, env_dict: dict, n_s: dict | None = None) -> Any:
+@dataclass(frozen=True)
+class ApeXReplayTopology:
+    shared_buffer: Any
+    worker_factory: WorkerReplayBufferFactory
+
+
+class ApeXReplayFactory(Protocol):
+    def __call__(self, need: SharedPrioritizedReplayNeed) -> ApeXReplayTopology:
         ...
 
 

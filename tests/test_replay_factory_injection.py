@@ -7,6 +7,7 @@ from jax_baselines.APE_X.base_class import Ape_X_Family
 from jax_baselines.APE_X.dpg_base_class import Ape_X_Deteministic_Policy_Gradient_Family
 from jax_baselines.core.distributed_runtime import ImpalaRolloutNeed
 from jax_baselines.core.replay_protocol import (
+    ApeXReplayTopology,
     LocalReplayNeed,
     PriorityNeed,
     SelfPredictionReplayNeed,
@@ -28,14 +29,15 @@ class FakeLocalReplayFactory:
         return self.buffer
 
 
-class FakeReplayFactory:
-    def __init__(self, buffer):
+class FakeApeXReplayFactory:
+    def __init__(self, buffer, worker_factory):
         self.buffer = buffer
+        self.worker_factory = worker_factory
         self.calls = []
 
     def __call__(self, need):
         self.calls.append(need)
-        return self.buffer
+        return ApeXReplayTopology(self.buffer, self.worker_factory)
 
 
 class FakeWorkerReplayFactory:
@@ -120,12 +122,12 @@ def test_dpg_family_uses_injected_replay_factory():
         (Ape_X_Deteministic_Policy_Gradient_Family, [3]),
     ],
 )
-def test_apex_families_use_injected_shared_and_worker_factories(family_cls, action_shape_or_n):
+def test_apex_families_use_injected_replay_topology(family_cls, action_shape_or_n):
     agent = family_cls.__new__(family_cls)
     fake_buffer = object()
-    multi_factory = FakeReplayFactory(fake_buffer)
-    agent.multi_replay_factory = multi_factory
-    agent.worker_replay_factory = FakeWorkerReplayFactory(object())
+    worker_factory = FakeWorkerReplayFactory(object())
+    replay_factory = FakeApeXReplayFactory(fake_buffer, worker_factory)
+    agent.apex_replay_factory = replay_factory
     agent.buffer_size = 789
     agent.observation_space = [[5]]
     agent.action_size = [3]
@@ -139,7 +141,8 @@ def test_apex_families_use_injected_shared_and_worker_factories(family_cls, acti
     agent.get_memory_setup()
 
     assert agent.replay_buffer is fake_buffer
-    assert multi_factory.calls == [
+    assert agent.worker_replay_factory is worker_factory
+    assert replay_factory.calls == [
         SharedPrioritizedReplayNeed(
             buffer_size=789,
             observation_space=[[5]],
@@ -186,6 +189,26 @@ def test_multi_prioritized_replay_factory_builds_from_need(monkeypatch):
             {"eps": 0.02},
         )
     ]
+
+
+def test_apex_replay_factory_composes_shared_and_worker_replay(monkeypatch):
+    from replay_memory import replay_factory
+
+    shared = object()
+    monkeypatch.setattr(replay_factory, "make_multi_prioritized_buffer", lambda need: shared)
+    need = SharedPrioritizedReplayNeed(
+        buffer_size=1,
+        observation_space=[[4]],
+        action_shape_or_n=1,
+        n_step=1,
+        gamma=0.99,
+        manager=object(),
+        priority=PriorityNeed(alpha=0.6, eps=0.001),
+    )
+
+    topology = replay_factory.make_apex_replay(need)
+
+    assert topology == ApeXReplayTopology(shared, replay_factory.make_worker_replay_buffer)
 
 
 def test_impala_family_uses_rollout_need_for_runtime_buffer():
@@ -374,17 +397,11 @@ def test_local_families_fail_fast_without_replay_factory(family_cls):
     "family_cls",
     [Ape_X_Family, Ape_X_Deteministic_Policy_Gradient_Family],
 )
-def test_apex_families_fail_fast_without_required_factories(family_cls):
+def test_apex_families_fail_fast_without_replay_factory(family_cls):
     agent = family_cls.__new__(family_cls)
-    agent.multi_replay_factory = None
-    agent.worker_replay_factory = FakeWorkerReplayFactory(object())
+    agent.apex_replay_factory = None
 
-    with pytest.raises(ValueError, match="MultiPrioritizedReplayBufferFactory is required"):
-        agent.get_memory_setup()
-
-    agent.multi_replay_factory = FakeReplayFactory(object())
-    agent.worker_replay_factory = None
-    with pytest.raises(ValueError, match="WorkerReplayBufferFactory is required"):
+    with pytest.raises(ValueError, match="ApeXReplayFactory is required"):
         agent.get_memory_setup()
 
 

@@ -139,10 +139,19 @@ def test_impala_family_resolves_leaf_defaults_at_call_time(cls, expected_name):
         def get_log_dir(self):
             return "/tmp/impala"
 
+        def last_update(self):
+            pass
+
+        def close(self):
+            pass
+
     class _Runtime:
         def create_logger_server(self, log_dir, run_name, experiment_name, logger_factory):
             logger_calls.append((log_dir, run_name, experiment_name, logger_factory))
             return _LoggerServer()
+
+        def shutdown(self):
+            pass
 
     def progress_factory(total, *, miniters):
         progress_calls.append((total, miniters))
@@ -168,7 +177,6 @@ def test_impala_family_resolves_leaf_defaults_at_call_time(cls, expected_name):
     agent.learn(123, log_interval=0, run_name="", progress_factory=progress_factory)
     assert progress_calls.pop() == (123, 0)
     assert logger_calls.pop()[1] == ""
-
 
 
 def test_ddpg_prepare_run_keeps_exploration_initialization():

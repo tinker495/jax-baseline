@@ -68,7 +68,6 @@ class TrainingSession:
         record_test_fn=None,
     ):
         run_name = agent.run_name_update(run_name)
-        agent.log_interval = log_interval
         agent.prepare_run(total_timesteps)
         eval_freq = eval_freq_from_count(eval_num, total_timesteps, agent.worker_size)
         logger_factory = logger_factory or NoOpLogger
@@ -82,15 +81,15 @@ class TrainingSession:
             agent.record_test_fn = record_test_fn
         elif hasattr(agent, "record_test_fn"):
             delattr(agent, "record_test_fn")
-        with logger as logger_run:
-            # Bridge for callbacks built at __init__ time: the CheckpointController's
-            # log_metric closure reads ``agent.logger_run``. Per-run state otherwise
-            # travels through ``ctx``, not ``self``.
-            agent.logger_run = logger_run
-            ctx = RunContext(logger_run, eval_freq, pbar, log_interval)
-            agent.run_training_loop(ctx)
-            agent.eval(ctx, total_timesteps)
-            agent.save_params(logger_run.get_local_path("params"))
+        try:
+            with logger as logger_run:
+                ctx = RunContext(logger_run, eval_freq, pbar, log_interval)
+                agent.run_training_loop(ctx)
+                agent.eval(ctx, total_timesteps)
+                agent.save_params(logger_run.get_local_path("params"))
+        finally:
+            if hasattr(agent, "rollout_tracker"):
+                agent.rollout_tracker = None
 
 
 def off_policy_loop(agent, ctx):

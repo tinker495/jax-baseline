@@ -15,10 +15,13 @@ Behaviors pinned:
 
 import pytest
 
+from jax_baselines.A2C.a2c import A2C
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
+from jax_baselines.A2C.surrogate_base import SurrogatePolicyGradient
 from jax_baselines.core.training_session import RunContext, TrainingSession
 from jax_baselines.DDPG.ddpg import DDPG
 from jax_baselines.DQN.base_class import Q_Network_Family
+from jax_baselines.TPPO.tppo import TPPO
 
 
 class FakeLoggerRun:
@@ -241,9 +244,32 @@ def test_run_executes_without_env_buffer_or_model():
 
     _run(agent)
 
-    assert agent.log_interval == 1000
+    assert agent.log_interval is None
     assert ("run_training_loop",) in rec
     assert isinstance(RunContext("lr", 96, "pbar", 1000), RunContext)
+    assert not hasattr(agent, "logger_run")
+
+
+def test_session_releases_run_context_after_success_and_failure():
+    class ContextAgent(FakeSessionAgent):
+        def __init__(self, rec, fail=False):
+            super().__init__(rec)
+            self.fail = fail
+            self.rollout_tracker = object()
+
+        def run_training_loop(self, ctx):
+            super().run_training_loop(ctx)
+            if self.fail:
+                raise RuntimeError("training failed")
+
+    successful = ContextAgent([])
+    _run(successful)
+    assert successful.rollout_tracker is None
+
+    failing = ContextAgent([], fail=True)
+    with pytest.raises(RuntimeError, match="training failed"):
+        _run(failing)
+    assert failing.rollout_tracker is None
 
 
 class FakeOnPolicySession(TrainingSession):
@@ -312,7 +338,17 @@ def test_on_policy_learn_delegates_to_training_session(monkeypatch):
     )
 
     assert result == "session-result"
-    assert agent.session_args == (1234, callback, 7, "exp", "run", 100, None, None, None)
+    assert agent.session_args == (
+        1234,
+        callback,
+        7,
+        "exp",
+        "run",
+        100,
+        None,
+        None,
+        None,
+    )
 
 
 def test_on_policy_session_contract_hooks_are_minimal():
@@ -359,3 +395,80 @@ def test_on_policy_eval_uses_run_context_logger(monkeypatch):
 
     assert result == {"score": 1.0}
     assert rec == [("eval-env", 3, "actions", "ctx-logger", 42, "conv-action")]
+
+
+class _MetricLoggerRun:
+    def __init__(self):
+        self.metrics = []
+
+    def log_metric(self, key, value, step):
+        self.metrics.append((key, value, step))
+
+
+class _EmptyBuffer:
+    def get_buffer(self):
+        return {}
+
+
+@pytest.mark.parametrize(
+    ("algorithm", "train_result", "metric_names"),
+    [
+        (
+            A2C,
+            ("params", "opt-state", 1, 2, 3, 4),
+            ["critic_loss", "actor_loss", "entropy_loss", "mean_target"],
+        ),
+        (
+            SurrogatePolicyGradient,
+            ("params", "opt-state", 1, 2, 3, 4),
+            ["critic_loss", "actor_loss", "entropy_loss", "mean_target"],
+        ),
+        (
+            TPPO,
+            ("params", "opt-state", 1, 2, 3, 4, 5),
+            [
+                "critic_loss",
+                "actor_loss",
+                "entropy_loss",
+                "mean_target",
+                "kl_divergence",
+            ],
+        ),
+    ],
+)
+def test_on_policy_train_logger_is_explicit_and_not_retained(algorithm, train_result, metric_names):
+    agent = algorithm.__new__(algorithm)
+    agent.buffer = _EmptyBuffer()
+    agent.params = "old-params"
+    agent.opt_state = "old-opt-state"
+    agent.key_seq = iter(["key-1", "key-2"])
+    agent._train_step = lambda *args, **kwargs: train_result
+    logger_run = _MetricLoggerRun()
+
+    assert algorithm.train_step(agent, 7, logger_run=logger_run) == 1
+    assert [name for name, _, _ in logger_run.metrics] == [f"loss/{name}" for name in metric_names]
+    assert not hasattr(agent, "logger_run")
+
+    algorithm.train_step(agent, 8)
+    assert len(logger_run.metrics) == len(metric_names)
+
+
+def test_on_policy_test_logger_is_local_to_context_manager():
+    logger_run = object()
+
+    class Logger:
+        def __enter__(self):
+            return logger_run
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            return False
+
+    agent = FakeOnPolicyAgent()
+    agent.logger = Logger()
+    calls = []
+    agent.test_eval_env = lambda run, episode: calls.append((run, episode))
+
+    agent.test(episode=4)
+
+    assert calls == [(logger_run, 4)]
+    assert not hasattr(agent, "logger_run")

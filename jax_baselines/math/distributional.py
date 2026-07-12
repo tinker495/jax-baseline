@@ -57,6 +57,8 @@ class HLGaussTransform:
 
     def to_probs(self, target: jax.Array) -> jax.Array:
         # target: [batch, 1] -> probs: [batch, n_bins]
+        target = jnp.clip(target, self.support[0], self.support[-1])
+
         def f(target):
             cdf_evals = jax.scipy.special.erf((self.support - target) / (jnp.sqrt(2) * self.sigma))
             z = cdf_evals[-1] - cdf_evals[0]

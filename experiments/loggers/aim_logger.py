@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 import numpy as np
 
+from experiments.runtime_adapters import _get_latest_run_id
 from jax_baselines.core.hparams import get_hyper_params
 
 
@@ -76,7 +77,8 @@ class AimLogger:
         self._aim = aim_module
         self._run_name = run_name
         self._experiment_name = experiment_name
-        self._local_dir = os.path.join(local_dir, experiment_name, run_name)
+        run_id = _get_latest_run_id(local_dir, experiment_name, run_name) + 1
+        self._local_dir = os.path.join(local_dir, experiment_name, f"{run_name}_{run_id:02d}")
         os.makedirs(self._local_dir, exist_ok=True)
         self._repo = repo
         self._agent = agent

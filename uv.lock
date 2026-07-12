@@ -16,6 +16,12 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
+[manifest]
+members = [
+    "jax-baselines",
+    "jax-baselines-adapters",
+]
+
 [[package]]
 name = "absl-py"
 version = "2.4.0"
@@ -1277,63 +1283,157 @@ name = "jax-baselines"
 version = "0.0.1"
 source = { editable = "." }
 dependencies = [
-    { name = "autorom", extra = ["accept-rom-license"] },
-    { name = "box2d-kengz" },
-    { name = "cpprb" },
-    { name = "dm-haiku" },
+    { name = "chex" },
     { name = "dm-pix" },
-    { name = "envpool" },
     { name = "flax" },
-    { name = "gymnasium", extra = ["atari", "box2d", "mujoco", "other"] },
-    { name = "jax", extra = ["cuda12"] },
+    { name = "jax" },
     { name = "numpy" },
-    { name = "opencv-python" },
     { name = "optax" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "ray" },
-    { name = "tensorboardx" },
 ]
 
 [package.dev-dependencies]
 dev = [
-    { name = "aim" },
+    { name = "jax-baselines-adapters", extra = ["all"] },
     { name = "pre-commit" },
     { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "chex" },
+    { name = "dm-pix" },
+    { name = "flax" },
+    { name = "jax" },
+    { name = "numpy" },
+    { name = "optax" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "jax-baselines-adapters", extras = ["all"], editable = "adapters" },
+    { name = "pre-commit" },
+    { name = "pytest" },
+]
+
+[[package]]
+name = "jax-baselines-adapters"
+version = "0.0.1"
+source = { editable = "adapters" }
+dependencies = [
+    { name = "chex" },
+    { name = "cpprb" },
+    { name = "flax" },
+    { name = "gymnasium" },
+    { name = "jax" },
+    { name = "jax-baselines" },
+    { name = "numpy" },
+    { name = "optax" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "tensorboardx" },
+    { name = "tqdm" },
+]
+
+[package.optional-dependencies]
+aim = [
+    { name = "aim" },
+]
+all = [
+    { name = "aim" },
+    { name = "ale-py" },
+    { name = "autorom", extra = ["accept-rom-license"] },
+    { name = "box2d-kengz" },
+    { name = "dm-haiku" },
+    { name = "envpool" },
+    { name = "gymnasium", extra = ["atari", "box2d", "mujoco", "other"] },
+    { name = "jax", extra = ["cuda12"] },
+    { name = "opencv-python" },
+    { name = "ray" },
     { name = "setuptools" },
     { name = "tensorboard" },
+    { name = "wandb" },
+]
+atari = [
+    { name = "ale-py" },
+    { name = "autorom", extra = ["accept-rom-license"] },
+    { name = "gymnasium", extra = ["atari"] },
+    { name = "opencv-python" },
+]
+box2d = [
+    { name = "box2d-kengz" },
+    { name = "gymnasium", extra = ["box2d"] },
+]
+cuda12 = [
+    { name = "jax", extra = ["cuda12"] },
+]
+dashboard = [
+    { name = "setuptools" },
+    { name = "tensorboard" },
+]
+distributed = [
+    { name = "ray" },
+]
+envpool = [
+    { name = "envpool" },
+]
+haiku = [
+    { name = "dm-haiku" },
+]
+mujoco = [
+    { name = "gymnasium", extra = ["mujoco"] },
+]
+other = [
+    { name = "gymnasium", extra = ["other"] },
+]
+wandb = [
     { name = "wandb" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "autorom", extras = ["accept-rom-license"] },
-    { name = "box2d-kengz" },
+    { name = "aim", marker = "extra == 'aim'" },
+    { name = "aim", marker = "extra == 'all'" },
+    { name = "ale-py", marker = "extra == 'all'" },
+    { name = "ale-py", marker = "extra == 'atari'" },
+    { name = "autorom", extras = ["accept-rom-license"], marker = "extra == 'all'" },
+    { name = "autorom", extras = ["accept-rom-license"], marker = "extra == 'atari'" },
+    { name = "box2d-kengz", marker = "extra == 'all'" },
+    { name = "box2d-kengz", marker = "extra == 'box2d'" },
+    { name = "chex" },
     { name = "cpprb", git = "https://github.com/tinker495/cpprb" },
-    { name = "dm-haiku" },
-    { name = "dm-pix" },
-    { name = "envpool" },
+    { name = "dm-haiku", marker = "extra == 'all'" },
+    { name = "dm-haiku", marker = "extra == 'haiku'" },
+    { name = "envpool", marker = "extra == 'all'" },
+    { name = "envpool", marker = "extra == 'envpool'" },
     { name = "flax" },
-    { name = "gymnasium", extras = ["atari", "box2d", "mujoco", "other"] },
-    { name = "jax", extras = ["cuda12"] },
+    { name = "gymnasium" },
+    { name = "gymnasium", extras = ["atari"], marker = "extra == 'atari'" },
+    { name = "gymnasium", extras = ["atari", "box2d", "mujoco", "other"], marker = "extra == 'all'" },
+    { name = "gymnasium", extras = ["box2d"], marker = "extra == 'box2d'" },
+    { name = "gymnasium", extras = ["mujoco"], marker = "extra == 'mujoco'" },
+    { name = "gymnasium", extras = ["other"], marker = "extra == 'other'" },
+    { name = "jax" },
+    { name = "jax", extras = ["cuda12"], marker = "extra == 'all'" },
+    { name = "jax", extras = ["cuda12"], marker = "extra == 'cuda12'" },
+    { name = "jax-baselines", editable = "." },
     { name = "numpy" },
-    { name = "opencv-python" },
+    { name = "opencv-python", marker = "extra == 'all'" },
+    { name = "opencv-python", marker = "extra == 'atari'" },
     { name = "optax" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
-    { name = "ray" },
+    { name = "ray", marker = "extra == 'all'" },
+    { name = "ray", marker = "extra == 'distributed'" },
+    { name = "setuptools", marker = "extra == 'all'", specifier = "<81" },
+    { name = "setuptools", marker = "extra == 'dashboard'", specifier = "<81" },
+    { name = "tensorboard", marker = "extra == 'all'" },
+    { name = "tensorboard", marker = "extra == 'dashboard'" },
     { name = "tensorboardx" },
+    { name = "tqdm" },
+    { name = "wandb", marker = "extra == 'all'" },
+    { name = "wandb", marker = "extra == 'wandb'" },
 ]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "aim" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "setuptools", specifier = "<81" },
-    { name = "tensorboard" },
-    { name = "wandb" },
-]
+provides-extras = ["aim", "atari", "box2d", "cuda12", "dashboard", "distributed", "envpool", "haiku", "mujoco", "other", "wandb", "all"]
 
 [[package]]
 name = "jax-cuda12-pjrt"
@@ -2011,7 +2111,7 @@ name = "nvidia-cublas-cu12"
 version = "12.9.2.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cuda-nvrtc-cu12" },
+    { name = "nvidia-cuda-nvrtc-cu12", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f7/a2/c96163a0fff1839c0c9548bbdeae7b853b867009e33b9b9264adc238b1cf/nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:5572131a59c3eebeeb1c4c8144f772d49372c20124916e072a0e3fc30df421d5", size = 575012079, upload-time = "2026-04-08T18:51:47.303Z" },
@@ -2068,7 +2168,7 @@ name = "nvidia-cudnn-cu12"
 version = "9.22.0.52"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12" },
+    { name = "nvidia-cublas-cu12", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/51/ff/c6a098c1e0bccc68aac5f1684526cf8936abb7024dcc46dca315b8a6f47f/nvidia_cudnn_cu12-9.22.0.52-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:cd9011812498376f866b9826331cc965ac922eb2df8549c9f2989f10255e5001", size = 774536507, upload-time = "2026-05-08T15:36:09.067Z" },
@@ -2080,7 +2180,7 @@ name = "nvidia-cufft-cu12"
 version = "11.4.1.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-nvjitlink-cu12", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9b/2b/76445b0af890da61b501fde30650a1a4bd910607261b209cccb5235d3daa/nvidia_cufft_cu12-11.4.1.4-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:1a28c9b12260a1aa7a8fd12f5ebd82d027963d635ba82ff39a1acfa7c4c0fbcf", size = 200822453, upload-time = "2025-06-05T20:05:27.889Z" },
@@ -2092,9 +2192,9 @@ name = "nvidia-cusolver-cu12"
 version = "11.7.5.82"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12" },
-    { name = "nvidia-cusparse-cu12" },
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-cublas-cu12", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "nvidia-cusparse-cu12", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "nvidia-nvjitlink-cu12", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/03/99/686ff9bf3a82a531c62b1a5c614476e8dfa24a9d89067aeedf3592ee4538/nvidia_cusolver_cu12-11.7.5.82-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:62efa83e4ace59a4c734d052bb72158e888aa7b770e1a5f601682f16fe5b4fd2", size = 337869834, upload-time = "2025-06-05T20:06:53.125Z" },
@@ -2106,7 +2206,7 @@ name = "nvidia-cusparse-cu12"
 version = "12.5.10.65"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12" },
+    { name = "nvidia-nvjitlink-cu12", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5e/6f/8710fbd17cdd1d0fc3fea7d36d5b65ce1933611c31e1861da330206b253a/nvidia_cusparse_cu12-12.5.10.65-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:221c73e7482dd93eda44e65ce567c031c07e2f93f6fa0ecd3ba876a195023e83", size = 366359408, upload-time = "2025-06-05T20:07:42.501Z" },
@@ -2136,7 +2236,7 @@ name = "nvidia-nvshmem-cu12"
 version = "3.6.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cuda-cccl-cu12" },
+    { name = "nvidia-cuda-cccl-cu12", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fb/da/bd8ae5201f8c5751ece31fe4fe489ece10fbcf5fcc1a595855b6459b6d6e/nvidia_nvshmem_cu12-3.6.5-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:7b38521ff84cdfc68da3360fe249cfbabfe05ee9aa271458857476124b03a420", size = 153109548, upload-time = "2026-03-24T19:19:19.523Z" },

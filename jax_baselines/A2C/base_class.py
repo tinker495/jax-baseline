@@ -5,6 +5,10 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+from jax_baselines.core.checkpoint_store import (
+    CheckpointStore,
+    checkpoint_store_or_default,
+)
 from jax_baselines.core.env_info import get_local_env_info, infer_action_meta
 from jax_baselines.core.env_protocols import (
     vector_autoreset_mask,
@@ -21,7 +25,6 @@ from jax_baselines.core.eval import (
 )
 from jax_baselines.core.rollout_stats import EpisodeTracker
 from jax_baselines.core.seeding import key_gen, set_global_seeds
-from jax_baselines.core.serialization import restore, save
 from jax_baselines.core.training_session import TrainingSession
 from jax_baselines.math.jax_utils import convert_jax
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
@@ -50,6 +53,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         seed=None,
         optimizer_factory: OptimizerFactory | None = None,
         lr_annealing=False,
+        checkpoint_store: CheckpointStore | None = None,
     ):
         self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
@@ -71,6 +75,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         self.entropy_adv_shaping_kappa = entropy_adv_shaping_kappa
         self.optimizer_factory = require_optimizer_factory(optimizer_factory)
         self.lr_annealing = lr_annealing
+        self.checkpoint_store = checkpoint_store_or_default(checkpoint_store)
 
         self.params = None
         self.rollout_tracker = None
@@ -83,10 +88,10 @@ class Actor_Critic_Policy_Gradient_Family(object):
             self.setup_model()
 
     def save_params(self, path):
-        save(path, self.params)
+        self.checkpoint_store.save(path, self.params)
 
     def load_params(self, path):
-        self.params = restore(path)
+        self.params = self.checkpoint_store.restore(path)
 
     def get_memory_setup(self):
         self.buffer = EpochBuffer(
@@ -323,7 +328,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 obs = [np.expand_dims(obs, axis=0)]
 
             if (steps + 1) % self.batch_size == 0:
-                loss = self.train_step(steps)
+                loss = self.train_step(steps, logger_run=ctx.logger_run)
                 self.lossque.append(loss)
 
             if steps % ctx.eval_freq == 0:
@@ -347,16 +352,17 @@ class Actor_Critic_Policy_Gradient_Family(object):
         # two episodes in the return. prev_done chains off the *real* env dones,
         # and the same mask keeps the dummy out of the rollout episode stats.
         prev_done = None
+        convert_action = self.conv_action if self.action_type == "continuous" else None
 
-        # Pipeline the async env: send each step's actions, then run the buffer
-        # bookkeeping AND the periodic train_step while EnvPool's C++ workers
-        # (or gymnasium's subprocesses) advance the environments in the
-        # background. The action for step t+1 is still computed from step t+1's
-        # observation, so this stays strictly on-policy -- only the order of
-        # "send" vs "post-step processing" changes, never the data dependency.
+        def send(actions):
+            self.env.step(convert_action(actions) if convert_action else actions)
+
+        # Pipeline the async env between updates. At an update boundary, delay
+        # the next send until train_step finishes so the new rollout cannot start
+        # with an action sampled from the previous policy.
         obs = self.env.current_obs()
         actions = self.actions([obs])
-        self.env.step(actions)
+        send(actions)
 
         for steps in ctx.pbar:
             (
@@ -367,10 +373,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 infos,
             ) = self.env.get_result()
 
-            # Fire the next step before processing this one, so the env advances
-            # in the background while the bookkeeping and train_step below run.
-            next_actions = self.actions([next_obses])
-            self.env.step(next_actions)
+            train_due = (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0
+            if not train_due:
+                # Keep the async overlap except when train_step changes the policy.
+                next_actions = self.actions([next_obses])
+                send(next_actions)
 
             done = np.logical_or(terminateds, truncateds)
             real_reset = vector_real_reset_mask(self.env, terminateds, truncateds, infos)
@@ -410,13 +417,15 @@ class Actor_Critic_Policy_Gradient_Family(object):
 
             prev_done = done & autoreset & active
 
+            if train_due:
+                loss = self.train_step(steps, logger_run=ctx.logger_run)
+                self.lossque.append(loss)
+                next_actions = self.actions([next_obses])
+                send(next_actions)
+
             # Advance the pipeline: the action just sent belongs to next_obses.
             obs = next_obses
             actions = next_actions
-
-            if (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0:
-                loss = self.train_step(steps)
-                self.lossque.append(loss)
 
             if steps % ctx.eval_freq == 0:
                 eval_result = self.eval(ctx, steps)
@@ -435,14 +444,14 @@ class Actor_Critic_Policy_Gradient_Family(object):
         )
 
     def test(self, episode=10):
-        with self.logger as self.logger_run:
-            self.test_eval_env(episode)
+        with self.logger as logger_run:
+            self.test_eval_env(logger_run, episode)
 
-    def test_eval_env(self, episode):
+    def test_eval_env(self, logger_run, episode):
         record_test_fn = getattr(self, "record_test_fn", record_and_test)
         return record_test_fn(
             self.env_builder,
-            self.logger_run,
+            logger_run,
             self.actions,
             episode,
             conv_action=self.conv_action,

@@ -303,6 +303,7 @@ def test_run_family_wires_agent_without_env_or_model(monkeypatch):
     assert captured["maker"] == "MAKER"
     assert captured["env"] == "ENVB"
     assert captured["kwargs"]["policy_kwargs"] == {"pk": 1}
+    assert isinstance(captured["kwargs"]["checkpoint_store"], run_mod.FileCheckpointStore)
     assert captured["tested"] is True
 
 
@@ -425,6 +426,9 @@ def test_run_distributed_family_wires_agent(monkeypatch):
         def __init__(self, **kwargs):
             captured["runtime_kwargs"] = kwargs
 
+        def shutdown(self):
+            captured["runtime_shutdowns"] = captured.get("runtime_shutdowns", 0) + 1
+
     class FakeAgent:
         def __init__(self, workers, maker, runtime, **kwargs):
             captured.update(workers=workers, maker=maker, runtime=runtime, kwargs=kwargs)
@@ -458,3 +462,47 @@ def test_run_distributed_family_wires_agent(monkeypatch):
     assert captured["logger_factory"] is TensorboardLogger
     assert captured["progress_factory"] is run_mod.make_progress
     assert captured["kwargs"]["policy_kwargs"] == {"pk": 1}
+    assert isinstance(captured["kwargs"]["checkpoint_store"], run_mod.FileCheckpointStore)
+    assert captured["runtime_shutdowns"] == 1
+
+
+@pytest.mark.parametrize("failure_stage", ["workers", "constructor"])
+def test_run_distributed_family_shuts_down_when_composition_fails(monkeypatch, failure_stage):
+    from dataclasses import replace
+
+    import experiments.cli._run as run_mod
+    import experiments.distributed_runtime as dist_runtime
+    from experiments.cli.apex_dpg import APEX_DPG_RUNNER
+
+    runtimes = []
+
+    class FakeRuntime:
+        def __init__(self, **_kwargs):
+            self.shutdowns = 0
+            runtimes.append(self)
+
+        def shutdown(self):
+            self.shutdowns += 1
+
+    class FailingAgent:
+        def __init__(self, *_args, **_kwargs):
+            raise RuntimeError("constructor failed")
+
+    def make_workers(_args, _runtime):
+        if failure_stage == "workers":
+            raise RuntimeError("workers failed")
+        return ["W0"]
+
+    fake_spec = replace(APEX_DPG_RUNNER.algos["DDPG"], cls=FailingAgent)
+    fake_runner = replace(
+        APEX_DPG_RUNNER,
+        algos={**APEX_DPG_RUNNER.algos, "DDPG": fake_spec},
+        make_workers=make_workers,
+    )
+    monkeypatch.setattr(run_mod, "resolve_maker", lambda _r, _s, _a: "MAKER")
+    monkeypatch.setattr(dist_runtime, "RayDistributedRuntime", FakeRuntime)
+
+    with pytest.raises(RuntimeError, match=failure_stage):
+        run_mod.run_distributed_family(fake_runner, ["--algo", "DDPG", "--steps", "11"])
+
+    assert runtimes[0].shutdowns == 1
