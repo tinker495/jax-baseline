@@ -116,54 +116,6 @@ def visual_embedding(
             ]
         )
 
-    elif mode == "simple":
-
-        net = nn.Sequential(
-            [
-                nn.Conv(
-                    16,
-                    kernel_size=[8, 8],
-                    strides=[4, 4],
-                    padding="VALID",
-                    kernel_init=flax.linen.initializers.orthogonal(scale=1.0),
-                ),
-                nn.relu,
-                nn.Conv(
-                    32,
-                    kernel_size=[4, 4],
-                    strides=[2, 2],
-                    padding="VALID",
-                    kernel_init=flax.linen.initializers.orthogonal(scale=1.0),
-                ),
-                nn.relu,
-                flatten_fn if flatten else lambda x: x,
-            ]
-        )
-
-    elif mode == "minimum":
-        net = nn.Sequential(
-            [
-                nn.Conv(
-                    16,
-                    kernel_size=[3, 3],
-                    strides=[1, 1],
-                    padding="VALID",
-                    kernel_init=flax.linen.initializers.orthogonal(scale=1.0),
-                ),
-                nn.relu,
-                nn.Conv(
-                    32,
-                    kernel_size=[4, 4],
-                    strides=[2, 2],
-                    padding="VALID",
-                    kernel_init=flax.linen.initializers.orthogonal(scale=1.0),
-                ),
-                nn.relu,
-                flatten_fn if flatten else lambda x: x,
-            ]
-        )
-    elif mode == "none":
-        net = flatten_fn if flatten else lambda x: x
     else:
         raise ValueError(f"Unknown visual_embedding mode: {mode!r}")
     return net

@@ -16,7 +16,7 @@ def pop_embedding_mode(policy_kwargs: Optional[dict], default: str = "normal") -
     return policy_kwargs, embedding_mode
 
 
-def visual_embedding(mode="simple"):
+def visual_embedding(mode="normal"):
     if mode == "normal":
 
         def net_fn(x):
@@ -50,46 +50,6 @@ def visual_embedding(mode="simple"):
                 ]
             )(x)
 
-    elif mode == "simple":
-
-        def net_fn(x):
-            return hk.Sequential(
-                [
-                    hk.Conv2D(
-                        16,
-                        kernel_shape=[8, 8],
-                        stride=[4, 4],
-                        padding="VALID",
-                        w_init=hk.initializers.Orthogonal(scale=1.0),
-                    ),
-                    jax.nn.relu,
-                    hk.Conv2D(
-                        32,
-                        kernel_shape=[4, 4],
-                        stride=[2, 2],
-                        padding="VALID",
-                        w_init=hk.initializers.Orthogonal(scale=1.0),
-                    ),
-                    jax.nn.relu,
-                    hk.Flatten(),
-                ]
-            )(x)
-
-    elif mode == "minimum":
-
-        def net_fn(x):
-            return hk.Sequential(
-                [
-                    hk.Conv2D(16, kernel_shape=[3, 3], stride=[1, 1], padding="VALID"),
-                    jax.nn.relu,
-                    hk.Conv2D(32, kernel_shape=[4, 4], stride=[2, 2], padding="VALID"),
-                    jax.nn.relu,
-                    hk.Flatten(),
-                ]
-            )(x)
-
-    elif mode == "none":
-        net_fn = hk.Flatten()
     else:
         raise ValueError(f"Unknown visual_embedding mode: {mode!r}")
     return net_fn
