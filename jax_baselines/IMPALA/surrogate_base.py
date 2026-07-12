@@ -11,9 +11,65 @@ class SurrogateIMPALA(IMPALA_Family):
 
     Both share identical model setup, V-trace preprocessing, and the
     minibatch/epoch optimization loop; they differ only in the per-sample actor
-    loss supplied through ``_loss_discrete``/``_loss_continuous`` and their
-    ``__init__`` name. Subclasses keep those plus their own ``learn``.
+    loss supplied through ``_loss_discrete``/``_loss_continuous``. Subclasses
+    keep those plus their own ``learn``.
     """
+
+    def __init__(
+        self,
+        workers,
+        model_builder_maker,
+        runtime,
+        ppo_eps=0.2,
+        epoch_num=3,
+        buffer_size=0,
+        gamma=0.995,
+        lamda=0.95,
+        learning_rate=3e-4,
+        update_freq=100,
+        batch_size=1024,
+        sample_size=1,
+        val_coef=0.2,
+        ent_coef=0.01,
+        use_entropy_adv_shaping=True,
+        entropy_adv_shaping_kappa=2.0,
+        rho_max=1.0,
+        log_interval=1,
+        log_dir=None,
+        _init_setup_model=True,
+        policy_kwargs=None,
+        seed=None,
+        optimizer_factory=None,
+        worker_replay_factory=None,
+    ):
+        self.minibatch_size = 256
+        self.epoch_num = epoch_num
+        self.ppo_eps = ppo_eps
+
+        super().__init__(
+            workers,
+            model_builder_maker,
+            runtime=runtime,
+            buffer_size=buffer_size,
+            gamma=gamma,
+            lamda=lamda,
+            learning_rate=learning_rate,
+            update_freq=update_freq,
+            batch_size=batch_size,
+            sample_size=sample_size,
+            val_coef=val_coef,
+            ent_coef=ent_coef,
+            use_entropy_adv_shaping=use_entropy_adv_shaping,
+            entropy_adv_shaping_kappa=entropy_adv_shaping_kappa,
+            rho_max=rho_max,
+            log_interval=log_interval,
+            log_dir=log_dir,
+            _init_setup_model=_init_setup_model,
+            policy_kwargs=policy_kwargs,
+            seed=seed,
+            optimizer_factory=optimizer_factory,
+            worker_replay_factory=worker_replay_factory,
+        )
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(

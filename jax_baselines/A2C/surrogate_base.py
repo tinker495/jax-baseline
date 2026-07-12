@@ -1,10 +1,15 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.math.jax_utils import convert_jax
-from jax_baselines.math.returns import get_gaes, normalize_advantage
+from jax_baselines.math.returns import (
+    get_gaes,
+    normalize_advantage,
+    validate_advantage_normalize_scope,
+)
 
 
 class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
@@ -13,9 +18,38 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
     PPO and SPO share identical rollout preprocessing (GAE) and the
     minibatch/epoch optimization loop; they differ only in the per-sample actor
     loss supplied through ``_loss_discrete``/``_loss_continuous`` (wired to
-    ``self._loss`` by ``Actor_Critic_Policy_Gradient_Family``). Subclasses keep
-    their own ``__init__`` (name + defaults) and ``_loss_*`` implementations.
+    ``self._loss`` by ``Actor_Critic_Policy_Gradient_Family``).
     """
+
+    def __init__(
+        self,
+        env_builder,
+        model_builder_maker,
+        lamda=0.95,
+        gae_normalize=False,
+        gae_normalize_scope="batch",
+        minibatch_size=32,
+        epoch_num=4,
+        ppo_eps=0.2,
+        value_clip=2.0,
+        **kwargs,
+    ):
+        self.lamda = lamda
+        self.gae_normalize = gae_normalize
+        self.gae_normalize_scope = validate_advantage_normalize_scope(gae_normalize_scope)
+        self.ppo_eps = ppo_eps
+        self.value_clip = value_clip
+        self.minibatch_size = minibatch_size
+        self.epoch_num = epoch_num
+
+        super().__init__(env_builder, model_builder_maker, **kwargs)
+
+        self.batch_size = int(
+            np.ceil(kwargs.get("batch_size", 256) * self.worker_size / minibatch_size)
+            * minibatch_size
+            / self.worker_size
+        )
+        self.get_memory_setup()
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
