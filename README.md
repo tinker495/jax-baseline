@@ -32,14 +32,7 @@ Atari ROMs still require license acceptance through AutoROM before Atari runs:
 uv run AutoROM --accept-license
 ```
 
-For a core-only pip install:
-
-```
-python -m pip install -e .
-```
-
-To reproduce the repository's experiment commands in a pip-only environment,
-install the core first and then the repo-local adapter workspace project:
+For a core-only pip install, run the first line; add the second for experiment commands:
 
 ```
 python -m pip install -e .
