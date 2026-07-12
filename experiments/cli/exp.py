@@ -102,7 +102,7 @@ def main(argv=None):
         if "=" not in item:
             parser.error(f"--set expects KEY=VALUE, got '{item}'")
         key, value = item.split("=", 1)
-        cli_overrides[key] = value
+        cli_overrides[key] = yaml.safe_load(value)
 
     with open(args.config) as handle:
         config = yaml.safe_load(handle)

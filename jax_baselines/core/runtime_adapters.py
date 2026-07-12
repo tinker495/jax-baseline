@@ -43,7 +43,7 @@ class NoOpLoggerRun:
     """Protocol-safe ``LoggerRun`` used when no experiment adapter is injected."""
 
     def __init__(self, local_dir: str):
-        self.local_dir = local_dir
+        self.local_dir = local_dir or "."
 
     def log_param(self, hparam_dict: dict) -> None:
         return None
