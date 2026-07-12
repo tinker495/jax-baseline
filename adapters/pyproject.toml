@@ -1,0 +1,83 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jax-baselines-adapters"
+version = "0.0.1"
+description = "Repo-local runtime adapters and experiment runners for jax-baselines."
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "chex",
+    "cpprb",
+    "flax",
+    "gymnasium",
+    "jax",
+    "jax-baselines",
+    "numpy",
+    "optax",
+    "python-dotenv",
+    "pyyaml",
+    "tensorboardX",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+aim = ["aim"]
+atari = [
+    "ale-py",
+    "autorom[accept-rom-license]",
+    "gymnasium[atari]",
+    "opencv-python",
+]
+box2d = ["box2d-kengz", "gymnasium[box2d]"]
+cuda12 = ["jax[cuda12]"]
+dashboard = ["setuptools<81", "tensorboard"]
+distributed = ["ray"]
+envpool = ["envpool"]
+haiku = ["dm-haiku"]
+mujoco = ["gymnasium[mujoco]"]
+other = ["gymnasium[other]"]
+wandb = ["wandb"]
+all = [
+    "aim",
+    "ale-py",
+    "autorom[accept-rom-license]",
+    "box2d-kengz",
+    "dm-haiku",
+    "envpool",
+    "gymnasium[atari,box2d,mujoco,other]",
+    "jax[cuda12]",
+    "opencv-python",
+    "ray",
+    "setuptools<81",
+    "tensorboard",
+    "wandb",
+]
+
+[project.scripts]
+qnet = "experiments.cli.qnet:main"
+dpg = "experiments.cli.dpg:main"
+pg = "experiments.cli.pg:main"
+impala = "experiments.cli.impala:main"
+apex-qnet = "experiments.cli.apex_qnet:main"
+apex-dpg = "experiments.cli.apex_dpg:main"
+exp = "experiments.cli.exp:main"
+dashboard = "experiments.cli.dashboard:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = [
+    "env_builder*",
+    "experiments*",
+    "model_builder*",
+    "replay_memory*",
+]
+
+[tool.setuptools.package-data]
+experiments = ["configs/*.yaml"]
+
+[tool.uv.sources]
+cpprb = { git = "https://github.com/tinker495/cpprb" }
+jax-baselines = { workspace = true }
