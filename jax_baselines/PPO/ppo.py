@@ -7,32 +7,6 @@ from jax_baselines.A2C.surrogate_base import SurrogatePolicyGradient
 class PPO(SurrogatePolicyGradient):
     _run_name = "PPO"
 
-    def __init__(
-        self,
-        env_builder,
-        model_builder_maker,
-        lamda=0.95,
-        gae_normalize=False,
-        gae_normalize_scope="batch",
-        minibatch_size=32,
-        epoch_num=4,
-        ppo_eps=0.2,
-        value_clip=2.0,
-        **kwargs,
-    ):
-        super().__init__(
-            env_builder,
-            model_builder_maker,
-            lamda=lamda,
-            gae_normalize=gae_normalize,
-            gae_normalize_scope=gae_normalize_scope,
-            minibatch_size=minibatch_size,
-            epoch_num=epoch_num,
-            ppo_eps=ppo_eps,
-            value_clip=value_clip,
-            **kwargs,
-        )
-
     def _loss_discrete(self, params, obses, actions, old_value, targets, old_prob, adv, key):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
