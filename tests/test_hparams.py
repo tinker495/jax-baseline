@@ -1,17 +1,10 @@
-"""Coverage for the hparam-provider protocol in jax_baselines.core.hparams.
+"""Coverage for scalar reflection in jax_baselines.core.hparams.
 
-``get_hyper_params`` reflects scalar config off the agent, then discovers held
-providers exposing a callable ``hparams() -> dict`` and merges their dicts. This
-is what logs ``self.ckpt.hparams()`` without the gatherer naming "ckpt", and
-what lets future deep handles log for free.
+``get_hyper_params`` reflects public scalar config directly off the agent and
+ignores nested runtime objects.
 """
 
 from jax_baselines.core.hparams import get_hyper_params
-
-
-class _Provider:
-    def hparams(self):
-        return {"baseline_mode": "median", "baseline_q": 0.2}
 
 
 class _NotAProvider:
@@ -24,7 +17,8 @@ class _Agent:
     def __init__(self):
         self.learning_rate = 5e-5  # plain scalar -> reflected
         self.optimizer = "adamw"  # plain scalar -> reflected
-        self.ckpt = _Provider()  # provider -> merged
+        self.baseline_mode = "median"
+        self.baseline_q = 0.2
         self.other = _NotAProvider()  # no hparams() -> ignored
         self._private = "hidden"  # underscore -> skipped
 
@@ -35,7 +29,7 @@ def test_scalar_attrs_are_reflected():
     assert params["optimizer"] == "adamw"
 
 
-def test_provider_hparams_are_merged():
+def test_checkpoint_hparams_are_reflected_from_agent():
     params = get_hyper_params(_Agent())
     assert params["baseline_mode"] == "median"
     assert params["baseline_q"] == 0.2
@@ -52,13 +46,12 @@ def test_underscore_attrs_are_skipped():
     assert "_private" not in params
 
 
-def test_provider_merge_is_generic_not_named_ckpt():
-    """A provider held under any attribute name is merged."""
+def test_nested_objects_are_not_inspected():
+    class _Provider:
+        def hparams(self):
+            return {"hidden_nested_value": 1}
 
     class _AltAgent:
-        def __init__(self):
-            self.optimizer_handle = _Provider()  # not named "ckpt"
+        handle = _Provider()
 
-    params = get_hyper_params(_AltAgent())
-    assert params["baseline_mode"] == "median"
-    assert params["baseline_q"] == 0.2
+    assert "hidden_nested_value" not in get_hyper_params(_AltAgent())
