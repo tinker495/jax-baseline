@@ -1,7 +1,6 @@
 """``--logger`` backend selection for the experiment CLIs.
 
-Maps the ``--logger`` name to a ``LoggerFactory`` (the
-:class:`jax_baselines.core.runtime_adapters.LoggerFactory` shape:
+Maps the ``--logger`` name to a logger factory (the callable shape
 ``(run_name, experiment_name, local_dir, agent) -> logger``).
 
 Concrete backends live under ``experiments.loggers``; their third-party
