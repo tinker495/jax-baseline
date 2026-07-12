@@ -84,6 +84,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         )  # [1 x 1 x support]
 
         self._get_actions = jax.jit(self._get_actions)
+        self._get_eval_actions = jax.jit(self._get_eval_actions)
         self._train_step = jax.jit(self._train_step)
         self._train_ent_coef = jax.jit(self._train_ent_coef)
         self._bulk_scan = jax.jit(self._bulk_scan)
@@ -121,6 +122,10 @@ class TQC(Deteministic_Policy_Gradient_Family):
         pi = jax.nn.tanh(mu + std * jax.random.normal(key, std.shape))
         return pi
 
+    def _get_eval_actions(self, params, obses) -> jnp.ndarray:
+        mu, _ = self.actor(params, None, self.preproc(params, None, convert_jax(obses)))
+        return jax.nn.tanh(mu)
+
     def _train_on_batch(self, data, context):
         (
             self.policy_params,
@@ -128,6 +133,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
             self.target_critic_params,
             self.opt_policy_state,
             self.opt_critic_state,
+            self.opt_ent_coef_state,
             loss,
             t_mean,
             self.log_ent_coef,
@@ -138,6 +144,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
             self.target_critic_params,
             self.opt_policy_state,
             self.opt_critic_state,
+            self.opt_ent_coef_state,
             next(self.key_seq),
             context.train_steps_count,
             self.log_ent_coef,
@@ -159,6 +166,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
             self.target_critic_params,
             self.opt_policy_state,
             self.opt_critic_state,
+            self.opt_ent_coef_state,
             self.log_ent_coef,
         )
         (
@@ -167,6 +175,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
             self.target_critic_params,
             self.opt_policy_state,
             self.opt_critic_state,
+            self.opt_ent_coef_state,
             self.log_ent_coef,
         ), (losses, targets, ent_coefs, priorities) = self._bulk_scan(carry, keys, steps, data)
         return DPGTrainReport(
@@ -185,6 +194,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
                 target_critic_params,
                 opt_policy_state,
                 opt_critic_state,
+                opt_ent_coef_state,
                 log_ent_coef,
             ) = carry
             key, step, batch = xs
@@ -194,6 +204,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
                 target_critic_params,
                 opt_policy_state,
                 opt_critic_state,
+                opt_ent_coef_state,
                 loss,
                 t_mean,
                 log_ent_coef,
@@ -204,6 +215,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
                 target_critic_params,
                 opt_policy_state,
                 opt_critic_state,
+                opt_ent_coef_state,
                 key,
                 step,
                 log_ent_coef,
@@ -215,6 +227,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
                 target_critic_params,
                 opt_policy_state,
                 opt_critic_state,
+                opt_ent_coef_state,
                 log_ent_coef,
             ), (loss, t_mean, log_ent_coef, priorities)
 
@@ -227,6 +240,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
         target_critic_params,
         opt_policy_state,
         opt_critic_state,
+        opt_ent_coef_state,
         key,
         step,
         log_ent_coef,
@@ -274,7 +288,9 @@ class TQC(Deteministic_Policy_Gradient_Family):
         )
 
         if self.auto_entropy:
-            log_ent_coef = self._train_ent_coef(log_ent_coef, log_prob)
+            log_ent_coef, opt_ent_coef_state = self._train_ent_coef(
+                log_ent_coef, opt_ent_coef_state, log_prob
+            )
 
         new_priorities = None
         if self.prioritized_replay:
@@ -304,6 +320,7 @@ class TQC(Deteministic_Policy_Gradient_Family):
             target_critic_params,
             opt_policy_state,
             opt_critic_state,
+            opt_ent_coef_state,
             critic_loss,
             -actor_loss,
             log_ent_coef,

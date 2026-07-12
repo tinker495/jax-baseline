@@ -63,6 +63,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         self._setup_entropy_coef()
 
         self._get_actions = jax.jit(self._get_actions)
+        self._get_eval_actions = jax.jit(self._get_eval_actions)
         self._train_step = jax.jit(self._train_step)
         self._train_ent_coef = jax.jit(self._train_ent_coef)
         self._bulk_scan = jax.jit(self._bulk_scan)
@@ -101,12 +102,17 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         pi = jax.nn.tanh(mu + std * jax.random.normal(key, std.shape))
         return pi
 
+    def _get_eval_actions(self, params, obses) -> jnp.ndarray:
+        (mu, _), _ = self.actor(params, None, self.preproc(params, None, convert_jax(obses)), False)
+        return jax.nn.tanh(mu)
+
     def _train_on_batch(self, data, context):
         (
             self.policy_params,
             self.critic_params,
             self.opt_policy_state,
             self.opt_critic_state,
+            self.opt_ent_coef_state,
             loss,
             t_mean,
             self.log_ent_coef,
@@ -116,6 +122,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             self.critic_params,
             self.opt_policy_state,
             self.opt_critic_state,
+            self.opt_ent_coef_state,
             next(self.key_seq),
             context.train_steps_count,
             self.log_ent_coef,
@@ -136,6 +143,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             self.critic_params,
             self.opt_policy_state,
             self.opt_critic_state,
+            self.opt_ent_coef_state,
             self.log_ent_coef,
         )
         (
@@ -143,6 +151,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             self.critic_params,
             self.opt_policy_state,
             self.opt_critic_state,
+            self.opt_ent_coef_state,
             self.log_ent_coef,
         ), (losses, targets, ent_coefs, priorities) = self._bulk_scan(carry, keys, steps, data)
         return DPGTrainReport(
@@ -155,13 +164,21 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
 
     def _bulk_scan(self, carry, keys, steps, data):
         def train_one(carry, xs):
-            policy_params, critic_params, opt_policy_state, opt_critic_state, log_ent_coef = carry
+            (
+                policy_params,
+                critic_params,
+                opt_policy_state,
+                opt_critic_state,
+                opt_ent_coef_state,
+                log_ent_coef,
+            ) = carry
             key, step, batch = xs
             (
                 policy_params,
                 critic_params,
                 opt_policy_state,
                 opt_critic_state,
+                opt_ent_coef_state,
                 loss,
                 t_mean,
                 log_ent_coef,
@@ -171,6 +188,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
                 critic_params,
                 opt_policy_state,
                 opt_critic_state,
+                opt_ent_coef_state,
                 key,
                 step,
                 log_ent_coef,
@@ -181,6 +199,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
                 critic_params,
                 opt_policy_state,
                 opt_critic_state,
+                opt_ent_coef_state,
                 log_ent_coef,
             ), (loss, t_mean, log_ent_coef, priorities)
 
@@ -192,6 +211,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         critic_params,
         opt_policy_state,
         opt_critic_state,
+        opt_ent_coef_state,
         key,
         step,
         log_ent_coef,
@@ -233,6 +253,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             critic_params,
             log_ent_coef,
             opt_policy_state,
+            opt_ent_coef_state,
             key,
         ):
             (_, (log_prob, policy_params)), grad = jax.value_and_grad(
@@ -244,16 +265,26 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             policy_params = optax.apply_updates(policy_params, updates)
 
             if self.auto_entropy:
-                log_ent_coef = self._train_ent_coef(log_ent_coef, log_prob)
+                log_ent_coef, opt_ent_coef_state = self._train_ent_coef(
+                    log_ent_coef, opt_ent_coef_state, log_prob
+                )
             return (
                 policy_params,
                 critic_params,
                 log_ent_coef,
                 opt_policy_state,
+                opt_ent_coef_state,
                 key,
             )
 
-        (policy_params, critic_params, log_ent_coef, opt_policy_state, key) = jax.lax.cond(
+        (
+            policy_params,
+            critic_params,
+            log_ent_coef,
+            opt_policy_state,
+            opt_ent_coef_state,
+            key,
+        ) = jax.lax.cond(
             step % self.policy_delay == 0,
             lambda x: _opt_actor(*x),
             lambda x: x,
@@ -262,6 +293,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
                 critic_params,
                 log_ent_coef,
                 opt_policy_state,
+                opt_ent_coef_state,
                 key,
             ),
         )
@@ -293,6 +325,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             critic_params,
             opt_policy_state,
             opt_critic_state,
+            opt_ent_coef_state,
             critic_loss,
             jnp.mean(targets),
             log_ent_coef,

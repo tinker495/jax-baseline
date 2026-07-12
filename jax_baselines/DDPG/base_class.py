@@ -3,6 +3,7 @@ from copy import deepcopy
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optax
 
 from jax_baselines.core.checkpoint import make_checkpoint_scaffold, snapshot_pytree
 from jax_baselines.core.checkpoint_state import CheckpointState
@@ -259,8 +260,9 @@ class Deteministic_Policy_Gradient_Family(object):
         if isinstance(self._ent_coef, str) and self._ent_coef.startswith("auto"):
             init_value = np.log(1e-1)
             if "_" in self._ent_coef:
-                init_value = np.log(float(self._ent_coef.split("_")[1]))
-                assert init_value > 0.0, "The initial value of ent_coef must be greater than 0"
+                initial_alpha = float(self._ent_coef.split("_")[1])
+                assert initial_alpha > 0.0, "The initial value of ent_coef must be greater than 0"
+                init_value = np.log(initial_alpha)
             self.log_ent_coef = jax.device_put(init_value)
             self.auto_entropy = True
         else:
@@ -270,13 +272,17 @@ class Deteministic_Policy_Gradient_Family(object):
                 raise ValueError(f"Invalid value for ent_coef: {self._ent_coef}") from err
             self.auto_entropy = False
 
-    def _train_ent_coef(self, log_coef, log_prob):
-        def loss(log_ent_coef, log_prob):
-            ent_coef = jnp.exp(log_ent_coef)
-            return jnp.mean(ent_coef * (self.target_entropy - log_prob))
+        self.ent_coef_optimizer = optax.adam(self.ent_coef_learning_rate)
+        self.opt_ent_coef_state = self.ent_coef_optimizer.init(self.log_ent_coef)
 
-        grad = jax.grad(loss)(log_coef, log_prob)
-        return log_coef - self.ent_coef_learning_rate * grad
+    def _train_ent_coef(self, log_coef, opt_state, log_prob):
+        def loss(log_ent_coef):
+            entropy = -jax.lax.stop_gradient(log_prob)
+            return jnp.mean(jnp.exp(log_ent_coef) * (entropy - self.target_entropy))
+
+        grad = jax.grad(loss)(log_coef)
+        updates, opt_state = self.ent_coef_optimizer.update(grad, opt_state, log_coef)
+        return optax.apply_updates(log_coef, updates), opt_state
 
     def train_step(self, steps, gradient_steps):
         return self.training_lifecycle.train(steps, gradient_steps)
@@ -327,7 +333,7 @@ class Deteministic_Policy_Gradient_Family(object):
 
     def actions(self, obs, steps, eval=False):
         obs = self._apply_simba_normalization(obs, eval, steps)
-        if steps <= self.learning_starts:
+        if not eval and steps <= self.learning_starts:
             return self._random_warmup_actions(eval=eval)
         state = self._select_action_state(eval, steps)
         actions = self._policy_action_from_state(state, obs, eval, steps)
@@ -343,6 +349,8 @@ class Deteministic_Policy_Gradient_Family(object):
         return self.get_behavior_state()
 
     def _policy_action_from_state(self, state, obs, eval, steps):
+        if eval:
+            return np.asarray(self._get_eval_actions(state["policy"], obs))
         return np.asarray(self._get_actions(state["policy"], obs, next(self.key_seq)))
 
     def _apply_action_noise(self, actions, steps, eval):

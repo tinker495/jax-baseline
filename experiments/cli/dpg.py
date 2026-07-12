@@ -65,7 +65,14 @@ def add_args(parser):
     parser.add_argument("--max_bulk_updates_per_pulse", type=int, default=32)
     parser.add_argument("--train_freq", type=int, default=1, help="train_frequancy")
     parser.add_argument("--critic_num", type=int, default=2, help="tqc critic number")
-    parser.add_argument("--ent_coef", type=str, default="auto", help="sac entropy coefficient")
+    parser.add_argument(
+        "--ent_coef",
+        type=str,
+        default=None,
+        help="entropy coefficient (algorithm default if omitted)",
+    )
+    parser.add_argument("--sigma_target", type=float, default=0.15)
+    parser.add_argument("--actor_update_period", type=int, default=2)
     parser.add_argument("--learning_starts", type=int, default=5000, help="learning start")
     parser.add_argument("--use_checkpointing", action="store_true")
 
@@ -136,13 +143,18 @@ ALGOS = {
         lambda a: {
             **_common(a),
             "target_network_update_tau": a.target_update_tau,
-            "ent_coef": a.ent_coef,
+            "ent_coef": a.ent_coef if a.ent_coef is not None else "auto_0.01",
+            "sigma_target": a.sigma_target,
+            "actor_update_period": a.actor_update_period,
         },
     ),
     "CrossQ": AlgoSpec(
         CrossQ,
         "crossq",
-        lambda a: {**_common(a), "ent_coef": a.ent_coef},
+        lambda a: {
+            **_common(a),
+            "ent_coef": a.ent_coef if a.ent_coef is not None else "auto",
+        },
     ),
     "TQC": AlgoSpec(
         TQC,
@@ -150,7 +162,7 @@ ALGOS = {
         lambda a: {
             **_common(a),
             "target_network_update_tau": a.target_update_tau,
-            "ent_coef": a.ent_coef,
+            "ent_coef": a.ent_coef if a.ent_coef is not None else "auto",
             "quantile_drop": a.quantile_drop,
             "n_support": a.n_support,
             "critic_num": a.critic_num,

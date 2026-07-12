@@ -37,16 +37,15 @@ def test_auto_enables_tuning_with_default_init():
 
 
 def test_auto_suffix_seeds_initial_value():
-    # The suffix must satisfy log(value) > 0, i.e. value > 1.0 (preserved
-    # invariant from the original SAC/TQC/CrossQ setup).
-    carrier = _setup("auto_2.0")
+    carrier = _setup("auto_0.01")
     assert carrier.auto_entropy is True
-    np.testing.assert_allclose(float(carrier.log_ent_coef), np.log(2.0), rtol=1e-6)
+    np.testing.assert_allclose(float(carrier.log_ent_coef), np.log(0.01), rtol=1e-6)
 
 
-def test_auto_suffix_rejects_value_at_or_below_one():
+@pytest.mark.parametrize("value", ["auto_0", "auto_-0.1"])
+def test_auto_suffix_rejects_non_positive_value(value):
     with pytest.raises(AssertionError, match="greater than 0"):
-        _setup("auto_0.5")
+        _setup(value)
 
 
 def test_fixed_numeric_disables_tuning():
@@ -60,25 +59,27 @@ def test_invalid_value_raises():
         _setup("not_a_number")
 
 
-def test_train_ent_coef_gradient_step():
-    carrier = _EntCarrier("auto", target_entropy=-3.0, ent_coef_learning_rate=0.1)
+def test_train_ent_coef_uses_adam_state_and_entropy_error():
+    carrier = _EntCarrier("auto", target_entropy=1.0, ent_coef_learning_rate=0.1)
+    Deteministic_Policy_Gradient_Family._setup_entropy_coef(carrier)
     log_coef = jnp.asarray(np.log(0.1))
-    log_prob = jnp.asarray([[-1.0], [-2.0]])
+    log_prob = jnp.asarray([[-2.0]])
 
-    updated = Deteministic_Policy_Gradient_Family._train_ent_coef(carrier, log_coef, log_prob)
+    updated, opt_state = Deteministic_Policy_Gradient_Family._train_ent_coef(
+        carrier, log_coef, carrier.opt_ent_coef_state, log_prob
+    )
 
-    # loss = mean(exp(log_coef) * (target_entropy - log_prob)); d/d log_coef of
-    # exp(log_coef)*c is exp(log_coef)*c, so grad = mean(exp(log_coef)*(te - lp)).
-    ent_coef = np.exp(float(log_coef))
-    expected_grad = np.mean(ent_coef * (-3.0 - np.array([-1.0, -2.0])))
-    expected = float(log_coef) - 0.1 * expected_grad
-    np.testing.assert_allclose(float(updated), expected, rtol=1e-5)
+    assert float(updated) < float(log_coef)
+    assert int(opt_state[0].count) == 1
 
 
 def test_train_ent_coef_is_jittable():
     carrier = _EntCarrier("auto", target_entropy=-1.0)
+    Deteministic_Policy_Gradient_Family._setup_entropy_coef(carrier)
     fn = jax.jit(
-        lambda lc, lp: Deteministic_Policy_Gradient_Family._train_ent_coef(carrier, lc, lp)
+        lambda lc, state, lp: Deteministic_Policy_Gradient_Family._train_ent_coef(
+            carrier, lc, state, lp
+        )
     )
-    out = fn(jnp.asarray(0.0), jnp.asarray([[-1.0]]))
+    out, _ = fn(jnp.asarray(0.0), carrier.opt_ent_coef_state, jnp.asarray([[-1.0]]))
     assert np.isfinite(float(out))

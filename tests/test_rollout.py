@@ -924,17 +924,21 @@ def test_dpg_eval_actions_use_checkpoint_normalizer():
     assert agent.checkpoint_obs_rms.calls == [("normalize", [np.array([1.0])])]
 
 
-def test_dpg_eval_warmup_action_matches_single_eval_env_shape():
+def test_dpg_eval_skips_random_warmup_and_uses_policy_action():
     agent = Deteministic_Policy_Gradient_Family.__new__(Deteministic_Policy_Gradient_Family)
     agent.simba = False
     agent.learning_starts = 100
     agent.worker_size = 32
     agent.action_size = (17,)
+    agent._select_action_state = lambda eval, steps: {"encoder": None, "policy": None}
+    agent._policy_action_from_state = lambda state, obs, eval, steps: np.full((1, 17), 0.5)
+    agent._apply_action_noise = lambda actions, steps, eval: actions
     env = _ShapeCheckingEvalEnv((17,))
 
     evaluate_policy(env, 1, lambda obs: agent.actions(obs, steps=0, eval=True))
 
     assert env.actions[0].shape == (17,)
+    assert np.all(env.actions[0] == 0.5)
 
 
 def test_td3_test_action_uses_eval_action_shape_with_many_workers():
