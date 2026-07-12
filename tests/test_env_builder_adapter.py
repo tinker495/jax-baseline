@@ -110,6 +110,49 @@ def test_env_builder_package_imports_use_core_protocols_without_common_shims():
     assert hasattr(importlib.import_module("env_builder"), "get_env_builder")
 
 
+
+def test_make_wrap_atari_applies_the_canonical_wrapper_order(monkeypatch):
+    atari = importlib.import_module("env_builder.atari_wrappers")
+    calls = []
+
+    class _Env:
+        spec = type("Spec", (), {"id": "PongNoFrameskip-v4"})()
+        unwrapped = type(
+            "Unwrapped", (), {"get_action_meanings": lambda self: ["NOOP", "FIRE", "UP"]}
+        )()
+
+    env = _Env()
+
+    def wrapper(name):
+        def apply(current, *args, **kwargs):
+            calls.append((name, args, kwargs))
+            return current
+
+        return apply
+
+    monkeypatch.setattr(atari.gym, "make", lambda *a, **k: env)
+    monkeypatch.setattr(atari, "NoopResetEnv", wrapper("noop"))
+    monkeypatch.setattr(atari, "MaxAndSkipEnv", wrapper("skip"))
+    monkeypatch.setattr(atari.gym.wrappers, "TimeLimit", wrapper("time_limit"))
+    monkeypatch.setattr(atari, "EpisodicLifeEnv", wrapper("episodic_life"))
+    monkeypatch.setattr(atari, "FireResetEnv", wrapper("fire"))
+    monkeypatch.setattr(atari, "WarpFrame", wrapper("warp"))
+    monkeypatch.setattr(atari, "ClipRewardEnv", wrapper("clip"))
+    monkeypatch.setattr(atari, "FrameStack", wrapper("frame_stack"))
+
+    assert atari.make_wrap_atari("PongNoFrameskip-v4", clip_rewards=True) is env
+    assert [name for name, _, _ in calls] == [
+        "noop",
+        "skip",
+        "time_limit",
+        "episodic_life",
+        "fire",
+        "warp",
+        "clip",
+        "frame_stack",
+    ]
+
+
 def test_single_env_protocol_accepts_structural_envs():
     env = _FakeSingleEnv()
 
