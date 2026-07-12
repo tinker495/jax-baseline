@@ -1,6 +1,3 @@
-# translated from test/test_impala_bipedal.sh
-# Note: OPTIMIZER changes mid-script. Commented A2C uses rmsprop.
-# Active PPO runs: first with rmsprop, second with adam.
 family: impala
 runtime:
   device: 0
@@ -19,6 +16,5 @@ base:
   val_coef: 0.6
   buffer_size: 32
 variants:
-  - {algo: A2C, optimizer: rmsprop, enabled: false}
   - {algo: PPO, optimizer: rmsprop}
   - {algo: PPO, optimizer: adam}
