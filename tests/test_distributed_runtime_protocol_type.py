@@ -8,23 +8,6 @@ from jax_baselines.core.distributed_runtime import DistributedRuntime
 from jax_baselines.IMPALA.base_class import IMPALA_Family
 
 
-class _Runtime:
-    replay_manager = (
-        create_event
-    ) = create_param_server = create_impala_buffer = lambda self, *a: None
-    create_worker = create_logger_server = wait = lambda self, *a, **kw: None
-
-    def worker_info(self, worker):
-        return worker
-
-    def shutdown(self):
-        return None
-
-
-def test_distributed_runtime_is_an_explicit_structural_protocol():
-    assert isinstance(_Runtime(), DistributedRuntime)
-
-
 @pytest.mark.parametrize(
     "family", [Ape_X_Family, Ape_X_Deteministic_Policy_Gradient_Family, IMPALA_Family]
 )

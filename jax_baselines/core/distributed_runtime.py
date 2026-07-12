@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, NamedTuple, Protocol, runtime_checkable
+from typing import Any, NamedTuple, Protocol
 
 
-@runtime_checkable
 class DistributedRuntime(Protocol):
     def replay_manager(self) -> Any:
         ...
