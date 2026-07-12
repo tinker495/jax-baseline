@@ -19,15 +19,6 @@ repos:
       - id: black
         args: [--line-length=100]
         name: Format code
-        exclude: docs/source-app
-
-  - repo: https://github.com/asottile/blacken-docs
-    rev: 1.13.0
-    hooks:
-      - id: blacken-docs
-        args: [--line-length=120]
-        additional_dependencies: [black==23.1.0]
-        exclude: docs/source-app
 
   - repo: https://github.com/PyCQA/isort
     rev: 5.12.0
@@ -44,4 +35,3 @@ repos:
           - mdformat-gfm==0.3.7
           - mdformat-black
           - mdformat-footnote
-          - mdformat_frontmatter
