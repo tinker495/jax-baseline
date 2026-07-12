@@ -16,6 +16,7 @@ from replay_memory.cpprb_buffers import (
     PrioritizedNstepReplayBuffer,
     PrioritizedReplayBuffer,
     ReplayBuffer,
+    _project_transitions,
 )
 from replay_memory.replay_factory import make_replay_buffer
 
@@ -23,6 +24,26 @@ H = W = 8
 S = 4  # frame-stack depth, as in Atari
 IMG = [H, W, S]
 OBS = [IMG]  # observation_space is a list of per-modality shapes
+
+
+def test_transition_projection_has_one_plain_and_prioritized_shape():
+    transitions = {
+        "obs0": np.zeros((2, 4), dtype=np.float32),
+        "action": np.zeros((2, 1), dtype=np.float32),
+        "reward": np.zeros((2, 1), dtype=np.float32),
+        "next_obs0": np.ones((2, 4), dtype=np.float32),
+        "done": np.zeros((2, 1), dtype=np.float32),
+        "weights": np.ones(2, dtype=np.float32),
+        "indexes": np.arange(2),
+    }
+
+    plain = _project_transitions(transitions, ["obs0"], ["next_obs0"])
+    prioritized = _project_transitions(transitions, ["obs0"], ["next_obs0"], prioritized=True)
+
+    assert set(plain) == {"obses", "actions", "rewards", "nxtobses", "terminateds"}
+    assert set(prioritized) == set(plain) | {"weights", "indexes"}
+    assert plain["obses"] == [transitions["obs0"]]
+    assert plain["nxtobses"] == [transitions["next_obs0"]]
 
 
 def _frame(v):

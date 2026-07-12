@@ -89,6 +89,20 @@ def _active_worker_indices(worker_size, store_mask):
     return np.flatnonzero(store_mask)
 
 
+def _project_transitions(transitions, obs_keys, next_obs_keys, *, prioritized=False):
+    projected = {
+        "obses": [transitions[key] for key in obs_keys],
+        "actions": transitions["action"],
+        "rewards": transitions["reward"],
+        "nxtobses": [transitions[key] for key in next_obs_keys],
+        "terminateds": transitions["done"],
+    }
+    if prioritized:
+        projected["weights"] = transitions["weights"]
+        projected["indexes"] = transitions["indexes"]
+    return projected
+
+
 class ReplayBuffer(object):
     def __init__(
         self,
@@ -163,26 +177,13 @@ class ReplayBuffer(object):
         self.buffer.on_episode_end()
 
     def sample(self, batch_size: int):
-        smpl = self.buffer.sample(batch_size)
-        return {
-            "obses": [smpl[o] for o in self.obsdict],
-            "actions": smpl["action"],
-            "rewards": smpl["reward"],
-            "nxtobses": [smpl[no] for no in self.nextobsdict],
-            "terminateds": smpl["done"],
-        }
+        return _project_transitions(self.buffer.sample(batch_size), self.obsdict, self.nextobsdict)
 
     def get_buffer(self):
         return self.buffer.get_all_transitions()
 
     def conv_transitions(self, transitions):
-        return {
-            "obses": [transitions[o] for o in self.obsdict],
-            "actions": transitions["action"],
-            "rewards": transitions["reward"],
-            "nxtobses": [transitions[no] for no in self.nextobsdict],
-            "terminateds": transitions["done"],
-        }
+        return _project_transitions(transitions, self.obsdict, self.nextobsdict)
 
     def clear(self):
         self.buffer.clear()
@@ -213,7 +214,7 @@ class NstepReplayBuffer(ReplayBuffer):
         )
 
         if worker_size > 1:
-            self.buffer = cpprb.ReplayBuffer(size, env_dict=central_env_dict, **comp_kw)
+            self.buffer = self._create_central_buffer(size, central_env_dict, comp_kw)
             # ponytail: row isolation preserves immediate sampling;
             # per-worker central buffers if compression ratio matters.
             self._isolate_multiworker_steps = n_step == 1 and bool(comp_kw)
@@ -226,7 +227,12 @@ class NstepReplayBuffer(ReplayBuffer):
                 ]
                 self.add = self.multiworker_add
         else:
-            self.buffer = cpprb.ReplayBuffer(size, env_dict=central_env_dict, Nstep=n_s, **comp_kw)
+            self.buffer = self._create_central_buffer(size, central_env_dict, comp_kw, n_s=n_s)
+
+    def _create_central_buffer(self, size, env_dict, comp_kw, n_s=None):
+        if n_s is not None:
+            comp_kw = {**comp_kw, "Nstep": n_s}
+        return cpprb.ReplayBuffer(size, env_dict=env_dict, **comp_kw)
 
     def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False):
         super().add(obs_t, action, reward, nxtobs_t, terminated, truncated)
@@ -316,16 +322,12 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         )
 
     def sample(self, batch_size: int, beta=0.5):
-        smpl = self.buffer.sample(batch_size, beta)
-        return {
-            "obses": [smpl[o] for o in self.obsdict],
-            "actions": smpl["action"],
-            "rewards": smpl["reward"],
-            "nxtobses": [smpl[no] for no in self.nextobsdict],
-            "terminateds": smpl["done"],
-            "weights": smpl["weights"],
-            "indexes": smpl["indexes"],
-        }
+        return _project_transitions(
+            self.buffer.sample(batch_size, beta),
+            self.obsdict,
+            self.nextobsdict,
+            prioritized=True,
+        )
 
     def update_priorities(self, indexes, priorities):
         self.buffer.update_priorities(indexes, priorities)
@@ -344,55 +346,32 @@ class PrioritizedNstepReplayBuffer(NstepReplayBuffer):
         compress_memory=False,
         eps=1e-4,
     ):
-        self.max_size = size
-        self.obsdict, self.nextobsdict = _build_obs_dicts(observation_space)
-        env_nextobsdict, comp_kw = _compress_config(
-            self.obsdict, self.nextobsdict, compress_memory, n_step=n_step
-        )
-        # The n-step add() marks episode boundaries itself; keep the base add()
-        # from doing it a second time.
-        self._compress_active = False
-        self.worker_size = worker_size
-        n_s, central_env_dict, local_env_dict = _nstep_env_dicts(
-            self.obsdict, self.nextobsdict, env_nextobsdict, action_space, n_step, gamma
+        self.alpha = alpha
+        self.eps = eps
+        super().__init__(
+            size=size,
+            observation_space=observation_space,
+            action_space=action_space,
+            worker_size=worker_size,
+            n_step=n_step,
+            gamma=gamma,
+            compress_memory=compress_memory,
         )
 
-        if worker_size > 1:
-            self.buffer = cpprb.PrioritizedReplayBuffer(
-                size, env_dict=central_env_dict, alpha=alpha, eps=eps, **comp_kw
-            )
-            # ponytail: row isolation preserves immediate sampling;
-            # per-worker central buffers if compression ratio matters.
-            self._isolate_multiworker_steps = n_step == 1 and bool(comp_kw)
-            if n_step == 1:
-                self.add = self.multiworker_single_step_add
-            else:
-                self.local_buffers = [
-                    cpprb.ReplayBuffer(2000, env_dict=local_env_dict, Nstep=n_s)
-                    for _ in range(worker_size)
-                ]
-                self.add = self.multiworker_add
-        else:
-            self.buffer = cpprb.PrioritizedReplayBuffer(
-                size,
-                env_dict=central_env_dict,
-                alpha=alpha,
-                eps=eps,
-                Nstep=n_s,
-                **comp_kw,
-            )
+    def _create_central_buffer(self, size, env_dict, comp_kw, n_s=None):
+        if n_s is not None:
+            comp_kw = {**comp_kw, "Nstep": n_s}
+        return cpprb.PrioritizedReplayBuffer(
+            size, env_dict=env_dict, alpha=self.alpha, eps=self.eps, **comp_kw
+        )
 
     def sample(self, batch_size: int, beta=0.5):
-        smpl = self.buffer.sample(batch_size, beta)
-        return {
-            "obses": [smpl[o] for o in self.obsdict],
-            "actions": smpl["action"],
-            "rewards": smpl["reward"],
-            "nxtobses": [smpl[no] for no in self.nextobsdict],
-            "terminateds": smpl["done"],
-            "weights": smpl["weights"],
-            "indexes": smpl["indexes"],
-        }
+        return _project_transitions(
+            self.buffer.sample(batch_size, beta),
+            self.obsdict,
+            self.nextobsdict,
+            prioritized=True,
+        )
 
     def update_priorities(self, indexes, priorities):
         self.buffer.update_priorities(indexes, priorities)
@@ -457,16 +436,12 @@ class MultiPrioritizedReplayBuffer:
         return self.buffer, self.env_dict, self.n_s
 
     def sample(self, batch_size: int, beta=0.5):
-        smpl = self.buffer.sample(batch_size, beta)
-        return {
-            "obses": [smpl[o] for o in self.obsdict],
-            "actions": smpl["action"],
-            "rewards": smpl["reward"],
-            "nxtobses": [smpl[no] for no in self.nextobsdict],
-            "terminateds": smpl["done"],
-            "weights": smpl["weights"],
-            "indexes": smpl["indexes"],
-        }
+        return _project_transitions(
+            self.buffer.sample(batch_size, beta),
+            self.obsdict,
+            self.nextobsdict,
+            prioritized=True,
+        )
 
     def update_priorities(self, indexes, priorities):
         self.buffer.update_priorities(indexes, priorities)
