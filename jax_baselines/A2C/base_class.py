@@ -256,9 +256,6 @@ class Actor_Critic_Policy_Gradient_Family(object):
         if self.env_type == "VectorizedEnv":
             self.learn_VectorizedEnv(ctx)
 
-    def release_run_context(self):
-        self.rollout_tracker = None
-
     def learn(
         self,
         total_timesteps,

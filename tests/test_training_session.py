@@ -250,23 +250,6 @@ def test_run_executes_without_env_buffer_or_model():
     assert not hasattr(agent, "logger_run")
 
 
-@pytest.mark.parametrize(
-    "family",
-    [
-        Q_Network_Family,
-        DDPG,
-        Actor_Critic_Policy_Gradient_Family,
-    ],
-)
-def test_family_release_run_context_drops_logger_bound_tracker(family):
-    agent = family.__new__(family)
-    agent.rollout_tracker = object()
-
-    family.release_run_context(agent)
-
-    assert agent.rollout_tracker is None
-
-
 def test_session_releases_run_context_after_success_and_failure():
     class ContextAgent(FakeSessionAgent):
         def __init__(self, rec, fail=False):
@@ -278,9 +261,6 @@ def test_session_releases_run_context_after_success_and_failure():
             super().run_training_loop(ctx)
             if self.fail:
                 raise RuntimeError("training failed")
-
-        def release_run_context(self):
-            self.rollout_tracker = None
 
     successful = ContextAgent([])
     _run(successful)

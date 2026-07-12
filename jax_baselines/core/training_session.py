@@ -88,9 +88,8 @@ class TrainingSession:
                 agent.eval(ctx, total_timesteps)
                 agent.save_params(logger_run.get_local_path("params"))
         finally:
-            release_run_context = getattr(agent, "release_run_context", None)
-            if release_run_context is not None:
-                release_run_context()
+            if hasattr(agent, "rollout_tracker"):
+                agent.rollout_tracker = None
 
 
 def off_policy_loop(agent, ctx):

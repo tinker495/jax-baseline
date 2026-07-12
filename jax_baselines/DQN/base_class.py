@@ -451,9 +451,6 @@ class Q_Network_Family:
     def run_training_loop(self, ctx):
         off_policy_loop(self, ctx)
 
-    def release_run_context(self):
-        self.rollout_tracker = None
-
     # -------------------------------
     # Rollout seam (RolloutSpec wiring)
     # -------------------------------

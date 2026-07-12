@@ -296,9 +296,6 @@ class Deteministic_Policy_Gradient_Family(object):
     def run_training_loop(self, ctx):
         off_policy_loop(self, ctx)
 
-    def release_run_context(self):
-        self.rollout_tracker = None
-
     def _train_on_batch(self, data, context):
         raise NotImplementedError
 
