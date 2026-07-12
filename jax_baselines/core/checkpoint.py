@@ -53,65 +53,6 @@ def _snapshot_leaf(leaf):
     return deepcopy(leaf)
 
 
-class CheckpointScaffold:
-    """Runtime handle the off-policy base holds as ``self.ckpt``.
-
-    Owns the :class:`CheckpointController` and the resolved live config, and
-    delegates the five schedule methods the base needs (``enabled``,
-    ``last_update_step``, ``on_episode_end``, ``to_state``, ``from_state``) so
-    the base never references the controller directly. Exposes :meth:`hparams`
-    for the hparam-provider protocol. The controller itself is delegate-only:
-    there is no public ``.controller`` accessor.
-    """
-
-    def __init__(
-        self,
-        *,
-        controller: "CheckpointController",
-        use_checkpointing: bool,
-        steps_before_checkpointing: int,
-        max_eps_before_checkpointing: int,
-        baseline_mode: str,
-        baseline_q: float,
-    ):
-        self._controller = controller
-        self.use_checkpointing = use_checkpointing
-        self.steps_before_checkpointing = steps_before_checkpointing
-        self.max_eps_before_checkpointing = max_eps_before_checkpointing
-        self.baseline_mode = baseline_mode
-        self.baseline_q = baseline_q
-
-    # -- schedule delegation (the base sees these, never the controller) --
-
-    @property
-    def enabled(self) -> bool:
-        return self._controller.enabled
-
-    @property
-    def last_update_step(self) -> Optional[int]:
-        return self._controller.last_update_step
-
-    def on_episode_end(self, *args, **kwargs):
-        return self._controller.on_episode_end(*args, **kwargs)
-
-    def to_state(self) -> dict:
-        return self._controller.to_state()
-
-    def from_state(self, state):
-        return self._controller.from_state(state)
-
-    # -- hparam provider protocol --
-
-    def hparams(self) -> dict:
-        return {
-            "use_checkpointing": self.use_checkpointing,
-            "steps_before_checkpointing": self.steps_before_checkpointing,
-            "max_eps_before_checkpointing": self.max_eps_before_checkpointing,
-            "baseline_mode": self.baseline_mode,
-            "baseline_q": self.baseline_q,
-        }
-
-
 def make_checkpoint_scaffold(
     *,
     use_checkpointing: bool,
@@ -122,18 +63,13 @@ def make_checkpoint_scaffold(
     ckpt_baseline_q: Optional[float],
     snapshot: Callable[[], None],
     log_metric: Callable[[str, float, int], None],
-) -> CheckpointScaffold:
-    """Resolve checkpoint config and build the :class:`CheckpointScaffold` handle.
-
-    Encapsulates the resolution ladder that was duplicated verbatim in the DQN
-    and DDPG base-class constructors. The base assigns the returned scaffold as
-    ``self.ckpt`` in one line and initialises ``_ckpt_update_residual = 0``
-    separately (it is mutable per-run state, not config).
+) -> "CheckpointController":
+    """Resolve checkpoint config and build its controller.
 
     ``quantile`` (0.2) and ``use_return_standardization`` (False) are hardcoded
     constants local to this factory: ``quantile`` is the default for
     ``baseline_q`` and ``use_return_standardization`` is forwarded to the
-    controller. Neither is a scaffold attribute or an hparam.
+    controller.
 
     Args:
         use_checkpointing: Enable the TD7-style checkpoint schedule.
@@ -150,14 +86,14 @@ def make_checkpoint_scaffold(
             logger.
 
     Returns:
-        The :class:`CheckpointScaffold` handle the base holds as ``self.ckpt``.
+        The :class:`CheckpointController` the base holds as ``self.ckpt``.
     """
     quantile: float = 0.2
     use_return_standardization: bool = False
 
     resolved_baseline_q: float = ckpt_baseline_q if ckpt_baseline_q is not None else quantile
 
-    controller = CheckpointController(
+    return CheckpointController(
         use_checkpointing=use_checkpointing,
         steps_before_checkpointing=steps_before_checkpointing,
         max_eps_before_checkpointing=max_eps_before_checkpointing,
@@ -167,15 +103,6 @@ def make_checkpoint_scaffold(
         use_return_standardization=use_return_standardization,
         snapshot=snapshot,
         log_metric=log_metric,
-    )
-
-    return CheckpointScaffold(
-        controller=controller,
-        use_checkpointing=use_checkpointing,
-        steps_before_checkpointing=steps_before_checkpointing,
-        max_eps_before_checkpointing=max_eps_before_checkpointing,
-        baseline_mode=ckpt_baseline_mode,
-        baseline_q=resolved_baseline_q,
     )
 
 
@@ -197,11 +124,11 @@ class CheckpointController:
     ):
         # Configuration
         self.use_checkpointing = use_checkpointing
-        self._steps_before_checkpointing = int(steps_before_checkpointing)
-        self._max_eps_before_checkpointing = int(max_eps_before_checkpointing)
-        self._baseline_q = baseline_q
-        self._baseline_mode = baseline_mode
-        self._use_return_standardization = use_return_standardization
+        self.steps_before_checkpointing = int(steps_before_checkpointing)
+        self.max_eps_before_checkpointing = int(max_eps_before_checkpointing)
+        self.baseline_q = baseline_q
+        self.baseline_mode = baseline_mode
+        self.use_return_standardization = use_return_standardization
         self._snapshot = snapshot
         self._log_metric = log_metric
 
@@ -231,10 +158,10 @@ class CheckpointController:
         if (
             self.use_checkpointing
             and (not self._enabled)
-            and steps > self._steps_before_checkpointing
+            and steps > self.steps_before_checkpointing
         ):
             # Relax the threshold slightly when entering checkpointing mode
-            self._max_eps_before_update = self._max_eps_before_checkpointing
+            self._max_eps_before_update = self.max_eps_before_checkpointing
             self._enabled = True
 
     def _reset_window(self):
@@ -282,9 +209,9 @@ class CheckpointController:
 
         window_stat = compute_ckpt_window_stat(
             self._returns_window,
-            self._baseline_q,
-            self._use_return_standardization,
-            self._baseline_mode,
+            self.baseline_q,
+            self.use_return_standardization,
+            self.baseline_mode,
         )
         if window_stat is None:
             return True

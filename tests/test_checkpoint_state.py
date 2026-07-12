@@ -126,9 +126,9 @@ def test_checkpoint_round_trip(cls):
     for i, name in enumerate(fields):
         setattr(src, name, _field_value(name, i))
     # Make the schedule state non-default so the spine must carry it.
-    src.ckpt._controller._enabled = True
-    src.ckpt._controller._update_count = 4
-    src.ckpt._controller._baseline = 1.25
+    src.ckpt._enabled = True
+    src.ckpt._update_count = 4
+    src.ckpt._baseline = 1.25
 
     with tempfile.TemporaryDirectory() as d:
         src.save_params(d)
@@ -140,9 +140,9 @@ def test_checkpoint_round_trip(cls):
     # spine
     assert dst.train_steps_count == 11
     assert abs(dst._ckpt_update_residual - 2.5) < 1e-6
-    assert dst.ckpt._controller._enabled is True
-    assert dst.ckpt._controller._update_count == 4
-    assert abs(dst.ckpt._controller._baseline - 1.25) < 1e-6
+    assert dst.ckpt._enabled is True
+    assert dst.ckpt._update_count == 4
+    assert abs(dst.ckpt._baseline - 1.25) < 1e-6
     _assert_tree_equal(src.eval_snapshot, dst.eval_snapshot)
 
     # per-algorithm bundle

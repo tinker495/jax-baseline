@@ -143,6 +143,8 @@ class Deteministic_Policy_Gradient_Family(object):
                 else None
             ),
         )
+        self.baseline_mode = self.ckpt.baseline_mode
+        self.baseline_q = self.ckpt.baseline_q
 
         # Logging throttle based on last log step
         self._last_log_step = 0
