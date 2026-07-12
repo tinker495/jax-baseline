@@ -5,6 +5,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from jax_baselines.BBF.bbf import BBF
+from jax_baselines.BBF.hl_gauss_bbf import HL_GAUSS_BBF
 from jax_baselines.core.bulk_training import (
     bulk_chunk_plan,
     flatten_bulk_batch,
@@ -19,6 +21,7 @@ from jax_baselines.DQN.training import (
     QNetTrainReport,
     QNetTrainResult,
 )
+from jax_baselines.SPR.hl_gauss_spr import HL_GAUSS_SPR
 from jax_baselines.SPR.spr import SPR
 
 
@@ -471,9 +474,6 @@ def test_local_qnet_algorithms_use_train_on_batch_and_inherit_train_step():
         "jax_baselines/IQN/iqn.py": "IQN",
         "jax_baselines/FQF/fqf.py": "FQF",
         "jax_baselines/SPR/spr.py": "SPR",
-        "jax_baselines/SPR/hl_gauss_spr.py": "HL_GAUSS_SPR",
-        "jax_baselines/BBF/bbf.py": "BBF",
-        "jax_baselines/BBF/hl_gauss_bbf.py": "HL_GAUSS_BBF",
     }
 
     repo_root = Path(__file__).resolve().parents[1]
@@ -486,6 +486,12 @@ def test_local_qnet_algorithms_use_train_on_batch_and_inherit_train_step():
 
         assert "_train_on_batch" in method_names
         assert "train_step" not in method_names
+
+
+@pytest.mark.parametrize("algorithm", [HL_GAUSS_SPR, BBF, HL_GAUSS_BBF])
+def test_spr_children_inherit_train_on_batch(algorithm):
+    assert "_train_on_batch" not in algorithm.__dict__
+    assert algorithm._train_on_batch is SPR._train_on_batch
 
 
 def test_dqn_train_on_bulk_scans_updates_and_stacks_priorities():
