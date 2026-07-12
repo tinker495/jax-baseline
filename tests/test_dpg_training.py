@@ -10,7 +10,26 @@ from jax_baselines.core.seeding import key_gen
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.ddpg import DDPG
 from jax_baselines.DDPG.training import DPGTrainingLifecycle, DPGTrainReport
+from jax_baselines.SAC.sac import SAC, SACCheckpointParams
 from jax_baselines.TD7.td7 import TD7
+from jax_baselines.TQC.tqc import TQC, TQCCheckpointParams
+
+
+def test_tqc_inherits_sac_training_spine():
+    assert issubclass(TQC, SAC)
+    assert TQCCheckpointParams is SACCheckpointParams
+    for method_name in (
+        "checkpoint_params",
+        "load_checkpoint_params",
+        "_get_pi_log_prob",
+        "_get_actions",
+        "_train_on_batch",
+        "_train_on_bulk",
+        "_bulk_scan",
+        "_train_step",
+    ):
+        assert method_name not in TQC.__dict__
+        assert getattr(TQC, method_name) is getattr(SAC, method_name)
 
 
 class FakeReplayBuffer:
