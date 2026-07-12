@@ -68,7 +68,7 @@ class FireResetEnv(gym.Wrapper):
 
 
 class EpisodicLifeEnv(gym.Wrapper):
-    def __init__(self, env, kill_on_life_loss=False):
+    def __init__(self, env):
         """Make end-of-life == end-of-episode, but only reset on true game over. Done by DeepMind for the DQN and
         co. since it helps value estimation.
 
@@ -77,7 +77,6 @@ class EpisodicLifeEnv(gym.Wrapper):
         gym.Wrapper.__init__(self, env)
         self.lives = 0
         self.was_real_done = True
-        self.kill_on_life_loss = kill_on_life_loss
 
     def true_reset(self, **kwargs):
         """Force a real environment reset, ignoring episodic life handling.
@@ -114,7 +113,7 @@ class EpisodicLifeEnv(gym.Wrapper):
         :param kwargs: Extra keywords passed to env.reset() call
         :return: ([int] or [float]) the first observation of the environment
         """
-        if self.was_real_done or self.kill_on_life_loss:
+        if self.was_real_done:
             obs, info = self.env.reset(**kwargs)
         else:
             # no-op step to advance from terminated/lost life obs
@@ -256,19 +255,6 @@ class FrameStack(gym.Wrapper):
         return LazyFrames(list(self.frames))
 
 
-class ScaledFloatFrame(gym.ObservationWrapper):
-    def __init__(self, env):
-        gym.ObservationWrapper.__init__(self, env)
-        self.observation_space = spaces.Box(
-            low=0, high=1.0, shape=env.observation_space.shape, dtype=np.float32
-        )
-
-    def observation(self, observation):
-        # careful! This undoes the memory optimization, use
-        # with smaller replay buffers only.
-        return np.array(observation).astype(np.float32) / 255.0
-
-
 class LazyFrames(object):
     def __init__(self, frames):
         """This object ensures that common frames between the observations are only stored once. It exists purely
@@ -299,41 +285,19 @@ class LazyFrames(object):
         return self._force()[i]
 
 
-def make_atari(env_id):
+def make_wrap_atari(env_id="Breakout-v0", clip_rewards=False):
     env = gym.make(env_id, render_mode="rgb_array")
     env = NoopResetEnv(env, noop_max=30)
     if "NoFrameskip" in env.spec.id:
         env = MaxAndSkipEnv(env, skip=4)
-    return env
-
-
-def wrap_deepmind(
-    env,
-    episode_life=True,
-    kill_on_life_loss=False,
-    clip_rewards=True,
-    frame_stack=True,
-    scale=False,
-):
-    """Configure environment for DeepMind-style Atari."""
-    if episode_life:
-        env = EpisodicLifeEnv(env, kill_on_life_loss)
+    env = gym.wrappers.TimeLimit(env, max_episode_steps=10000)
+    env = EpisodicLifeEnv(env)
     if "FIRE" in env.unwrapped.get_action_meanings():
         env = FireResetEnv(env)
     env = WarpFrame(env)
-    if scale:
-        env = ScaledFloatFrame(env)
     if clip_rewards:
         env = ClipRewardEnv(env)
-    if frame_stack:
-        env = FrameStack(env, 4)
-    return env
-
-
-def make_wrap_atari(env_id="Breakout-v0", clip_rewards=False):
-    env = make_atari(env_id)
-    env = gym.wrappers.TimeLimit(env, max_episode_steps=10000)
-    env = wrap_deepmind(env, clip_rewards=clip_rewards, frame_stack=True)
+    env = FrameStack(env, 4)
     return env
 
 
