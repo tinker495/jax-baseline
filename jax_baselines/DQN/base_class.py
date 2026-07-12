@@ -4,6 +4,10 @@ import numpy as np
 import optax
 
 from jax_baselines.core.checkpoint import make_checkpoint_scaffold, snapshot_pytree
+from jax_baselines.core.checkpoint_store import (
+    CheckpointStore,
+    checkpoint_store_or_default,
+)
 from jax_baselines.core.env_info import get_local_env_info
 from jax_baselines.core.eval import evaluate_policy, record_and_test
 from jax_baselines.core.replay_protocol import (
@@ -19,7 +23,6 @@ from jax_baselines.core.rollout import (
 )
 from jax_baselines.core.rollout_stats import EpisodeTracker
 from jax_baselines.core.seeding import key_gen, set_global_seeds
-from jax_baselines.core.serialization import restore, save
 from jax_baselines.core.training_session import TrainingSession, off_policy_loop
 from jax_baselines.DQN.training import (
     QNetTrainingLifecycle,
@@ -76,6 +79,7 @@ class Q_Network_Family:
         initial_checkpoint_window=1,
         ckpt_baseline_mode="median",
         ckpt_baseline_q=None,
+        checkpoint_store: CheckpointStore | None = None,
     ):
         self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
@@ -124,6 +128,7 @@ class Q_Network_Family:
 
         self.compress_memory = compress_memory
         self.replay_factory = replay_factory
+        self.checkpoint_store = checkpoint_store_or_default(checkpoint_store)
 
         self.get_env_setup()
         self.get_memory_setup()
@@ -134,7 +139,6 @@ class Q_Network_Family:
         self.max_eps_before_checkpointing = int(max_eps_before_checkpointing)
         self.initial_checkpoint_window = int(initial_checkpoint_window)
 
-        self.logger_run = None
         self.rollout_tracker = None
         self._ckpt_update_residual = 0
         self.ckpt = make_checkpoint_scaffold(
@@ -145,11 +149,6 @@ class Q_Network_Family:
             ckpt_baseline_mode=ckpt_baseline_mode,
             ckpt_baseline_q=ckpt_baseline_q,
             snapshot=self._checkpoint_update_snapshot,
-            log_metric=lambda key, value, step: (
-                self.logger_run.log_metric(key, value, step)
-                if self.logger_run is not None
-                else None
-            ),
         )
         self.baseline_mode = self.ckpt.baseline_mode
         self.baseline_q = self.ckpt.baseline_q
@@ -165,10 +164,10 @@ class Q_Network_Family:
             self.setup_model()
 
     def save_params(self, path):
-        save(path, self.params)
+        self.checkpoint_store.save(path, self.params)
 
     def load_params(self, path):
-        self.params = self.target_params = restore(path)
+        self.params = self.target_params = self.checkpoint_store.restore(path)
 
     def get_env_setup(self):
         (
@@ -210,8 +209,8 @@ class Q_Network_Family:
     def _make_optimizer(self, learning_rate):
         return self.optimizer_factory(learning_rate)
 
-    def train_step(self, steps, gradient_steps):
-        return self.training_lifecycle.train(steps, gradient_steps)
+    def train_step(self, steps, gradient_steps, logger_run=None, log_interval=None):
+        return self.training_lifecycle.train(steps, gradient_steps, logger_run, log_interval)
 
     def _train_on_batch(self, data, context):
         (
@@ -235,10 +234,13 @@ class Q_Network_Family:
         steps = jnp.asarray([context.train_steps_count for context in contexts])
         keys = jax.random.split(next(self.key_seq), len(contexts)) if self.param_noise else None
         carry = (self.params, self.target_params, self.opt_state)
-        (self.params, self.target_params, self.opt_state), (
-            losses,
-            targets,
-            priorities,
+        (
+            (self.params, self.target_params, self.opt_state),
+            (
+                losses,
+                targets,
+                priorities,
+            ),
         ) = self._bulk_scan(carry, keys, steps, data)
         return QNetTrainResult.from_values(
             loss=jnp.mean(losses),
@@ -449,6 +451,9 @@ class Q_Network_Family:
     def run_training_loop(self, ctx):
         off_policy_loop(self, ctx)
 
+    def release_run_context(self):
+        self.rollout_tracker = None
+
     # -------------------------------
     # Rollout seam (RolloutSpec wiring)
     # -------------------------------
@@ -468,10 +473,13 @@ class Q_Network_Family:
 
     def make_rollout_spec(self, ctx):
         self.rollout_tracker = EpisodeTracker(ctx.logger_run.log_metric, ctx.log_interval)
+        train = lambda steps, gradient_steps: self.train_step(  # noqa: E731
+            steps, gradient_steps, ctx.logger_run, ctx.log_interval
+        )
         pulse = CheckpointTrainPulse(
             train_freq=self.train_freq,
             gradient_steps=self.gradient_steps,
-            train=self.train_step,
+            train=train,
             record_loss=lambda loss: self.lossque.append(loss),
             read_residual=lambda: self._ckpt_update_residual,
             write_residual=lambda value: setattr(self, "_ckpt_update_residual", value),
@@ -488,12 +496,14 @@ class Q_Network_Family:
             vector_action=self._vector_action_selection,
             refresh_exploration=self._refresh_exploration,
             has_true_reset=self._has_true_reset,
-            train=self.train_step,
+            train=train,
             evaluate=lambda steps: self.eval(ctx, steps),
             describe=self.description,
             bind_loss_window=self._bind_loss_window,
             record_rollout_episode=self.rollout_tracker.record,
-            checkpoint_on_episode_end=self.ckpt.on_episode_end,
+            checkpoint_on_episode_end=lambda *args, **kwargs: self.ckpt.on_episode_end(
+                *args, log_metric=ctx.logger_run.log_metric, **kwargs
+            ),
             checkpoint_pulse=pulse,
         )
 
@@ -516,15 +526,15 @@ class Q_Network_Family:
         )
 
     def test(self, episode=10):
-        with self.logger as self.logger_run:
-            self.test_eval_env(episode)
+        with self.logger as logger_run:
+            self.test_eval_env(logger_run, episode)
 
-    def test_eval_env(self, episode):
+    def test_eval_env(self, logger_run, episode):
         # record_and_test expects (env_builder, logger_run, actions_eval_fn, episode, conv_action=None)
         record_test_fn = getattr(self, "record_test_fn", record_and_test)
         return record_test_fn(
             self.env_builder,
-            self.logger_run,
+            logger_run,
             lambda obs: self.actions(obs, 0.0),
             episode,
             conv_action=None,

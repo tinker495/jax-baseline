@@ -51,13 +51,13 @@ class DPGTrainingLifecycle:
     def __init__(self, agent):
         self.agent = agent
 
-    def train(self, steps, gradient_steps):
+    def train(self, steps, gradient_steps, logger_run=None, log_interval=None):
         if gradient_steps <= 0:
             raise ValueError("gradient_steps must be greater than 0")
 
         if self._uses_bulk_pulse(gradient_steps):
             report = self._train_bulk_pulse(steps, gradient_steps)
-            self._log_report(report, steps)
+            self._log_report(report, steps, logger_run, log_interval)
             return report.loss
 
         reports = []
@@ -65,7 +65,7 @@ class DPGTrainingLifecycle:
             reports.append(self._train_one_batch(steps))
 
         report = self.agent._aggregate_train_reports(reports)
-        self._log_report(report, steps)
+        self._log_report(report, steps, logger_run, log_interval)
         return report.loss
 
     def _uses_bulk_pulse(self, gradient_steps):
@@ -138,9 +138,9 @@ class DPGTrainingLifecycle:
             priorities = host_priority_values(report.new_priorities)
             self.agent.replay_buffer.update_priorities(indexes, priorities)
 
-    def _log_report(self, report, steps):
-        logger_run = self.agent.logger_run
-        if logger_run and (steps - self.agent._last_log_step >= self.agent.log_interval):
+    def _log_report(self, report, steps, logger_run, log_interval):
+        interval = self.agent.log_interval if log_interval is None else log_interval
+        if logger_run and (steps - self.agent._last_log_step >= interval):
             self.agent._last_log_step = steps
             for metric_name, metric_value in report.metrics.items():
                 logger_run.log_metric(metric_name, metric_value, steps)

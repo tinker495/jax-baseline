@@ -188,15 +188,11 @@ def _assert_allowlist_matches(actual: set[tuple[str, str]], declared: set[tuple[
 
 
 def test_import_boundary_allowlist_matches_current_forbidden_imports():
-    # Issue #7 audit fix: the ratchet now scans BOTH static source imports and
+    # Issue #7 audit fix: the ratchet scans BOTH static source imports and
     # dynamic ``import_module("...")`` / ``__import__("...")`` calls across the
-    # whole core, not just static imports. The distributed families reach Ray,
-    # cpprb, Gymnasium, and env_builder through *function-local dynamic* imports;
-    # scanning only static ``import`` nodes let those leaks hide from the gate
-    # (a false-green: the allowlist read empty while the core still imported
-    # adapters at runtime). Folding the dynamic scan in makes every forbidden
-    # import — static or dynamic, module-top-level or function-local — answer to
-    # the same stale-aware allowlist below.
+    # whole core. The current allowlist is empty: distributed families use
+    # injected protocols, so a future function-local adapter import must fail
+    # this same gate rather than hide behind a dynamic import.
     actual = _find_forbidden_imports(SCAN_ROOT) | _find_forbidden_dynamic_imports(SCAN_ROOT)
     declared = _allowlist_keys()
 
@@ -304,37 +300,9 @@ def test_import_boundary_allowlist_entries_are_documented():
     assert not duplicate_keys, "duplicate allowlist entries:\n" + _format_pairs(duplicate_keys)
 
 
-def test_import_boundary_final_slice_has_no_common_or_migration_debt_allowlist_entries():
-    """Issue #13 is the final ``common`` dismantling slice.
-
-    The allowlist may be non-empty only for consciously recorded distributed
-    runtime wiring exemptions.  Migration shims, not-yet-moved entries, and
-    anything under ``jax_baselines/common`` should be gone in the same
-    changeset that seals the boundary.
-    """
-
-    migration_debt = [
-        entry
-        for entry in ALLOWED_IMPORTS
-        if entry.tag != "DISTRIBUTED_RUNTIME_EXEMPTION"
-        or entry.path.startswith("jax_baselines/common/")
-    ]
-
-    assert not migration_debt, (
-        "final boundary allowlist must contain only explicit distributed runtime exemptions:\n"
-        + "\n".join(
-            f"  - {entry.path} :: {entry.token} [{entry.tag}] {entry.retiring_slice}"
-            for entry in migration_debt
-        )
-    )
-
-
-def test_import_boundary_remaining_exemptions_are_distributed_ray_only():
+def test_import_boundary_final_slice_has_empty_allowlist():
+    """Core adapter migration is complete; no runtime exemption remains."""
     assert ALLOWED_IMPORTS == ()
-    for entry in ALLOWED_IMPORTS:
-        assert entry.tag == "DISTRIBUTED_RUNTIME_EXEMPTION"
-        assert entry.token == "ray"
-        assert "distributed" in entry.retiring_slice.lower()
 
 
 def test_algorithm_core_has_no_ray_shaped_distributed_interface():

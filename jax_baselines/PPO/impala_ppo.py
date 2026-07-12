@@ -34,6 +34,7 @@ class IMPALA_PPO(SurrogateIMPALA):
         seed=None,
         optimizer_factory=None,
         worker_replay_factory=None,
+        checkpoint_store=None,
     ):
 
         self.minibatch_size = 256
@@ -63,6 +64,7 @@ class IMPALA_PPO(SurrogateIMPALA):
             seed=seed,
             optimizer_factory=optimizer_factory,
             worker_replay_factory=worker_replay_factory,
+            checkpoint_store=checkpoint_store,
         )
 
     def _loss_discrete(self, params, obses, actions, vs, mu_prob, pi_prob, adv, key):

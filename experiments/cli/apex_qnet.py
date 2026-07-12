@@ -15,10 +15,7 @@ from jax_baselines.C51.apex_c51 import APE_X_C51
 from jax_baselines.DQN.apex_dqn import APE_X_DQN
 from jax_baselines.IQN.apex_iqn import APE_X_IQN
 from jax_baselines.QRDQN.apex_qrdqn import APE_X_QRDQN
-from replay_memory.replay_factory import (
-    make_multi_prioritized_buffer,
-    make_worker_replay_buffer,
-)
+from replay_memory.replay_factory import make_apex_replay
 
 
 def add_args(parser):
@@ -94,8 +91,7 @@ def _common(a):
         ),
         "compress_memory": a.compress_memory,
         "seed": a.seed,
-        "multi_replay_factory": make_multi_prioritized_buffer,
-        "worker_replay_factory": make_worker_replay_buffer,
+        "apex_replay_factory": make_apex_replay,
     }
 
 

@@ -5,18 +5,21 @@ import jax
 import numpy as np
 
 from jax_baselines.APE_X.exploration import worker_epsilons
+from jax_baselines.core.checkpoint_store import (
+    CheckpointStore,
+    checkpoint_store_or_default,
+)
+from jax_baselines.core.distributed_runtime import DistributedRuntime
 from jax_baselines.core.env_info import get_worker_env_info
 from jax_baselines.core.hparams import get_hyper_params
 from jax_baselines.core.replay_protocol import (
-    MultiPrioritizedReplayBufferFactory,
+    ApeXReplayFactory,
     PriorityNeed,
     SharedPrioritizedReplayNeed,
-    WorkerReplayBufferFactory,
     require_replay_factory,
 )
 from jax_baselines.core.runtime_adapters import make_progress
 from jax_baselines.core.seeding import key_gen, set_global_seeds
-from jax_baselines.core.serialization import restore, save
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
@@ -27,7 +30,7 @@ class Ape_X_Family(object):
         self,
         workers,
         model_builder_maker,
-        runtime,
+        runtime: DistributedRuntime,
         gamma=0.995,
         learning_rate=5e-5,
         buffer_size=50000,
@@ -53,14 +56,14 @@ class Ape_X_Family(object):
         seed=None,
         optimizer_factory: OptimizerFactory | None = None,
         compress_memory=False,
-        multi_replay_factory: MultiPrioritizedReplayBufferFactory | None = None,
-        worker_replay_factory: WorkerReplayBufferFactory | None = None,
+        apex_replay_factory: ApeXReplayFactory | None = None,
+        checkpoint_store: CheckpointStore | None = None,
     ):
         self.workers = workers
         self.model_builder_maker = model_builder_maker
         self.runtime = runtime
-        self.multi_replay_factory = multi_replay_factory
-        self.worker_replay_factory = worker_replay_factory
+        self.apex_replay_factory = apex_replay_factory
+        self.checkpoint_store = checkpoint_store_or_default(checkpoint_store)
         self.log_interval = log_interval
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
@@ -111,10 +114,10 @@ class Ape_X_Family(object):
             self.setup_model()
 
     def save_params(self, path):
-        save(path, self.params)
+        self.checkpoint_store.save(path, self.params)
 
     def load_params(self, path):
-        self.params = self.target_params = restore(path)
+        self.params = self.target_params = self.checkpoint_store.restore(path)
 
     def _make_optimizer(self, learning_rate):
         return self.optimizer_factory(learning_rate)
@@ -129,11 +132,7 @@ class Ape_X_Family(object):
         print("-------------------------------------------------")
 
     def get_memory_setup(self):
-        multi_replay_factory = require_replay_factory(
-            self.multi_replay_factory, "MultiPrioritizedReplayBufferFactory"
-        )
-        require_replay_factory(self.worker_replay_factory, "WorkerReplayBufferFactory")
-        self.replay_buffer = multi_replay_factory(
+        replay_topology = require_replay_factory(self.apex_replay_factory, "ApeXReplayFactory")(
             SharedPrioritizedReplayNeed(
                 buffer_size=self.buffer_size,
                 observation_space=self.observation_space,
@@ -148,6 +147,8 @@ class Ape_X_Family(object):
                 compress_observations=self.compress_memory,
             )
         )
+        self.replay_buffer = replay_topology.shared_buffer
+        self.worker_replay_factory = replay_topology.worker_factory
 
     def setup_model(self):
         pass
@@ -210,80 +211,90 @@ class Ape_X_Family(object):
         progress_factory = progress_factory or make_progress
         pbar = progress_factory(total_trainstep, miniters=log_interval)
 
-        self.logger_server = self.runtime.create_logger_server(
-            self.log_dir, run_name, experiment_name, logger_factory
-        )
-        hparams = get_hyper_params(self)
-        self.logger_server.register_hparams(hparams)
+        logger_server = None
+        try:
+            logger_server = self.runtime.create_logger_server(
+                self.log_dir, run_name, experiment_name, logger_factory
+            )
+            self.logger_server = logger_server
+            hparams = get_hyper_params(self)
+            logger_server.register_hparams(hparams)
 
-        if self.env_type == "SingleEnv":
-            self.learn_SingleEnv(pbar, callback, log_interval)
+            if self.env_type == "SingleEnv":
+                self.learn_SingleEnv(pbar, callback, log_interval)
 
-        self.save_params(self.logger_server.get_log_dir())
+            self.save_params(logger_server.get_log_dir())
+        finally:
+            try:
+                if logger_server is not None:
+                    try:
+                        logger_server.last_update()
+                    finally:
+                        logger_server.close()
+            finally:
+                self.runtime.shutdown()
 
     def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
         stop = self.runtime.create_event()
-        worker_num = len(self.workers)
-        update = [self.runtime.create_event() for i in range(worker_num)]
         stop.clear()
-        for u in update:
-            u.clear()
-
-        cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
-        param_server = self.runtime.create_param_server(cpu_param)
-
-        epsilons = worker_epsilons(self.exploration_initial_eps, self.exploration_decay, worker_num)
-        self.logger_server.add_multiline(epsilons)
         jobs = []
-        for idx in range(worker_num):
-            if self.param_noise:
-                eps = None
-            else:
-                eps = epsilons[idx]
-            jobs.append(
-                self.workers[idx].run(
-                    1000,
-                    self.replay_buffer.buffer_info(),
-                    self.worker_replay_factory,
-                    self.model_builder,
-                    self.actor_builder,
-                    param_server,
-                    self.logger_server,
-                    update[idx],
-                    stop,
-                    eps=eps,
-                    seed=self.seed + idx,
-                )
+        try:
+            worker_num = len(self.workers)
+            update = [self.runtime.create_event() for _ in range(worker_num)]
+            for u in update:
+                u.clear()
+
+            cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
+            param_server = self.runtime.create_param_server(cpu_param)
+
+            epsilons = worker_epsilons(
+                self.exploration_initial_eps, self.exploration_decay, worker_num
             )
-            time.sleep(0.1)
+            self.logger_server.add_multiline(epsilons)
+            for idx in range(worker_num):
+                if self.param_noise:
+                    eps = None
+                else:
+                    eps = epsilons[idx]
+                jobs.append(
+                    self.workers[idx].run(
+                        1000,
+                        self.replay_buffer.buffer_info(),
+                        self.worker_replay_factory,
+                        self.model_builder,
+                        self.actor_builder,
+                        param_server,
+                        self.logger_server,
+                        update[idx],
+                        stop,
+                        eps=eps,
+                        seed=self.seed + idx,
+                    )
+                )
+                time.sleep(0.1)
 
-        print("Start Warmup")
-        while len(self.replay_buffer) < self.learning_starts:
-            time.sleep(1)
-            if stop.is_set():
-                print("Stop Training")
-                self.runtime.wait(jobs, timeout=300)
-                self.runtime.shutdown()
-                return
+            print("Start Warmup")
+            while len(self.replay_buffer) < self.learning_starts:
+                time.sleep(1)
+                if stop.is_set():
+                    print("Stop Training")
+                    return
 
-        print("Start Training")
-        self.lossque = deque(maxlen=10)
-        for steps in pbar:
-            if stop.is_set():
-                print("Stop Training")
-                break
-            loss = self.train_step(steps, self.gradient_steps)
-            self.lossque.append(loss)
-            if steps % log_interval == 0:
-                pbar.set_description(self.description())
-            if steps % self.target_network_update_freq == 0:
-                cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
-                param_server.update_params(cpu_param)
-                for u in update:
-                    u.set()
-        self.logger_server.last_update()
-        self.logger_server.close()
-        stop.set()
-        self.runtime.wait(jobs, timeout=300)
-        time.sleep(1)
-        self.runtime.shutdown()
+            print("Start Training")
+            self.lossque = deque(maxlen=10)
+            for steps in pbar:
+                if stop.is_set():
+                    print("Stop Training")
+                    break
+                loss = self.train_step(steps, self.gradient_steps)
+                self.lossque.append(loss)
+                if steps % log_interval == 0:
+                    pbar.set_description(self.description())
+                if steps % self.target_network_update_freq == 0:
+                    cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
+                    param_server.update_params(cpu_param)
+                    for u in update:
+                        u.set()
+        finally:
+            stop.set()
+            self.runtime.wait(jobs, timeout=300)

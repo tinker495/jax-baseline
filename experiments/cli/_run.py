@@ -5,9 +5,11 @@ from dataclasses import dataclass
 from importlib import import_module
 from typing import Callable, Protocol
 
+from experiments.checkpoint_store import FileCheckpointStore
 from experiments.cli._common import load_runtime_env
 from experiments.cli._loggers import add_logger_args, resolve_logger_factory
 from experiments.runtime_adapters import make_progress, record_and_test
+from jax_baselines.core.distributed_runtime import DistributedRuntime
 
 
 @dataclass(frozen=True)
@@ -79,7 +81,11 @@ def run_family(runner: FamilyRunner, argv=None):
     maker = resolve_maker(runner, spec, args)
     env_builder, policy_kwargs = runner.build_env(args)
     agent = spec.resolve_cls(args)(
-        env_builder, maker, policy_kwargs=policy_kwargs, **spec.build(args)
+        env_builder,
+        maker,
+        policy_kwargs=policy_kwargs,
+        checkpoint_store=FileCheckpointStore(),
+        **spec.build(args),
     )
     agent.learn(
         int(args.steps),
@@ -97,13 +103,12 @@ def run_family(runner: FamilyRunner, argv=None):
 class DistributedFamilyRunner:
     """Sibling of FamilyRunner for Ray-based families (APE-X / IMPALA).
 
-    The agent is built as ``cls(workers, maker, runtime, **build)`` (not from an
-    env_builder), gets worker handles from the distributed runtime adapter, and
-    runs ``learn(steps)`` only (no experiment_name, no test()).
+    The agent gets worker handles and the explicit ``DistributedRuntime`` adapter,
+    then runs ``learn(steps)`` only (no experiment_name, no test()).
     """
 
     add_args: Callable[[ArgumentParser], None]
-    make_workers: Callable[[Namespace, object], list]
+    make_workers: Callable[[Namespace, DistributedRuntime], list]
     policy_kwargs: Callable[[Namespace], dict]
     algos: dict[str, AlgoSpec]
     maker_pkg: str  # builder package with a "{lib}" placeholder
@@ -125,18 +130,22 @@ def run_distributed_family(runner: DistributedFamilyRunner, argv=None):
     maker = resolve_maker(runner, spec, args)
     logger_factory = resolve_logger_factory(args)
     runtime = RayDistributedRuntime(num_cpus=args.worker + runner.ray_cpu_headroom, num_gpus=0)
-    workers = runner.make_workers(args, runtime)
-    agent = spec.resolve_cls(args)(
-        workers,
-        maker,
-        runtime,
-        policy_kwargs=runner.policy_kwargs(args),
-        **spec.build(args),
-    )
-    agent.learn(
-        int(args.steps),
-        experiment_name=args.experiment_name,
-        logger_factory=logger_factory,
-        progress_factory=make_progress,
-    )
-    return agent
+    try:
+        workers = runner.make_workers(args, runtime)
+        agent = spec.resolve_cls(args)(
+            workers,
+            maker,
+            runtime,
+            policy_kwargs=runner.policy_kwargs(args),
+            checkpoint_store=FileCheckpointStore(),
+            **spec.build(args),
+        )
+        agent.learn(
+            int(args.steps),
+            experiment_name=args.experiment_name,
+            logger_factory=logger_factory,
+            progress_factory=make_progress,
+        )
+        return agent
+    finally:
+        runtime.shutdown()

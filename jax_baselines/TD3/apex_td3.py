@@ -45,8 +45,8 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
         optimizer_factory=None,
         compress_memory=False,
         param_broadcast_freq=20,
-        multi_replay_factory=None,
-        worker_replay_factory=None,
+        apex_replay_factory=None,
+        checkpoint_store=None,
     ):
         self.action_noise = exploration_initial_eps ** (1 + exploration_decay)
         self.target_action_noise = self.action_noise * target_action_noise_mul
@@ -81,8 +81,8 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
             optimizer_factory=optimizer_factory,
             compress_memory=compress_memory,
             param_broadcast_freq=param_broadcast_freq,
-            multi_replay_factory=multi_replay_factory,
-            worker_replay_factory=worker_replay_factory,
+            apex_replay_factory=apex_replay_factory,
+            checkpoint_store=checkpoint_store,
         )
 
     def setup_model(self):

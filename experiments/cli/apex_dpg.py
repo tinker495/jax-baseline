@@ -13,10 +13,7 @@ from experiments.optimizers import make_batch_scaled_optimizer_factory
 from jax_baselines.APE_X.dpg_worker import Ape_X_Worker
 from jax_baselines.DDPG.apex_ddpg import APE_X_DDPG
 from jax_baselines.TD3.apex_td3 import APE_X_TD3
-from replay_memory.replay_factory import (
-    make_multi_prioritized_buffer,
-    make_worker_replay_buffer,
-)
+from replay_memory.replay_factory import make_apex_replay
 
 
 def add_args(parser):
@@ -79,8 +76,7 @@ def _common(a):
         "optimizer_factory": make_batch_scaled_optimizer_factory(
             a.optimizer, a.batch_num * a.batch_size
         ),
-        "multi_replay_factory": make_multi_prioritized_buffer,
-        "worker_replay_factory": make_worker_replay_buffer,
+        "apex_replay_factory": make_apex_replay,
     }
 
 

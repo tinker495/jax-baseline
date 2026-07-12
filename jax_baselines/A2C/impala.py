@@ -34,6 +34,7 @@ class IMPALA(IMPALA_Family):
         seed=None,
         optimizer_factory=None,
         worker_replay_factory=None,
+        checkpoint_store=None,
     ):
 
         super().__init__(
@@ -59,6 +60,7 @@ class IMPALA(IMPALA_Family):
             seed=seed,
             optimizer_factory=optimizer_factory,
             worker_replay_factory=worker_replay_factory,
+            checkpoint_store=checkpoint_store,
         )
 
     def setup_model(self):

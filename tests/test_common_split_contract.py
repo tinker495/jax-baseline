@@ -20,6 +20,7 @@ EXPECTED_MATH_MODULES = (
 
 EXPECTED_CORE_MODULES = (
     "jax_baselines.core.checkpoint",
+    "jax_baselines.core.checkpoint_store",
     "jax_baselines.core.checkpoint_state",
     "jax_baselines.core.env_info",
     "jax_baselines.core.env_protocols",
@@ -30,7 +31,6 @@ EXPECTED_CORE_MODULES = (
     "jax_baselines.core.rollout",
     "jax_baselines.core.rollout_stats",
     "jax_baselines.core.runtime_adapters",
-    "jax_baselines.core.serialization",
     "jax_baselines.core.training_session",
 )
 

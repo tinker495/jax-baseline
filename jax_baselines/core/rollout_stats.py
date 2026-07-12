@@ -29,9 +29,9 @@ class EpisodeTracker:
     ``deque`` convention, trading smoothness for responsiveness.
 
     The engine that drives the rollout stays logger-free: it only calls
-    :meth:`record`. The ``log_metric`` callable is injected by the agent and
-    resolves the live ``logger_run`` lazily, so the tracker can be constructed
-    once at agent ``__init__`` and is inert until a run binds the logger.
+    :meth:`record`. The ``log_metric`` callable is bound to the active run and
+    the training session releases the tracker before that run's logger leaves
+    scope.
     """
 
     def __init__(self, log_metric, log_interval, window=10):

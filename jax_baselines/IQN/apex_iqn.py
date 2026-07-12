@@ -50,8 +50,8 @@ class APE_X_IQN(Ape_X_Family):
         seed=None,
         optimizer_factory=None,
         compress_memory=False,
-        multi_replay_factory=None,
-        worker_replay_factory=None,
+        apex_replay_factory=None,
+        checkpoint_store=None,
     ):
         self.n_support = n_support
         self.delta = delta
@@ -87,8 +87,8 @@ class APE_X_IQN(Ape_X_Family):
             seed=seed,
             optimizer_factory=optimizer_factory,
             compress_memory=compress_memory,
-            multi_replay_factory=multi_replay_factory,
-            worker_replay_factory=worker_replay_factory,
+            apex_replay_factory=apex_replay_factory,
+            checkpoint_store=checkpoint_store,
         )
 
     def setup_model(self):

@@ -148,11 +148,13 @@ def test_apex_dpg_constructors_initialize_model_setup_dependencies(monkeypatch, 
         def get_buffer_info(self):
             return object()
 
-    def _multi_replay_factory(_need):
-        return _Replay()
-
     def _worker_replay_factory(*_args, **_kwargs):
         return object()
+
+    def _apex_replay_factory(_need):
+        from jax_baselines.core.replay_protocol import ApeXReplayTopology
+
+        return ApeXReplayTopology(_Replay(), _worker_replay_factory)
 
     def _optimizer_factory(_learning_rate):
         class _Optimizer:
@@ -172,8 +174,7 @@ def test_apex_dpg_constructors_initialize_model_setup_dependencies(monkeypatch, 
     built = spec.build(args)
     built.update(
         {
-            "multi_replay_factory": _multi_replay_factory,
-            "worker_replay_factory": _worker_replay_factory,
+            "apex_replay_factory": _apex_replay_factory,
             "optimizer_factory": _optimizer_factory,
         }
     )
