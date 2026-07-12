@@ -1,11 +1,8 @@
 """Shared actor/critic blocks for the stochastic Gaussian DPG builders.
 
-sac, dac and tqc share the byte-identical squashed-Gaussian ``Actor``
-(``(mu, log_std)`` head). sac and dac additionally share the byte-identical
-plain ``Critic`` (single ``Dense(1)`` head); tqc keeps its own quantile critic
-and dac keeps its own ``Optimistic_Actor``. Per-builder critic wiring (twin
-critics, optimistic actor) stays in each builder's ``model_builder_maker``.
-Mirrors the deterministic ``ddpg_td3_blocks`` sibling.
+SAC and TQC share the squashed-Gaussian ``Actor`` (``(mu, log_std)`` head).
+SAC also uses the plain ``Critic`` here; TQC keeps its quantile critic in its
+builder. Mirrors the deterministic ``ddpg_td3_blocks`` sibling.
 """
 
 import flax.linen as nn
