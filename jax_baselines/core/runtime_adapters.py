@@ -39,31 +39,6 @@ class LoggerRun(Protocol):
         ...
 
 
-class LoggerFactory(Protocol):
-    def __call__(
-        self, run_name: str, experiment_name: str, local_dir: str, agent: Optional[Any]
-    ) -> Any:
-        ...
-
-
-class ProgressBar(Protocol):
-    def __iter__(self) -> Iterator[int]:
-        ...
-
-    def set_description(self, desc: str) -> None:
-        ...
-
-
-class ProgressFactory(Protocol):
-    def __call__(self, *args: Any, **kwargs: Any) -> ProgressBar:
-        ...
-
-
-class EvaluationRecorder(Protocol):
-    def __call__(self, env_builder, logger_run, actions_eval_fn, episode, conv_action=None):
-        ...
-
-
 class NoOpLoggerRun:
     """Protocol-safe ``LoggerRun`` used when no experiment adapter is injected."""
 
