@@ -26,6 +26,7 @@ class TD7CheckpointParams:
 
 
 class TD7(Deteministic_Policy_Gradient_Family):
+    _run_name = "TD7"
     supports_bulk_training = True
 
     def __init__(
@@ -516,27 +517,3 @@ class TD7(Deteministic_Policy_Gradient_Family):
         if self.n_step_method:
             run_name = "{}Step_".format(self.n_step) + run_name
         return run_name
-
-    def learn(
-        self,
-        total_timesteps,
-        callback=None,
-        log_interval=1000,
-        experiment_name="TD7",
-        run_name="TD7",
-        eval_num=100,
-        logger_factory=None,
-        progress_factory=None,
-        record_test_fn=None,
-    ):
-        super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            experiment_name,
-            run_name,
-            eval_num,
-            logger_factory=logger_factory,
-            progress_factory=progress_factory,
-            record_test_fn=record_test_fn,
-        )

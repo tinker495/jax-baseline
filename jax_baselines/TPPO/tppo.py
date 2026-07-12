@@ -17,6 +17,8 @@ from jax_baselines.math.returns import (
 
 
 class TPPO(Actor_Critic_Policy_Gradient_Family):
+    _run_name = "TPPO"
+
     def __init__(
         self,
         env_builder,
@@ -288,23 +290,3 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         else:
             total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss, jnp.mean(kl))
-
-    def learn(
-        self,
-        total_timesteps,
-        callback=None,
-        log_interval=1000,
-        experiment_name="TPPO",
-        run_name="TPPO",
-        eval_num=100,
-        **kwargs,
-    ):
-        return super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            experiment_name,
-            run_name,
-            eval_num,
-            **kwargs,
-        )

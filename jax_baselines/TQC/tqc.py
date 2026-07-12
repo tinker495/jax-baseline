@@ -12,6 +12,7 @@ TQCCheckpointParams = SACCheckpointParams
 
 
 class TQC(SAC):
+    _run_name = "TQC"
     supports_bulk_training = True
 
     def __init__(
@@ -126,31 +127,9 @@ class TQC(SAC):
             next_q = truncated_mixture(qnets_pi, self.quantile_drop) - ent_coef * log_prob
         return (not_terminateds * next_q * self._gamma) + rewards
 
-    def learn(
-        self,
-        total_timesteps,
-        callback=None,
-        log_interval=1000,
-        experiment_name="TQC",
-        run_name="TQC",
-        eval_num=100,
-        logger_factory=None,
-        progress_factory=None,
-        record_test_fn=None,
-    ):
-        run_name = run_name + "({:d})".format(self.n_support)
-        if self.mixture_type == "truncated":
-            run_name = run_name + "_truncated({:d})".format(self.quantile_drop)
-        else:
-            run_name = run_name + "_min"
-        super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            experiment_name,
-            run_name,
-            eval_num,
-            logger_factory=logger_factory,
-            progress_factory=progress_factory,
-            record_test_fn=record_test_fn,
+    def run_name_update(self, run_name):
+        run_name += f"({self.n_support:d})"
+        run_name += (
+            f"_truncated({self.quantile_drop:d})" if self.mixture_type == "truncated" else "_min"
         )
+        return super().run_name_update(run_name)

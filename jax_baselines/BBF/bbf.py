@@ -13,6 +13,8 @@ from jax_baselines.SPR.spr import SPR
 
 
 class BBF(SPR):
+    _run_name = "BBF"
+
     def __init__(
         self,
         env_builder: callable,
@@ -253,27 +255,3 @@ class BBF(SPR):
         if self.param_noise:
             run_name = "Noisy_" + run_name
         return run_name
-
-    def learn(
-        self,
-        total_timesteps,
-        callback=None,
-        log_interval=1000,
-        experiment_name="BBF",
-        run_name="BBF",
-        eval_num=100,
-        logger_factory=None,
-        progress_factory=None,
-        record_test_fn=None,
-    ):
-        super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            experiment_name,
-            run_name,
-            eval_num,
-            logger_factory=logger_factory,
-            progress_factory=progress_factory,
-            record_test_fn=record_test_fn,
-        )

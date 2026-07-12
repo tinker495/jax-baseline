@@ -5,6 +5,66 @@ from jax_baselines.IMPALA.surrogate_base import SurrogateIMPALA
 
 
 class IMPALA_SPO(SurrogateIMPALA):
+    _run_name = "IMPALA_SPO"
+    _learn_log_interval = 10
+
+    def __init__(
+        self,
+        workers,
+        model_builder_maker,
+        runtime,
+        ppo_eps=0.2,
+        epoch_num=3,
+        buffer_size=0,
+        gamma=0.995,
+        lamda=0.95,
+        learning_rate=3e-4,
+        update_freq=100,
+        batch_size=1024,
+        sample_size=1,
+        val_coef=0.2,
+        ent_coef=0.01,
+        use_entropy_adv_shaping=True,
+        entropy_adv_shaping_kappa=2.0,
+        rho_max=1.0,
+        log_interval=1,
+        log_dir=None,
+        _init_setup_model=True,
+        policy_kwargs=None,
+        seed=None,
+        optimizer_factory=None,
+        worker_replay_factory=None,
+    ):
+
+        self.minibatch_size = 256
+        self.epoch_num = epoch_num
+        self.ppo_eps = ppo_eps
+
+        super().__init__(
+            workers,
+            model_builder_maker,
+            runtime=runtime,
+            buffer_size=buffer_size,
+            gamma=gamma,
+            lamda=lamda,
+            learning_rate=learning_rate,
+            update_freq=update_freq,
+            batch_size=batch_size,
+            sample_size=sample_size,
+            val_coef=val_coef,
+            ent_coef=ent_coef,
+            use_entropy_adv_shaping=use_entropy_adv_shaping,
+            entropy_adv_shaping_kappa=entropy_adv_shaping_kappa,
+            rho_max=rho_max,
+            log_interval=log_interval,
+            log_dir=log_dir,
+            _init_setup_model=_init_setup_model,
+            policy_kwargs=policy_kwargs,
+            seed=seed,
+            optimizer_factory=optimizer_factory,
+            worker_replay_factory=worker_replay_factory,
+        )
+
     def _loss_discrete(self, params, obses, actions, vs, mu_prob, pi_prob, adv, key):
         feature = self.preproc(params, key, obses)
         vals = self.critic(params, key, feature)
@@ -69,27 +129,3 @@ class IMPALA_SPO(SurrogateIMPALA):
         else:
             total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
-
-    def learn(
-        self,
-        total_trainstep,
-        callback=None,
-        log_interval=10,
-        run_name="IMPALA_SPO",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
-        experiment_name="experiment",
-        logger_factory=None,
-        progress_factory=None,
-    ):
-        super().learn(
-            total_trainstep,
-            callback,
-            log_interval,
-            run_name,
-            reset_num_timesteps,
-            replay_wrapper,
-            experiment_name=experiment_name,
-            logger_factory=logger_factory,
-            progress_factory=progress_factory,
-        )

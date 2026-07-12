@@ -30,6 +30,7 @@ from jax_baselines.math.param_updates import (
 
 
 class SPR(Q_Network_Family):
+    _run_name = "SPR"
     supports_bulk_training = True
 
     def __init__(
@@ -540,27 +541,3 @@ class SPR(Q_Network_Family):
             n_step_str = "OF_"
             run_name = n_step_str + run_name
         return run_name
-
-    def learn(
-        self,
-        total_timesteps,
-        callback=None,
-        log_interval=1000,
-        experiment_name="SPR",
-        run_name="SPR",
-        eval_num=100,
-        logger_factory=None,
-        progress_factory=None,
-        record_test_fn=None,
-    ):
-        super().learn(
-            total_timesteps,
-            callback,
-            log_interval,
-            experiment_name,
-            run_name,
-            eval_num,
-            logger_factory=logger_factory,
-            progress_factory=progress_factory,
-            record_test_fn=record_test_fn,
-        )

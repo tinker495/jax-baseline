@@ -11,6 +11,9 @@ from jax_baselines.math.policy_math import (
 
 
 class IMPALA_TPPO(IMPALA_Family):
+    _run_name = "IMPALA_TPPO"
+    _learn_log_interval = 10
+
     def __init__(
         self,
         workers,
@@ -351,28 +354,7 @@ class IMPALA_TPPO(IMPALA_Family):
             total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
-    def learn(
-        self,
-        total_trainstep,
-        callback=None,
-        log_interval=10,
-        run_name="IMPALA_TPPO",
-        reset_num_timesteps=True,
-        replay_wrapper=None,
-        experiment_name="experiment",
-        logger_factory=None,
-        progress_factory=None,
-    ):
+    def run_name_update(self, run_name):
         if self.mu_ratio != 0.0:
             run_name += f"({self.mu_ratio:.2f})"
-        super().learn(
-            total_trainstep,
-            callback,
-            log_interval,
-            run_name,
-            reset_num_timesteps,
-            replay_wrapper,
-            experiment_name=experiment_name,
-            logger_factory=logger_factory,
-            progress_factory=progress_factory,
-        )
+        return super().run_name_update(run_name)

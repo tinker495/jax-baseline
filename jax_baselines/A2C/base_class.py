@@ -28,6 +28,8 @@ from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 class Actor_Critic_Policy_Gradient_Family(object):
+    _run_name = "A2C"
+
     def __init__(
         self,
         env_builder,
@@ -254,13 +256,17 @@ class Actor_Critic_Policy_Gradient_Family(object):
         total_timesteps,
         callback=None,
         log_interval=1000,
-        experiment_name="A2C",
-        run_name="A2C",
+        experiment_name=None,
+        run_name=None,
         eval_num=100,
         logger_factory=None,
         progress_factory=None,
         record_test_fn=None,
     ):
+        if experiment_name is None:
+            experiment_name = self._run_name
+        if run_name is None:
+            run_name = self._run_name
         return TrainingSession().run(
             self,
             total_timesteps,
