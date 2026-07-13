@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 from importlib import import_module
 from threading import Event
 from unittest.mock import MagicMock, Mock, call
@@ -15,6 +16,33 @@ FAMILIES = (
     ),
     ("jax_baselines.IMPALA.base_class", "IMPALA_Family", "impala"),
 )
+
+
+def test_runtime_authenticates_workers_before_core_construction(monkeypatch):
+    from experiments import distributed_runtime
+
+    process = type("Process", (), {"authkey": b"ray"})()
+    monkeypatch.setattr(distributed_runtime.mp, "current_process", lambda: process)
+
+    class Worker:
+        def __init__(self, value, *, seed):
+            self.info = value, seed, process.authkey
+
+        def get_info(self):
+            return self.info
+
+        def run(self, value):
+            return value
+
+    worker = distributed_runtime._AuthenticatedWorker(
+        Worker,
+        base64.b64encode(b"manager"),
+        ("env",),
+        {"seed": 7},
+    )
+
+    assert worker.get_info() == ("env", 7, b"manager")
+    assert worker.run("result") == "result"
 
 
 def _make_agent(monkeypatch, module_name, class_name, kind, *, ready, stop_on_run):
