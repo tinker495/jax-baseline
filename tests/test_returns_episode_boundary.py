@@ -184,14 +184,21 @@ class _ScriptEnv:
         self._script = term_script
         self._t = 0
         self.sent_actions = []
+        self.awaiting_result = False
 
     def current_obs(self):
         return np.zeros((self.ws, 2), dtype=np.float32)
 
     def step(self, actions):
+        if self.awaiting_result:
+            raise RuntimeError("step called while a result is pending")
+        self.awaiting_result = True
         self.sent_actions.append(np.asarray(actions).copy())
 
     def get_result(self):
+        if not self.awaiting_result:
+            raise RuntimeError("get_result called without a pending step")
+        self.awaiting_result = False
         terms = self._script[self._t]
         self._t += 1
         nxt = np.ones((self.ws, 2), dtype=np.float32)
@@ -206,8 +213,12 @@ class _LivesScriptEnv(_ScriptEnv):
         self._rows = rows
         self._t = 0
         self.sent_actions = []
+        self.awaiting_result = False
 
     def get_result(self):
+        if not self.awaiting_result:
+            raise RuntimeError("get_result called without a pending step")
+        self.awaiting_result = False
         terms, truncs, lives = self._rows[self._t]
         self._t += 1
         return (
@@ -309,14 +320,14 @@ def test_a2c_vectorized_converts_continuous_actions_before_env_step():
 
     Actor_Critic_Policy_Gradient_Family.learn_VectorizedEnv(agent, _Ctx([0]))
 
-    assert len(agent.env.sent_actions) == 2
+    assert len(agent.env.sent_actions) == 1
     assert all(np.array_equal(action, np.ones((2, 1))) for action in agent.env.sent_actions)
     assert np.array_equal(agent.buffer.actions[0], np.full((2, 1), 6.0))
 
 
 def test_a2c_vectorized_recomputes_pipelined_action_after_policy_update():
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
-    agent.env = _ScriptEnv([np.array([False, False])])
+    agent.env = _ScriptEnv([np.array([False, False]), np.array([False, False])])
     agent.buffer = _RecordingBuffer()
     agent.worker_size = 2
     agent.batch_size = 1
@@ -335,13 +346,32 @@ def test_a2c_vectorized_recomputes_pipelined_action_after_policy_update():
     agent.eval = lambda ctx, steps: None
     agent.description = lambda eval_result: "desc"
 
-    ctx = _Ctx([0])
+    ctx = _Ctx([0, 1])
     Actor_Critic_Policy_Gradient_Family.learn_VectorizedEnv(agent, ctx)
 
     sent_versions = [int(actions[0, 0]) for actions in agent.env.sent_actions]
     assert sent_versions == [0, 1]
     assert train_calls == [(0, ctx.logger_run)]
     assert not hasattr(agent, "logger_run")
+
+
+def test_a2c_vectorized_can_run_twice_without_a_pending_step():
+    agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.env = _ScriptEnv([np.array([False, False]), np.array([False, False])])
+    agent.buffer = _RecordingBuffer()
+    agent.worker_size = 2
+    agent.batch_size = 10_000
+    agent.action_type = "discrete"
+    agent.actions = lambda obs: np.zeros((2, 1), dtype=np.int32)
+    agent.train_step = lambda steps: 0.0
+    agent.eval = lambda ctx, steps: None
+    agent.description = lambda eval_result: "desc"
+
+    Actor_Critic_Policy_Gradient_Family.learn_VectorizedEnv(agent, _Ctx([0]))
+    assert not agent.env.awaiting_result
+
+    Actor_Critic_Policy_Gradient_Family.learn_VectorizedEnv(agent, _Ctx([1]))
+    assert not agent.env.awaiting_result
 
 
 def test_a2c_vectorized_keeps_post_lifeloss_step_real():
