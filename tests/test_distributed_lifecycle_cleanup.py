@@ -172,7 +172,12 @@ def test_ray_runtime_shuts_down_ray_when_manager_start_fails(monkeypatch):
             calls.append(("ray.shutdown",))
 
     monkeypatch.setattr(distributed_runtime, "_ray", lambda: Ray())
-    monkeypatch.setattr(distributed_runtime.mp, "get_context", lambda: Context())
+    contexts = []
+    monkeypatch.setattr(
+        distributed_runtime.mp,
+        "get_context",
+        lambda name: contexts.append(name) or Context(),
+    )
 
     with pytest.raises(RuntimeError, match="manager failed"):
         distributed_runtime.RayDistributedRuntime(num_cpus=3, num_gpus=0)
@@ -184,3 +189,4 @@ def test_ray_runtime_shuts_down_ray_when_manager_start_fails(monkeypatch):
         ),
         ("ray.shutdown",),
     ]
+    assert contexts == ["spawn"]

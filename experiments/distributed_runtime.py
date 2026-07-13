@@ -164,7 +164,7 @@ class RayDistributedRuntime:
         ray = _ray()
         ray.init(num_cpus=num_cpus, num_gpus=num_gpus, ignore_reinit_error=True)
         try:
-            self._manager = mp.get_context().Manager()
+            self._manager = mp.get_context("spawn").Manager()
         except BaseException:
             ray.shutdown()
             raise

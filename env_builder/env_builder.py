@@ -417,14 +417,19 @@ class GymVectorizedEnv(VectorizedEnv):
                     env_id,
                     num_envs=worker_num,
                     vectorization_mode="async",
+                    vector_kwargs={"context": "spawn"},
                     wrappers=(_normalize_action_space,),
                 )
             except Exception:
-                self.env = gym.vector.AsyncVectorEnv([make_env() for _ in range(worker_num)])
+                self.env = gym.vector.AsyncVectorEnv(
+                    [make_env() for _ in range(worker_num)], context="spawn"
+                )
         else:
             # Atari needs the custom wrappers, so build AsyncVectorEnv from the
             # explicit per-env constructors.
-            self.env = gym.vector.AsyncVectorEnv([make_env() for _ in range(worker_num)])
+            self.env = gym.vector.AsyncVectorEnv(
+                [make_env() for _ in range(worker_num)], context="spawn"
+            )
 
         # Store environment info
         action_size, action_type = _action_meta(self.env.single_action_space)
