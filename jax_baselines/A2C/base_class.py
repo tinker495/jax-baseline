@@ -1,4 +1,5 @@
 from collections import deque
+from itertools import chain, pairwise
 
 import jax
 import jax.numpy as jnp
@@ -359,12 +360,16 @@ class Actor_Critic_Policy_Gradient_Family(object):
 
         # Pipeline the async env between updates. At an update boundary, delay
         # the next send until train_step finishes so the new rollout cannot start
-        # with an action sampled from the previous policy.
+        # with an action sampled from the previous policy. Pair each step with its
+        # successor so the final iteration does not leave an env result pending.
         obs = self.env.current_obs()
         actions = self.actions([obs])
-        send(actions)
-
-        for steps in ctx.pbar:
+        end = object()
+        first = True
+        for steps, next_step in pairwise(chain(ctx.pbar, (end,))):
+            if first:
+                send(actions)
+                first = False
             (
                 next_obses,
                 rewards,
@@ -374,7 +379,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             ) = self.env.get_result()
 
             train_due = (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0
-            if not train_due:
+            if not train_due and next_step is not end:
                 # Keep the async overlap except when train_step changes the policy.
                 next_actions = self.actions([next_obses])
                 send(next_actions)
@@ -420,12 +425,14 @@ class Actor_Critic_Policy_Gradient_Family(object):
             if train_due:
                 loss = self.train_step(steps, logger_run=ctx.logger_run)
                 self.lossque.append(loss)
-                next_actions = self.actions([next_obses])
-                send(next_actions)
+                if next_step is not end:
+                    next_actions = self.actions([next_obses])
+                    send(next_actions)
 
-            # Advance the pipeline: the action just sent belongs to next_obses.
-            obs = next_obses
-            actions = next_actions
+            if next_step is not end:
+                # Advance the pipeline: the action just sent belongs to next_obses.
+                obs = next_obses
+                actions = next_actions
 
             if steps % ctx.eval_freq == 0:
                 eval_result = self.eval(ctx, steps)
