@@ -492,7 +492,7 @@ class Q_Network_Family:
             single_action=self._single_action_selection,
             vector_action=self._vector_action_selection,
             refresh_exploration=self._refresh_exploration,
-            has_true_reset=self._has_true_reset,
+            force_reset=None,
             train=train,
             evaluate=lambda steps: self.eval(ctx, steps),
             describe=self.description,
@@ -546,6 +546,3 @@ class Q_Network_Family:
         Subclasses override to customise which parameters are snapshotted.
         """
         self.checkpoint_params = snapshot_pytree(self.get_eval_params())
-
-    def _has_true_reset(self):
-        return False

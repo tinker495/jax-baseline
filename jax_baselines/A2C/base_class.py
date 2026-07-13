@@ -11,6 +11,7 @@ from jax_baselines.core.checkpoint_store import (
 )
 from jax_baselines.core.env_info import get_local_env_info, infer_action_meta
 from jax_baselines.core.env_protocols import (
+    single_real_episode_end,
     vector_autoreset_mask,
     vector_real_reset_mask,
 )
@@ -18,7 +19,6 @@ from jax_baselines.core.epoch_buffer import EpochBuffer
 from jax_baselines.core.eval import (
     _normalize_action_for_step,
     evaluate_policy,
-    extract_lives,
     extract_original_reward,
     extract_vector_original_rewards,
     record_and_test,
@@ -310,8 +310,9 @@ class Actor_Critic_Policy_Gradient_Family(object):
             obs = next_obs
 
             if terminated or truncated:
-                lives = extract_lives(info)
-                emit_original = have_original and (lives is None or lives == 0)
+                emit_original = have_original and single_real_episode_end(
+                    terminated, truncated, info
+                )
                 self.rollout_tracker.record(
                     steps,
                     episode_reward=score,

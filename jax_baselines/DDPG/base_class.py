@@ -485,7 +485,7 @@ class Deteministic_Policy_Gradient_Family(object):
             single_action=self._single_action_selection,
             vector_action=self._vector_action_selection,
             refresh_exploration=lambda steps: None,
-            has_true_reset=lambda: False,
+            force_reset=None,
             train=train,
             evaluate=lambda steps: self.eval(ctx, steps),
             describe=self.description,

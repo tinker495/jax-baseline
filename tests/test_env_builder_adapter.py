@@ -6,6 +6,7 @@ import ast
 import importlib
 from pathlib import Path
 
+import gymnasium as gym
 import numpy as np
 import pytest
 
@@ -108,6 +109,38 @@ def test_env_builder_package_imports_use_core_protocols_without_common_shims():
     assert adapter_module.EnvInfo is EnvInfo
     assert hasattr(importlib.import_module("env_builder"), "PreparedEnvSpec")
     assert hasattr(importlib.import_module("env_builder"), "get_env_builder")
+
+
+def test_episodic_life_normalizes_real_episode_boundaries():
+    atari = importlib.import_module("env_builder.atari_wrappers")
+
+    class LifeEnv(gym.Env):
+        observation_space = gym.spaces.Box(0, 1, shape=(1,), dtype=np.float32)
+        action_space = gym.spaces.Discrete(2)
+
+        def __init__(self):
+            self.steps = [
+                (False, False, {"lives": 2}),
+                (True, False, {"lives": 0}),
+            ]
+
+        def reset(self, *, seed=None, options=None):
+            return np.zeros(1, dtype=np.float32), {"lives": 3}
+
+        def step(self, action):
+            terminated, truncated, info = self.steps.pop(0)
+            return np.zeros(1, dtype=np.float32), 0.0, terminated, truncated, info
+
+    env = atari.EpisodicLifeEnv(LifeEnv())
+    env.lives = 3
+
+    assert env.step(0)[2:] == (True, False, {"lives": 2, "real_episode_end": False})
+    assert env.step(0)[2:] == (True, False, {"lives": 0, "real_episode_end": True})
+
+    env.was_real_done = False
+    _, info = env.reset_for_evaluation()
+    assert info == {"lives": 3}
+    assert env.was_real_done is True
 
 
 def test_make_wrap_atari_applies_the_canonical_wrapper_order(monkeypatch):

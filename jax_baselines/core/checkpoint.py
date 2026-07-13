@@ -182,8 +182,8 @@ class CheckpointController:
         """Advance the checkpoint schedule at an episode boundary.
 
         Returns True when the episode did not trigger a checkpoint failure, and
-        False when the window fell below the baseline (the Q-Net family uses this
-        to gate ``env.true_reset()``; the DPG family ignores it).
+        False when the window fell below the baseline (the rollout spec may use
+        this to invoke an adapter-supplied forced reset).
 
         ``advance_criterion=False`` records the episode's timesteps toward the
         training pulse volume but leaves the assessment criterion untouched. The
@@ -222,7 +222,7 @@ class CheckpointController:
             return True
 
         if window_stat < self._baseline:
-            # Below baseline: signal failure (Q-Net gates true_reset on this).
+            # Below baseline: signal failure to the rollout reset policy.
             self._fire(train_and_reset_callback, steps)
             self._reset_window()
             return False

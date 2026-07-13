@@ -104,3 +104,16 @@ def vector_autoreset_mask(env: Any, terminateds: Any, truncateds: Any, infos: An
     if callable(autoreset_mask):
         return np.asarray(autoreset_mask(terminateds, truncateds, infos), dtype=bool)
     return _done_mask(terminateds, truncateds)
+
+
+def single_real_episode_end(terminated: Any, truncated: Any, info: Any) -> bool:
+    """Return the adapter-normalized real episode boundary for one environment."""
+    if isinstance(info, dict) and "real_episode_end" in info:
+        return bool(info["real_episode_end"])
+    return bool(terminated or truncated)
+
+
+def reset_for_evaluation(env: Any) -> Any:
+    """Reset an adapter for an independent evaluation run."""
+    reset = getattr(env, "reset_for_evaluation", None)
+    return reset() if callable(reset) else env.reset()
