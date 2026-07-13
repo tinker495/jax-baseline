@@ -1,5 +1,3 @@
-import base64
-import multiprocessing as mp
 from functools import partial
 
 import jax
@@ -11,10 +9,7 @@ from jax_baselines.core.seeding import seed_prngs
 
 
 class Impala_Worker(object):
-    encoded = base64.b64encode(mp.current_process().authkey)
-
     def __init__(self, env_builder, seed=None) -> None:
-        mp.current_process().authkey = base64.b64decode(self.encoded)
         seed_prngs(seed)
         # env_builder is the repo-local Environment Adapter callable injected by
         # experiments; the adapter prepares the env and normalized metadata.

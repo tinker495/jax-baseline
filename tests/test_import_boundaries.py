@@ -29,6 +29,7 @@ FORBIDDEN_TOKENS = (
     "envpool",
     "cpprb",
     "ray",
+    "multiprocessing",
     "argparse",
     "tensorboardX",
     "model_builder",

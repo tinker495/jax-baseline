@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import multiprocessing as mp
 import random
 from collections import deque
@@ -25,6 +26,18 @@ class _RayWorkerHandle:
 
     def run(self, *args, **kwargs):
         return self._actor.run.remote(*args, **kwargs)
+
+
+class _AuthenticatedWorker:
+    def __init__(self, worker_cls, encoded_authkey, args, kwargs):
+        mp.current_process().authkey = base64.b64decode(encoded_authkey)
+        self._worker = worker_cls(*args, **kwargs)
+
+    def get_info(self):
+        return self._worker.get_info()
+
+    def run(self, *args, **kwargs):
+        return self._worker.run(*args, **kwargs)
 
 
 class _RayParamServerHandle:
@@ -163,6 +176,7 @@ class RayDistributedRuntime:
     def __init__(self, *, num_cpus=None, num_gpus=0):
         ray = _ray()
         ray.init(num_cpus=num_cpus, num_gpus=num_gpus, ignore_reinit_error=True)
+        self._encoded_authkey = base64.b64encode(mp.current_process().authkey)
         try:
             self._manager = mp.get_context("spawn").Manager()
         except BaseException:
@@ -177,7 +191,11 @@ class RayDistributedRuntime:
         return self._manager.Event()
 
     def create_worker(self, worker_cls, *args, **kwargs):
-        actor = _ray().remote(num_cpus=1)(worker_cls).remote(*args, **kwargs)
+        actor = (
+            _ray()
+            .remote(num_cpus=1)(_AuthenticatedWorker)
+            .remote(worker_cls, self._encoded_authkey, args, kwargs)
+        )
         return _RayWorkerHandle(actor)
 
     def worker_info(self, worker):
