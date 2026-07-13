@@ -264,15 +264,13 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
             while len(self.replay_buffer) < self.learning_starts:
                 time.sleep(1)
                 if stop.is_set():
-                    print("Stop Training")
-                    return
+                    raise RuntimeError("distributed worker stopped during warmup")
 
             print("Start Training")
             self.lossque = deque(maxlen=10)
             for steps in pbar:
                 if stop.is_set():
-                    print("Stop Training")
-                    break
+                    raise RuntimeError("distributed worker stopped during training")
                 loss = self.train_step(steps, self.gradient_steps)
                 self.lossque.append(loss)
                 if steps % log_interval == 0:
