@@ -288,7 +288,7 @@ def test_qnet_training_lifecycle_uses_scalar_path_without_bulk_hook():
         (7, 9, (7, 2)),
     ),
 )
-def test_bulk_chunk_schedule_uses_bounded_greedy_buckets(max_chunk, gradient_steps, expected):
+def test_bulk_chunk_schedule_uses_minimum_call_bucket_plan(max_chunk, gradient_steps, expected):
     assert tuple(iter_bulk_chunk_sizes(gradient_steps, max_chunk)) == expected
 
 
@@ -370,7 +370,7 @@ def test_qnet_training_lifecycle_uses_smaller_buckets_before_scalar_tail():
     assert [ctx.train_steps_count for ctx in agent.contexts] == [1, 2, 3, 4, 5, 6, 7]
 
 
-def test_qnet_training_lifecycle_uses_scalar_tail_larger_than_one_after_full_bulk_chunk():
+def test_qnet_training_lifecycle_uses_terminal_two_update_bucket_after_full_bulk_chunk():
     agent = FakePulseAgent()
     agent.max_bulk_updates_per_pulse = 3
     lifecycle = QNetTrainingLifecycle(agent)
