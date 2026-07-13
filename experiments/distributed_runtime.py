@@ -207,7 +207,13 @@ class RayDistributedRuntime:
         )
 
     def wait(self, jobs, timeout=None):
-        return _ray().wait(jobs, timeout=timeout)
+        if not jobs:
+            return []
+        ray = _ray()
+        ready, remaining = ray.wait(jobs, num_returns=len(jobs), timeout=timeout)
+        if remaining:
+            raise TimeoutError(f"{len(remaining)} distributed worker(s) did not stop")
+        return ray.get(ready)
 
     def shutdown(self):
         if getattr(self, "_shutdown", False):

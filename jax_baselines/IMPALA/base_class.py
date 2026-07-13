@@ -316,15 +316,13 @@ class IMPALA_Family(object):
             while self.buffer.queue_is_empty():
                 time.sleep(1)
                 if stop.is_set():
-                    print("Stop Training")
-                    return
+                    raise RuntimeError("distributed worker stopped during warmup")
 
             print("Start Training")
             self.lossque = deque(maxlen=10)
             for steps in pbar:
                 if stop.is_set():
-                    print("Stop Training")
-                    break
+                    raise RuntimeError("distributed worker stopped during training")
                 loss, rho = self.train_step(steps)
                 self.lossque.append(loss)
                 if steps % log_interval == 0:

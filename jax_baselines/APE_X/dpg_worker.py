@@ -1,6 +1,5 @@
 import base64
 import multiprocessing as mp
-import traceback
 from functools import partial
 
 import jax
@@ -121,14 +120,6 @@ class Ape_X_Worker(object):
                         key=next(key_seq),
                     )
                     global_buffer.add(**transition, priorities=abs_td_error)
-        except Exception:
-            print(
-                "------------------------------Exception in worker----------------------------------"
-            )
-            traceback.print_exc()
-            print(
-                "---------------------------------------------------------------------------------"
-            )
         finally:
             if stop.is_set():
                 print("worker stopped")

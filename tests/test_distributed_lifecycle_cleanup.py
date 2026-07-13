@@ -93,12 +93,12 @@ def test_distributed_learn_cleans_up_after_warmup_stop(monkeypatch, module_name,
         monkeypatch, module_name, class_name, kind, ready=False, stop_on_run=True
     )
 
-    agent.learn(1, progress_factory=lambda *_args, **_kwargs: [])
+    with pytest.raises(RuntimeError, match="distributed worker stopped during warmup"):
+        agent.learn(1, progress_factory=lambda *_args, **_kwargs: [])
 
     assert stop.is_set()
     assert lifecycle.mock_calls == [
         call.wait(["job"], timeout=300),
-        call.save_params("/tmp/run"),
         call.last_update(),
         call.close(),
         call.shutdown(),
@@ -184,3 +184,45 @@ def test_ray_runtime_shuts_down_ray_when_manager_start_fails(monkeypatch):
         ),
         ("ray.shutdown",),
     ]
+
+
+def test_ray_runtime_wait_resolves_every_worker(monkeypatch):
+    from experiments import distributed_runtime
+
+    calls = []
+
+    class Ray:
+        def wait(self, jobs, **kwargs):
+            calls.append(("wait", jobs, kwargs))
+            return jobs, []
+
+        def get(self, jobs):
+            calls.append(("get", jobs))
+            return ["done"] * len(jobs)
+
+    monkeypatch.setattr(distributed_runtime, "_ray", lambda: Ray())
+    runtime = distributed_runtime.RayDistributedRuntime.__new__(
+        distributed_runtime.RayDistributedRuntime
+    )
+
+    assert runtime.wait(["a", "b"], timeout=3) == ["done", "done"]
+    assert calls == [
+        ("wait", ["a", "b"], {"num_returns": 2, "timeout": 3}),
+        ("get", ["a", "b"]),
+    ]
+
+
+def test_ray_runtime_wait_rejects_unfinished_workers(monkeypatch):
+    from experiments import distributed_runtime
+
+    class Ray:
+        def wait(self, jobs, **kwargs):
+            return jobs[:1], jobs[1:]
+
+    monkeypatch.setattr(distributed_runtime, "_ray", lambda: Ray())
+    runtime = distributed_runtime.RayDistributedRuntime.__new__(
+        distributed_runtime.RayDistributedRuntime
+    )
+
+    with pytest.raises(TimeoutError, match="1 distributed worker"):
+        runtime.wait(["done", "stuck"], timeout=3)
