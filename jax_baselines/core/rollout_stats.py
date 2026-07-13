@@ -57,15 +57,12 @@ class EpisodeTracker:
         self._reward.append(float(episode_reward))
         self._length.append(float(episode_length))
         self._timeout.append(float(timeout))
-        original_ready = original_reward is not None
-        if original_ready:
+        if original_reward is not None:
             self._original.append(float(original_reward))
 
         if steps - self._last_log_step >= self._log_interval:
             self._flush(steps)
             self._last_log_step = steps
-        elif original_ready:
-            self._log_metric("rollout/original_reward", float(np.mean(self._original)), steps)
 
     def _flush(self, steps):
         if not self._reward:
