@@ -1,19 +1,16 @@
 import numpy as np
 
 from jax_baselines.core.env_info import prepare_worker_env
+from jax_baselines.core.env_protocols import (
+    reset_for_evaluation,
+    single_real_episode_end,
+)
 
 
 def extract_original_reward(info):
     """Return a single-step original reward from an env info dict, if present."""
     if isinstance(info, dict):
         return info.get("original_reward")
-    return None
-
-
-def extract_lives(info):
-    """Return a single-step lives count from an env info dict, if present."""
-    if isinstance(info, dict):
-        return info.get("lives")
     return None
 
 
@@ -56,11 +53,6 @@ def extract_vector_original_rewards(infos, worker_size):
     logging independent from the vector backend.
     """
     return _extract_vector_info_values(infos, worker_size, "original_reward", np.float64)
-
-
-def extract_vector_lives(infos, worker_size):
-    """Return per-worker lives counts and a presence mask from vector infos."""
-    return _extract_vector_info_values(infos, worker_size, "lives", np.int32)
 
 
 def log_measurement(
@@ -118,14 +110,9 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
     total_ep_len = np.zeros(eval_eps)
     total_truncated = np.zeros(eval_eps)
 
-    # Prefer a true environment reset if available (e.g., Atari EpisodicLifeEnv)
-    if hasattr(eval_env, "true_reset") and callable(eval_env.true_reset):
-        obs, info = eval_env.true_reset()
-    else:
-        obs, info = eval_env.reset()
+    obs, info = reset_for_evaluation(eval_env)
     obs = [np.expand_dims(obs, axis=0)]
     have_original_reward = "original_reward" in info
-    have_lives = "lives" in info
     if have_original_reward:
         original_reward = info["original_reward"]
     terminated = False
@@ -149,14 +136,9 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
 
         total_ep_len[ep] = eplen
         total_truncated[ep] = float(truncated)
-        if have_original_reward:
-            if have_lives:
-                if info.get("lives", 0) == 0:
-                    original_rewards.append(original_reward)
-                    original_reward = 0
-            else:
-                original_rewards.append(original_reward)
-                original_reward = 0
+        if have_original_reward and single_real_episode_end(terminated, truncated, info):
+            original_rewards.append(original_reward)
+            original_reward = 0
 
         obs, info = eval_env.reset()
         obs = [np.expand_dims(obs, axis=0)]

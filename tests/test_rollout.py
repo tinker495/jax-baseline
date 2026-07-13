@@ -44,7 +44,7 @@ from jax_baselines.TD7.td7 import TD7
 
 
 # --- runner seam: rebuilds the family RolloutSpec the base classes inject ---
-def _spec(agent, single_action, vector_action, refresh_exploration, has_true_reset):
+def _spec(agent, single_action, vector_action, refresh_exploration, force_reset):
     return RolloutSpec(
         env=agent.env,
         replay_buffer=agent.replay_buffer,
@@ -56,7 +56,7 @@ def _spec(agent, single_action, vector_action, refresh_exploration, has_true_res
         single_action=single_action,
         vector_action=vector_action,
         refresh_exploration=refresh_exploration,
-        has_true_reset=has_true_reset,
+        force_reset=force_reset,
         train=agent.train_step,
         evaluate=agent.eval,
         describe=agent.description,
@@ -79,7 +79,8 @@ def _qnet_runner(agent):
     def refresh(steps):
         agent.update_eps = agent.exploration.value(steps)
 
-    return RolloutEngine(_spec(agent, single_action, vector_action, refresh, agent._has_true_reset))
+    force_reset = agent.env.true_reset if agent._has_true_reset() else None
+    return RolloutEngine(_spec(agent, single_action, vector_action, refresh, force_reset))
 
 
 def _dpg_runner(agent):
@@ -91,9 +92,7 @@ def _dpg_runner(agent):
         a = agent.actions([obs], steps)
         return ActionSelection(a, a)
 
-    return RolloutEngine(
-        _spec(agent, single_action, vector_action, lambda steps: None, lambda: False)
-    )
+    return RolloutEngine(_spec(agent, single_action, vector_action, lambda steps: None, None))
 
 
 # --- recording fakes -----------------------------------------------------
@@ -1009,7 +1008,7 @@ def test_checkpointing_loop_drives_real_pulse_to_train_step():
         single_action=single_action,
         vector_action=single_action,
         refresh_exploration=lambda steps: None,
-        has_true_reset=lambda: False,
+        force_reset=None,
         train=agent.train_step,
         evaluate=agent.eval,
         describe=agent.description,
@@ -1067,7 +1066,7 @@ def test_vectorized_checkpointing_pools_same_step_worker_lengths_before_pulse():
         single_action=vector_action,
         vector_action=vector_action,
         refresh_exploration=lambda steps: None,
-        has_true_reset=lambda: False,
+        force_reset=None,
         train=agent.train_step,
         evaluate=agent.eval,
         describe=agent.description,

@@ -13,8 +13,7 @@ spec callbacks:
   (the Q-Net family double-indexes discrete actions, the DPG family does not);
 - ``refresh_exploration`` updates epsilon for the Q-Net family and is a no-op
   for the DPG family;
-- ``has_true_reset`` gates the checkpoint-failure ``env.true_reset()`` branch
-  (Q-Net only).
+- ``force_reset`` optionally supplies the adapter's checkpoint-failure reset.
 
 The per-episode checkpoint training pulse is shared via
 :class:`CheckpointTrainPulse`. Its residual counter is kept on the agent
@@ -29,11 +28,11 @@ from typing import Callable, Optional
 import numpy as np
 
 from jax_baselines.core.env_protocols import (
+    single_real_episode_end,
     vector_autoreset_mask,
     vector_real_reset_mask,
 )
 from jax_baselines.core.eval import (
-    extract_lives,
     extract_original_reward,
     extract_vector_original_rewards,
 )
@@ -111,7 +110,7 @@ class RolloutSpec:
     single_action: Callable[[object, int], ActionSelection]
     vector_action: Callable[[object, int], ActionSelection]
     refresh_exploration: Callable[[int], None]
-    has_true_reset: Callable[[], bool]
+    force_reset: Callable[[], object] | None
     # agent operations
     train: Callable[[int, int], object]
     evaluate: Callable[[int], object]
@@ -163,8 +162,9 @@ class RolloutEngine:
             obs = next_obs
 
             if terminated or truncated:
-                lives = extract_lives(info)
-                emit_original = have_original and (lives is None or lives == 0)
+                emit_original = have_original and single_real_episode_end(
+                    terminated, truncated, info
+                )
                 spec.record_rollout_episode(
                     steps,
                     episode_reward=score,
@@ -292,8 +292,9 @@ class RolloutEngine:
             obs = next_obs
 
             if terminated or truncated:
-                lives = extract_lives(info)
-                emit_original = have_original and (lives is None or lives == 0)
+                emit_original = have_original and single_real_episode_end(
+                    terminated, truncated, info
+                )
                 if steps > spec.learning_starts:
                     ckpt_success = spec.checkpoint_on_episode_end(
                         steps,
@@ -316,8 +317,8 @@ class RolloutEngine:
                     original = 0.0
                     have_original = False
 
-                if not ckpt_success and spec.has_true_reset():
-                    obs, info = spec.env.true_reset()
+                if not ckpt_success and spec.force_reset is not None:
+                    obs, info = spec.force_reset()
                 else:
                     obs, info = spec.env.reset()
                 obs = [np.expand_dims(obs, axis=0)]
@@ -343,7 +344,7 @@ class RolloutEngine:
         # Adapters classify two backend quirks separately: whether this done row
         # is a real game reset, and whether the next row is an autoreset dummy.
         prev_done = None
-        defer_checkpoint_pulses = not spec.has_true_reset()
+        defer_checkpoint_pulses = spec.force_reset is None
         pending_checkpoint_pulses = deque()
         pending_eval_steps = deque()
 
@@ -437,8 +438,8 @@ class RolloutEngine:
                         originals[idx] = 0.0
                         original_present[idx] = False
 
-                if spec.has_true_reset() and monitor_failed:
-                    spec.env.true_reset()
+                if spec.force_reset is not None and monitor_failed:
+                    spec.force_reset()
 
             prev_done = done & autoreset & active
 

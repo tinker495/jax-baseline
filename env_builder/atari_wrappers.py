@@ -90,9 +90,13 @@ class EpisodicLifeEnv(gym.Wrapper):
         self.lives = info.get("lives", 0)
         return obs, info
 
+    def reset_for_evaluation(self, **kwargs):
+        return self.true_reset(**kwargs)
+
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
         self.was_real_done = terminated or truncated
+        info["real_episode_end"] = self.was_real_done
         # check current lives, make loss of life terminated,
         # then update lives to handle bonus lives
         if self.was_real_done:

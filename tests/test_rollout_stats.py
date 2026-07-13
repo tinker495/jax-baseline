@@ -206,7 +206,7 @@ def _spec(env, record, **overrides):
         single_action=lambda obs, steps: ActionSelection(0, 0),
         vector_action=lambda obs, steps: ActionSelection(0, 0),
         refresh_exploration=lambda steps: None,
-        has_true_reset=lambda: False,
+        force_reset=None,
         train=lambda steps, gs: 0.0,
         evaluate=lambda steps: None,
         describe=lambda eval_result: "desc",
@@ -250,12 +250,12 @@ def test_single_env_accumulates_original_reward():
     assert records[0]["original"] == 30.0
 
 
-def test_single_env_original_reward_waits_for_zero_lives():
+def test_single_env_original_reward_waits_for_real_episode_end():
     env = _ScriptedSingleEnv(
         [(1.0, True, False), (1.0, True, False)],
         infos=[
-            {"original_reward": 10.0, "lives": 2},
-            {"original_reward": 20.0, "lives": 0},
+            {"original_reward": 10.0, "real_episode_end": False},
+            {"original_reward": 20.0, "real_episode_end": True},
         ],
     )
     records, record = _episode_recorder()
