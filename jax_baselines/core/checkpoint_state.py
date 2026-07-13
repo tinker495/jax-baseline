@@ -3,7 +3,7 @@
 Sibling to :mod:`jax_baselines.core.checkpoint` (the schedule) and
 :mod:`jax_baselines.core.rollout` (the rollout loop): where
 :class:`~jax_baselines.core.checkpoint.CheckpointController` owns the checkpoint
-*schedule*, this module owns the checkpoint *state* an agent persists to resume
+*schedule*, this module owns the checkpoint *state* an agent persists to warm-start
 training and run eval-consistent behaviour.
 
 :class:`CheckpointState` is the family-wide spine. The per-algorithm network
@@ -17,6 +17,9 @@ Serialization rides the existing pytree
 pytree node, so the struct *is* the wire format. There is no spine-level
 ``to_state``/``from_state`` ladder; the sibling ``CheckpointController`` and
 ``RunningMeanStd`` keep their own and are embedded here as plain ``dict`` fields.
+
+This is deliberately not an exact execution-resume snapshot: optimizer moments,
+PRNG streams, replay contents, and environment state are not serialized.
 """
 
 from typing import Any, Optional
@@ -26,7 +29,7 @@ from flax import struct
 
 @struct.dataclass
 class CheckpointState:
-    """The serializable spine an off-policy DPG agent saves and restores.
+    """The serializable warm-start spine an off-policy DPG agent saves and restores.
 
     Fields:
         params: The algorithm's own ``flax.struct`` checkpoint bundle (the real

@@ -155,6 +155,11 @@ class Deteministic_Policy_Gradient_Family(object):
         self.checkpoint_store.save(path, self._build_checkpoint_state())
 
     def load_params(self, path):
+        """Warm-start saved model, schedule, and normalization state.
+
+        Optimizer, PRNG, replay, and environment state start fresh; this method
+        does not reproduce an interrupted execution exactly.
+        """
         self._restore_checkpoint_state(self.checkpoint_store.restore(path))
 
     def _make_optimizer(self, learning_rate):

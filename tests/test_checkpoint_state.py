@@ -1,10 +1,13 @@
-"""Round-trip tests for the typed DPG checkpoint state.
+"""Round-trip tests for the typed DPG warm-start checkpoint state.
 
 These exercise the per-algorithm checkpoint *contract* (``checkpoint_params`` /
 ``load_checkpoint_params``) and the family-wide ``CheckpointState`` spine in
 isolation -- each agent is built with ``__new__`` so no env / buffer / model is
 needed. This is the test surface the typed module exists to provide; the former
 ``getattr``/``hasattr`` marshalling had none.
+
+Optimizer, PRNG, replay, and environment state are intentionally outside this
+warm-start contract.
 """
 
 import tempfile
