@@ -110,6 +110,32 @@ def test_env_builder_package_imports_use_core_protocols_without_common_shims():
     assert hasattr(importlib.import_module("env_builder"), "get_env_builder")
 
 
+def test_seed_env_propagates_environment_failures():
+    seeding = importlib.import_module("env_builder.seeding")
+
+    class BrokenEnv:
+        def reset(self, *, seed):
+            raise RuntimeError("seed failed")
+
+    with pytest.raises(RuntimeError, match="seed failed"):
+        seeding.seed_env(BrokenEnv(), 7)
+
+
+def test_seed_env_keeps_legacy_reset_fallback():
+    seeding = importlib.import_module("env_builder.seeding")
+    calls = []
+
+    class LegacyEnv:
+        def reset(self, *args, **kwargs):
+            calls.append(kwargs)
+            if kwargs:
+                raise TypeError("legacy reset")
+
+    seeding.seed_env(LegacyEnv(), 7)
+
+    assert calls == [{"seed": 7}, {}]
+
+
 def test_make_wrap_atari_applies_the_canonical_wrapper_order(monkeypatch):
     atari = importlib.import_module("env_builder.atari_wrappers")
     calls = []

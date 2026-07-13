@@ -16,19 +16,11 @@ def seed_env(env: gym.Env, seed: Optional[int]) -> None:
         env.reset(seed=seed)
     except TypeError:
         env.reset()
-    except Exception:
-        pass
 
     space = getattr(env, "action_space", None)
     if space is not None and hasattr(space, "seed"):
-        try:
-            space.seed(seed)
-        except Exception:
-            pass
+        space.seed(seed)
 
     space = getattr(env, "observation_space", None)
     if space is not None and hasattr(space, "seed"):
-        try:
-            space.seed(seed)
-        except Exception:
-            pass
+        space.seed(seed)
