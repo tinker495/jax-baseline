@@ -138,7 +138,7 @@ class C51(Q_Network_Family):
             jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         )
         cross_entropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
-        return jnp.mean(cross_entropy), cross_entropy
+        return jnp.mean(cross_entropy * weights), cross_entropy
 
     def _target(
         self,

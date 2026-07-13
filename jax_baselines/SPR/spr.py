@@ -441,7 +441,7 @@ class SPR(Q_Network_Family):
             jnp.take_along_axis(self.get_q(params, parsed_obses, key), parsed_actions, axis=1)
         )
         centropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
-        mean_centropy = jnp.mean(centropy)
+        mean_centropy = jnp.mean(centropy * weights)
         total_loss = mean_centropy + self.spr_weight * rprloss
         return total_loss, (
             centropy,
