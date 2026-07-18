@@ -6,7 +6,7 @@ import numpy as np
 
 from model_builder.haiku.layers import NoisyLinear
 from model_builder.haiku.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import print_param
+from model_builder.utils import dummy_observation, print_haiku_model_summary
 
 
 class Model(hk.Module):
@@ -95,25 +95,12 @@ def model_builder_maker(observation_space, action_space, dueling_model, param_no
         if key is not None:
             key1, key2, key3, key4 = jax.random.split(key, num=4)
             tau = jax.random.uniform(key4, (1, 64))
-            pre_param = preproc.init(
-                key1,
-                [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-            )
-            model_param = model.init(
-                key2,
-                preproc.apply(
-                    pre_param,
-                    key3,
-                    [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                ),
-                tau,
-            )
+            observation = dummy_observation(observation_space)
+            pre_param = preproc.init(key1, observation)
+            feature = preproc.apply(pre_param, key3, observation)
+            model_param = model.init(key2, feature, tau)
             params = hk.data_structures.merge(pre_param, model_param)
-            if print_model:
-                print("------------------build-haiku-model--------------------")
-                print_param("preprocess", pre_param)
-                print_param("model", model_param)
-                print("-------------------------------------------------------")
+            print_haiku_model_summary(print_model, (preproc, observation), (model, feature, tau))
             return preproc_fn, model_fn, params
         return preproc_fn, model_fn
 

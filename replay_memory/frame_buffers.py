@@ -23,12 +23,13 @@ import numpy as np
 
 
 def _frame_geometry(observation_space, n_frames):
-    if len(observation_space) != 1 or len(observation_space[0]) < 3:
+    shape = next(iter(observation_space.values()), ())
+    if len(observation_space) != 1 or len(shape) < 3:
         raise ValueError(
             "FrameStackReplayBuffer supports a single image modality "
             f"(H, W, C*stack); got observation_space={observation_space}"
         )
-    h, w, stacked_c = observation_space[0]
+    h, w, stacked_c = shape
     if stacked_c % n_frames != 0:
         raise ValueError(f"stacked channels {stacked_c} not divisible by n_frames {n_frames}")
     return int(h), int(w), stacked_c // n_frames
@@ -38,7 +39,7 @@ class FrameStackReplayBuffer:
     def __init__(
         self,
         size: int,
-        observation_space: list,
+        observation_space: dict,
         action_space=1,
         n_step: int = 1,
         gamma: float = 0.99,
@@ -48,6 +49,7 @@ class FrameStackReplayBuffer:
         self.n_step = int(n_step)
         self.gamma = gamma
         self.n_frames = int(n_frames)
+        self.observation_key = next(iter(observation_space))
         self.h, self.w, self.cf = _frame_geometry(observation_space, self.n_frames)
         self.stacked_c = self.cf * self.n_frames
         self.action_shape = (
@@ -86,7 +88,7 @@ class FrameStackReplayBuffer:
     def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False):
         r = self._count % self.max_size
         self._boundary_next.pop(r, None)
-        self._frame[r] = np.asarray(obs_t[0])[0, :, :, -self.cf :]
+        self._frame[r] = np.asarray(obs_t[self.observation_key])[0, :, :, -self.cf :]
         self._action[r] = np.asarray(action, dtype=np.float32).reshape(self.action_shape)
         self._reward[r] = reward
         self._terminated[r] = bool(terminated)
@@ -94,7 +96,9 @@ class FrameStackReplayBuffer:
         self._ep_id[r] = self._ep
         self._ep_step[r] = self._cur_step
         if terminated or truncated:
-            self._boundary_next[r] = np.asarray(nxtobs_t[0])[0, :, :, -self.cf :].copy()
+            self._boundary_next[r] = np.asarray(nxtobs_t[self.observation_key])[
+                0, :, :, -self.cf :
+            ].copy()
         self._count += 1
         if terminated or truncated:
             self._ep += 1
@@ -145,12 +149,12 @@ class FrameStackReplayBuffer:
         lo = max(0, self._count - self.max_size)
         lo_arr = np.full(a.shape, lo, dtype=np.int64)
         reward, next_idx, done, hit_boundary = self._nstep(a)
-        obses = [self._gather_stack(a, lo_arr)]
+        obses = {self.observation_key: self._gather_stack(a, lo_arr)}
         next_stack = self._gather_stack(next_idx, lo_arr)
         for row in np.flatnonzero(hit_boundary):
             next_stack[row, ..., : -self.cf] = next_stack[row, ..., self.cf :]
             next_stack[row, ..., -self.cf :] = self._boundary_next[next_idx[row] % self.max_size]
-        nxtobses = [next_stack]
+        nxtobses = {self.observation_key: next_stack}
         return {
             "obses": obses,
             "actions": self._action[a % self.max_size],
@@ -210,7 +214,7 @@ class PrioritizedFrameStackReplayBuffer(FrameStackReplayBuffer):
     def __init__(
         self,
         size: int,
-        observation_space: list,
+        observation_space: dict,
         action_space=1,
         n_step: int = 1,
         gamma: float = 0.99,

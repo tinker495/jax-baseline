@@ -34,17 +34,17 @@ from model_builder.flax.dpg.td3_builder import (
 )
 
 _POLICY_KWARGS = {"node": 16, "hidden_n": 2, "embedding_mode": "normal"}
-_OBSERVATION_SPACE = [[4]]
+_OBSERVATION_SPACE = {"obs": [4]}
 _ACTION_SIZE = [2]
 _BATCH_SIZE = 8
 
 
 def _batch():
     return {
-        "obses": [np.ones((_BATCH_SIZE, 4), dtype=np.float32)],
+        "obses": {"obs": np.ones((_BATCH_SIZE, 4), dtype=np.float32)},
         "actions": np.zeros((_BATCH_SIZE, _ACTION_SIZE[0]), dtype=np.float32),
         "rewards": np.ones((_BATCH_SIZE, 1), dtype=np.float32),
-        "nxtobses": [np.full((_BATCH_SIZE, 4), 2.0, dtype=np.float32)],
+        "nxtobses": {"obs": np.full((_BATCH_SIZE, 4), 2.0, dtype=np.float32)},
         "terminateds": np.zeros((_BATCH_SIZE, 1), dtype=np.float32),
     }
 

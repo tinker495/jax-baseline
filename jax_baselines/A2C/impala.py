@@ -77,8 +77,8 @@ class IMPALA(IMPALA_Family):
         truncateds,
     ):
         # ((b x h x w x c), (b x n)) x x -> (x x b x h x w x c), (x x b x n)
-        obses = [jnp.stack(zo) for zo in zip(*obses)]
-        nxtobses = [jnp.stack(zo) for zo in zip(*nxtobses)]
+        obses = jax.tree.map(lambda *values: jnp.stack(values), *obses)
+        nxtobses = jax.tree.map(lambda *values: jnp.stack(values), *nxtobses)
         actions = jnp.stack(actions)
         mu_log_prob = jnp.stack(mu_log_prob)
         rewards = jnp.stack(rewards)
@@ -101,7 +101,7 @@ class IMPALA(IMPALA_Family):
         vs, rho, adv = self._compute_vtrace(
             pi_prob, mu_log_prob, rewards, terminateds, truncateds, value, next_value
         )
-        obses = [jnp.vstack(o) for o in obses]
+        obses = {key: jnp.vstack(value) for key, value in obses.items()}
         actions = jnp.vstack(actions)
         vs = jnp.vstack(vs)
         rho = jnp.vstack(rho)

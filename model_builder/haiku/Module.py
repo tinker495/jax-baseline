@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import haiku as hk
 import jax
@@ -58,9 +58,10 @@ def visual_embedding(mode="normal"):
 class PreProcess(hk.Module):
     def __init__(self, state_size, embedding_mode="normal"):
         super().__init__()
-        self.embedding = [
-            visual_embedding(embedding_mode) if len(st) == 3 else lambda x: x for st in state_size
-        ]
+        self.embedding = {
+            key: visual_embedding(embedding_mode) if len(st) == 3 else lambda x: x
+            for key, st in state_size.items()
+        }
 
-    def __call__(self, obses: List[jnp.ndarray]) -> jnp.ndarray:
-        return jnp.concatenate([pre(x) for pre, x in zip(self.embedding, obses)], axis=1)
+    def __call__(self, obses: dict[str, jnp.ndarray]) -> jnp.ndarray:
+        return jnp.concatenate([pre(obses[key]) for key, pre in self.embedding.items()], axis=1)

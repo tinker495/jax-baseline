@@ -15,7 +15,7 @@ from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense, NoisyDense
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import print_param
+from model_builder.utils import dummy_observation, print_flax_model_summary
 
 
 class Projection(nn.Module):
@@ -208,15 +208,10 @@ def make_spr_style_builder_maker(
         prediction_fn = get_apply_fn_flax_module(model, model.prediction)
 
         if key is not None:
-            params = model.init(
-                key,
-                [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                jnp.zeros((1, action_space[0]), dtype=np.float32),
-            )
-            if print_model:
-                print("------------------build-flax-model--------------------")
-                print_param("", params)
-                print("------------------------------------------------------")
+            observation = dummy_observation(observation_space)
+            action = jnp.zeros((1, action_space[0]), dtype=np.float32)
+            params = model.init(key, observation, action)
+            print_flax_model_summary(print_model, key, (model, observation, action))
             return preproc_fn, model_fn, transition_fn, projection_fn, prediction_fn, params
         else:
             return preproc_fn, model_fn, transition_fn, projection_fn, prediction_fn

@@ -143,8 +143,8 @@ class IMPALA_TPPO(IMPALA_Family):
         truncateds,
     ):
         # ((b x h x w x c), (b x n)) x worker -> (worker x b x h x w x c), (worker x b x n)
-        obses = [jnp.stack(zo) for zo in zip(*obses)]
-        nxtobses = [jnp.stack(zo) for zo in zip(*nxtobses)]
+        obses = jax.tree.map(lambda *values: jnp.stack(values), *obses)
+        nxtobses = jax.tree.map(lambda *values: jnp.stack(values), *nxtobses)
         actions = jnp.stack(actions)
         mu_log_prob = jnp.stack(mu_log_prob)
         rewards = jnp.stack(rewards)
@@ -168,7 +168,7 @@ class IMPALA_TPPO(IMPALA_Family):
         vs, rho, adv = self._compute_vtrace(
             pi_prob, mu_log_prob, rewards, terminateds, truncateds, value, next_value
         )
-        obses = [jnp.vstack(o) for o in obses]
+        obses = {key: jnp.vstack(value) for key, value in obses.items()}
         actions = jnp.vstack(actions)
         vs = jnp.vstack(vs)
         if self.action_type == "continuous":
@@ -218,7 +218,7 @@ class IMPALA_TPPO(IMPALA_Family):
             batch_idxes = jax.random.permutation(use_key, jnp.arange(vs.shape[0])).reshape(
                 -1, self.minibatch_size
             )
-            obses_batch = [o[batch_idxes] for o in obses]
+            obses_batch = {key: value[batch_idxes] for key, value in obses.items()}
             actions_batch = actions[batch_idxes]
             vs_batch = vs[batch_idxes]
             old_prob_batch = jax.tree.map(lambda p: p[batch_idxes], old_prob)

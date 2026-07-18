@@ -30,13 +30,13 @@ def test_dpg_eval_path_uses_sac_mode_without_sampling():
     agent.learning_starts = 100
     agent.use_checkpointing = False
     agent.policy_params = None
-    agent.preproc = lambda params, key, obs: obs[0]
+    agent.preproc = lambda params, key, obs: obs["obs"]
     agent.actor = lambda params, key, feature: (feature, jnp.full_like(feature, 10.0))
 
-    obs = [jnp.array([[0.25, -0.5]])]
+    obs = {"obs": jnp.array([[0.25, -0.5]])}
     actions = agent.actions(obs, steps=0, eval=True)
 
-    np.testing.assert_allclose(actions, jnp.tanh(obs[0]))
+    np.testing.assert_allclose(actions, jnp.tanh(obs["obs"]))
 
 
 def test_sac_actor_loss_uses_minimum_expected_q():
@@ -57,21 +57,21 @@ def test_sac_actor_loss_uses_minimum_expected_q():
 
 
 def test_other_stochastic_dpg_algorithms_also_use_mode_for_evaluation():
-    obs = [jnp.array([[0.25, -0.5]])]
+    obs = {"obs": jnp.array([[0.25, -0.5]])}
 
     tqc = object.__new__(TQC)
-    tqc.preproc = lambda params, key, value: value[0]
+    tqc.preproc = lambda params, key, value: value["obs"]
     tqc.actor = lambda params, key, feature: (feature, jnp.full_like(feature, 10.0))
 
     crossq = object.__new__(CrossQ)
-    crossq.preproc = lambda params, key, value: value[0]
+    crossq.preproc = lambda params, key, value: value["obs"]
     crossq.actor = lambda params, key, feature, training: (
         (feature, jnp.full_like(feature, 10.0)),
         {},
     )
 
-    np.testing.assert_allclose(tqc._get_eval_actions(None, obs), jnp.tanh(obs[0]))
-    np.testing.assert_allclose(crossq._get_eval_actions(None, obs), jnp.tanh(obs[0]))
+    np.testing.assert_allclose(tqc._get_eval_actions(None, obs), jnp.tanh(obs["obs"]))
+    np.testing.assert_allclose(crossq._get_eval_actions(None, obs), jnp.tanh(obs["obs"]))
 
 
 def test_flashsac_entropy_target_and_defaults():
@@ -86,7 +86,7 @@ def test_flashsac_entropy_target_and_defaults():
 
 def test_sac_actor_and_temperature_update_on_configured_period():
     agent = object.__new__(SAC)
-    agent.preproc = lambda params, key, obs: obs[0]
+    agent.preproc = lambda params, key, obs: obs["obs"]
     agent.actor = lambda params, key, feature: (
         jnp.full((feature.shape[0], 1), params),
         jnp.full((feature.shape[0], 1), -1.0),
@@ -113,10 +113,10 @@ def test_sac_actor_and_temperature_update_on_configured_period():
     log_ent_coef = jnp.log(jnp.asarray(0.01))
     opt_ent_coef_state = agent.ent_coef_optimizer.init(log_ent_coef)
     data = {
-        "obses": [jnp.ones((2, 1))],
+        "obses": {"obs": jnp.ones((2, 1))},
         "actions": jnp.zeros((2, 1)),
         "rewards": jnp.zeros((2, 1)),
-        "nxtobses": [jnp.ones((2, 1))],
+        "nxtobses": {"obs": jnp.ones((2, 1))},
         "terminateds": jnp.zeros((2, 1)),
     }
 
@@ -188,10 +188,10 @@ def test_sac_actor_and_target_use_distinct_fresh_keys():
         key,
         1,
         log_ent_coef,
-        obses=[jnp.zeros((1, 1))],
+        obses={"obs": jnp.zeros((1, 1))},
         actions=jnp.zeros((1, 1)),
         rewards=jnp.zeros((1, 1)),
-        nxtobses=[jnp.zeros((1, 1))],
+        nxtobses={"obs": jnp.zeros((1, 1))},
         terminateds=jnp.zeros((1, 1)),
     )
     target_key, _, actor_key = jax.random.split(key, 3)

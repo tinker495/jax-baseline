@@ -12,6 +12,7 @@ from jax_baselines.core.checkpoint_store import (
 )
 from jax_baselines.core.env_info import get_local_env_info, infer_action_meta
 from jax_baselines.core.env_protocols import (
+    batch_observation,
     single_real_episode_end,
     vector_autoreset_mask,
     vector_real_reset_mask,
@@ -288,7 +289,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
 
     def learn_SingleEnv(self, ctx):
         obs, info = self.env.reset()
-        obs = [np.expand_dims(obs, axis=0)]
+        obs = batch_observation(obs)
         self.lossque = deque(maxlen=10)
         self.rollout_tracker = EpisodeTracker(ctx.logger_run.log_metric, ctx.log_interval)
         eval_result = None
@@ -300,7 +301,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
             actions = self.actions(obs)
             step_action = _normalize_action_for_step(self.conv_action(actions))
             next_obs, reward, terminated, truncated, info = self.env.step(step_action)
-            next_obs = [np.expand_dims(next_obs, axis=0)]
+            next_obs = batch_observation(next_obs)
             self.buffer.add(obs, actions, [reward], next_obs, [terminated], [truncated])
             score += float(reward)
             eplen += 1
@@ -327,7 +328,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                     original = 0.0
                     have_original = False
                 obs, info = self.env.reset()
-                obs = [np.expand_dims(obs, axis=0)]
+                obs = batch_observation(obs)
 
             if (steps + 1) % self.batch_size == 0:
                 loss = self.train_step(steps, logger_run=ctx.logger_run)
@@ -364,7 +365,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         # with an action sampled from the previous policy. Pair each step with its
         # successor so the final iteration does not leave an env result pending.
         obs = self.env.current_obs()
-        actions = self.actions([obs])
+        actions = self.actions(obs)
         end = object()
         first = True
         for steps, next_step in pairwise(chain(ctx.pbar, (end,))):
@@ -378,11 +379,10 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 truncateds,
                 infos,
             ) = self.env.get_result()
-
             train_due = (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0
             if not train_due and next_step is not end:
                 # Keep the async overlap except when train_step changes the policy.
-                next_actions = self.actions([next_obses])
+                next_actions = self.actions(next_obses)
                 send(next_actions)
 
             done = np.logical_or(terminateds, truncateds)
@@ -404,7 +404,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 # whatever the env reports on the discarded autoreset step.
                 terminateds = np.where(prev_done, True, terminateds)
                 rewards = np.where(prev_done, np.float32(0.0), rewards)
-            self.buffer.add([obs], actions, rewards, [next_obses], terminateds, truncateds)
+            self.buffer.add(obs, actions, rewards, next_obses, terminateds, truncateds)
 
             for idx in np.where(done & active)[0]:
                 emit_original = original_present[idx] and real_reset[idx]
@@ -427,7 +427,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 loss = self.train_step(steps, logger_run=ctx.logger_run)
                 self.lossque.append(loss)
                 if next_step is not end:
-                    next_actions = self.actions([next_obses])
+                    next_actions = self.actions(next_obses)
                     send(next_actions)
 
             if next_step is not end:

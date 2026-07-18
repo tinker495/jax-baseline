@@ -57,8 +57,6 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         terminateds,
         truncateds,
     ):
-        obses = [jnp.stack(zo) for zo in zip(*obses)]
-        nxtobses = [jnp.stack(zo) for zo in zip(*nxtobses)]
         actions = jnp.stack(actions)
         rewards = jnp.stack(rewards)
         terminateds = jnp.stack(terminateds)
@@ -78,7 +76,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         targets = jax.vmap(discount_with_terminated, in_axes=(0, 0, 0, 0, None))(
             rewards, terminateds, truncateds, next_value, self.gamma
         )
-        obses = [jnp.vstack(o) for o in obses]
+        obses = {key: jnp.vstack(value) for key, value in obses.items()}
         actions = jnp.vstack(actions)
         value = jnp.vstack(value)
         targets = jnp.vstack(targets)

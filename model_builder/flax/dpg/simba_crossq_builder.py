@@ -7,7 +7,7 @@ from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import LOG_STD_MEAN, LOG_STD_SCALE, Dense
 from model_builder.flax.Module import BatchReNorm, PreProcess, pop_embedding_mode
-from model_builder.utils import print_param
+from model_builder.utils import dummy_observation, print_flax_model_summary
 
 
 class Actor(nn.Module):
@@ -88,26 +88,17 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         model_critic = Merged_Critic()
         critic_fn = get_apply_fn_flax_module(model_critic, mutable=["batch_stats"])
         if key is not None:
-            policy_params = model_actor.init(
+            observation = dummy_observation(observation_space)
+            action = np.zeros((1, *action_size), dtype=np.float32)
+            policy_params = model_actor.init(key, observation, True)
+            feature = preproc_fn(policy_params, key, observation)
+            critic_params = model_critic.init(key, feature, action, True)
+            print_flax_model_summary(
+                print_model,
                 key,
-                [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                True,
+                (model_actor, observation, True),
+                (model_critic, feature, action, True),
             )
-            critic_params = model_critic.init(
-                key,
-                preproc_fn(
-                    policy_params,
-                    key,
-                    [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                ),
-                np.zeros((1, *action_size), dtype=np.float32),
-                True,
-            )
-            if print_model:
-                print("------------------build-flax-model--------------------")
-                print_param("", policy_params)
-                print_param("", critic_params)
-                print("------------------------------------------------------")
             return preproc_fn, actor_fn, critic_fn, policy_params, critic_params
         else:
             return preproc_fn, actor_fn, critic_fn

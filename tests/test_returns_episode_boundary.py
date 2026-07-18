@@ -187,7 +187,7 @@ class _ScriptEnv:
         self.awaiting_result = False
 
     def current_obs(self):
-        return np.zeros((self.ws, 2), dtype=np.float32)
+        return {"obs": np.zeros((self.ws, 2), dtype=np.float32)}
 
     def step(self, actions):
         if self.awaiting_result:
@@ -205,7 +205,7 @@ class _ScriptEnv:
         # Nonzero so the dummy-step reward zeroing is observable in the buffer.
         rewards = np.ones(self.ws, dtype=np.float32)
         truncs = np.zeros(self.ws, dtype=bool)
-        return nxt, rewards, terms, truncs, {}
+        return {"obs": nxt}, rewards, terms, truncs, {}
 
 
 class _LivesScriptEnv(_ScriptEnv):
@@ -222,7 +222,7 @@ class _LivesScriptEnv(_ScriptEnv):
         terms, truncs, lives = self._rows[self._t]
         self._t += 1
         return (
-            np.ones((self.ws, 2), dtype=np.float32),
+            {"obs": np.ones((self.ws, 2), dtype=np.float32)},
             np.ones(self.ws, dtype=np.float32),
             np.asarray(terms, dtype=bool),
             np.asarray(truncs, dtype=bool),
@@ -437,11 +437,11 @@ class _ScriptSingleEnv:
         self.received_actions = []
 
     def reset(self):
-        return np.zeros(2, dtype=np.float32), {}
+        return {"obs": np.zeros(2, dtype=np.float32)}, {}
 
     def step(self, action):
         self.received_actions.append(action)
-        return np.ones(2, dtype=np.float32), 1.0, False, False, {}
+        return {"obs": np.ones(2, dtype=np.float32)}, 1.0, False, False, {}
 
 
 def test_a2c_single_env_action_plumbing_and_buffer_shape():

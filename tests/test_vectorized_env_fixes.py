@@ -54,24 +54,40 @@ def _batch(worker_size):
 
 
 def test_replay_buffer_no_mask_adds_every_worker():
-    buf = ReplayBuffer(100, [[2]], 1)
+    buf = ReplayBuffer(100, {"obs": [2]}, 1)
     obs, act, rew, nxt, term, trunc = _batch(3)
-    buf.add([obs], act, rew, [nxt], term, trunc)
+    buf.add({"obs": obs}, act, rew, {"obs": nxt}, term, trunc)
     assert len(buf) == 3
 
 
 def test_replay_buffer_store_mask_skips_dummy_workers():
-    buf = ReplayBuffer(100, [[2]], 1)
+    buf = ReplayBuffer(100, {"obs": [2]}, 1)
     obs, act, rew, nxt, term, trunc = _batch(3)
     # worker 0 is a post-done autoreset dummy; only workers 1 and 2 are real.
-    buf.add([obs], act, rew, [nxt], term, trunc, store_mask=np.array([False, True, True]))
+    buf.add(
+        {"obs": obs},
+        act,
+        rew,
+        {"obs": nxt},
+        term,
+        trunc,
+        store_mask=np.array([False, True, True]),
+    )
     assert len(buf) == 2
 
 
 def test_replay_buffer_all_dummy_mask_adds_nothing():
-    buf = ReplayBuffer(100, [[2]], 1)
+    buf = ReplayBuffer(100, {"obs": [2]}, 1)
     obs, act, rew, nxt, term, trunc = _batch(2)
-    buf.add([obs], act, rew, [nxt], term, trunc, store_mask=np.array([False, False]))
+    buf.add(
+        {"obs": obs},
+        act,
+        rew,
+        {"obs": nxt},
+        term,
+        trunc,
+        store_mask=np.array([False, False]),
+    )
     assert len(buf) == 0
 
 
@@ -88,14 +104,22 @@ def test_active_worker_indices_rejects_mismatched_store_mask_length():
 
 
 def test_nstep_multiworker_add_store_mask_skips_dummy_worker():
-    buf = NstepReplayBuffer(100, [[2]], 1, worker_size=2, n_step=2)
+    buf = NstepReplayBuffer(100, {"obs": [2]}, 1, worker_size=2, n_step=2)
     obs, act, rew, nxt, term, trunc = _batch(2)
-    buf.multiworker_add([obs], act, rew, [nxt], term, trunc, store_mask=np.array([False, True]))
-    buf.multiworker_add([obs], act, rew, [nxt], term, trunc, store_mask=np.array([False, True]))
+    for _ in range(2):
+        buf.multiworker_add(
+            {"obs": obs},
+            act,
+            rew,
+            {"obs": nxt},
+            term,
+            trunc,
+            store_mask=np.array([False, True]),
+        )
 
     transitions = buf.get_buffer()
     assert len(buf) == 1
-    assert np.array_equal(transitions["obs0"][0], obs[1])
+    assert np.array_equal(transitions["obs:obs"][0], obs[1])
 
 
 # --- Fix 3: explicit --env_backend selection -----------------------------
@@ -252,7 +276,7 @@ def test_envpool_get_result_resorts_recv_into_canonical_env_order():
     obs, rew, term, _, result_infos = env.get_result()
 
     # Canonical 0..N-1 order: env0, env1, env2 -- every array re-sorted in lockstep.
-    assert obs.tolist() == [[0.0], [1.0], [2.0]]
+    assert obs["obs"].tolist() == [[0.0], [1.0], [2.0]]
     assert rew.tolist() == [0.0, 1.0, 2.0]
     assert term.tolist() == [False, False, True]
     assert result_infos["reward"].tolist() == [0.0, 10.0, 20.0]

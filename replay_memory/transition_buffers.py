@@ -1,4 +1,5 @@
 import random
+from collections.abc import Mapping
 
 import numpy as np
 
@@ -31,10 +32,10 @@ class Buffer:
     def add(self, obs, next_obs, **kwargs):
         self.update_idx()
         if self.buffer["ep_idx"][self.roll_idx_m1] != self.ep_idx:
-            for idx, k in enumerate(self.obs_dict.keys()):
-                self.buffer[k][self.roll_idx] = obs[idx]
-        for idx, k in enumerate(self.obs_dict.keys()):
-            self.buffer[k][self.next_roll_idx] = next_obs[idx]
+            for key in self.obs_dict:
+                self.buffer[key][self.roll_idx] = obs[key]
+        for key in self.obs_dict:
+            self.buffer[key][self.next_roll_idx] = next_obs[key]
         for k, data in kwargs.items():
             self.buffer[k][self.roll_idx] = data
         self.buffer["ep_idx"][self.roll_idx] = self.ep_idx
@@ -54,9 +55,7 @@ class Buffer:
             idxs + np.reshape(np.arange(traj_len + 1), (1, traj_len + 1))
         ) % self.max_size
         traj_idxs = (idxs + np.reshape(np.arange(traj_len), (1, traj_len))) % self.max_size
-        obs = []
-        for k in self.obs_dict:
-            obs.append(self.buffer[k][obs_traj_idxs])
+        obs = {key: self.buffer[key][obs_traj_idxs] for key in self.obs_dict}
         data = {}
         for k in self.env_dict:
             data[k] = self.buffer[k][traj_idxs]
@@ -150,22 +149,18 @@ class TransitionReplayBuffer:
     def __init__(
         self,
         size: int,
-        observation_space: list | None = None,
+        observation_space: dict | None = None,
         action_space=1,
         prediction_depth=5,
     ):
         self.max_size = size
         self.prediction_depth = prediction_depth
-        self.obsdict = dict(
-            (
-                "obs{}".format(idx),
-                {
-                    "shape": o,
-                    "dtype": np.uint8 if len(o) >= 3 else np.float32,
-                },
-            )
-            for idx, o in enumerate(observation_space or [])
-        )
+        if not isinstance(observation_space, Mapping):
+            raise TypeError("observation_space must be a dict")
+        self.obsdict = {
+            key: {"shape": shape, "dtype": np.uint8 if len(shape) >= 3 else np.float32}
+            for key, shape in observation_space.items()
+        }
 
         if isinstance(action_space, int):
             action_space = (action_space,)
@@ -206,7 +201,7 @@ class PrioritizedTransitionReplayBuffer(TransitionReplayBuffer):
     def __init__(
         self,
         size: int,
-        observation_space: list | None = None,
+        observation_space: dict | None = None,
         action_space=1,
         prediction_depth=5,
         alpha: float = 0.6,

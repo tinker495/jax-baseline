@@ -24,10 +24,10 @@ class _OneStepEnv:
 
     def reset(self):
         self.reset_count += 1
-        return np.array([0.0]), {}
+        return {"obs": np.array([0.0])}, {}
 
     def step(self, action):
-        return np.array([0.0]), 3.0, True, False, {}
+        return {"obs": np.array([0.0])}, 3.0, True, False, {}
 
     def close(self):
         self.closed = True
@@ -104,7 +104,7 @@ def test_core_record_and_test_uses_worker_env_protocol(tmp_path):
             return PreparedWorkerEnvSpec(
                 env=env,
                 env_info={
-                    "observation_space": [[1]],
+                    "observation_space": {"obs": [1]},
                     "action_size": [2],
                     "action_type": "discrete",
                     "env_type": "single",

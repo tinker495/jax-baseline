@@ -5,6 +5,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from jax_baselines.core.bulk_training import flatten_bulk_batch, iter_bulk_batches
 from jax_baselines.core.rollout import CheckpointTrainPulse
 from jax_baselines.core.seeding import key_gen
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
@@ -236,6 +237,27 @@ def test_dpg_bulk_reshape_handles_batch_size_one():
     assert reshaped["obses"].shape == (2, 1, 3)
     assert reshaped["nxtobses"].shape == (2, 1, 3)
     assert reshaped["indexes"].shape == (2, 1)
+
+
+def test_bulk_helpers_recurse_into_dict_observations():
+    agent = FakeBulkAgent()
+    lifecycle = DPGTrainingLifecycle(agent)
+    data = {
+        "obses": {"obs": np.ones((8, 3))},
+        "actions": np.ones((8, 1)),
+        "rewards": np.ones((8, 1)),
+        "nxtobses": {"obs": np.ones((8, 3))},
+        "terminateds": np.zeros((8, 1)),
+    }
+
+    reshaped = lifecycle._reshape_bulk_batch(data, chunk_size=2)
+
+    assert reshaped["obses"]["obs"].shape == (2, 4, 3)
+    assert reshaped["nxtobses"]["obs"].shape == (2, 4, 3)
+    assert reshaped["actions"].shape == (2, 4, 1)
+    first = next(iter_bulk_batches(reshaped, (object(), object())))
+    assert first["obses"]["obs"].shape == (4, 3)
+    assert flatten_bulk_batch(reshaped)["obses"]["obs"].shape == (8, 3)
 
 
 class FakeMissingBulkHookAgent(FakeAgent):

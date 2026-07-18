@@ -32,7 +32,7 @@ from model_builder.flax.dpg.tqc_builder import (
 )
 
 _POLICY_KWARGS = {"node": 16, "hidden_n": 2, "embedding_mode": "normal"}
-_OBSERVATION_SPACE = [[4]]
+_OBSERVATION_SPACE = {"obs": [4]}
 _ACTION_SIZE = [2]
 _SUPPORT_N = 25
 
@@ -140,7 +140,7 @@ def test_deterministic_builders_preserve_public_contract_and_param_roots(
     assert set(critic_params["params"]) == critic_roots
 
     key = jax.random.PRNGKey(1)
-    feature = preproc(policy_params, key, [jnp.zeros((1, 4), dtype=jnp.float32)])
+    feature = preproc(policy_params, key, {"obs": jnp.zeros((1, 4), dtype=jnp.float32)})
     action = actor(policy_params, key, feature)
     values = critic(critic_params, key, feature, action)
     assert feature.shape == (1, 4)

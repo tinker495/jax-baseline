@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
 import flax
 import flax.linen as nn
@@ -122,35 +122,36 @@ def visual_embedding(
 
 
 class PreProcess(nn.Module):
-    states_size: List[Tuple[int, ...]]
+    states_size: dict[str, Tuple[int, ...]]
     embedding_mode: str = "normal"
     flatten: bool = True
     pre_postprocess: Callable = lambda x: x  # Identity function
     multiple: int = 1
 
     def setup(self):
-        self.embedding = [
-            (
+        self.embedding = {
+            key: (
                 visual_embedding(self.embedding_mode, self.flatten, multiple=self.multiple)
                 if len(st) == 3
                 else lambda x: x
             )
-            for st in self.states_size
-        ]
+            for key, st in self.states_size.items()
+        }
 
     @nn.compact
-    def __call__(self, obses: List[jnp.ndarray]) -> jnp.ndarray:
+    def __call__(self, obses: dict[str, jnp.ndarray]) -> jnp.ndarray:
         return self.pre_postprocess(
-            jnp.concatenate([pre(x) for pre, x in zip(self.embedding, obses)], axis=1)
+            jnp.concatenate(
+                [pre(obses[key]) for key, pre in self.embedding.items()],
+                axis=1,
+            )
         )
 
     @property
     def output_size(self):
         return sum(
-            [
-                pre(jnp.zeros((1,) + st)).shape[1]
-                for pre, st in zip(self.embedding, self.states_size)
-            ]
+            pre(jnp.zeros((1,) + self.states_size[key])).shape[1]
+            for key, pre in self.embedding.items()
         )
 
 

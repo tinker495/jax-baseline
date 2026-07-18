@@ -1,9 +1,9 @@
 from functools import partial
 
 import jax
-import numpy as np
 
 from jax_baselines.core.env_info import prepare_worker_env
+from jax_baselines.core.env_protocols import batch_observation
 from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
 from jax_baselines.core.seeding import seed_prngs
 
@@ -55,7 +55,7 @@ class Impala_Worker(object):
             if have_original_reward:
                 original_score = 0
             score = 0
-            obs = [np.expand_dims(obs, axis=0)]
+            obs = batch_observation(obs)
             eplen = 0
             episode = 0
             rw_label = "rollout/episode_reward"
@@ -77,7 +77,7 @@ class Impala_Worker(object):
                     next_obs, reward, terminated, truncated, info = self.env.step(
                         convert_action(actions)
                     )
-                    next_obs = [np.expand_dims(next_obs, axis=0)]
+                    next_obs = batch_observation(next_obs)
                     local_buffer.add(
                         obs,
                         actions,
@@ -112,7 +112,7 @@ class Impala_Worker(object):
                         eplen = 0
                         episode += 1
                         obs, info = self.env.reset()
-                        obs = [np.expand_dims(obs, axis=0)]
+                        obs = batch_observation(obs)
                 queue.put(local_buffer.get_buffer())
         finally:
             if stop.is_set():

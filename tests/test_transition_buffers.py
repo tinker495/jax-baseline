@@ -4,21 +4,23 @@ from replay_memory.transition_buffers import TransitionReplayBuffer
 
 
 def test_self_prediction_filled_mask_keeps_terminal_reward_step(monkeypatch):
-    buf = TransitionReplayBuffer(10, observation_space=[[1]], action_space=1, prediction_depth=3)
+    buf = TransitionReplayBuffer(
+        10, observation_space={"obs": [1]}, action_space=1, prediction_depth=3
+    )
     action = np.array([0], dtype=np.float32)
 
     buf.add(
-        [np.array([0], dtype=np.float32)],
+        {"obs": np.array([0], dtype=np.float32)},
         action,
         1.0,
-        [np.array([1], dtype=np.float32)],
+        {"obs": np.array([1], dtype=np.float32)},
         False,
     )
     buf.add(
-        [np.array([1], dtype=np.float32)],
+        {"obs": np.array([1], dtype=np.float32)},
         action,
         2.0,
-        [np.array([2], dtype=np.float32)],
+        {"obs": np.array([2], dtype=np.float32)},
         True,
     )
 

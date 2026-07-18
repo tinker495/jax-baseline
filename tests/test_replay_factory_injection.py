@@ -56,7 +56,7 @@ def test_q_network_family_uses_injected_replay_factory():
     factory = FakeLocalReplayFactory(fake_buffer)
     agent.replay_factory = factory
     agent.buffer_size = 123
-    agent.observation_space = [[4]]
+    agent.observation_space = {"obs": [4]}
     agent.worker_size = 2
     agent.n_step = 3
     agent.n_step_method = True
@@ -72,7 +72,7 @@ def test_q_network_family_uses_injected_replay_factory():
     assert factory.calls == [
         LocalReplayNeed(
             buffer_size=123,
-            observation_space=[[4]],
+            observation_space={"obs": [4]},
             action_shape_or_n=1,
             worker_size=2,
             n_step=3,
@@ -89,7 +89,7 @@ def test_dpg_family_uses_injected_replay_factory():
     factory = FakeLocalReplayFactory(fake_buffer)
     agent.replay_factory = factory
     agent.buffer_size = 456
-    agent.observation_space = [[8]]
+    agent.observation_space = {"obs": [8]}
     agent.action_size = [2]
     agent.worker_size = 4
     agent.n_step = 2
@@ -105,7 +105,7 @@ def test_dpg_family_uses_injected_replay_factory():
     assert factory.calls == [
         LocalReplayNeed(
             buffer_size=456,
-            observation_space=[[8]],
+            observation_space={"obs": [8]},
             action_shape_or_n=[2],
             worker_size=4,
             n_step=2,
@@ -129,7 +129,7 @@ def test_apex_families_use_injected_replay_topology(family_cls, action_shape_or_
     replay_factory = FakeApeXReplayFactory(fake_buffer, worker_factory)
     agent.apex_replay_factory = replay_factory
     agent.buffer_size = 789
-    agent.observation_space = [[5]]
+    agent.observation_space = {"obs": [5]}
     agent.action_size = [3]
     agent.prioritized_replay_alpha = 0.8
     agent.prioritized_replay_eps = 0.02
@@ -145,7 +145,7 @@ def test_apex_families_use_injected_replay_topology(family_cls, action_shape_or_
     assert replay_factory.calls == [
         SharedPrioritizedReplayNeed(
             buffer_size=789,
-            observation_space=[[5]],
+            observation_space={"obs": [5]},
             action_shape_or_n=action_shape_or_n,
             n_step=4,
             gamma=0.91,
@@ -171,7 +171,7 @@ def test_multi_prioritized_replay_factory_builds_from_need(monkeypatch):
 
     need = SharedPrioritizedReplayNeed(
         buffer_size=789,
-        observation_space=[[5]],
+        observation_space={"obs": [5]},
         action_shape_or_n=1,
         n_step=4,
         gamma=0.91,
@@ -185,7 +185,7 @@ def test_multi_prioritized_replay_factory_builds_from_need(monkeypatch):
     assert isinstance(buffer, FakeMultiPrioritizedReplayBuffer)
     assert calls == [
         (
-            (789, [[5]], 0.8, 1, 4, 0.91, "manager", True),
+            (789, {"obs": [5]}, 0.8, 1, 4, 0.91, "manager", True),
             {"eps": 0.02},
         )
     ]
@@ -198,7 +198,7 @@ def test_apex_replay_factory_composes_shared_and_worker_replay(monkeypatch):
     monkeypatch.setattr(replay_factory, "make_multi_prioritized_buffer", lambda need: shared)
     need = SharedPrioritizedReplayNeed(
         buffer_size=1,
-        observation_space=[[4]],
+        observation_space={"obs": [4]},
         action_shape_or_n=1,
         n_step=1,
         gamma=0.99,
@@ -227,7 +227,7 @@ def test_impala_family_uses_rollout_need_for_runtime_buffer():
     agent.runtime = runtime
     agent.buffer_size = 64
     agent.worker_num = 2
-    agent.observation_space = [[4]]
+    agent.observation_space = {"obs": [4]}
     agent.action_type = "continuous"
     agent.action_size = [3]
     agent.sample_size = 5
@@ -240,7 +240,7 @@ def test_impala_family_uses_rollout_need_for_runtime_buffer():
         ImpalaRolloutNeed(
             replay_size=64,
             actor_num=2,
-            observation_space=[[4]],
+            observation_space={"obs": [4]},
             discrete=False,
             action_space=[3],
             sample_size=5,
@@ -266,7 +266,7 @@ def test_ray_distributed_runtime_builds_impala_buffer_from_need(monkeypatch):
     need = ImpalaRolloutNeed(
         replay_size=64,
         actor_num=2,
-        observation_space=[[4]],
+        observation_space={"obs": [4]},
         discrete=False,
         action_space=[3],
         sample_size=5,
@@ -278,7 +278,7 @@ def test_ray_distributed_runtime_builds_impala_buffer_from_need(monkeypatch):
     assert isinstance(buffer, FakeRayImpalaBuffer)
     assert calls == [
         (
-            (64, 2, [[4]]),
+            (64, 2, {"obs": [4]}),
             {"discrete": False, "action_space": [3], "sample_size": 5, "seed": 7},
         )
     ]
@@ -292,7 +292,7 @@ def test_spr_uses_injected_transition_replay_factory():
     factory = FakeLocalReplayFactory(fake_buffer)
     agent.replay_factory = factory
     agent.buffer_size = 321
-    agent.observation_space = [[84, 84, 4]]
+    agent.observation_space = {"obs": [84, 84, 4]}
     agent.worker_size = 1
     agent.n_step = 3
     agent.n_step_method = True
@@ -309,7 +309,7 @@ def test_spr_uses_injected_transition_replay_factory():
     assert factory.calls == [
         SelfPredictionReplayNeed(
             buffer_size=321,
-            observation_space=[[84, 84, 4]],
+            observation_space={"obs": [84, 84, 4]},
             action_shape_or_n=1,
             worker_size=1,
             n_step=3,
@@ -336,7 +336,7 @@ def test_replay_factory_builds_self_prediction_buffer_from_need():
     buf = make_replay_buffer(
         SelfPredictionReplayNeed(
             buffer_size=321,
-            observation_space=[[84, 84, 4]],
+            observation_space={"obs": [84, 84, 4]},
             action_shape_or_n=1,
             n_step=3,
             gamma=0.99,
@@ -355,7 +355,7 @@ def test_replay_factory_builds_self_prediction_buffer_from_need():
         (
             SelfPredictionReplayNeed(
                 buffer_size=321,
-                observation_space=[[84, 84, 4]],
+                observation_space={"obs": [84, 84, 4]},
                 action_shape_or_n=1,
                 compress_observations=True,
                 prediction_depth=5,
@@ -365,7 +365,7 @@ def test_replay_factory_builds_self_prediction_buffer_from_need():
         (
             SelfPredictionReplayNeed(
                 buffer_size=321,
-                observation_space=[[84, 84, 4]],
+                observation_space={"obs": [84, 84, 4]},
                 action_shape_or_n=1,
                 worker_size=2,
                 prediction_depth=5,

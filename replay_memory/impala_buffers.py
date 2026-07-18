@@ -24,8 +24,10 @@ class EpochBuffer:
         return self.buffer.get_stored_size()
 
     def add(self, obs_t, action, log_prob, reward, nxtobs_t, terminated, truncted=False):
-        obsdict = dict(zip(self.obsdict.keys(), list(obs_t)))
-        nextobsdict = dict(zip(self.nextobsdict.keys(), list(nxtobs_t)))
+        obsdict = {field: obs_t[field.removeprefix("obs:")] for field in self.obsdict}
+        nextobsdict = {
+            field: nxtobs_t[field.removeprefix("next_obs:")] for field in self.nextobsdict
+        }
         self.buffer.add(
             **obsdict,
             action=action,
@@ -41,11 +43,11 @@ class EpochBuffer:
     def get_buffer(self):
         trans = self.buffer.get_all_transitions()
         return batch(
-            [trans[o] for o in self.obsdict.keys()],
+            {field.removeprefix("obs:"): trans[field] for field in self.obsdict},
             trans["action"],
             trans["log_prob"],
             trans["reward"],
-            [trans[o] for o in self.nextobsdict.keys()],
+            {field.removeprefix("next_obs:"): trans[field] for field in self.nextobsdict},
             trans["terminated"],
             trans["truncted"],
         )

@@ -96,14 +96,14 @@ def _model_factory(cur_dist, nxt_dist):
         return obses
 
     def model(params, key, x):
-        marker = jnp.asarray(x[0])[0, 0]
+        marker = jnp.asarray(x["obs"])[0, 0]
         return jax.lax.cond(marker > 0.5, lambda: nxt_dist, lambda: cur_dist)
 
     return model, preproc
 
 
 def _obs(marker, batch):
-    return [np.full((batch, 1), marker, dtype=np.float32)]
+    return {"obs": np.full((batch, 1), marker, dtype=np.float32)}
 
 
 def test_worker_priority_matches_inlined_golden_master():

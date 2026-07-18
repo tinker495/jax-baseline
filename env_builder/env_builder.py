@@ -5,6 +5,11 @@ import numpy as np
 from gymnasium import spaces
 from gymnasium.wrappers.utils import rescale_box
 
+from env_builder.observations import (
+    flatten_observation_space,
+    normalize_observation,
+    normalize_observation_space,
+)
 from env_builder.seeding import seed_env
 from jax_baselines.core.env_protocols import (
     Env,
@@ -25,12 +30,6 @@ __all__ = [
     "GymVectorizedEnv",
     "get_env_builder",
 ]
-
-
-def _observation_space_shape(observation_space) -> list[list[int]]:
-    if hasattr(observation_space, "shape"):
-        return [list(observation_space.shape)]
-    return [list(observation_space)]
 
 
 def _action_meta(action_space) -> tuple[list[int], str]:
@@ -71,7 +70,7 @@ def _single_env_info(env, env_id: str) -> EnvInfo:
         raise ValueError("Single env must satisfy the SingleEnv protocol")
     action_size, action_type = _action_meta(env.action_space)
     return {
-        "observation_space": _observation_space_shape(env.observation_space),
+        "observation_space": normalize_observation_space(env.observation_space),
         "action_size": action_size,
         "action_type": action_type,
         "env_type": "single",
@@ -114,6 +113,11 @@ def get_env_builder(env_name, env_backend="gymnasium"):
                 env = make_wrap_atari(env_name, clip_rewards=True)
             else:
                 env = gym.make(env_name, render_mode=render_mode)
+            env = gym.wrappers.TransformObservation(
+                env,
+                normalize_observation,
+                spaces.Dict(flatten_observation_space(env.observation_space)),
+            )
             env = _normalize_action_space(env)
             seed_env(env, seed)
             return env
@@ -246,7 +250,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
         observation_space = self._format_observation_space(self.env.observation_space)
         action_size, action_type = _action_meta(self.env.action_space)
         self.env_info: EnvInfo = {
-            "observation_space": _observation_space_shape(observation_space),
+            "observation_space": observation_space,
             "action_size": action_size,
             "action_type": action_type,
             "env_type": env_type,
@@ -278,7 +282,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
         # contract is a strict send (step) / recv (get_result) alternation.
         self.env.async_reset()
         raw_obs, _, _, _, info = self.env.recv()
-        self.obs = self._process_observations(raw_obs[np.argsort(info["env_id"])])
+        self.obs = self._process_observations(raw_obs, np.argsort(info["env_id"]))
 
     def _check_atari_env(self, env_id: str) -> bool:
         """Check if the environment is an Atari game."""
@@ -320,7 +324,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
 
         next_obs, rewards, terminateds, truncateds, infos = self.env.recv()
         order = np.argsort(infos["env_id"])
-        next_obs = self._process_observations(next_obs[order])
+        next_obs = self._process_observations(next_obs, order)
         rewards = rewards[order]
         terminateds = terminateds[order]
         truncateds = truncateds[order]
@@ -366,20 +370,23 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
         if hasattr(self, "env") and self.env is not None:
             self.env.close()
 
-    def _process_observations(self, obs: np.ndarray) -> np.ndarray:
+    def _process_observations(self, obs, order):
         """Convert EnvPool outputs to channel-last format expected by models."""
-        if self._is_atari and obs.ndim == 4:
-            # EnvPool Atari obs format: (N, C, H, W) -> convert to (N, H, W, C)
-            return np.transpose(obs, (0, 2, 3, 1))
-        return obs
+        normalized = {key: value[order] for key, value in normalize_observation(obs).items()}
+        if self._is_atari:
+            normalized = {
+                key: np.transpose(value, (0, 2, 3, 1)) if value.ndim == 4 else value
+                for key, value in normalized.items()
+            }
+        return normalized
 
     def _format_observation_space(self, obs_space):
         """Return observation space matching processed observation format."""
         if self._is_atari:
             low = np.transpose(obs_space.low, (1, 2, 0))
             high = np.transpose(obs_space.high, (1, 2, 0))
-            return spaces.Box(low=low, high=high, dtype=obs_space.dtype)
-        return obs_space
+            obs_space = spaces.Box(low=low, high=high, dtype=obs_space.dtype)
+        return normalize_observation_space(obs_space)
 
 
 class GymVectorizedEnv(VectorizedEnv):
@@ -434,7 +441,7 @@ class GymVectorizedEnv(VectorizedEnv):
         # Store environment info
         action_size, action_type = _action_meta(self.env.single_action_space)
         self.env_info: EnvInfo = {
-            "observation_space": _observation_space_shape(self.env.single_observation_space),
+            "observation_space": normalize_observation_space(self.env.single_observation_space),
             "action_size": action_size,
             "action_type": action_type,
             "env_type": "gym_vector",
@@ -463,6 +470,7 @@ class GymVectorizedEnv(VectorizedEnv):
 
         # Initialize
         self.obs, _ = self.env.reset(seed=seed)
+        self.obs = normalize_observation(self.obs)
         self._awaiting_result = False
 
     def get_info(self):
@@ -483,6 +491,7 @@ class GymVectorizedEnv(VectorizedEnv):
         self._awaiting_result = False
 
         next_obs, rewards, terminateds, truncateds, infos = self.env.step_wait()
+        next_obs = normalize_observation(next_obs)
         self.obs = next_obs
 
         return next_obs, rewards, terminateds, truncateds, infos

@@ -6,7 +6,7 @@ import numpy as np
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.layers import SimbaV2Block, SimbaV2Embedding, SimbaV2Head
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import print_param
+from model_builder.utils import dummy_observation, print_flax_model_summary
 
 
 class Encoder(nn.Module):
@@ -121,7 +121,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         critic_fn = get_apply_fn_flax_module(critic_model)
 
         if key is not None:
-            zero_obs = [np.zeros((1, *o), dtype=np.float32) for o in observation_space]
+            zero_obs = dummy_observation(observation_space)
             zero_action = np.zeros((1, *action_size), dtype=np.float32)
             encoder_params = encoder_model.init(key, zero_obs, zero_action)
             feature, zs = encoder_model.apply(
@@ -142,13 +142,13 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 zsa_full,
                 zero_action,
             )
-            if print_model:
-                print("------------------build-flax-model--------------------")
-                print_param("", encoder_params)
-                print("------------------------------------------------------")
-                print_param("", policy_params)
-                print_param("", critic_params)
-                print("------------------------------------------------------")
+            print_flax_model_summary(
+                print_model,
+                key,
+                (encoder_model, zero_obs, zero_action),
+                (policy_model, feature, zs),
+                (critic_model, feature_full, zs_full, zsa_full, zero_action),
+            )
             return (
                 preproc_fn,
                 encoder_fn,

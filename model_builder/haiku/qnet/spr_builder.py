@@ -5,7 +5,7 @@ import numpy as np
 
 from model_builder.haiku.layers import NoisyLinear
 from model_builder.haiku.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import print_param
+from model_builder.utils import dummy_observation, print_haiku_model_summary
 
 
 class Projection(hk.Module):
@@ -170,13 +170,9 @@ def model_builder_maker(
         prediction_fn = prediction.apply
         if key is not None:
             keys = jax.random.split(key, 8)
-            pre_param = preproc.init(
-                keys[0],
-                [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-            )
-            feature = preproc.apply(
-                pre_param, keys[1], [np.zeros((1, *o), dtype=np.float32) for o in observation_space]
-            )
+            observation = dummy_observation(observation_space)
+            pre_param = preproc.init(keys[0], observation)
+            feature = preproc.apply(pre_param, keys[1], observation)
             model_param = model.init(keys[2], feature)
             action = jnp.zeros((1, action_space[0]), dtype=np.float32)
             transition_param = transition.init(keys[3], feature, action)
@@ -185,16 +181,20 @@ def model_builder_maker(
             projection_feature = projection.apply(projection_param, keys[6], transition_feature)
             prediction_param = prediction.init(keys[7], projection_feature)
             params = hk.data_structures.merge(
-                pre_param, model_param, transition_param, projection_param, prediction_param
+                pre_param,
+                model_param,
+                transition_param,
+                projection_param,
+                prediction_param,
             )
-            if print_model:
-                print("------------------build-haiku-model--------------------")
-                print_param("preprocess", pre_param)
-                print_param("model", model_param)
-                print_param("transition", transition_param)
-                print_param("projection", projection_param)
-                print_param("prediction", prediction_param)
-                print("-------------------------------------------------------")
+            print_haiku_model_summary(
+                print_model,
+                (preproc, observation),
+                (model, feature),
+                (transition, feature, action),
+                (projection, transition_feature),
+                (prediction, projection_feature),
+            )
             return preproc_fn, model_fn, transition_fn, projection_fn, prediction_fn, params
         return preproc_fn, model_fn, transition_fn, projection_fn, prediction_fn
 

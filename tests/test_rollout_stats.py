@@ -111,13 +111,13 @@ class _ScriptedSingleEnv:
         self.t = 0
 
     def reset(self):
-        return np.zeros(1, dtype=np.float32), {}
+        return {"obs": np.zeros(1, dtype=np.float32)}, {}
 
     def step(self, action):
         reward, terminated, truncated = self.script[self.t]
         info = self.infos[self.t]
         self.t += 1
-        return np.zeros(1, dtype=np.float32), reward, terminated, truncated, info
+        return {"obs": np.zeros(1, dtype=np.float32)}, reward, terminated, truncated, info
 
 
 class _ScriptedVecEnv:
@@ -128,7 +128,7 @@ class _ScriptedVecEnv:
         self.i = 0
 
     def current_obs(self):
-        return np.zeros((self.ws, 1), dtype=np.float32)
+        return {"obs": np.zeros((self.ws, 1), dtype=np.float32)}
 
     def step(self, actions):
         pass
@@ -138,7 +138,7 @@ class _ScriptedVecEnv:
         infos = self.infos[self.i]
         self.i += 1
         return (
-            np.zeros((self.ws, 1), dtype=np.float32),
+            {"obs": np.zeros((self.ws, 1), dtype=np.float32)},
             rewards,
             terminateds,
             truncateds,

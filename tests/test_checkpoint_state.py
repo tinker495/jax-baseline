@@ -171,8 +171,8 @@ def test_simba_obs_rms_round_trip():
     for i, name in enumerate(fields):
         setattr(src, name, _field_value(name, i))
     src.simba = True
-    src.obs_rms = RunningMeanStd(shapes=[(2,)], dtype=np.float64)
-    src.obs_rms.update([np.ones((4, 2), np.float64)])
+    src.obs_rms = RunningMeanStd(shapes={"obs": (2,)}, dtype=np.float64)
+    src.obs_rms.update({"obs": np.ones((4, 2), np.float64)})
     src.action_obs_rms = RunningMeanStd.from_state(src.obs_rms.to_state())
     src.checkpoint_obs_rms = None  # exercises the None branch
 

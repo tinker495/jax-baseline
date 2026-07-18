@@ -117,19 +117,19 @@ class HL_GAUSS_BBF(BBF):
         obses = convert_jax(obses)
         actions = actions.astype(jnp.int32)
         not_terminateds = 1.0 - terminateds
-        obses = [
-            jax.lax.cond(
-                len(o.shape) >= 5,
-                lambda: self._image_augmentation(o, key),
-                lambda: o,
-            )
-            for o in obses
-        ]
+        obses = jax.tree.map(
+            lambda value: jax.lax.cond(
+                len(value.shape) >= 5,
+                lambda: self._image_augmentation(value, key),
+                lambda: value,
+            ),
+            obses,
+        )
 
-        batch_idxes = jnp.arange(obses[0].shape[0]).reshape(
+        batch_idxes = jnp.arange(next(iter(obses.values())).shape[0]).reshape(
             -1, self.batch_size
         )  # nbatches x batch_size
-        batched_obses = [o[batch_idxes] for o in obses]
+        batched_obses = jax.tree.map(lambda value: value[batch_idxes], obses)
         batched_actions = actions[batch_idxes]
         batched_rewards = rewards[batch_idxes]
         batched_not_terminateds = not_terminateds[batch_idxes]
@@ -144,15 +144,21 @@ class HL_GAUSS_BBF(BBF):
             params, target_params, opt_state, key = updates
             obses, actions, rewards, not_terminateds, filled, weights, steps = input
             key, subkey = jax.random.split(key)
-            parsed_obses = [jnp.reshape(o[:, 0], (-1, *o.shape[2:])) for o in obses]
+            parsed_obses = jax.tree.map(
+                lambda value: jnp.reshape(value[:, 0], (-1, *value.shape[2:])), obses
+            )
             last_idxs, parsed_filled = self.get_last_idx(filled, n_step)
-            parsed_nxtobses = [
-                jnp.reshape(
-                    jnp.take_along_axis(o, jnp.reshape(last_idxs + 1, (-1, 1, 1, 1, 1)), axis=1),
-                    (-1, *o.shape[2:]),
-                )
-                for o in obses
-            ]
+            parsed_nxtobses = jax.tree.map(
+                lambda value: jnp.reshape(
+                    jnp.take_along_axis(
+                        value,
+                        jnp.reshape(last_idxs + 1, (-1, 1, 1, 1, 1)),
+                        axis=1,
+                    ),
+                    (-1, *value.shape[2:]),
+                ),
+                obses,
+            )
             parsed_actions = jnp.reshape(actions[:, 0], (-1, 1, 1))
             parsed_rewards = jnp.sum(rewards * _gamma * parsed_filled, axis=1, keepdims=True)
             parsed_not_terminateds = jnp.take_along_axis(not_terminateds, last_idxs, axis=1)
@@ -170,7 +176,9 @@ class HL_GAUSS_BBF(BBF):
                 parsed_gamma,
                 key,
             )
-            transition_obses = [o[:, : (self.prediction_depth + 1)] for o in obses]
+            transition_obses = jax.tree.map(
+                lambda value: value[:, : (self.prediction_depth + 1)], obses
+            )
             transition_actions = actions[:, : self.prediction_depth]
             transition_filled = filled[:, : self.prediction_depth]
             (_, (centropy, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(

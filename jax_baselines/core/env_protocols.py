@@ -8,15 +8,18 @@ instead of concrete backend packages.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
+from typing import Any, Literal, Protocol, TypeAlias, TypedDict, runtime_checkable
 
 import numpy as np
+
+Observation: TypeAlias = dict[str, Any]
+ObservationSpace: TypeAlias = dict[str, list[int]]
 
 
 class EnvInfo(TypedDict):
     """Environment metadata shared across adapter and core layers."""
 
-    observation_space: list[list[int]]
+    observation_space: ObservationSpace
     action_size: list[int]
     action_type: Literal["discrete", "continuous"]
     env_type: str
@@ -49,10 +52,10 @@ class SingleEnv(Protocol):
     observation_space: Any
     action_space: Any
 
-    def reset(self, *args: Any, **kwargs: Any) -> Any:
+    def reset(self, *args: Any, **kwargs: Any) -> tuple[Observation, dict[str, Any]]:
         ...
 
-    def step(self, action: Any) -> Any:
+    def step(self, action: Any) -> tuple[Observation, Any, Any, Any, dict[str, Any]]:
         ...
 
     def close(self) -> Any:
@@ -61,20 +64,27 @@ class SingleEnv(Protocol):
 
 @runtime_checkable
 class VectorizedEnv(Protocol):
-    """Async-style vectorized environment surface consumed by the core."""
+    """Async-style vectorized environment surface consumed by the core.
+
+    ``get_result()[0]`` is the successor for the completed transition, while
+    ``current_obs()`` is the observation for the next action. They may differ
+    when an adapter performs same-step autoreset.
+    """
 
     env_info: EnvInfo | None = None
 
     def get_info(self) -> dict[str, Any]:
         ...
 
-    def current_obs(self) -> Any:
+    def current_obs(self) -> Observation:
+        """Return the observation corresponding to the next action."""
         ...
 
     def step(self, action: Any) -> None:
         ...
 
-    def get_result(self) -> Any:
+    def get_result(self) -> tuple[Observation, Any, Any, Any, Any]:
+        """Return the completed transition, including its observation successor."""
         ...
 
     def close(self) -> None:
@@ -83,6 +93,13 @@ class VectorizedEnv(Protocol):
 
 # Backward-compatible name exported by env_builder; no separate ABC needed.
 Env = VectorizedEnv
+
+
+def batch_observation(observation: Observation) -> Observation:
+    """Add the leading model batch dimension to a single observation."""
+    if not isinstance(observation, dict):
+        raise TypeError("observation must be a dict")
+    return {key: np.expand_dims(value, axis=0) for key, value in observation.items()}
 
 
 def _done_mask(terminateds: Any, truncateds: Any) -> np.ndarray:

@@ -45,35 +45,46 @@ def compute_ckpt_window_stat(
 class RunningMeanStd:
     """Tracks the mean, variance and count of values."""
 
-    def __init__(self, epsilon=1e-4, shapes: list = None, dtype=np.float64):
+    def __init__(self, epsilon=1e-4, shapes: dict | None = None, dtype=np.float64):
         """Tracks the mean, variance and count of values."""
         if shapes is None:
-            shapes = [()]
+            shapes = {"obs": ()}
+        elif not isinstance(shapes, dict):
+            raise TypeError("shapes must be a dict")
         self.dtype = np.dtype(dtype)
-        self.means = [np.zeros(shape, dtype=self.dtype) for shape in shapes]
-        self.vars = [np.ones(shape, dtype=self.dtype) for shape in shapes]
+        self.means = {key: np.zeros(shape, dtype=self.dtype) for key, shape in shapes.items()}
+        self.vars = {key: np.ones(shape, dtype=self.dtype) for key, shape in shapes.items()}
         self.count = epsilon
 
     def normalize(self, xs):
         """Normalizes the input using the running mean and variance."""
-        return [(x - mean) / np.sqrt(var + 1e-8) for x, mean, var in zip(xs, self.means, self.vars)]
+        return {
+            key: (xs[key] - self.means[key]) / np.sqrt(self.vars[key] + 1e-8) for key in self.means
+        }
 
     def update(self, xs):
         """Updates the mean, var and count from a batch of samples."""
-        means = []
-        vars = []
-        for x, mean, var in zip(xs, self.means, self.vars):
+        means = {}
+        vars = {}
+        batch_count = None
+        for key, mean in self.means.items():
+            x = xs[key]
+            var = self.vars[key]
             batch_mean = np.mean(x, axis=0)
             batch_var = np.var(x, axis=0)
-            batch_count = x.shape[0]
+            current_count = x.shape[0]
+            if batch_count is not None and current_count != batch_count:
+                raise ValueError("Observation batches must share a leading dimension")
+            batch_count = current_count
             mean, var = self.update_mean_var_count_from_moments(
                 mean, var, batch_mean, batch_var, batch_count
             )
-            means.append(mean)
-            vars.append(var)
+            means[key] = mean
+            vars[key] = var
         self.means = means
         self.vars = vars
-        self.count += batch_count
+        if batch_count is not None:
+            self.count += batch_count
 
     def update_mean_var_count_from_moments(self, mean, var, batch_mean, batch_var, batch_count):
         """Updates the mean, var and count using the previous mean, var, count and batch values."""
@@ -91,23 +102,29 @@ class RunningMeanStd:
     def to_state(self):
         """Serialize running statistics to a numpy-friendly state."""
         return {
-            "means": [np.asarray(arr) for arr in self.means],
-            "vars": [np.asarray(arr) for arr in self.vars],
+            "means": {key: np.asarray(arr) for key, arr in self.means.items()},
+            "vars": {key: np.asarray(arr) for key, arr in self.vars.items()},
             "count": np.asarray(self.count, dtype=np.float64),
         }
 
     @classmethod
     def from_state(cls, state):
         """Deserialize running statistics from a saved state."""
-        means = [np.asarray(arr) for arr in state.get("means", [])]
-        vars_ = [np.asarray(arr) for arr in state.get("vars", [])]
-        dtype = means[0].dtype if means else np.float64
-        shapes = [arr.shape for arr in means]
+        means = state.get("means", {})
+        vars_ = state.get("vars", {})
+        if not isinstance(means, dict):
+            keys = ["obs"] if len(means) == 1 else [str(index) for index in range(len(means))]
+            means = dict(zip(keys, means))
+            vars_ = dict(zip(keys, vars_))
+        means = {key: np.asarray(arr) for key, arr in means.items()}
+        vars_ = {key: np.asarray(arr) for key, arr in vars_.items()}
+        dtype = next(iter(means.values())).dtype if means else np.float64
+        shapes = {key: arr.shape for key, arr in means.items()}
         instance = cls(shapes=shapes, dtype=dtype)
         if means:
-            instance.means = [arr.astype(dtype, copy=False) for arr in means]
+            instance.means = {key: arr.astype(dtype, copy=False) for key, arr in means.items()}
         if vars_:
-            instance.vars = [arr.astype(dtype, copy=False) for arr in vars_]
+            instance.vars = {key: arr.astype(dtype, copy=False) for key, arr in vars_.items()}
         count = state.get("count", np.array(0.0))
         instance.count = float(np.asarray(count))
         return instance

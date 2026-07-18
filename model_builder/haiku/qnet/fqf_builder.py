@@ -5,7 +5,7 @@ import numpy as np
 
 from model_builder.haiku.Module import PreProcess, pop_embedding_mode
 from model_builder.haiku.qnet.iqn_builder import Model
-from model_builder.utils import print_param
+from model_builder.utils import dummy_observation, print_haiku_model_summary
 
 
 class FractionProposal(hk.Module):
@@ -57,26 +57,19 @@ def model_builder_maker(
         model_fn = model.apply
         if key is not None:
             key1, key2, key3, key4 = jax.random.split(key, num=4)
-            pre_param = preproc.init(
-                key1,
-                [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-            )
-            feature = preproc_fn(
-                pre_param, key2, [np.zeros((1, *o), dtype=np.float32) for o in observation_space]
-            )
-            fqf_param = fqf.init(
-                key3,
-                feature,
-            )
+            observation = dummy_observation(observation_space)
+            pre_param = preproc.init(key1, observation)
+            feature = preproc_fn(pre_param, key2, observation)
+            fqf_param = fqf.init(key3, feature)
             _, tau_hat, _ = fqf_fn(fqf_param, key4, feature)
             model_param = model.init(key4, feature, tau_hat)
             params = hk.data_structures.merge(pre_param, model_param)
-            if print_model:
-                print("------------------build-haiku-model--------------------")
-                print_param("preprocess", pre_param)
-                print_param("fqf", fqf_param)
-                print_param("model", model_param)
-                print("-------------------------------------------------------")
+            print_haiku_model_summary(
+                print_model,
+                (preproc, observation),
+                (fqf, feature),
+                (model, feature, tau_hat),
+            )
             return preproc_fn, model_fn, fqf_fn, params, fqf_param
         return preproc_fn, model_fn, fqf_fn
 

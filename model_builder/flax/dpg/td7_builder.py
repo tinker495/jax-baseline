@@ -7,7 +7,7 @@ from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense, avgl1norm
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import print_param
+from model_builder.utils import dummy_observation, print_flax_model_summary
 
 
 class Encoder(nn.Module):
@@ -134,37 +134,19 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         actor_fn = get_apply_fn_flax_module(policy_model)
         critic_fn = get_apply_fn_flax_module(critic_model)
         if key is not None:
-            encoder_params = encoder_model.init(
+            observation = dummy_observation(observation_space)
+            action = np.zeros((1, *action_size), dtype=np.float32)
+            encoder_params = encoder_model.init(key, observation, action)
+            feature, zs, zsa = encoder_model.apply(encoder_params, observation, action)
+            policy_params = policy_model.init(key, feature, zs)
+            critic_params = critic_model.init(key, feature, zs, zsa, action)
+            print_flax_model_summary(
+                print_model,
                 key,
-                [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                np.zeros((1, *action_size), dtype=np.float32),
+                (encoder_model, observation, action),
+                (policy_model, feature, zs),
+                (critic_model, feature, zs, zsa, action),
             )
-            policy_params = policy_model.init(
-                key,
-                *encoder_model.apply(
-                    encoder_params,
-                    [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                    method=encoder_model.feature_and_zs,
-                ),
-            )
-
-            critic_params = critic_model.init(
-                key,
-                *encoder_model.apply(
-                    encoder_params,
-                    [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                    np.zeros((1, *action_size), dtype=np.float32),
-                ),
-                np.zeros((1, *action_size), dtype=np.float32),
-            )
-
-            if print_model:
-                print("------------------build-flax-model--------------------")
-                print_param("", encoder_params)
-                print("------------------------------------------------------")
-                print_param("", policy_params)
-                print_param("", critic_params)
-                print("------------------------------------------------------")
             return (
                 preproc_fn,
                 encoder_fn,

@@ -73,7 +73,7 @@ def _qnet_runner(agent):
         return ActionSelection(a[0][0], a[0])
 
     def vector_action(obs, steps):
-        a = agent.actions([obs], agent.update_eps)
+        a = agent.actions(obs, agent.update_eps)
         return ActionSelection(a, a)
 
     def refresh(steps):
@@ -89,7 +89,7 @@ def _dpg_runner(agent):
         return ActionSelection(a[0], a[0])
 
     def vector_action(obs, steps):
-        a = agent.actions([obs], steps)
+        a = agent.actions(obs, steps)
         return ActionSelection(a, a)
 
     return RolloutEngine(_spec(agent, single_action, vector_action, lambda steps: None, None))
@@ -102,6 +102,8 @@ def rep(x):
         return ("arr", rep(x.tolist()))
     if isinstance(x, list):
         return [rep(v) for v in x]
+    if isinstance(x, dict):
+        return [rep(x[key]) for key in sorted(x)]
     if isinstance(x, tuple):
         return tuple(rep(v) for v in x)
     if isinstance(x, np.integer):
@@ -123,19 +125,19 @@ class FakeSingleEnv:
     def reset(self):
         self.rec.append(("reset",))
         self.c += 1
-        return np.array([float(self.c)]), {}
+        return {"obs": np.array([float(self.c)])}, {}
 
     def true_reset(self):
         self.rec.append(("true_reset",))
         self.c += 1
-        return np.array([float(self.c)]), {}
+        return {"obs": np.array([float(self.c)])}, {}
 
     def step(self, action):
         self.rec.append(("env_step", rep(action)))
         r, term, trunc = self.script[self.t]
         self.t += 1
         self.c += 1
-        return np.array([float(self.c)]), r, term, trunc, {}
+        return {"obs": np.array([float(self.c)])}, r, term, trunc, {}
 
 
 class FakeVecEnv:
@@ -149,7 +151,7 @@ class FakeVecEnv:
 
     def current_obs(self):
         self.c += 1
-        return np.array([float(self.c)] * self.ws)
+        return {"obs": np.array([float(self.c)] * self.ws)}
 
     def step(self, actions):
         self.rec.append(("env_step", rep(actions)))
@@ -158,7 +160,7 @@ class FakeVecEnv:
 
     def get_result(self):
         rewards, terms, truncs = self._last
-        nxt = np.array([float(self.c) + 0.5] * self.ws)
+        nxt = {"obs": np.array([float(self.c) + 0.5] * self.ws)}
         return nxt, rewards, terms, truncs, {}
 
     def true_reset(self):
@@ -860,7 +862,7 @@ class _OffsetNormalizer:
 
     def normalize(self, obs):
         self.calls.append(("normalize", obs))
-        return [np.asarray(x) + self.offset for x in obs]
+        return {key: np.asarray(value) + self.offset for key, value in obs.items()}
 
     def update(self, obs):
         self.calls.append(("update", obs))
@@ -872,7 +874,7 @@ class _ShapeCheckingEvalEnv:
         self.actions = []
 
     def reset(self):
-        return np.zeros(3), {}
+        return {"obs": np.zeros(3)}, {}
 
     def step(self, action):
         action = np.asarray(action)
@@ -881,7 +883,7 @@ class _ShapeCheckingEvalEnv:
                 f"Action dimension mismatch. Expected {self.action_shape}, found {action.shape}"
             )
         self.actions.append(action)
-        return np.zeros(3), 0.0, True, False, {}
+        return {"obs": np.zeros(3)}, 0.0, True, False, {}
 
 
 def _dpg_action_agent():
@@ -896,7 +898,7 @@ def _dpg_action_agent():
     agent.worker_size = 1
     agent.action_size = (1,)
     agent._select_action_state = lambda eval, steps: {"encoder": None, "policy": None}
-    agent._policy_action_from_state = lambda state, obs, eval, steps: np.asarray(obs[0])
+    agent._policy_action_from_state = lambda state, obs, eval, steps: np.asarray(obs["obs"])
     agent._apply_action_noise = lambda actions, steps, eval: actions
     return agent
 
@@ -904,23 +906,23 @@ def _dpg_action_agent():
 def test_dpg_rollout_actions_use_policy_update_normalizer_and_update_live_rms():
     agent = _dpg_action_agent()
 
-    action = agent.actions([np.array([1.0])], steps=5, eval=False)
+    action = agent.actions({"obs": np.array([1.0])}, steps=5, eval=False)
 
     assert np.array_equal(action, np.array([11.0]))
-    assert agent.obs_rms.calls == [("update", [np.array([1.0])])]
-    assert agent.action_obs_rms.calls == [("normalize", [np.array([1.0])])]
+    assert agent.obs_rms.calls == [("update", {"obs": np.array([1.0])})]
+    assert agent.action_obs_rms.calls == [("normalize", {"obs": np.array([1.0])})]
     assert agent.checkpoint_obs_rms.calls == []
 
 
 def test_dpg_eval_actions_use_checkpoint_normalizer():
     agent = _dpg_action_agent()
 
-    action = agent.actions([np.array([1.0])], steps=5, eval=True)
+    action = agent.actions({"obs": np.array([1.0])}, steps=5, eval=True)
 
     assert np.array_equal(action, np.array([1001.0]))
     assert agent.obs_rms.calls == []
     assert agent.action_obs_rms.calls == []
-    assert agent.checkpoint_obs_rms.calls == [("normalize", [np.array([1.0])])]
+    assert agent.checkpoint_obs_rms.calls == [("normalize", {"obs": np.array([1.0])})]
 
 
 def test_dpg_eval_skips_random_warmup_and_uses_policy_action():

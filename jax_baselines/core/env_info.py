@@ -36,6 +36,12 @@ def _require_env_info(env_info: EnvInfo | None) -> EnvInfo:
     if missing:
         raise ValueError(f"Prepared env_info missing required keys: {', '.join(missing)}")
 
+    observation_space = env_info["observation_space"]
+    if not isinstance(observation_space, dict) or not observation_space:
+        raise ValueError("Prepared env_info observation_space must be a non-empty dict")
+    if any(not isinstance(key, str) for key in observation_space):
+        raise ValueError("Prepared env_info observation keys must be strings")
+
     return env_info
 
 

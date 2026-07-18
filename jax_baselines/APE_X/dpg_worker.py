@@ -1,9 +1,9 @@
 from functools import partial
 
 import jax
-import numpy as np
 
 from jax_baselines.core.env_info import prepare_worker_env
+from jax_baselines.core.env_protocols import batch_observation
 from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
 from jax_baselines.core.seeding import seed_prngs
 
@@ -63,7 +63,7 @@ class Ape_X_Worker(object):
                     obs, info = self.env.reset()
             else:
                 obs, info = self.env.reset()
-            obs = [np.expand_dims(obs, axis=0)]
+            obs = batch_observation(obs)
             params = param_server.get_params()
             eplen = 0
             episode = 0
@@ -85,7 +85,7 @@ class Ape_X_Worker(object):
                 eplen += 1
                 actions = get_action(params, obs, noise, eps, next(key_seq))
                 next_obs, reward, terminated, truncated, info = self.env.step(actions)
-                next_obs = [np.expand_dims(next_obs, axis=0)]
+                next_obs = batch_observation(next_obs)
                 local_buffer.add(obs, actions, reward, next_obs, terminated, truncated)
                 score += reward
                 obs = next_obs
@@ -93,7 +93,7 @@ class Ape_X_Worker(object):
                 if terminated or truncated:
                     local_buffer.episode_end()
                     obs, info = self.env.reset()
-                    obs = [np.expand_dims(obs, axis=0)]
+                    obs = batch_observation(obs)
                     if logger_server is not None:
                         log_dict = {
                             rw_label: score,

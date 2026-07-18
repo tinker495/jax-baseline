@@ -110,7 +110,7 @@ class RayImpalaBuffer:
         self,
         replay_size: int,
         actor_num: int,
-        observation_space: list,
+        observation_space: dict,
         discrete=True,
         action_space=1,
         sample_size=32,
@@ -118,20 +118,20 @@ class RayImpalaBuffer:
     ):
         self.actor_num = actor_num
         self.obsdict = {
-            f"obs{idx}": (
-                {"shape": o, "dtype": np.uint8}
-                if len(o) >= 3
-                else {"shape": o, "dtype": np.float32}
+            f"obs:{key}": (
+                {"shape": shape, "dtype": np.uint8}
+                if len(shape) >= 3
+                else {"shape": shape, "dtype": np.float32}
             )
-            for idx, o in enumerate(observation_space)
+            for key, shape in observation_space.items()
         }
         self.nextobsdict = {
-            f"next_obs{idx}": (
-                {"shape": o, "dtype": np.uint8}
-                if len(o) >= 3
-                else {"shape": o, "dtype": np.float32}
+            f"next_obs:{key}": (
+                {"shape": shape, "dtype": np.uint8}
+                if len(shape) >= 3
+                else {"shape": shape, "dtype": np.float32}
             )
-            for idx, o in enumerate(observation_space)
+            for key, shape in observation_space.items()
         }
         self.env_dict = {
             **self.obsdict,

@@ -346,7 +346,11 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         weights,
         key,
     ):
-        concated_obses = [jnp.concatenate([o, n]) for o, n in zip(obses, nxtobses)]
+        concated_obses = jax.tree_util.tree_map(
+            lambda obs, nxtobs: jnp.concatenate([obs, nxtobs]),
+            obses,
+            nxtobses,
+        )
         concated_preproc = self.preproc(policy_params, key, concated_obses)
         next_preproc = jnp.split(concated_preproc, 2, axis=0)[1]
         next_policy, log_prob, _ = self._get_pi_log_prob(policy_params, next_preproc, key, False)

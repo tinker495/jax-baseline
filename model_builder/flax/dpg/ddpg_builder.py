@@ -4,7 +4,7 @@ import numpy as np
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.dpg.ddpg_td3_blocks import Actor, Critic
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import print_param
+from model_builder.utils import dummy_observation, print_flax_model_summary
 
 
 def _make_model_builder(
@@ -47,24 +47,17 @@ def _make_model_builder(
         actor_fn = get_apply_fn_flax_module(actor_model, actor_model.actor)
         critic_fn = get_apply_fn_flax_module(critic_model)
         if key is not None:
-            policy_params = actor_model.init(
+            observation = dummy_observation(observation_space)
+            action = np.zeros((1, *action_size), dtype=np.float32)
+            policy_params = actor_model.init(key, observation)
+            feature = preproc_fn(policy_params, key, observation)
+            critic_params = critic_model.init(key, feature, action)
+            print_flax_model_summary(
+                print_model,
                 key,
-                [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
+                (actor_model, observation),
+                (critic_model, feature, action),
             )
-            critic_params = critic_model.init(
-                key,
-                preproc_fn(
-                    policy_params,
-                    key,
-                    [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-                ),
-                np.zeros((1, *action_size), dtype=np.float32),
-            )
-            if print_model:
-                print("------------------build-flax-model--------------------")
-                print_param("", policy_params)
-                print_param("", critic_params)
-                print("------------------------------------------------------")
             return preproc_fn, actor_fn, critic_fn, policy_params, critic_params
         return preproc_fn, actor_fn, critic_fn
 

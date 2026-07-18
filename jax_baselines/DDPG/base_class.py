@@ -455,7 +455,7 @@ class Deteministic_Policy_Gradient_Family(object):
         return ActionSelection(env_action=actions[0], store_action=actions[0])
 
     def _vector_action_selection(self, obs, steps):
-        actions = self.actions([obs], steps)
+        actions = self.actions(obs, steps)
         return ActionSelection(env_action=actions, store_action=actions)
 
     def _snapshot_action_normalizer(self):

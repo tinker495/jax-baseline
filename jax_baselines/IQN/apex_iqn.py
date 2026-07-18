@@ -140,7 +140,7 @@ class APE_X_IQN(Ape_X_Family):
             ):
                 key1, key2, key3 = jax.random.split(key, 3)
                 conv_obses = convert_jax(obses)
-                batch_size = conv_obses[0].shape[0]
+                batch_size = next(iter(conv_obses.values())).shape[0]
                 tau = jax.random.uniform(key1, (batch_size, n_support))
                 next_tau = jax.random.uniform(key2, (batch_size, n_support))
                 q_values = jnp.take_along_axis(

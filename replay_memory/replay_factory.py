@@ -37,8 +37,8 @@ def _frame_compress_applicable(observation_space, worker_size, n_step, n_frames)
         worker_size == 1
         and n_step > 1
         and len(observation_space) == 1
-        and len(observation_space[0]) >= 3
-        and observation_space[0][-1] % n_frames == 0
+        and len(next(iter(observation_space.values()))) >= 3
+        and next(iter(observation_space.values()))[-1] % n_frames == 0
     )
 
 
@@ -122,7 +122,7 @@ def make_replay_buffer(need: LocalReplayNeed):
         compress_memory
         and worker_size > 1
         and n_step == 1
-        and any(len(shape) >= 3 for shape in observation_space)
+        and any(len(shape) >= 3 for shape in observation_space.values())
     ):
         if prioritized:
             return PrioritizedNstepReplayBuffer(

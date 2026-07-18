@@ -1,4 +1,5 @@
 import warnings
+from collections.abc import Mapping
 
 import cpprb
 import numpy as np
@@ -14,10 +15,18 @@ def _obs_spec(shape):
 
 
 def _build_obs_dicts(observation_space):
-    """Build the ``obs{i}`` / ``next_obs{i}`` cpprb env_dict fragments."""
-    obsdict = {f"obs{idx}": _obs_spec(o) for idx, o in enumerate(observation_space)}
-    nextobsdict = {f"next_obs{idx}": _obs_spec(o) for idx, o in enumerate(observation_space)}
+    """Build cpprb fields while preserving canonical observation keys."""
+    if not isinstance(observation_space, Mapping):
+        raise TypeError("observation_space must be a dict")
+    obsdict = {f"obs:{key}": _obs_spec(shape) for key, shape in observation_space.items()}
+    nextobsdict = {f"next_obs:{key}": _obs_spec(shape) for key, shape in observation_space.items()}
     return obsdict, nextobsdict
+
+
+def _storage_observation(fields, observation, prefix):
+    if not isinstance(observation, Mapping):
+        raise TypeError("observation must be a dict")
+    return {field: observation[field.removeprefix(f"{prefix}:")] for field in fields}
 
 
 def _compress_config(obsdict, nextobsdict, compress_memory, n_step):
@@ -95,10 +104,10 @@ def _terminated_mask(done):
 
 def _project_transitions(transitions, obs_keys, next_obs_keys, *, prioritized=False):
     projected = {
-        "obses": [transitions[key] for key in obs_keys],
+        "obses": {key.removeprefix("obs:"): transitions[key] for key in obs_keys},
         "actions": transitions["action"],
         "rewards": transitions["reward"],
-        "nxtobses": [transitions[key] for key in next_obs_keys],
+        "nxtobses": {key.removeprefix("next_obs:"): transitions[key] for key in next_obs_keys},
         "terminateds": _terminated_mask(transitions["done"]),
     }
     if prioritized:
@@ -160,14 +169,14 @@ class ReplayBuffer(object):
         if store_mask is not None:
             if not store_mask.any():
                 return
-            obs_t = [o[store_mask] for o in obs_t]
-            nxtobs_t = [no[store_mask] for no in nxtobs_t]
+            obs_t = {key: value[store_mask] for key, value in obs_t.items()}
+            nxtobs_t = {key: value[store_mask] for key, value in nxtobs_t.items()}
             action = action[store_mask]
             reward = reward[store_mask]
             terminated = terminated[store_mask]
             truncated = truncated[store_mask]
-        obsdict = dict(zip(self.obsdict, obs_t))
-        nextobsdict = dict(zip(self.nextobsdict, nxtobs_t))
+        obsdict = _storage_observation(self.obsdict, obs_t, "obs")
+        nextobsdict = _storage_observation(self.nextobsdict, nxtobs_t, "next_obs")
         self.buffer.add(**obsdict, action=action, reward=reward, **nextobsdict, done=terminated)
         # next_of / stack_compress reconstruct observations from sequentially
         # stored rows, so the episode boundary must be marked or the terminal
@@ -255,8 +264,14 @@ class NstepReplayBuffer(ReplayBuffer):
         store_mask=None,
     ):
         for w in _active_worker_indices(self.worker_size, store_mask):
-            obsdict = dict(zip(self.obsdict, [o[w] for o in obs_t]))
-            nextobsdict = dict(zip(self.nextobsdict, [no[w] for no in nxtobs_t]))
+            obsdict = _storage_observation(
+                self.obsdict, {key: value[w] for key, value in obs_t.items()}, "obs"
+            )
+            nextobsdict = _storage_observation(
+                self.nextobsdict,
+                {key: value[w] for key, value in nxtobs_t.items()},
+                "next_obs",
+            )
             local_buffer = self.local_buffers[w]
             start = local_buffer.get_next_index()
             local_buffer.add(
@@ -295,8 +310,14 @@ class NstepReplayBuffer(ReplayBuffer):
         store_mask=None,
     ):
         for w in _active_worker_indices(self.worker_size, store_mask):
-            obsdict = dict(zip(self.obsdict, [o[w] for o in obs_t]))
-            nextobsdict = dict(zip(self.nextobsdict, [no[w] for no in nxtobs_t]))
+            obsdict = _storage_observation(
+                self.obsdict, {key: value[w] for key, value in obs_t.items()}, "obs"
+            )
+            nextobsdict = _storage_observation(
+                self.nextobsdict,
+                {key: value[w] for key, value in nxtobs_t.items()},
+                "next_obs",
+            )
             self.buffer.add(
                 **obsdict,
                 action=action[w],

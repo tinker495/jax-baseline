@@ -59,7 +59,7 @@ def test_worker_builds_env_through_injected_adapter(worker_cls):
         return PreparedWorkerEnvSpec(
             env=env,
             env_info={
-                "observation_space": [[4]],
+                "observation_space": {"obs": [4]},
                 "action_size": [2],
                 "action_type": "discrete",
                 "env_type": "single",
@@ -75,7 +75,7 @@ def test_worker_builds_env_through_injected_adapter(worker_cls):
 
     assert calls == [(1, 7)]
     info = worker.get_info()
-    assert info["observation_space"] == [[4]]
+    assert info["observation_space"] == {"obs": [4]}
     assert info["action_size"] == [2]
     assert info["action_type"] == "discrete"
     # get_worker_env_info normalizes distributed envs to SingleEnv; the worker
@@ -90,11 +90,11 @@ def test_impala_worker_replay_factory_satisfies_seam():
     from replay_memory.replay_factory import make_impala_worker_buffer
 
     env_dict = {
-        "obs0": {"shape": (4,)},
+        "obs:obs": {"shape": (4,)},
         "action": {"shape": 1},
         "log_prob": {},
         "reward": {},
-        "next_obs0": {"shape": (4,)},
+        "next_obs:obs": {"shape": (4,)},
         "terminated": {},
         "truncted": {},
     }
@@ -103,11 +103,11 @@ def test_impala_worker_replay_factory_satisfies_seam():
 
     assert len(buffer) == 0
     buffer.add(
-        [np.zeros((4,))],
+        {"obs": np.zeros((4,))},
         action=0,
         log_prob=0.0,
         reward=1.0,
-        nxtobs_t=[np.ones((4,))],
+        nxtobs_t={"obs": np.ones((4,))},
         terminated=False,
     )
     assert len(buffer) == 1
@@ -123,10 +123,10 @@ def test_apex_worker_replay_factory_satisfies_seam():
     from replay_memory.replay_factory import make_worker_replay_buffer
 
     env_dict = {
-        "obs0": {"shape": (4,)},
+        "obs:obs": {"shape": (4,)},
         "action": {"shape": 1},
         "reward": {},
-        "next_obs0": {"shape": (4,)},
+        "next_obs:obs": {"shape": (4,)},
         "done": {},
     }
 
@@ -134,10 +134,10 @@ def test_apex_worker_replay_factory_satisfies_seam():
 
     assert len(buffer) == 0
     buffer.add(
-        [np.zeros((4,))],
+        {"obs": np.zeros((4,))},
         action=0,
         reward=1.0,
-        nxtobs_t=[np.ones((4,))],
+        nxtobs_t={"obs": np.ones((4,))},
         terminated=False,
     )
     assert len(buffer) == 1

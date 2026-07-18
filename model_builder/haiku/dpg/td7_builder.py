@@ -4,7 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from model_builder.haiku.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import print_param
+from model_builder.utils import dummy_observation, print_haiku_model_summary
 
 
 def avgl1norm(x, epsilon=1e-6):
@@ -108,40 +108,32 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         critic_fn = critic.apply
         if key is not None:
             keys = jax.random.split(key, num=9)
-            pre_param = preproc.init(
-                keys[0],
-                [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-            )
-            feature = preproc.apply(
-                pre_param,
-                keys[1],
-                [np.zeros((1, *o), dtype=np.float32) for o in observation_space],
-            )
+            observation = dummy_observation(observation_space)
+            action = np.zeros((1, action_size[0]))
+            pre_param = preproc.init(keys[0], observation)
+            feature = preproc.apply(pre_param, keys[1], observation)
 
             encoder_param = encoder.init(keys[2], feature)
             zs = encoder.apply(encoder_param, keys[3], feature)
 
-            action_encoder_param = action_encoder.init(keys[4], zs, np.zeros((1, action_size[0])))
-            zsa = action_encoder.apply(
-                action_encoder_param, keys[5], zs, np.zeros((1, action_size[0]))
-            )
+            action_encoder_param = action_encoder.init(keys[4], zs, action)
+            zsa = action_encoder.apply(action_encoder_param, keys[5], zs, action)
 
             actor_param = actor.init(keys[6], feature, zs)
-            critic_param = critic.init(keys[7], feature, zs, zsa, np.zeros((1, action_size[0])))
+            critic_param = critic.init(keys[7], feature, zs, zsa, action)
 
             encoder_params = hk.data_structures.merge(
                 pre_param, encoder_param, action_encoder_param
             )
             params = hk.data_structures.merge(actor_param, critic_param)
-            if print_model:
-                print("------------------build-haiku-model--------------------")
-                print_param("preprocess", pre_param)
-                print_param("encoder", encoder_param)
-                print_param("action_encoder", action_encoder_param)
-                print("-------------------------------------------------------")
-                print_param("actor", actor_param)
-                print_param("critic", critic_param)
-                print("-------------------------------------------------------")
+            print_haiku_model_summary(
+                print_model,
+                (preproc, observation),
+                (encoder, feature),
+                (action_encoder, zs, action),
+                (actor, feature, zs),
+                (critic, feature, zs, zsa, action),
+            )
             return (
                 preproc_fn,
                 encoder_fn,

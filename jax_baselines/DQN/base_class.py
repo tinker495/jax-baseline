@@ -462,7 +462,7 @@ class Q_Network_Family:
         return ActionSelection(env_action=actions[0][0], store_action=actions[0])
 
     def _vector_action_selection(self, obs, steps):
-        actions = self.actions([obs], self.update_eps)
+        actions = self.actions(obs, self.update_eps)
         return ActionSelection(env_action=actions, store_action=actions)
 
     def _refresh_exploration(self, steps):

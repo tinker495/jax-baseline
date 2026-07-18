@@ -30,7 +30,7 @@ from model_builder.haiku.dpg.tqc_builder import (
 )
 
 _POLICY_KWARGS = {"node": 16, "hidden_n": 2, "embedding_mode": "normal"}
-_OBSERVATION_SPACE = [[4]]
+_OBSERVATION_SPACE = {"obs": [4]}
 _ACTION_SIZE = [2]
 _TQC_SUPPORT_N = 25
 

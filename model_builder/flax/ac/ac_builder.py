@@ -1,13 +1,12 @@
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import print_param
+from model_builder.utils import dummy_observation, print_flax_model_summary
 
 
 class Actor(nn.Module):
@@ -75,13 +74,9 @@ def model_builder_maker(observation_space, action_size, action_type, policy_kwar
         actor_fn = get_apply_fn_flax_module(model, model.actor)
         critic_fn = get_apply_fn_flax_module(model, model.critic)
         if key is not None:
-            params = model.init(
-                key, [np.zeros((1, *o), dtype=np.float32) for o in observation_space]
-            )
-            if print_model:
-                print("------------------build-flax-model--------------------")
-                print_param("", params)
-                print("-------------------------------------------------------")
+            observation = dummy_observation(observation_space)
+            params = model.init(key, observation)
+            print_flax_model_summary(print_model, key, (model, observation))
             return preproc_fn, actor_fn, critic_fn, params
         else:
             return preproc_fn, actor_fn, critic_fn

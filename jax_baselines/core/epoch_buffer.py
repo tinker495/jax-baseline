@@ -6,7 +6,7 @@ import numpy as np
 
 
 class EpochBuffer:
-    def __init__(self, epoch_size: int, observation_space: list, worker_size=1, action_space=1):
+    def __init__(self, epoch_size: int, observation_space: dict, worker_size=1, action_space=1):
         self.epoch_size = epoch_size
         self.observation_space = observation_space
         self.worker_size = worker_size
@@ -17,10 +17,14 @@ class EpochBuffer:
         for worker_idx in range(self.worker_size):
             self.local_buffers[worker_idx].append(
                 {
-                    "obses": [np.asarray(obs[worker_idx]) for obs in obs_t],
+                    "obses": {
+                        key: np.asarray(obs_t[key][worker_idx]) for key in self.observation_space
+                    },
                     "action": np.asarray(action[worker_idx]),
                     "reward": np.asarray(reward[worker_idx]),
-                    "nxtobses": [np.asarray(next_obs[worker_idx]) for next_obs in nxtobs_t],
+                    "nxtobses": {
+                        key: np.asarray(nxtobs_t[key][worker_idx]) for key in self.observation_space
+                    },
                     "terminated": np.asarray(terminated[worker_idx]),
                     "truncated": np.asarray(truncated[worker_idx]),
                 }
@@ -28,31 +32,32 @@ class EpochBuffer:
 
     def get_buffer(self):
         transitions = {
-            "obses": [],
+            "obses": {},
             "actions": [],
             "rewards": [],
-            "nxtobses": [],
+            "nxtobses": {},
             "terminateds": [],
             "truncateds": [],
         }
-        for worker_buffer in self.local_buffers:
-            transitions["obses"].append(
+        for key in self.observation_space:
+            transitions["obses"][key] = np.asarray(
                 [
-                    np.asarray([record["obses"][obs_idx] for record in worker_buffer])
-                    for obs_idx in range(len(self.observation_space))
+                    [record["obses"][key] for record in worker_buffer]
+                    for worker_buffer in self.local_buffers
                 ]
             )
+            transitions["nxtobses"][key] = np.asarray(
+                [
+                    [record["nxtobses"][key] for record in worker_buffer]
+                    for worker_buffer in self.local_buffers
+                ]
+            )
+        for worker_buffer in self.local_buffers:
             transitions["actions"].append(
                 np.asarray([record["action"] for record in worker_buffer])
             )
             transitions["rewards"].append(
                 np.asarray([record["reward"] for record in worker_buffer])
-            )
-            transitions["nxtobses"].append(
-                [
-                    np.asarray([record["nxtobses"][obs_idx] for record in worker_buffer])
-                    for obs_idx in range(len(self.observation_space))
-                ]
             )
             transitions["terminateds"].append(
                 np.asarray([record["terminated"] for record in worker_buffer])

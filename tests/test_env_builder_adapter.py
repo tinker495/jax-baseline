@@ -62,7 +62,7 @@ class _FakeVectorizedEnv(VectorizedEnv):
     def __init__(self, worker_num=3):
         self.worker_num = worker_num
         self.env_info = {
-            "observation_space": [[5]],
+            "observation_space": {"obs": [5]},
             "action_size": [2],
             "action_type": "continuous",
             "env_type": "fake_vector",
@@ -231,7 +231,7 @@ def test_get_local_env_info_consumes_adapter_prepared_single_envs():
                 env=env,
                 eval_env=_FakeSingleEnv(),
                 env_info={
-                    "observation_space": [[4]],
+                    "observation_space": {"obs": [4]},
                     "action_size": [3],
                     "action_type": "discrete",
                     "env_type": "single",
@@ -248,7 +248,7 @@ def test_get_local_env_info_consumes_adapter_prepared_single_envs():
     )
 
     assert calls == [(1, 7)]
-    assert observation_space == [[4]]
+    assert observation_space == {"obs": [4]}
     assert action_size == [3]
     assert worker_size == 1
     assert env_type == "SingleEnv"
@@ -273,7 +273,7 @@ def test_get_local_env_info_consumes_adapter_prepared_vectorized_envs():
     )
 
     assert calls == [(3, 11)]
-    assert observation_space == [[5]]
+    assert observation_space == {"obs": [5]}
     assert action_size == [2]
     assert worker_size == 3
     assert env_type == "VectorizedEnv"
@@ -303,7 +303,7 @@ def test_get_local_env_info_requires_local_eval_env():
                 env=env,
                 eval_env=None,
                 env_info={
-                    "observation_space": [[4]],
+                    "observation_space": {"obs": [4]},
                     "action_size": [3],
                     "action_type": "discrete",
                     "env_type": "single",
@@ -323,7 +323,7 @@ def test_prepare_worker_env_requires_single_worker_spec():
             return PreparedWorkerEnvSpec(
                 env=_FakeVectorizedEnv(worker_num=2),
                 env_info={
-                    "observation_space": [[5]],
+                    "observation_space": {"obs": [5]},
                     "action_size": [2],
                     "action_type": "continuous",
                     "env_type": "fake_vector",
@@ -366,7 +366,7 @@ def test_env_builder_adapter_prepares_train_eval_pair_and_seed_policy():
             env_info=env.env_info
             if isinstance(env, VectorizedEnv)
             else {
-                "observation_space": [[4]],
+                "observation_space": {"obs": [4]},
                 "action_size": [3],
                 "action_type": "discrete",
                 "env_type": "single",
@@ -421,7 +421,7 @@ def test_experiments_composition_path_uses_adapter_prepared_envs(monkeypatch):
             return PreparedWorkerEnvSpec(
                 env=env,
                 env_info={
-                    "observation_space": [[4]],
+                    "observation_space": {"obs": [4]},
                     "action_size": [3],
                     "action_type": "discrete",
                     "env_type": "single",
@@ -449,7 +449,7 @@ def test_experiments_composition_path_uses_adapter_prepared_envs(monkeypatch):
 
     assert isinstance(env, _FakeVectorizedEnv)
     assert eval_env.seed == 121
-    assert observation_space == [[5]]
+    assert observation_space == {"obs": [5]}
     assert action_size == [2]
     assert worker_size == 4
     assert env_type == "VectorizedEnv"

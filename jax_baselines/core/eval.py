@@ -2,6 +2,7 @@ import numpy as np
 
 from jax_baselines.core.env_info import prepare_worker_env
 from jax_baselines.core.env_protocols import (
+    batch_observation,
     reset_for_evaluation,
     single_real_episode_end,
 )
@@ -111,7 +112,7 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
     total_truncated = np.zeros(eval_eps)
 
     obs, info = reset_for_evaluation(eval_env)
-    obs = [np.expand_dims(obs, axis=0)]
+    obs = batch_observation(obs)
     have_original_reward = "original_reward" in info
     if have_original_reward:
         original_reward = info["original_reward"]
@@ -128,7 +129,7 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
             action_to_step = _normalize_action_for_step(step_action)
 
             observation, reward, terminated, truncated, info = eval_env.step(action_to_step)
-            obs = [np.expand_dims(observation, axis=0)]
+            obs = batch_observation(observation)
             if have_original_reward:
                 original_reward += info.get("original_reward", 0)
             total_reward[ep] += reward
@@ -141,7 +142,7 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
             original_reward = 0
 
         obs, info = eval_env.reset()
-        obs = [np.expand_dims(obs, axis=0)]
+        obs = batch_observation(obs)
         terminated = False
         truncated = False
         eplen = 0
@@ -180,7 +181,7 @@ def run_test_episodes(test_env, actions_eval_fn, episode, conv_action=None):
     total_rewards = []
     for _ in range(episode):
         obs, info = test_env.reset()
-        obs = [np.expand_dims(obs, axis=0)]
+        obs = batch_observation(obs)
         terminated = False
         truncated = False
         episode_rew = 0
@@ -191,7 +192,7 @@ def run_test_episodes(test_env, actions_eval_fn, episode, conv_action=None):
             action_to_step = _normalize_action_for_step(step_action)
 
             observation, reward, terminated, truncated, info = test_env.step(action_to_step)
-            obs = [np.expand_dims(observation, axis=0)]
+            obs = batch_observation(observation)
             episode_rew += reward
             eplen += 1
         print("episod reward :", episode_rew, "episod len :", eplen)

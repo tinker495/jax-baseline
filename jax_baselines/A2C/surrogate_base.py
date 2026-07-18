@@ -86,8 +86,6 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
         return critic_loss
 
     def _preprocess(self, params, key, obses, actions, rewards, nxtobses, terminateds, truncateds):
-        obses = [jnp.stack(zo) for zo in zip(*obses)]
-        nxtobses = [jnp.stack(zo) for zo in zip(*nxtobses)]
         actions = jnp.stack(actions)
         rewards = jnp.stack(rewards)
         terminateds = jnp.stack(terminateds)
@@ -109,7 +107,7 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
         adv = jax.vmap(get_gaes, in_axes=(0, 0, 0, 0, 0, None, None))(
             rewards, terminateds, truncateds, value, next_value, self.gamma, self.lamda
         )
-        obses = [jnp.vstack(o) for o in obses]
+        obses = {key: jnp.vstack(value) for key, value in obses.items()}
         actions = jnp.vstack(actions)
         value = jnp.vstack(value)
         pi_prob = jnp.vstack(pi_prob)
@@ -141,7 +139,7 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
             batch_idxes = jax.random.permutation(use_key, jnp.arange(targets.shape[0])).reshape(
                 -1, self.minibatch_size
             )
-            obses_batch = [o[batch_idxes] for o in obses]
+            obses_batch = {key: value[batch_idxes] for key, value in obses.items()}
             actions_batch = actions[batch_idxes]
             old_values_batch = old_values[batch_idxes]
             targets_batch = targets[batch_idxes]

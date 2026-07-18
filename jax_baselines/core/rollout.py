@@ -28,6 +28,7 @@ from typing import Callable, Optional
 import numpy as np
 
 from jax_baselines.core.env_protocols import (
+    batch_observation,
     single_real_episode_end,
     vector_autoreset_mask,
     vector_real_reset_mask,
@@ -139,7 +140,7 @@ class RolloutEngine:
     def learn_single_env(self, pbar, callback=None, log_interval=1000):
         spec = self.spec
         obs, info = spec.env.reset()
-        obs = [np.expand_dims(obs, axis=0)]
+        obs = batch_observation(obs)
         lossque = self._begin()
         eval_result = None
 
@@ -151,7 +152,7 @@ class RolloutEngine:
         for steps in pbar:
             sel = spec.single_action(obs, steps)
             next_obs, reward, terminated, truncated, info = spec.env.step(sel.env_action)
-            next_obs = [np.expand_dims(next_obs, axis=0)]
+            next_obs = batch_observation(next_obs)
             spec.replay_buffer.add(obs, sel.store_action, reward, next_obs, terminated, truncated)
             score += float(reward)
             eplen += 1
@@ -178,7 +179,7 @@ class RolloutEngine:
                     original = 0.0
                     have_original = False
                 obs, info = spec.env.reset()
-                obs = [np.expand_dims(obs, axis=0)]
+                obs = batch_observation(obs)
 
             if steps > spec.learning_starts and steps % spec.train_freq == 0:
                 spec.refresh_exploration(steps)
@@ -233,10 +234,10 @@ class RolloutEngine:
 
             store_mask = None if prev_done is None or not prev_done.any() else ~prev_done
             spec.replay_buffer.add(
-                [obs],
+                obs,
                 sel.store_action,
                 rewards,
-                [next_obses],
+                next_obses,
                 terminateds,
                 truncateds,
                 store_mask=store_mask,
@@ -269,7 +270,7 @@ class RolloutEngine:
         spec = self.spec
         if obs is None:
             obs, info = spec.env.reset()
-            obs = [np.expand_dims(obs, axis=0)]
+            obs = batch_observation(obs)
         lossque = self._begin()
         eval_result = None
 
@@ -282,7 +283,7 @@ class RolloutEngine:
             eplen += 1
             sel = spec.single_action(obs, steps)
             next_obs, reward, terminated, truncated, info = spec.env.step(sel.env_action)
-            next_obs = [np.expand_dims(next_obs, axis=0)]
+            next_obs = batch_observation(next_obs)
             spec.replay_buffer.add(obs, sel.store_action, reward, next_obs, terminated, truncated)
             score += float(reward)
             step_original = extract_original_reward(info)
@@ -321,7 +322,7 @@ class RolloutEngine:
                     obs, info = spec.force_reset()
                 else:
                     obs, info = spec.env.reset()
-                obs = [np.expand_dims(obs, axis=0)]
+                obs = batch_observation(obs)
 
             if steps > spec.learning_starts and steps % spec.train_freq == 0:
                 spec.refresh_exploration(steps)
@@ -394,10 +395,10 @@ class RolloutEngine:
 
             store_mask = None if prev_done is None or not prev_done.any() else ~prev_done
             spec.replay_buffer.add(
-                [obs],
+                obs,
                 sel.store_action,
                 rewards,
-                [next_obses],
+                next_obses,
                 terminateds,
                 truncateds,
                 store_mask=store_mask,

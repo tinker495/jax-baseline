@@ -120,7 +120,7 @@ def make_train_contexts(agent, context_type, steps, chunk_size, **kwargs):
 
 
 def reshape_bulk_batch(data, chunk_size, batch_size):
-    return {key: reshape_bulk_value(value, chunk_size, batch_size) for key, value in data.items()}
+    return jax.tree.map(lambda value: reshape_bulk_value(value, chunk_size, batch_size), data)
 
 
 def normalize_bulk_weights(data):
@@ -140,10 +140,6 @@ def normalize_bulk_weight_value(value):
 
 
 def reshape_bulk_value(value, chunk_size, batch_size):
-    if isinstance(value, list):
-        return [reshape_bulk_value(item, chunk_size, batch_size) for item in value]
-    if isinstance(value, tuple):
-        return tuple(reshape_bulk_value(item, chunk_size, batch_size) for item in value)
     shape = getattr(value, "shape", None)
     if shape is None or len(shape) == 0:
         return value
@@ -158,14 +154,10 @@ def reshape_bulk_value(value, chunk_size, batch_size):
 def iter_bulk_batches(data, contexts):
     """Yield per-mini-update slices from a bulk replay sample."""
     for index in range(len(contexts)):
-        yield {key: slice_bulk_value(value, index) for key, value in data.items()}
+        yield jax.tree.map(lambda value: slice_bulk_value(value, index), data)
 
 
 def slice_bulk_value(value, index):
-    if isinstance(value, list):
-        return [slice_bulk_value(item, index) for item in value]
-    if isinstance(value, tuple):
-        return tuple(slice_bulk_value(item, index) for item in value)
     shape = getattr(value, "shape", None)
     if shape is None or len(shape) == 0:
         return value
@@ -174,14 +166,10 @@ def slice_bulk_value(value, index):
 
 def flatten_bulk_batch(data):
     """Collapse ``(chunk, batch, ...)`` bulk data into ``(chunk * batch, ...)``."""
-    return {key: flatten_bulk_value(value) for key, value in data.items()}
+    return jax.tree.map(flatten_bulk_value, data)
 
 
 def flatten_bulk_value(value):
-    if isinstance(value, list):
-        return [flatten_bulk_value(item) for item in value]
-    if isinstance(value, tuple):
-        return tuple(flatten_bulk_value(item) for item in value)
     shape = getattr(value, "shape", None)
     if shape is None or len(shape) < 2:
         return value

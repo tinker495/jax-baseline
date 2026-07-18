@@ -133,10 +133,10 @@ class APE_X_DQN(Ape_X_Family):
         actions = actions.astype(jnp.int32)
         not_terminateds = 1.0 - terminateds
         batch_idxes = jnp.arange(self.batch_size).reshape(-1, self.mini_batch_size)
-        obses_batch = [o[batch_idxes] for o in obses]
+        obses_batch = jax.tree.map(lambda value: value[batch_idxes], obses)
         actions_batch = actions[batch_idxes]
         rewards_batch = rewards[batch_idxes]
-        nxtobses_batch = [o[batch_idxes] for o in nxtobses]
+        nxtobses_batch = jax.tree.map(lambda value: value[batch_idxes], nxtobses)
         not_terminateds_batch = not_terminateds[batch_idxes]
         weights_batch = weights[batch_idxes]
 

@@ -1,9 +1,9 @@
 from functools import partial
 
 import jax
-import numpy as np
 
 from jax_baselines.core.env_info import prepare_worker_env
+from jax_baselines.core.env_protocols import batch_observation
 from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
 from jax_baselines.core.seeding import seed_prngs
 
@@ -64,7 +64,7 @@ class Ape_X_Worker(object):
             if have_original_reward:
                 original_score = 0
             score = 0
-            obs = [np.expand_dims(obs, axis=0)]
+            obs = batch_observation(obs)
             params = param_server.get_params()
             eplen = 0
             episode = 0
@@ -90,7 +90,7 @@ class Ape_X_Worker(object):
                 eplen += 1
                 actions = get_action(params, obs, eps, next(key_seq))
                 next_obs, reward, terminated, truncated, info = self.env.step(actions)
-                next_obs = [np.expand_dims(next_obs, axis=0)]
+                next_obs = batch_observation(next_obs)
                 local_buffer.add(obs, actions, reward, next_obs, terminated, truncated)
                 if have_original_reward:
                     original_score += info["original_reward"]
@@ -118,7 +118,7 @@ class Ape_X_Worker(object):
                     eplen = 0
                     episode += 1
                     obs, info = self.env.reset()
-                    obs = [np.expand_dims(obs, axis=0)]
+                    obs = batch_observation(obs)
 
                 if len(local_buffer) >= local_size:
                     transition = local_buffer.get_buffer()
