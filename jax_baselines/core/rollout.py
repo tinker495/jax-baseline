@@ -124,6 +124,8 @@ class RolloutSpec:
     checkpoint_on_episode_end: Callable[..., bool]
     checkpoint_pulse: Callable[[int, int], None]
     checkpoint_monitor_worker: int = 0
+    reward_normalization: bool = False
+    record_transition: Callable[..., None] | None = None
 
 
 class RolloutEngine:
@@ -153,6 +155,8 @@ class RolloutEngine:
             sel = spec.single_action(obs, steps)
             next_obs, reward, terminated, truncated, info = spec.env.step(sel.env_action)
             next_obs = batch_observation(next_obs)
+            if spec.reward_normalization and spec.record_transition is not None:
+                spec.record_transition(reward, np.logical_or(terminated, truncated))
             spec.replay_buffer.add(obs, sel.store_action, reward, next_obs, terminated, truncated)
             score += float(reward)
             eplen += 1
@@ -214,6 +218,8 @@ class RolloutEngine:
             next_obses, rewards, terminateds, truncateds, infos = spec.env.get_result()
             done = np.logical_or(terminateds, truncateds)
             active = np.ones(spec.worker_size, dtype=bool) if prev_done is None else ~prev_done
+            if spec.reward_normalization and spec.record_transition is not None:
+                spec.record_transition(rewards, done, active)
             scores[active] += rewards[active]
             eplens[active] += 1
             step_original, step_original_present = extract_vector_original_rewards(
@@ -284,6 +290,8 @@ class RolloutEngine:
             sel = spec.single_action(obs, steps)
             next_obs, reward, terminated, truncated, info = spec.env.step(sel.env_action)
             next_obs = batch_observation(next_obs)
+            if spec.reward_normalization and spec.record_transition is not None:
+                spec.record_transition(reward, np.logical_or(terminated, truncated))
             spec.replay_buffer.add(obs, sel.store_action, reward, next_obs, terminated, truncated)
             score += float(reward)
             step_original = extract_original_reward(info)
@@ -382,6 +390,8 @@ class RolloutEngine:
             next_obses, rewards, terminateds, truncateds, infos = spec.env.get_result()
             done = np.logical_or(terminateds, truncateds)
             active = np.ones(spec.worker_size, dtype=bool) if prev_done is None else ~prev_done
+            if spec.reward_normalization and spec.record_transition is not None:
+                spec.record_transition(rewards, done, active)
             scores[active] += rewards[active]
             eplens[active] += 1
             step_original, step_original_present = extract_vector_original_rewards(

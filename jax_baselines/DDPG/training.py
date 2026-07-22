@@ -1,6 +1,6 @@
 """Local DPG training lifecycle.
 
-Owns replay sampling, SIMBA normalization, PER priority updates, and metric
+Owns replay sampling, SIMBA/reward normalization, PER priority updates, and metric
 logging. Algorithm subclasses only provide the per-batch gradient update via
 `_train_on_batch`. Environment rollout and the checkpoint training pulse live
 in `jax_baselines.core.rollout`.
@@ -131,6 +131,8 @@ class DPGTrainingLifecycle:
             obs_rms = self.agent._policy_update_obs_rms()
             data["obses"] = obs_rms.normalize(data["obses"])
             data["nxtobses"] = obs_rms.normalize(data["nxtobses"])
+        if self.agent.reward_normalizer is not None:
+            data["rewards"] = self.agent.reward_normalizer.normalize(data["rewards"])
 
     def _update_priorities(self, data, report):
         if self.agent.prioritized_replay:
@@ -144,3 +146,7 @@ class DPGTrainingLifecycle:
             self.agent._last_log_step = steps
             for metric_name, metric_value in report.metrics.items():
                 logger_run.log_metric(metric_name, metric_value, steps)
+            if self.agent.reward_normalizer is not None:
+                logger_run.log_metric(
+                    "rollout/reward_scale", self.agent.reward_normalizer.scale, steps
+                )

@@ -1,3 +1,4 @@
+import jax.numpy as jnp
 import numpy as np
 import pytest
 from gymnasium import spaces
@@ -5,6 +6,7 @@ from gymnasium import spaces
 from env_builder.observations import normalize_observation, normalize_observation_space
 from jax_baselines.core.env_protocols import batch_observation
 from jax_baselines.core.epoch_buffer import EpochBuffer
+from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.math.statistics import RunningMeanStd
 from replay_memory.cpprb_buffers import ReplayBuffer
 
@@ -70,3 +72,44 @@ def test_epoch_and_replay_buffers_keep_observation_keys():
     replay_data = replay.sample(1)
     assert set(replay_data["obses"]) == set(space)
     assert set(replay_data["nxtobses"]) == set(space)
+
+
+def test_crossq_critic_loss_concatenates_dict_observation_values():
+    agent = CrossQ.__new__(CrossQ)
+    agent._gamma = 0.99
+    seen = {}
+
+    def preproc(_params, _key, observations):
+        seen.update(observations)
+        return observations["obs"]
+
+    agent.preproc = preproc
+    agent._get_pi_log_prob = lambda _params, features, _key: (
+        jnp.zeros((features.shape[0], 1)),
+        jnp.zeros((features.shape[0], 1)),
+    )
+    agent.critic = lambda params, _key, features, _actions, _training: (
+        (jnp.zeros((features.shape[0], 1)), jnp.zeros((features.shape[0], 1))),
+        {"batch_stats": params["batch_stats"]},
+    )
+    observations = {"obs": jnp.ones((2, 3))}
+    next_observations = {"obs": jnp.full((2, 3), 2.0)}
+
+    loss, _ = agent._critic_loss(
+        {"batch_stats": {}},
+        {},
+        observations,
+        jnp.zeros((2, 1)),
+        jnp.zeros((2, 1)),
+        next_observations,
+        jnp.ones((2, 1)),
+        0.1,
+        jnp.ones((2, 1)),
+        None,
+    )
+
+    assert jnp.isfinite(loss)
+    np.testing.assert_array_equal(
+        seen["obs"],
+        jnp.concatenate([observations["obs"], next_observations["obs"]]),
+    )

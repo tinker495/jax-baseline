@@ -257,6 +257,57 @@ SINGLE_SCRIPT = [
 ]
 
 
+@pytest.mark.parametrize(("enabled", "expected"), [(True, [(2.0, np.bool_(True))]), (False, [])])
+def test_rollout_reward_normalization_flag_controls_transition_recording(enabled, expected):
+    rec = []
+    agent = FakeAgent(rec, FakeSingleEnv(rec, [(2.0, True, False)]), "dpg")
+    runner = _dpg_runner(agent)
+    transitions = []
+    runner.spec.reward_normalization = enabled
+    runner.spec.record_transition = lambda reward, done: transitions.append((reward, done))
+
+    runner.learn_single_env(FakePbar([0]))
+
+    assert transitions == expected
+
+
+@pytest.mark.parametrize("vectorized", [False, True])
+@pytest.mark.parametrize("checkpointing", [False, True])
+def test_every_rollout_path_records_reward_normalization_transitions(vectorized, checkpointing):
+    rec = []
+    if vectorized:
+        env = FakeVecEnv(
+            rec,
+            [
+                (
+                    np.array([2.0, 3.0]),
+                    np.array([False, False]),
+                    np.array([False, False]),
+                )
+            ],
+            2,
+        )
+    else:
+        env = FakeSingleEnv(rec, [(2.0, False, False)])
+    runner = _dpg_runner(FakeAgent(rec, env, "dpg"))
+    transitions = []
+    runner.spec.reward_normalization = True
+    runner.spec.record_transition = lambda *args: transitions.append(args)
+    method = (
+        runner.learn_vectorized_env_checkpointing
+        if vectorized and checkpointing
+        else runner.learn_vectorized_env
+        if vectorized
+        else runner.learn_single_env_checkpointing
+        if checkpointing
+        else runner.learn_single_env
+    )
+
+    method(FakePbar([0]))
+
+    assert len(transitions) == 1
+
+
 def _vec_script(ws):
     # Worker 0 terminates at step 1 (== learning_starts, so its score/eplen are
     # NOT reset here -- the reset only fires for steps > learning_starts) and then
@@ -962,7 +1013,10 @@ def test_td7_eval_snapshot_waits_for_checkpoint_enabled_gate():
     agent = TD7.__new__(TD7)
     agent.use_checkpointing = True
     agent.ckpt = type("Ckpt", (), {"enabled": False})()
-    agent.eval_snapshot = {"encoder": "checkpoint-encoder", "policy": "checkpoint-policy"}
+    agent.eval_snapshot = {
+        "encoder": "checkpoint-encoder",
+        "policy": "checkpoint-policy",
+    }
     agent.fixed_encoder_params = "live-encoder"
     agent.policy_params = "live-policy"
 

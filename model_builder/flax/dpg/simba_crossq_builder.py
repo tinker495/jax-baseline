@@ -16,10 +16,9 @@ class Actor(nn.Module):
     hidden_n: int = 2
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray, training: bool = True) -> jnp.ndarray:
+    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         for _ in range(self.hidden_n):
             feature = Dense(self.node)(feature)
-            feature = BatchReNorm(use_running_average=not training)(feature)
             feature = jax.nn.relu(feature)
         mu = Dense(
             self.action_size[0],
@@ -62,17 +61,17 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
                 self.act = Actor(action_size, **policy_kwargs)
 
-            def __call__(self, x, training: bool = True):
+            def __call__(self, x):
                 feature = self.preprocess(x)
-                mu, log_std = self.actor(feature, training)
+                mu, log_std = self.actor(feature)
                 return mu, log_std
 
             def preprocess(self, x):
                 x = self.preproc(x)
                 return x
 
-            def actor(self, x, training: bool = True):
-                return self.act(x, training)
+            def actor(self, x):
+                return self.act(x)
 
         class Merged_Critic(nn.Module):
             def setup(self):
@@ -84,19 +83,19 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
 
         model_actor = Merged_Actor()
         preproc_fn = get_apply_fn_flax_module(model_actor, model_actor.preprocess)
-        actor_fn = get_apply_fn_flax_module(model_actor, model_actor.actor, mutable=["batch_stats"])
+        actor_fn = get_apply_fn_flax_module(model_actor, model_actor.actor)
         model_critic = Merged_Critic()
         critic_fn = get_apply_fn_flax_module(model_critic, mutable=["batch_stats"])
         if key is not None:
             observation = dummy_observation(observation_space)
             action = np.zeros((1, *action_size), dtype=np.float32)
-            policy_params = model_actor.init(key, observation, True)
+            policy_params = model_actor.init(key, observation)
             feature = preproc_fn(policy_params, key, observation)
             critic_params = model_critic.init(key, feature, action, True)
             print_flax_model_summary(
                 print_model,
                 key,
-                (model_actor, observation, True),
+                (model_actor, observation),
                 (model_critic, feature, action, True),
             )
             return preproc_fn, actor_fn, critic_fn, policy_params, critic_params

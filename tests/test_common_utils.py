@@ -8,7 +8,49 @@ checkpoint-gating). They had no direct test; these lock their behavior.
 import numpy as np
 import pytest
 
-from jax_baselines.math.statistics import RunningMeanStd, compute_ckpt_window_stat
+from jax_baselines.math.statistics import (
+    RewardNormalizer,
+    RunningMeanStd,
+    compute_ckpt_window_stat,
+)
+
+
+def test_reward_normalizer_tracks_active_discounted_returns_without_episode_bleed():
+    normalizer = RewardNormalizer(worker_size=2, gamma=0.5)
+
+    normalizer.record(
+        rewards=np.array([2.0, 10.0]),
+        dones=np.array([False, True]),
+    )
+    normalizer.record(
+        rewards=np.array([4.0, 99.0]),
+        dones=np.array([True, False]),
+        active=np.array([True, False]),
+    )
+
+    np.testing.assert_array_equal(normalizer.discounted_returns, np.zeros(2))
+    assert normalizer.rms.count == pytest.approx(3.0001)
+    assert normalizer.rms.means["return"] == pytest.approx(17.0 / 3.0001)
+
+
+def test_reward_normalizer_scale_is_return_std_and_divides_rewards():
+    normalizer = RewardNormalizer(worker_size=1, gamma=0.5)
+    normalizer.record(rewards=np.array([2.0]), dones=np.array([False]))
+    normalizer.record(rewards=np.array([6.0]), dones=np.array([True]))
+
+    assert normalizer.scale == pytest.approx(float(np.sqrt(normalizer.rms.vars["return"] + 1e-8)))
+    np.testing.assert_allclose(
+        normalizer.normalize(np.array([4.0, -4.0])),
+        np.array([4.0, -4.0]) / normalizer.scale,
+    )
+
+
+def test_reward_normalizer_normalize_preserves_float32_dtype():
+    normalizer = RewardNormalizer(worker_size=1, gamma=0.99)
+    normalizer.record(rewards=np.array([5.0]), dones=np.array([False]))
+
+    assert normalizer.normalize(np.ones((4, 1), dtype=np.float32)).dtype == np.float32
+    assert normalizer.normalize(np.ones(3)).dtype == np.float64
 
 
 def test_running_mean_std_matches_batch_statistics():

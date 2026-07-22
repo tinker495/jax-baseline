@@ -147,6 +147,7 @@ class _FrameBufferBulkAgent:
         self.logger_run = None
         self._last_log_step = 0
         self.log_interval = 1_000_000
+        self.reward_normalizer = None
 
     def _sample_batch(self, batch_size=None):
         return self.replay_buffer.sample(self.batch_size if batch_size is None else batch_size)

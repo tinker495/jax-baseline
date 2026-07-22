@@ -7,13 +7,15 @@ import optax
 
 from experiments.cli.dpg import DPG_RUNNER
 from jax_baselines.CrossQ.crossq import CrossQ
-from jax_baselines.SAC.sac import (
-    SAC,
-    entropy_target_from_sigma,
-    mode_action,
-    sample_action,
-)
+from jax_baselines.math.policy_math import entropy_target_from_sigma
+from jax_baselines.SAC.sac import SAC, mode_action, sample_action
 from jax_baselines.TQC.tqc import TQC
+from model_builder.flax.dpg.crossq_builder import (
+    model_builder_maker as crossq_model_builder_maker,
+)
+from model_builder.flax.dpg.simba_crossq_builder import (
+    model_builder_maker as simba_crossq_model_builder_maker,
+)
 
 
 def test_action_sampling_and_mode_are_explicitly_separate():
@@ -65,13 +67,31 @@ def test_other_stochastic_dpg_algorithms_also_use_mode_for_evaluation():
 
     crossq = object.__new__(CrossQ)
     crossq.preproc = lambda params, key, value: value["obs"]
-    crossq.actor = lambda params, key, feature, training: (
-        (feature, jnp.full_like(feature, 10.0)),
-        {},
-    )
+    crossq.actor = lambda params, key, feature: (feature, jnp.full_like(feature, 10.0))
 
     np.testing.assert_allclose(tqc._get_eval_actions(None, obs), jnp.tanh(obs["obs"]))
     np.testing.assert_allclose(crossq._get_eval_actions(None, obs), jnp.tanh(obs["obs"]))
+
+
+def test_crossq_actors_have_no_batch_stats_but_critics_do():
+    for make_builder in (crossq_model_builder_maker, simba_crossq_model_builder_maker):
+        builder = make_builder(
+            {"obs": [4]},
+            [2],
+            {"node": 16, "hidden_n": 1, "embedding_mode": "normal"},
+        )
+        preproc, actor, critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
+
+        assert "batch_stats" not in policy_params
+        assert "batch_stats" in critic_params
+
+        feature = preproc(policy_params, None, {"obs": jnp.zeros((2, 4))})
+        mu, log_std = actor(policy_params, None, feature)
+        (q1, q2), updates = critic(critic_params, None, feature, jnp.zeros((2, 2)), True)
+
+        assert mu.shape == log_std.shape == (2, 2)
+        assert q1.shape == q2.shape == (2, 1)
+        assert set(updates) == {"batch_stats"}
 
 
 def test_flashsac_entropy_target_and_defaults():
@@ -82,6 +102,7 @@ def test_flashsac_entropy_target_and_defaults():
     assert params["ent_coef"].default == "auto_0.01"
     assert params["sigma_target"].default == 0.15
     assert params["actor_update_period"].default == 2
+    assert inspect.signature(CrossQ.__init__).parameters["sigma_target"].default == 0.15
 
 
 def test_sac_actor_and_temperature_update_on_configured_period():

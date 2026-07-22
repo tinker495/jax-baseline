@@ -59,6 +59,7 @@ class FakeBulkReplayBuffer(FakeReplayBuffer):
         return {
             "obses": np.ones((update_count, 4)),
             "nxtobses": np.full((update_count, 4), 2.0),
+            "rewards": np.full((update_count, 4), 4.0),
             "indexes": indexes,
             "weights": weights,
         }
@@ -70,6 +71,13 @@ class FakeNormalizer:
 
     def normalize(self, value):
         return value + self.offset
+
+
+class FakeRewardNormalizer:
+    scale = 2.0
+
+    def normalize(self, rewards):
+        return rewards / self.scale
 
 
 class FakeLoggerRun:
@@ -93,6 +101,7 @@ class FakeAgent:
         self.logger_run = FakeLoggerRun()
         self._last_log_step = 0
         self.log_interval = 5
+        self.reward_normalizer = None
         self.contexts = []
         self.batches = []
 
@@ -165,6 +174,36 @@ def test_dpg_training_lifecycle_samples_normalizes_updates_priorities_and_logs()
     ]
 
 
+def test_dpg_training_lifecycle_normalizes_sampled_rewards():
+    agent = FakeAgent()
+    agent.reward_normalizer = FakeRewardNormalizer()
+    agent.replay_buffer.sample = lambda batch_size, beta=None: {
+        "obses": np.array([1.0]),
+        "nxtobses": np.array([2.0]),
+        "rewards": np.array([4.0]),
+        "indexes": np.array([3]),
+    }
+
+    DPGTrainingLifecycle(agent).train(steps=10, gradient_steps=1)
+
+    np.testing.assert_array_equal(agent.batches[0]["rewards"], np.array([2.0]))
+
+
+def test_dpg_training_lifecycle_logs_reward_scale():
+    agent = FakeAgent()
+    agent.reward_normalizer = FakeRewardNormalizer()
+    agent.replay_buffer.sample = lambda batch_size, beta=None: {
+        "obses": np.array([1.0]),
+        "nxtobses": np.array([2.0]),
+        "rewards": np.array([4.0]),
+        "indexes": np.array([3]),
+    }
+
+    DPGTrainingLifecycle(agent).train(steps=10, gradient_steps=1, logger_run=agent.logger_run)
+
+    assert ("rollout/reward_scale", 2.0, 10) in agent.logger_run.metrics
+
+
 def test_dpg_priority_update_materializes_jax_values_on_host():
     agent = FakeAgent()
     lifecycle = DPGTrainingLifecycle(agent)
@@ -220,6 +259,15 @@ def test_dpg_training_lifecycle_bulk_pulse_chunks_steps_and_delays_priorities():
     )
     assert np.array_equal(agent.replay_buffer.priority_updates[-1][0], np.arange(4))
     assert np.array_equal(agent.replay_buffer.priority_updates[-1][1], np.array([5, 5, 5, 5]))
+
+
+def test_dpg_bulk_training_normalizes_sampled_rewards():
+    agent = FakeBulkAgent()
+    agent.reward_normalizer = FakeRewardNormalizer()
+
+    DPGTrainingLifecycle(agent).train(steps=10, gradient_steps=2)
+
+    np.testing.assert_array_equal(agent.bulk_batches[0]["rewards"], np.full((2, 4), 2.0))
 
 
 def test_dpg_bulk_reshape_handles_batch_size_one():

@@ -1,6 +1,6 @@
 """Local Q-Net training lifecycle.
 
-Centralises replay sampling, PER priority updates, and metric/histogram logging
+Centralises replay sampling, reward normalization, PER priority updates, and metric/histogram logging
 behind a single training-lifecycle object. Algorithms keep their JIT-compiled
 tuple returns and translate them into a lifecycle result on the Python side via
 `_train_on_batch`. Environment rollout and the checkpoint training pulse live in
@@ -110,6 +110,7 @@ class QNetTrainingLifecycle:
     def _train_one_batch(self, steps, gradient_steps):
         self.agent.train_steps_count += 1
         data = self.agent._sample_batch()
+        self._normalize_batch(data)
         context = QNetTrainContext(
             steps=steps,
             train_steps_count=self.agent.train_steps_count,
@@ -140,6 +141,7 @@ class QNetTrainingLifecycle:
             data = self.agent._sample_batch(chunk_size * self.agent.batch_size)
             data = self._reshape_bulk_batch(data, chunk_size)
             data = normalize_bulk_weights(data)
+            self._normalize_batch(data)
             result = self._normalise_train_result(train_on_bulk(data, contexts))
             self._update_priorities(data, result)
             reports.append(result.report)
@@ -153,6 +155,10 @@ class QNetTrainingLifecycle:
 
     def _reshape_bulk_batch(self, data, chunk_size):
         return reshape_bulk_batch(data, chunk_size, self.agent.batch_size)
+
+    def _normalize_batch(self, data):
+        if self.agent.reward_normalizer is not None:
+            data["rewards"] = self.agent.reward_normalizer.normalize(data["rewards"])
 
     def _normalise_train_result(self, result):
         if isinstance(result, QNetTrainResult):
@@ -190,3 +196,7 @@ class QNetTrainingLifecycle:
                 logger_run.log_metric(metric_name, metric_value, steps)
             for histogram_name, histogram_value in report.histograms.items():
                 logger_run.log_histogram(histogram_name, histogram_value, steps)
+            if self.agent.reward_normalizer is not None:
+                logger_run.log_metric(
+                    "rollout/reward_scale", self.agent.reward_normalizer.scale, steps
+                )

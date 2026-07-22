@@ -4,6 +4,7 @@ import numpy as np
 import optax
 
 from jax_baselines.core.checkpoint import make_checkpoint_scaffold, snapshot_pytree
+from jax_baselines.core.checkpoint_state import QNetCheckpointState
 from jax_baselines.core.checkpoint_store import (
     CheckpointStore,
     checkpoint_store_or_default,
@@ -29,6 +30,7 @@ from jax_baselines.DQN.training import (
     QNetTrainReport,
     QNetTrainResult,
 )
+from jax_baselines.math.statistics import RewardNormalizer
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
@@ -80,6 +82,7 @@ class Q_Network_Family:
         ckpt_baseline_mode="median",
         ckpt_baseline_q=None,
         checkpoint_store: CheckpointStore | None = None,
+        reward_normalization=False,
     ):
         self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
@@ -129,8 +132,12 @@ class Q_Network_Family:
         self.compress_memory = compress_memory
         self.replay_factory = replay_factory
         self.checkpoint_store = checkpoint_store_or_default(checkpoint_store)
+        self.reward_normalization = bool(reward_normalization)
 
         self.get_env_setup()
+        self.reward_normalizer = (
+            RewardNormalizer(self.worker_size, self.gamma) if self.reward_normalization else None
+        )
         self.get_memory_setup()
 
         # Generic checkpointing scaffolding (used by algorithms that opt-in)
@@ -164,10 +171,27 @@ class Q_Network_Family:
             self.setup_model()
 
     def save_params(self, path):
-        self.checkpoint_store.save(path, self.params)
+        if self.reward_normalizer is None:
+            self.checkpoint_store.save(path, self.params)
+            return
+        self.checkpoint_store.save(
+            path,
+            QNetCheckpointState(
+                params=self.params,
+                reward_rms_state=self.reward_normalizer.to_state(),
+            ),
+        )
 
     def load_params(self, path):
-        self.params = self.target_params = self.checkpoint_store.restore(path)
+        state = self.checkpoint_store.restore(path)
+        if self.reward_normalizer is not None:
+            self.reward_normalizer.reset()
+        if isinstance(state, QNetCheckpointState):
+            self.params = self.target_params = state.params
+            if self.reward_normalizer is not None and state.reward_rms_state is not None:
+                self.reward_normalizer.restore(state.reward_rms_state)
+            return
+        self.params = self.target_params = state
 
     def get_env_setup(self):
         (
@@ -502,6 +526,10 @@ class Q_Network_Family:
                 *args, log_metric=ctx.logger_run.log_metric, **kwargs
             ),
             checkpoint_pulse=pulse,
+            reward_normalization=self.reward_normalization,
+            record_transition=(
+                self.reward_normalizer.record if self.reward_normalizer is not None else None
+            ),
         )
 
     def eval(self, ctx, steps):

@@ -58,6 +58,7 @@ class FakeBulkReplayBuffer(FakeReplayBuffer):
         weights = np.arange(1, update_count * 4 + 1, dtype=np.float32)
         return {
             "obses": np.ones((update_count, 4)),
+            "rewards": np.full((update_count, 4), 4.0),
             "indexes": indexes,
             "weights": weights,
         }
@@ -75,6 +76,13 @@ class FakeLoggerRun:
         self.histograms.append((name, value, steps))
 
 
+class FakeRewardNormalizer:
+    scale = 2.0
+
+    def normalize(self, rewards):
+        return rewards / self.scale
+
+
 class FakeAgent:
     def __init__(self):
         self.replay_buffer = FakeReplayBuffer()
@@ -85,6 +93,7 @@ class FakeAgent:
         self.logger_run = FakeLoggerRun()
         self._last_log_step = 0
         self.log_interval = 5
+        self.reward_normalizer = None
         self.contexts = []
         self.batches = []
 
@@ -129,6 +138,34 @@ def test_qnet_training_lifecycle_samples_updates_priorities_and_logs():
     ]
     assert len(agent.logger_run.histograms) == 1
     assert agent.logger_run.histograms[0][0] == "loss/tau"
+
+
+def test_qnet_training_lifecycle_normalizes_sampled_rewards():
+    agent = FakeAgent()
+    agent.reward_normalizer = FakeRewardNormalizer()
+    agent._sample_batch = lambda batch_size=None: {
+        "obses": np.array([1.0]),
+        "rewards": np.array([4.0]),
+        "indexes": np.array([3]),
+    }
+
+    QNetTrainingLifecycle(agent).train(steps=10, gradient_steps=1)
+
+    np.testing.assert_array_equal(agent.batches[0]["rewards"], np.array([2.0]))
+
+
+def test_qnet_training_lifecycle_logs_reward_scale():
+    agent = FakeAgent()
+    agent.reward_normalizer = FakeRewardNormalizer()
+    agent._sample_batch = lambda batch_size=None: {
+        "obses": np.array([1.0]),
+        "rewards": np.array([4.0]),
+        "indexes": np.array([3]),
+    }
+
+    QNetTrainingLifecycle(agent).train(steps=10, gradient_steps=1, logger_run=agent.logger_run)
+
+    assert ("rollout/reward_scale", 2.0, 10) in agent.logger_run.metrics
 
 
 def test_qnet_priority_update_materializes_jax_values_on_host():
@@ -256,6 +293,15 @@ def test_qnet_training_lifecycle_handles_priority_update_calls_for_chunked_pulse
         agent.replay_buffer.priority_update_calls[-1][1],
         np.array([5, 5, 5, 5]),
     )
+
+
+def test_qnet_bulk_training_normalizes_sampled_rewards():
+    agent = FakePulseAgent()
+    agent.reward_normalizer = FakeRewardNormalizer()
+
+    QNetTrainingLifecycle(agent).train(steps=10, gradient_steps=2)
+
+    np.testing.assert_array_equal(agent.bulk_batches[0]["rewards"], np.full((2, 4), 2.0))
 
 
 class FakeMissingBulkHookPulseAgent(FakeAgent):
@@ -417,6 +463,7 @@ def test_spr_lineage_single_update_uses_scalar_path_without_bulk_hook():
     agent.logger_run = None
     agent._last_log_step = 0
     agent.log_interval = 5
+    agent.reward_normalizer = None
     contexts = []
 
     def sample_batch(batch_size=None):

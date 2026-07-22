@@ -1,4 +1,4 @@
-"""Serializable checkpoint state for the off-policy DPG family.
+"""Serializable checkpoint state for the local off-policy families.
 
 Sibling to :mod:`jax_baselines.core.checkpoint` (the schedule) and
 :mod:`jax_baselines.core.rollout` (the rollout loop): where
@@ -6,7 +6,7 @@ Sibling to :mod:`jax_baselines.core.checkpoint` (the schedule) and
 *schedule*, this module owns the checkpoint *state* an agent persists to warm-start
 training and run eval-consistent behaviour.
 
-:class:`CheckpointState` is the family-wide spine. The per-algorithm network
+:class:`CheckpointState` is the DPG family-wide spine. The per-algorithm network
 bundle -- the only part that varies across DDPG/TD3/SAC/TQC/CrossQ/TD7 -- is
 supplied by each algorithm as its own typed ``flax.struct`` bundle and carried in
 the ``params`` field (with the eval-time snapshot in ``eval_snapshot``). The spine
@@ -28,6 +28,14 @@ from flax import struct
 
 
 @struct.dataclass
+class QNetCheckpointState:
+    """Q-Net parameters plus optional discounted-return statistics."""
+
+    params: Any
+    reward_rms_state: Optional[dict] = None
+
+
+@struct.dataclass
 class CheckpointState:
     """The serializable warm-start spine an off-policy DPG agent saves and restores.
 
@@ -43,6 +51,8 @@ class CheckpointState:
         obs_rms_state / action_obs_rms_state / checkpoint_obs_rms_state: simba
             observation-normalizer states (``RunningMeanStd.to_state()``); ``None``
             when simba is disabled or the normalizer has not been snapshotted.
+        reward_rms_state: Discounted-return statistics used to normalize rewards;
+            the worker-local partial returns are intentionally not serialized.
     """
 
     params: Any
@@ -53,3 +63,4 @@ class CheckpointState:
     obs_rms_state: Optional[dict] = None
     action_obs_rms_state: Optional[dict] = None
     checkpoint_obs_rms_state: Optional[dict] = None
+    reward_rms_state: Optional[dict] = None

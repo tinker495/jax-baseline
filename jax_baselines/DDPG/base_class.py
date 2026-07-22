@@ -28,7 +28,7 @@ from jax_baselines.core.rollout_stats import EpisodeTracker
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.training_session import TrainingSession, off_policy_loop
 from jax_baselines.DDPG.training import DPGTrainingLifecycle, DPGTrainReport
-from jax_baselines.math.statistics import RunningMeanStd
+from jax_baselines.math.statistics import RewardNormalizer, RunningMeanStd
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
@@ -75,6 +75,7 @@ class Deteministic_Policy_Gradient_Family(object):
         ckpt_baseline_mode="min",
         ckpt_baseline_q=None,
         checkpoint_store: CheckpointStore | None = None,
+        reward_normalization=False,
     ):
         self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
@@ -112,8 +113,12 @@ class Deteministic_Policy_Gradient_Family(object):
         self.optimizer = self._make_optimizer(self.learning_rate)
         self.replay_factory = replay_factory
         self.checkpoint_store = checkpoint_store_or_default(checkpoint_store)
+        self.reward_normalization = bool(reward_normalization)
 
         self.get_env_setup()
+        self.reward_normalizer = (
+            RewardNormalizer(self.worker_size, self.gamma) if self.reward_normalization else None
+        )
         self.get_memory_setup()
 
         # Control model initialization timing across children
@@ -198,6 +203,9 @@ class Deteministic_Policy_Gradient_Family(object):
                 if (self.simba and self.checkpoint_obs_rms is not None)
                 else None
             ),
+            reward_rms_state=(
+                self.reward_normalizer.to_state() if self.reward_normalizer is not None else None
+            ),
         )
 
     def _restore_checkpoint_state(self, state: CheckpointState):
@@ -220,6 +228,13 @@ class Deteministic_Policy_Gradient_Family(object):
                 if state.checkpoint_obs_rms_state is not None
                 else None
             )
+
+        # getattr guards against pre-reward_rms checkpoints, not against self.
+        reward_rms_state = getattr(state, "reward_rms_state", None)
+        if self.reward_normalizer is not None:
+            self.reward_normalizer.reset()
+            if reward_rms_state is not None:
+                self.reward_normalizer.restore(reward_rms_state)
 
     def get_env_setup(self):
         # Use common helper to standardize environment info
@@ -500,6 +515,10 @@ class Deteministic_Policy_Gradient_Family(object):
                 *args, log_metric=ctx.logger_run.log_metric, **kwargs
             ),
             checkpoint_pulse=pulse,
+            reward_normalization=self.reward_normalization,
+            record_transition=(
+                self.reward_normalizer.record if self.reward_normalizer is not None else None
+            ),
         )
 
     def eval(self, ctx, steps):

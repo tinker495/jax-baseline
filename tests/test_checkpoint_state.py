@@ -22,19 +22,31 @@ from jax_baselines.core.checkpoint import make_checkpoint_scaffold, snapshot_pyt
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DDPG.ddpg import DDPG
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.math.statistics import RunningMeanStd
+from jax_baselines.math.statistics import RewardNormalizer, RunningMeanStd
 from jax_baselines.SAC.sac import SAC
 from jax_baselines.TD3.td3 import TD3
 from jax_baselines.TD7.td7 import TD7
 from jax_baselines.TQC.tqc import TQC
+from jax_baselines.XQC.xqc import XQC
 
 # The exact network bundle each algorithm's checkpoint contract carries.
 ALGO_FIELDS = {
-    DDPG: ["policy_params", "critic_params", "target_policy_params", "target_critic_params"],
-    TD3: ["policy_params", "critic_params", "target_policy_params", "target_critic_params"],
+    DDPG: [
+        "policy_params",
+        "critic_params",
+        "target_policy_params",
+        "target_critic_params",
+    ],
+    TD3: [
+        "policy_params",
+        "critic_params",
+        "target_policy_params",
+        "target_critic_params",
+    ],
     SAC: ["policy_params", "critic_params", "target_critic_params", "log_ent_coef"],
     TQC: ["policy_params", "critic_params", "target_critic_params", "log_ent_coef"],
     CrossQ: ["policy_params", "critic_params", "log_ent_coef"],
+    XQC: ["policy_params", "critic_params", "target_critic_params", "log_ent_coef"],
     TD7: [
         "encoder_params",
         "policy_params",
@@ -123,6 +135,7 @@ def test_checkpoint_round_trip(cls):
     src = cls.__new__(cls)
     src.checkpoint_store = FileCheckpointStore()
     src.simba = False
+    src.reward_normalizer = None
     src.ckpt = _scaffold()
     src.train_steps_count = 11
     src._ckpt_update_residual = 2.5
@@ -139,6 +152,7 @@ def test_checkpoint_round_trip(cls):
         dst = cls.__new__(cls)
         dst.checkpoint_store = FileCheckpointStore()
         dst.simba = False
+        dst.reward_normalizer = None
         dst.ckpt = _scaffold()
         dst.load_params(d)
 
@@ -171,6 +185,7 @@ def test_simba_obs_rms_round_trip():
     for i, name in enumerate(fields):
         setattr(src, name, _field_value(name, i))
     src.simba = True
+    src.reward_normalizer = None
     src.obs_rms = RunningMeanStd(shapes={"obs": (2,)}, dtype=np.float64)
     src.obs_rms.update({"obs": np.ones((4, 2), np.float64)})
     src.action_obs_rms = RunningMeanStd.from_state(src.obs_rms.to_state())
@@ -181,6 +196,7 @@ def test_simba_obs_rms_round_trip():
         dst = DDPG.__new__(DDPG)
         dst.checkpoint_store = FileCheckpointStore()
         dst.simba = True
+        dst.reward_normalizer = None
         dst.ckpt = _scaffold()
         dst.load_params(d)
 
@@ -189,6 +205,108 @@ def test_simba_obs_rms_round_trip():
     assert dst.checkpoint_obs_rms is None
     assert dst.eval_snapshot is None
     _assert_tree_equal(src.obs_rms.to_state(), dst.obs_rms.to_state())
+
+
+def test_dpg_reward_normalizer_statistics_round_trip_without_partial_returns():
+    fields = ALGO_FIELDS[DDPG]
+    src = DDPG.__new__(DDPG)
+    src.checkpoint_store = FileCheckpointStore()
+    src.ckpt = _scaffold()
+    src.train_steps_count = 3
+    src._ckpt_update_residual = 0.0
+    src.eval_snapshot = None
+    src.simba = False
+    src.reward_normalizer = RewardNormalizer(worker_size=2, gamma=0.9)
+    src.reward_normalizer.record(
+        rewards=np.array([1.0, 3.0]),
+        dones=np.array([False, False]),
+    )
+    for i, name in enumerate(fields):
+        setattr(src, name, _field_value(name, i))
+
+    with tempfile.TemporaryDirectory() as d:
+        src.save_params(d)
+        dst = DDPG.__new__(DDPG)
+        dst.checkpoint_store = FileCheckpointStore()
+        dst.ckpt = _scaffold()
+        dst.simba = False
+        dst.reward_normalizer = RewardNormalizer(worker_size=3, gamma=0.9)
+        dst.load_params(d)
+
+    _assert_tree_equal(src.reward_normalizer.to_state(), dst.reward_normalizer.to_state())
+    np.testing.assert_array_equal(dst.reward_normalizer.discounted_returns, np.zeros(3))
+
+
+def test_qnet_reward_normalizer_statistics_round_trip_without_partial_returns():
+    src = Q_Network_Family.__new__(Q_Network_Family)
+    src.checkpoint_store = FileCheckpointStore()
+    src.params = _tree(1.0)
+    src.reward_normalizer = RewardNormalizer(worker_size=2, gamma=0.99)
+    src.reward_normalizer.record(
+        rewards=np.array([2.0, 4.0]),
+        dones=np.array([False, False]),
+    )
+
+    with tempfile.TemporaryDirectory() as d:
+        src.save_params(d)
+        dst = Q_Network_Family.__new__(Q_Network_Family)
+        dst.checkpoint_store = FileCheckpointStore()
+        dst.reward_normalizer = RewardNormalizer(worker_size=3, gamma=0.99)
+        dst.load_params(d)
+
+    _assert_tree_equal(src.params, dst.params)
+    assert dst.target_params is dst.params
+    _assert_tree_equal(src.reward_normalizer.to_state(), dst.reward_normalizer.to_state())
+    np.testing.assert_array_equal(dst.reward_normalizer.discounted_returns, np.zeros(3))
+
+
+def test_qnet_legacy_checkpoint_clears_partial_discounted_returns():
+    src = Q_Network_Family.__new__(Q_Network_Family)
+    src.checkpoint_store = FileCheckpointStore()
+    src.reward_normalizer = None
+    src.params = _tree(1.0)
+
+    with tempfile.TemporaryDirectory() as d:
+        src.save_params(d)
+        dst = Q_Network_Family.__new__(Q_Network_Family)
+        dst.checkpoint_store = FileCheckpointStore()
+        dst.reward_normalizer = RewardNormalizer(worker_size=2, gamma=0.99)
+        dst.reward_normalizer.record(
+            rewards=np.array([2.0, 4.0]),
+            dones=np.array([False, False]),
+        )
+        dst.load_params(d)
+
+    np.testing.assert_array_equal(dst.reward_normalizer.discounted_returns, np.zeros(2))
+
+
+def test_dpg_checkpoint_without_reward_stats_clears_partial_discounted_returns():
+    fields = ALGO_FIELDS[DDPG]
+    src = DDPG.__new__(DDPG)
+    src.checkpoint_store = FileCheckpointStore()
+    src.ckpt = _scaffold()
+    src.train_steps_count = 3
+    src._ckpt_update_residual = 0.0
+    src.eval_snapshot = None
+    src.simba = False
+    src.reward_normalizer = None
+    for i, name in enumerate(fields):
+        setattr(src, name, _field_value(name, i))
+
+    with tempfile.TemporaryDirectory() as d:
+        src.save_params(d)
+        dst = DDPG.__new__(DDPG)
+        dst.checkpoint_store = FileCheckpointStore()
+        dst.ckpt = _scaffold()
+        dst.simba = False
+        dst.reward_normalizer = RewardNormalizer(worker_size=2, gamma=0.99)
+        dst.reward_normalizer.record(
+            rewards=np.array([2.0, 4.0]),
+            dones=np.array([False, False]),
+        )
+        dst.load_params(d)
+
+    np.testing.assert_array_equal(dst.reward_normalizer.discounted_returns, np.zeros(2))
 
 
 def test_base_contract_is_abstract():

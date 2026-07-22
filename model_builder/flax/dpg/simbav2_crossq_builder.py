@@ -22,8 +22,7 @@ class Actor(nn.Module):
     hidden_n: int = 2
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray, training: bool = True) -> jnp.ndarray:
-        del training
+    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         encoded = SimbaV2Embedding(self.node)(feature)
         for _ in range(self.hidden_n):
             encoded = SimbaV2Block(self.node)(encoded)
@@ -69,15 +68,15 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
                 self.act = Actor(action_size, **policy_kwargs)
 
-            def __call__(self, x, training: bool = True):
+            def __call__(self, x):
                 feature = self.preprocess(x)
-                return self.actor(feature, training)
+                return self.actor(feature)
 
             def preprocess(self, x):
                 return self.preproc(x)
 
-            def actor(self, x, training: bool = True):
-                return self.act(x, training)
+            def actor(self, x):
+                return self.act(x)
 
         class Merged_Critic(nn.Module):
             def setup(self):
@@ -96,13 +95,13 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         if key is not None:
             observation = dummy_observation(observation_space)
             action = np.zeros((1, *action_size), dtype=np.float32)
-            policy_params = actor_model.init(key, observation, True)
+            policy_params = actor_model.init(key, observation)
             feature = preproc_fn(policy_params, key, observation)
             critic_params = critics_model.init(key, feature, action, True)
             print_flax_model_summary(
                 print_model,
                 key,
-                (actor_model, observation, True),
+                (actor_model, observation),
                 (critics_model, feature, action, True),
             )
             return preproc_fn, actor_fn, critic_fn, policy_params, critic_params

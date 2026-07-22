@@ -128,3 +128,64 @@ class RunningMeanStd:
         count = state.get("count", np.array(0.0))
         instance.count = float(np.asarray(count))
         return instance
+
+
+class RewardNormalizer:
+    """Scales rewards by the running std of the discounted return (Engstrom et al. 2020).
+
+    Each worker accumulates ``G_t = gamma * G_{t-1} + r_t`` during rollout;
+    :meth:`record` feeds those returns into a :class:`RunningMeanStd`, and
+    :meth:`normalize` divides sampled rewards by :attr:`scale` (the running
+    ``std(G)``), effectively bounding Q-values for fixed-support critics (XQC).
+    """
+
+    def __init__(self, worker_size: int, gamma: float):
+        self.gamma = float(gamma)
+        self.rms = RunningMeanStd(shapes={"return": ()}, dtype=np.float64)
+        self.discounted_returns = np.zeros(int(worker_size), dtype=np.float64)
+
+    def record(self, rewards, dones, active=None):
+        rewards = np.atleast_1d(np.asarray(rewards, dtype=np.float64))
+        dones = np.atleast_1d(np.asarray(dones, dtype=bool))
+        active = (
+            np.ones(rewards.shape, dtype=bool) if active is None else np.asarray(active, dtype=bool)
+        )
+        expected_shape = self.discounted_returns.shape
+        if rewards.shape != expected_shape or dones.shape != expected_shape:
+            raise ValueError(
+                "rewards and dones must match the configured worker shape "
+                f"{expected_shape}, got {rewards.shape} and {dones.shape}"
+            )
+        if active.shape != expected_shape:
+            raise ValueError(
+                "active must match the configured worker shape "
+                f"{expected_shape}, got {active.shape}"
+            )
+        if not np.any(active):
+            return
+
+        self.discounted_returns[active] = (
+            self.gamma * self.discounted_returns[active] + rewards[active]
+        )
+        self.rms.update({"return": self.discounted_returns[active]})
+        self.discounted_returns[active & dones] = 0.0
+
+    @property
+    def scale(self):
+        """Current reward divisor: std of the recorded discounted returns."""
+        return float(np.sqrt(self.rms.vars["return"] + 1e-8))
+
+    def normalize(self, rewards):
+        rewards = np.asarray(rewards)
+        dtype = np.result_type(rewards.dtype, np.float32)
+        return (rewards / self.scale).astype(dtype, copy=False)
+
+    def to_state(self):
+        return self.rms.to_state()
+
+    def reset(self):
+        self.discounted_returns.fill(0.0)
+
+    def restore(self, state):
+        self.rms = RunningMeanStd.from_state(state)
+        self.reset()
