@@ -1,5 +1,12 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
+
+
+def entropy_target_from_sigma(action_dim: int, sigma_target: float) -> float:
+    if sigma_target <= 0:
+        raise ValueError("sigma_target must be greater than 0")
+    return 0.5 * action_dim * np.log(2.0 * np.pi * np.e * sigma_target**2)
 
 
 def truncated_mixture(quantiles, cut):

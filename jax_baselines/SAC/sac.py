@@ -11,6 +11,7 @@ from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.jax_utils import convert_jax
 from jax_baselines.math.param_updates import scaled_by_reset, soft_update
+from jax_baselines.math.policy_math import entropy_target_from_sigma
 
 
 def sample_action(mu, log_std, key):
@@ -20,12 +21,6 @@ def sample_action(mu, log_std, key):
 
 def mode_action(mu):
     return jnp.tanh(mu)
-
-
-def entropy_target_from_sigma(action_dim: int, sigma_target: float) -> float:
-    if sigma_target <= 0:
-        raise ValueError("sigma_target must be greater than 0")
-    return 0.5 * action_dim * np.log(2.0 * np.pi * np.e * sigma_target**2)
 
 
 @struct.dataclass

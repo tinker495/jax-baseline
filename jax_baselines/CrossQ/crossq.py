@@ -10,6 +10,7 @@ from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.jax_utils import convert_jax
 from jax_baselines.math.param_updates import scaled_by_reset
+from jax_baselines.math.policy_math import entropy_target_from_sigma
 
 
 @struct.dataclass
@@ -28,6 +29,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         env_builder: callable,
         model_builder_maker,
         ent_coef="auto",
+        sigma_target=0.15,
         policy_delay=3,
         **kwargs,
     ):
@@ -43,7 +45,9 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
 
         super().__init__(env_builder, model_builder_maker, **crossq_kwargs)
 
-        self.target_entropy = 0.5 * np.prod(self.action_size).astype(np.float32)
+        self.target_entropy = entropy_target_from_sigma(
+            int(np.prod(self.action_size)), sigma_target
+        )
 
     def setup_model(self):
         model_builder = self.model_builder_maker(
@@ -259,7 +263,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         ):
             (_, (log_prob, policy_params)), grad = jax.value_and_grad(
                 self._actor_loss, has_aux=True
-            )(policy_params, critic_params, obses, key2, ent_coef)
+            )(policy_params, critic_params, obses, key, ent_coef)
             updates, opt_policy_state = self.optimizer.update(
                 grad, opt_policy_state, params=policy_params
             )
@@ -295,7 +299,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
                 log_ent_coef,
                 opt_policy_state,
                 opt_ent_coef_state,
-                key,
+                key2,
             ),
         )
 
@@ -374,5 +378,5 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         feature = self.preproc(policy_params, key, obses)
         policy, log_prob, policy_params = self._get_pi_log_prob(policy_params, feature, key)
         (q1_pi, q2_pi), _ = self.critic(critic_params, key, feature, policy, False)
-        actor_loss = jnp.mean(ent_coef * log_prob - (q1_pi + q2_pi) / 2.0)
+        actor_loss = jnp.mean(ent_coef * log_prob - jnp.minimum(q1_pi, q2_pi))
         return actor_loss, (log_prob, policy_params)
