@@ -37,6 +37,7 @@ from jax_baselines.TD7.td7 import TD7
 from jax_baselines.TPPO.impala_tppo import IMPALA_TPPO
 from jax_baselines.TPPO.tppo import TPPO
 from jax_baselines.TQC.tqc import TQC
+from jax_baselines.XQC.xqc import XQC
 
 _LOCAL_LEAVES = (
     (DQN, "DQN", Q_Network_Family, "jax_baselines.DQN.base_class"),
@@ -64,6 +65,7 @@ _LOCAL_LEAVES = (
         Deteministic_Policy_Gradient_Family,
         "jax_baselines.DDPG.base_class",
     ),
+    (XQC, "XQC", Deteministic_Policy_Gradient_Family, "jax_baselines.DDPG.base_class"),
     (TD7, "TD7", Deteministic_Policy_Gradient_Family, "jax_baselines.DDPG.base_class"),
     (PPO, "PPO", Actor_Critic_Policy_Gradient_Family, "jax_baselines.A2C.base_class"),
     (SPO, "SPO", Actor_Critic_Policy_Gradient_Family, "jax_baselines.A2C.base_class"),

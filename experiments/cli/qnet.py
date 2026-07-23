@@ -82,6 +82,20 @@ def add_args(parser):
     parser.add_argument("--hl_gauss", action="store_true")
     parser.add_argument("--scaled_by_reset", action="store_true")
     parser.add_argument("--use_checkpointing", action="store_true")
+    reward_group = parser.add_mutually_exclusive_group()
+    reward_group.add_argument(
+        "--reward_normalization",
+        dest="reward_normalization",
+        action="store_true",
+        help="normalize sampled rewards by discounted-return RMS",
+    )
+    reward_group.add_argument(
+        "--no_reward_normalization",
+        dest="reward_normalization",
+        action="store_false",
+        help="disable discounted-return reward normalization",
+    )
+    parser.set_defaults(reward_normalization=False)
 
 
 def build_env(args):
@@ -120,6 +134,7 @@ def _common(a):
         "compress_memory": a.compress_memory,
         "replay_factory": make_replay_buffer,
         "use_checkpointing": a.use_checkpointing,
+        "reward_normalization": a.reward_normalization,
     }
 
 
@@ -194,6 +209,7 @@ ALGOS = {
             "compress_memory": a.compress_memory,
             "replay_factory": make_replay_buffer,
             "use_checkpointing": a.use_checkpointing,
+            "reward_normalization": a.reward_normalization,
         },
     ),
     # BBF likewise carries its own reduced set (exploration + off_policy_fix +
@@ -224,6 +240,7 @@ ALGOS = {
             "compress_memory": a.compress_memory,
             "replay_factory": make_replay_buffer,
             "use_checkpointing": a.use_checkpointing,
+            "reward_normalization": a.reward_normalization,
         },
     ),
 }

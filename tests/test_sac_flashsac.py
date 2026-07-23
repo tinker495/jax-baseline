@@ -10,6 +10,7 @@ from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.math.policy_math import entropy_target_from_sigma
 from jax_baselines.SAC.sac import SAC, mode_action, sample_action
 from jax_baselines.TQC.tqc import TQC
+from jax_baselines.XQC.xqc import XQC
 from model_builder.flax.dpg.crossq_builder import (
     model_builder_maker as crossq_model_builder_maker,
 )
@@ -103,6 +104,7 @@ def test_flashsac_entropy_target_and_defaults():
     assert params["sigma_target"].default == 0.15
     assert params["actor_update_period"].default == 2
     assert inspect.signature(CrossQ.__init__).parameters["sigma_target"].default == 0.15
+    assert inspect.signature(XQC.__init__).parameters["sigma_target"].default == 0.15
 
 
 def test_sac_actor_and_temperature_update_on_configured_period():
@@ -234,3 +236,5 @@ def test_sac_cli_uses_flashsac_defaults_without_changing_sibling_algorithms():
     assert DPG_RUNNER.algos["SAC"].build(args)["actor_update_period"] == 2
     assert DPG_RUNNER.algos["TQC"].build(args)["ent_coef"] == "auto"
     assert DPG_RUNNER.algos["CrossQ"].build(args)["ent_coef"] == "auto"
+    assert DPG_RUNNER.algos["CrossQ"].build(args)["sigma_target"] == 0.15
+    assert DPG_RUNNER.algos["XQC"].build(args)["sigma_target"] == 0.15

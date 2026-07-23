@@ -31,3 +31,4 @@ variants:
   - {algo: TQC, simba: true}
   - {algo: TQC, simbav2: true}
   - {algo: CrossQ}
+  - {algo: XQC}

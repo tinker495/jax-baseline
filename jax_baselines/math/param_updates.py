@@ -107,3 +107,17 @@ def soft_update(new_tensors: PyTree, old_tensors: PyTree, tau: float):
     return jax.tree_util.tree_map(
         lambda new, old: tau * new + (1.0 - tau) * old, new_tensors, old_tensors
     )
+
+
+def project_dense_kernels(tensors: PyTree, epsilon: float = 1e-8):
+    """Project every Dense kernel column in a Flax variable tree to unit norm."""
+
+    def project(path, value):
+        keys = [getattr(entry, "key", None) for entry in path]
+        if keys[-1] == "kernel" and any(
+            isinstance(key, str) and key.startswith("Dense_") for key in keys[:-1]
+        ):
+            return value / jnp.maximum(jnp.linalg.norm(value, axis=0, keepdims=True), epsilon)
+        return value
+
+    return jax.tree_util.tree_map_with_path(project, tensors)

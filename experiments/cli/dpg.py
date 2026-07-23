@@ -11,6 +11,7 @@ from jax_baselines.SAC.sac import SAC
 from jax_baselines.TD3.td3 import TD3
 from jax_baselines.TD7.td7 import TD7
 from jax_baselines.TQC.tqc import TQC
+from jax_baselines.XQC.xqc import XQC
 from replay_memory.replay_factory import make_replay_buffer
 
 
@@ -75,6 +76,20 @@ def add_args(parser):
     parser.add_argument("--actor_update_period", type=int, default=2)
     parser.add_argument("--learning_starts", type=int, default=5000, help="learning start")
     parser.add_argument("--use_checkpointing", action="store_true")
+    reward_group = parser.add_mutually_exclusive_group()
+    reward_group.add_argument(
+        "--reward_normalization",
+        dest="reward_normalization",
+        action="store_true",
+        help="normalize sampled rewards by discounted-return RMS",
+    )
+    reward_group.add_argument(
+        "--no_reward_normalization",
+        dest="reward_normalization",
+        action="store_false",
+        help="disable discounted-return reward normalization",
+    )
+    parser.set_defaults(reward_normalization=None)
 
 
 def build_env(args):
@@ -119,6 +134,9 @@ def _common(a):
         "optimizer_factory": make_batch_scaled_optimizer_factory(a.optimizer, a.batch),
         "replay_factory": make_replay_buffer,
         "use_checkpointing": a.use_checkpointing,
+        "reward_normalization": (
+            a.algo == "XQC" if a.reward_normalization is None else a.reward_normalization
+        ),
     }
 
 
@@ -154,6 +172,17 @@ ALGOS = {
         lambda a: {
             **_common(a),
             "ent_coef": a.ent_coef if a.ent_coef is not None else "auto",
+            "sigma_target": a.sigma_target,
+        },
+    ),
+    "XQC": AlgoSpec(
+        XQC,
+        "xqc",
+        lambda a: {
+            **_common(a),
+            "target_network_update_tau": a.target_update_tau,
+            "ent_coef": a.ent_coef if a.ent_coef is not None else "auto_0.01",
+            "sigma_target": a.sigma_target,
         },
     ),
     "TQC": AlgoSpec(
@@ -196,6 +225,9 @@ ALGOS = {
             "log_dir": a.logdir,
             "optimizer_factory": make_batch_scaled_optimizer_factory(a.optimizer, a.batch),
             "replay_factory": make_replay_buffer,
+            "reward_normalization": (
+                False if a.reward_normalization is None else a.reward_normalization
+            ),
         },
     ),
 }

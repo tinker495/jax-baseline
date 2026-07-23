@@ -30,7 +30,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 EXPECTED_ALGOS = {
-    "dpg": {"DDPG", "TD3", "SAC", "CrossQ", "TQC", "TD7"},
+    "dpg": {"DDPG", "TD3", "SAC", "CrossQ", "XQC", "TQC", "TD7"},
     "pg": {"A2C", "PPO", "TPPO", "SPO"},
     "qnet": {"DQN", "C51", "QRDQN", "IQN", "FQF", "SPR", "BBF"},
 }
@@ -117,8 +117,67 @@ def test_dpg_simba_variants_resolve(flags: list[str]):
     from experiments.cli.dpg import DPG_RUNNER
 
     for algo, spec in DPG_RUNNER.algos.items():
+        if algo == "XQC":
+            continue
         args = _parse(DPG_RUNNER, ["--algo", algo, "--model_lib", "flax", *flags])
         assert callable(resolve_maker(DPG_RUNNER, spec, args))
+
+
+def test_dpg_xqc_algorithm_resolves_its_builder():
+    from experiments.cli._run import resolve_maker
+    from experiments.cli.dpg import DPG_RUNNER
+
+    args = _parse(DPG_RUNNER, ["--algo", "XQC", "--model_lib", "flax"])
+    assert callable(resolve_maker(DPG_RUNNER, DPG_RUNNER.algos["XQC"], args))
+
+
+def test_dpg_xqc_respects_common_cli_settings():
+    from experiments.cli.dpg import DPG_RUNNER
+
+    args = _parse(
+        DPG_RUNNER,
+        [
+            "--algo",
+            "XQC",
+            "--learning_rate",
+            "0.0002",
+            "--batch",
+            "64",
+            "--buffer_size",
+            "12345",
+            "--gradient_steps",
+            "4",
+            "--target_update_tau",
+            "0.01",
+            "--ent_coef",
+            "auto_0.02",
+        ],
+    )
+    built = DPG_RUNNER.algos["XQC"].build(args)
+
+    assert built["learning_rate"] == 2e-4
+    assert built["batch_size"] == 64
+    assert built["buffer_size"] == 12_345
+    assert built["gradient_steps"] == 4
+    assert built["target_network_update_tau"] == 0.01
+    assert built["ent_coef"] == "auto_0.02"
+
+
+def test_dpg_reward_normalization_defaults_to_xqc_and_can_be_overridden():
+    from experiments.cli.dpg import DPG_RUNNER
+
+    for algo, spec in DPG_RUNNER.algos.items():
+        built = spec.build(_parse(DPG_RUNNER, ["--algo", algo]))
+        assert built["reward_normalization"] is (algo == "XQC")
+
+    enabled = DPG_RUNNER.algos["DDPG"].build(
+        _parse(DPG_RUNNER, ["--algo", "DDPG", "--reward_normalization"])
+    )
+    disabled = DPG_RUNNER.algos["XQC"].build(
+        _parse(DPG_RUNNER, ["--algo", "XQC", "--no_reward_normalization"])
+    )
+    assert enabled["reward_normalization"] is True
+    assert disabled["reward_normalization"] is False
 
 
 def test_dpg_crossq_haiku_is_unsupported_clean_error():
@@ -198,6 +257,16 @@ def test_qnet_build_forwards_bulk_chunk_cap(algo: str):
     )
 
     assert built["max_bulk_updates_per_pulse"] == 3
+
+
+def test_qnet_reward_normalization_is_opt_in_for_every_algorithm():
+    from experiments.cli.qnet import QNET_RUNNER
+
+    for algo, spec in QNET_RUNNER.algos.items():
+        default = spec.build(_parse(QNET_RUNNER, ["--algo", algo]))
+        enabled = spec.build(_parse(QNET_RUNNER, ["--algo", algo, "--reward_normalization"]))
+        assert default["reward_normalization"] is False
+        assert enabled["reward_normalization"] is True
 
 
 def test_qnet_bbf_optimizer_policy_preserves_plain_bbf_cli_optimizer(monkeypatch):
@@ -433,7 +502,13 @@ def test_run_distributed_family_wires_agent(monkeypatch):
         def __init__(self, workers, maker, runtime, **kwargs):
             captured.update(workers=workers, maker=maker, runtime=runtime, kwargs=kwargs)
 
-        def learn(self, steps, experiment_name=None, logger_factory=None, progress_factory=None):
+        def learn(
+            self,
+            steps,
+            experiment_name=None,
+            logger_factory=None,
+            progress_factory=None,
+        ):
             captured.update(
                 steps=steps,
                 experiment_name=experiment_name,

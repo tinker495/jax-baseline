@@ -1,0 +1,20 @@
+family: dpg
+runtime:
+  device: 0
+base:
+  experiment_name: XQC
+  env: Humanoid-v5
+  learning_rate: 0.0003
+  steps: 1e6
+  buffer_size: 1e6
+  batch: 256
+  gradient_steps: 2
+  train_freq: 1
+  target_update_tau: 0.005
+  learning_starts: 5000
+  optimizer: adam
+  ent_coef: auto_0.01
+  node: 256
+  hidden_n: 4
+variants:
+  - {algo: XQC}

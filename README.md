@@ -86,6 +86,7 @@ python -m pip install -e './adapters[all]'
 | TQC[^TQC]       | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
 | TD7[^TD7]       | :white_check_mark:(LAP[^LaP]) | :x:                        | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
 | CrossQ[^CrossQ] | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
+| XQC[^XQC]       | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :x:                | :x:                  |
 | BRO[^BRO]:x:    | :x:                           | :x:                        | :x:                | :x:                | :x:                  |
 
 ## Performance Compariton
@@ -178,5 +179,7 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 [^LaP]: [LaP](https://arxiv.org/abs/2007.06049)
 
 [^CrossQ]: [CrossQ](https://arxiv.org/abs/1902.05605)
+
+[^XQC]: [XQC](https://arxiv.org/pdf/2509.25174)
 
 [^BRO]: [BRO](https://arxiv.org/abs/2405.16158)
