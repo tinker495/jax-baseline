@@ -132,6 +132,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+docs/adr/
 **log/
 log.zip
 
