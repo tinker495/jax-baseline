@@ -7,38 +7,26 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-def _project(path: Path) -> dict:
-    with path.open("rb") as handle:
-        return tomllib.load(handle)
-
-
-def _requirement_names(requirements: list[str]) -> set[str]:
-    return {
+def test_single_distribution_includes_experiment_packages_and_commands():
+    with (REPO_ROOT / "pyproject.toml").open("rb") as handle:
+        config = tomllib.load(handle)
+    project = config["project"]
+    setuptools = config["tool"]["setuptools"]
+    dependencies = {
         re.split(r"[<>=!~;\[]", requirement, maxsplit=1)[0].lower().replace("_", "-")
-        for requirement in requirements
+        for requirement in project["dependencies"]
     }
 
-
-def test_core_and_adapter_distribution_boundaries():
-    core = _project(REPO_ROOT / "pyproject.toml")
-    adapters = _project(REPO_ROOT / "adapters" / "pyproject.toml")
-    adapter_dependencies = _requirement_names(adapters["project"]["dependencies"])
-    adapter_extras = adapters["project"]["optional-dependencies"]
-
-    assert core["tool"]["setuptools"]["packages"]["find"]["include"] == ["jax_baselines*"]
-    assert "scripts" not in core["project"]
-    assert _requirement_names(core["project"]["dependencies"]) == {
-        "chex",
-        "dm-pix",
-        "flax",
-        "jax",
-        "numpy",
-        "optax",
+    assert not (REPO_ROOT / "adapters").exists()
+    assert "workspace" not in config["tool"]["uv"]
+    assert set(setuptools["packages"]["find"]["include"]) == {
+        "jax_baselines*",
+        "env_builder*",
+        "experiments*",
+        "model_builder*",
+        "replay_memory*",
     }
-    assert core["tool"]["uv"]["workspace"]["members"] == ["adapters"]
-    assert core["dependency-groups"]["dev"][0] == "jax-baselines-adapters[all]"
-
-    assert set(adapters["project"]["scripts"]) == {
+    assert set(project["scripts"]) == {
         "apex-dpg",
         "apex-qnet",
         "dashboard",
@@ -48,33 +36,18 @@ def test_core_and_adapter_distribution_boundaries():
         "pg",
         "qnet",
     }
-    assert adapters["tool"]["setuptools"]["packages"]["find"]["include"] == [
-        "env_builder*",
-        "experiments*",
-        "model_builder*",
-        "replay_memory*",
-    ]
-    assert adapters["tool"]["setuptools"]["package-data"]["experiments"] == ["configs/*.yaml"]
-    assert {"all", "distributed", "envpool", "wandb", "aim"} <= set(adapter_extras)
+    for target in project["scripts"].values():
+        module, _ = target.split(":")
+        assert (REPO_ROOT / (module.replace(".", "/") + ".py")).is_file()
+    assert setuptools["package-data"]["experiments"] == ["configs/*.yaml"]
     assert {
-        "aim",
-        "autorom",
-        "box2d-kengz",
-        "dm-haiku",
-        "envpool",
-        "opencv-python",
-        "ray",
-        "tensorboard",
-        "wandb",
-    }.isdisjoint(adapter_dependencies)
-    assert {"cpprb", "gymnasium", "python-dotenv", "pyyaml", "tensorboardx", "tqdm"} <= (
-        adapter_dependencies
-    )
-
-
-def test_adapter_build_tree_reuses_repository_packages():
-    source = REPO_ROOT / "adapters" / "src"
-    for package in ("env_builder", "experiments", "model_builder", "replay_memory"):
-        link = source / package
-        assert link.is_symlink()
-        assert link.resolve() == REPO_ROOT / package
+        "jax",
+        "dm-pix",
+        "cpprb",
+        "gymnasium",
+        "pyyaml",
+        "tensorboardx",
+    } <= dependencies
+    assert "jax-baselines-adapters" not in dependencies
+    assert {"all", "distributed", "envpool", "haiku"} <= set(project["optional-dependencies"])
+    assert config["dependency-groups"]["dev"][0] == "jax-baselines[all]"

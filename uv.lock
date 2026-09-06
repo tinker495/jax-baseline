@@ -16,12 +16,6 @@ resolution-markers = [
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32'",
 ]
 
-[manifest]
-members = [
-    "jax-baselines",
-    "jax-baselines-adapters",
-]
-
 [[package]]
 name = "absl-py"
 version = "2.4.0"
@@ -1284,48 +1278,11 @@ version = "0.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "chex" },
-    { name = "dm-pix" },
-    { name = "flax" },
-    { name = "jax" },
-    { name = "numpy" },
-    { name = "optax" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "jax-baselines-adapters", extra = ["all"] },
-    { name = "pre-commit" },
-    { name = "pytest" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "chex" },
-    { name = "dm-pix" },
-    { name = "flax" },
-    { name = "jax" },
-    { name = "numpy" },
-    { name = "optax" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "jax-baselines-adapters", extras = ["all"], editable = "adapters" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-]
-
-[[package]]
-name = "jax-baselines-adapters"
-version = "0.0.1"
-source = { editable = "adapters" }
-dependencies = [
-    { name = "chex" },
     { name = "cpprb" },
+    { name = "dm-pix" },
     { name = "flax" },
     { name = "gymnasium" },
     { name = "jax" },
-    { name = "jax-baselines" },
     { name = "numpy" },
     { name = "optax" },
     { name = "python-dotenv" },
@@ -1389,6 +1346,13 @@ wandb = [
     { name = "wandb" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "jax-baselines", extra = ["all"] },
+    { name = "pre-commit" },
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aim", marker = "extra == 'aim'" },
@@ -1403,6 +1367,7 @@ requires-dist = [
     { name = "cpprb", git = "https://github.com/tinker495/cpprb" },
     { name = "dm-haiku", marker = "extra == 'all'" },
     { name = "dm-haiku", marker = "extra == 'haiku'" },
+    { name = "dm-pix" },
     { name = "envpool", marker = "extra == 'all'" },
     { name = "envpool", marker = "extra == 'envpool'" },
     { name = "flax" },
@@ -1415,7 +1380,6 @@ requires-dist = [
     { name = "jax" },
     { name = "jax", extras = ["cuda12"], marker = "extra == 'all'" },
     { name = "jax", extras = ["cuda12"], marker = "extra == 'cuda12'" },
-    { name = "jax-baselines", editable = "." },
     { name = "numpy" },
     { name = "opencv-python", marker = "extra == 'all'" },
     { name = "opencv-python", marker = "extra == 'atari'" },
@@ -1434,6 +1398,13 @@ requires-dist = [
     { name = "wandb", marker = "extra == 'wandb'" },
 ]
 provides-extras = ["aim", "atari", "box2d", "cuda12", "dashboard", "distributed", "envpool", "haiku", "mujoco", "other", "wandb", "all"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "jax-baselines", extras = ["all"] },
+    { name = "pre-commit" },
+    { name = "pytest" },
+]
 
 [[package]]
 name = "jax-cuda12-pjrt"
