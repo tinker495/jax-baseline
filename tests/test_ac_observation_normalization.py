@@ -10,6 +10,8 @@ from jax_baselines.math.statistics import RunningMeanStd
 
 def _agent(enabled=True):
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.memory_backend = "cpu"
+    agent._initial_reset = None
     agent.observation_space = {"unified_obs": [1]}
     agent.obs_normalization = enabled
     agent.obs_rms = (

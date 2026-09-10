@@ -110,7 +110,9 @@ class SAC(Deteministic_Policy_Gradient_Family):
         return pi, log_prob
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        mu, log_std = self.actor(params, None, self.preproc(params, None, convert_normalized_obs(obses)))
+        mu, log_std = self.actor(
+            params, None, self.preproc(params, None, convert_normalized_obs(obses))
+        )
         return sample_action(mu, log_std, key)
 
     def _get_eval_actions(self, params, obses) -> jnp.ndarray:

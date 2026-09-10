@@ -183,7 +183,8 @@ class APE_X_C51(Ape_X_Family):
 
             def actor(model, preproc, params, obses, key):
                 q_values = jnp.sum(
-                    model(params, key, preproc(params, key, convert_normalized_obs(obses))) * categorial_bar,
+                    model(params, key, preproc(params, key, convert_normalized_obs(obses)))
+                    * categorial_bar,
                     axis=2,
                 )
                 return jnp.argmax(q_values, axis=1)

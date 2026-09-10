@@ -86,10 +86,6 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
         return critic_loss
 
     def _preprocess(self, params, key, obses, actions, rewards, nxtobses, terminateds, truncateds):
-        actions = jnp.stack(actions)
-        rewards = jnp.stack(rewards)
-        terminateds = jnp.stack(terminateds)
-        truncateds = jnp.stack(truncateds)
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
         feature = jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, obses)

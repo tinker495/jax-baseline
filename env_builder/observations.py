@@ -21,8 +21,8 @@ def _to_numpy(value):
         raise ValueError("Selected observation must be one numeric array") from exc
 
 
-def _numeric_array(value):
-    array = _to_numpy(value)
+def _numeric_array(value, array_converter=_to_numpy):
+    array = array_converter(value)
     if array.dtype == object or not np.issubdtype(array.dtype, np.number):
         raise ValueError("Selected observation must be one numeric array")
     return array
@@ -68,14 +68,17 @@ def _flatten(value, leaf=None, kind="Observation", prefix=""):
     return leaves
 
 
-def normalize_observation(observation, observation_key=None):
+def normalize_observation(observation, observation_key=None, *, array_converter=_to_numpy):
     """Flatten raw shared observations and mark every leaf with ``unified_``."""
     if observation_key:
         observation = _select_path(observation, observation_key)
-    normalized = _flatten(observation, _numeric_array, prefix=observation_key or "")
+    normalized = _flatten(observation, prefix=observation_key or "")
     if not normalized:
         raise ValueError("Observation must contain at least one array leaf")
-    return {f"unified_{key}": value for key, value in sorted(normalized.items())}
+    return {
+        f"unified_{key}": _numeric_array(value, array_converter)
+        for key, value in sorted(normalized.items())
+    }
 
 
 def normalize_observation_space(space, observation_key=None):

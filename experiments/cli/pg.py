@@ -16,6 +16,12 @@ def add_args(parser):
     parser.add_argument("--experiment_name", type=str, default="PG", help="experiment name")
     parser.add_argument("--env", type=str, default="Pendulum-v1", help="environment")
     add_env_args(parser)
+    parser.add_argument(
+        "--memory_backend",
+        choices=("auto", "cpu", "gpu"),
+        default="auto",
+        help="rollout storage; auto follows the environment observation device",
+    )
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--worker", type=int, default=1, help="gym_worker_size")
     parser.add_argument("--algo", type=str, default="A2C", help="algo ID")
@@ -103,6 +109,7 @@ def _common(a):
         "val_coef": a.val_coef,
         "ent_coef": a.ent_coef,
         "obs_normalization": a.obs_normalization,
+        "memory_backend": a.memory_backend,
         "use_entropy_adv_shaping": a.use_entropy_adv_shaping,
         "log_dir": a.logdir,
         "optimizer_factory": make_optimizer_factory(

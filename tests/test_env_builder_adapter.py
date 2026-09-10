@@ -344,6 +344,7 @@ def test_infer_action_meta_uses_adapter_normalized_action_type():
     action = np.array([6.0, -6.0])
     np.testing.assert_array_equal(continuous_conv(action), [5.0, -5.0])
     np.testing.assert_array_equal(action, [6.0, -6.0])
+    np.testing.assert_array_equal(action, [6.0, -6.0])
 
 
 def test_env_builder_adapter_prepares_train_eval_pair_and_seed_policy():
@@ -461,6 +462,7 @@ def test_experiments_composition_path_uses_adapter_prepared_envs(monkeypatch):
                 "observation_key": None,
                 "episode_length": None,
                 "device": "cuda:0",
+                "jax_arrays": False,
             },
         ),
         ("prepare_envs", 4, 21),
@@ -485,6 +487,7 @@ def test_mjlab_backend_is_lazy_and_receives_its_supported_options(monkeypatch):
         observation_key="policy.obs",
         episode_length=7,
         device="cpu",
+        jax_arrays=True,
     )
 
     mjlab(3, seed=4, render_mode="rgb_array")
@@ -499,6 +502,7 @@ def test_mjlab_backend_is_lazy_and_receives_its_supported_options(monkeypatch):
                 "episode_length": 7,
                 "device": "cpu",
                 "render_mode": "rgb_array",
+                "jax_arrays": True,
             },
         ),
     ]
@@ -558,6 +562,7 @@ def test_shared_local_cli_env_options_forward_to_builder(monkeypatch):
             "12",
             "--env_device",
             "cpu",
+            "--env_jax_arrays",
         ]
     )
 
@@ -569,6 +574,7 @@ def test_shared_local_cli_env_options_forward_to_builder(monkeypatch):
         "observation_key": "policy.joints",
         "episode_length": 12,
         "device": "cpu",
+        "jax_arrays": True,
     }
 
 

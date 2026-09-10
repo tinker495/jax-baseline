@@ -10,6 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, TypeAlias, TypedDict, runtime_checkable
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 # Keys retain their role from the environment boundary through replay and model input:
@@ -101,27 +103,35 @@ def batch_observation(observation: Observation) -> Observation:
     """Add the leading model batch dimension to a single observation."""
     if not isinstance(observation, dict):
         raise TypeError("observation must be a dict")
-    return {key: np.expand_dims(value, axis=0) for key, value in observation.items()}
+    return {key: value[None, ...] for key, value in observation.items()}
 
 
-def _done_mask(terminateds: Any, truncateds: Any) -> np.ndarray:
+def _done_mask(terminateds: Any, truncateds: Any) -> np.ndarray | jax.Array:
+    if isinstance(terminateds, jax.Array):
+        return jnp.logical_or(terminateds, truncateds)
     return np.logical_or(
         np.asarray(terminateds, dtype=bool),
         np.asarray(truncateds, dtype=bool),
     )
 
 
-def vector_real_reset_mask(env: Any, terminateds: Any, truncateds: Any, infos: Any) -> np.ndarray:
+def vector_real_reset_mask(
+    env: Any, terminateds: Any, truncateds: Any, infos: Any
+) -> np.ndarray | jax.Array:
     real_reset_mask = getattr(env, "real_reset_mask", None)
     if callable(real_reset_mask):
-        return np.asarray(real_reset_mask(terminateds, truncateds, infos), dtype=bool)
+        mask = real_reset_mask(terminateds, truncateds, infos)
+        return mask.astype(bool) if isinstance(mask, jax.Array) else np.asarray(mask, dtype=bool)
     return _done_mask(terminateds, truncateds)
 
 
-def vector_autoreset_mask(env: Any, terminateds: Any, truncateds: Any, infos: Any) -> np.ndarray:
+def vector_autoreset_mask(
+    env: Any, terminateds: Any, truncateds: Any, infos: Any
+) -> np.ndarray | jax.Array:
     autoreset_mask = getattr(env, "autoreset_mask", None)
     if callable(autoreset_mask):
-        return np.asarray(autoreset_mask(terminateds, truncateds, infos), dtype=bool)
+        mask = autoreset_mask(terminateds, truncateds, infos)
+        return mask.astype(bool) if isinstance(mask, jax.Array) else np.asarray(mask, dtype=bool)
     return _done_mask(terminateds, truncateds)
 
 

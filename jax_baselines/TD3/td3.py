@@ -79,7 +79,9 @@ class TD3(Deteministic_Policy_Gradient_Family):
         self.target_critic_params = bundle.target_critic_params
 
     def _get_actions(self, policy_params, obses, key=None) -> jnp.ndarray:
-        return self.actor(policy_params, key, self.preproc(policy_params, key, convert_normalized_obs(obses)))
+        return self.actor(
+            policy_params, key, self.preproc(policy_params, key, convert_normalized_obs(obses))
+        )
 
     def _policy_action_from_state(self, state, obs, eval, steps):
         return np.asarray(self._get_actions(state["policy"], obs, None))

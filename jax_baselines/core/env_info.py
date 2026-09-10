@@ -1,3 +1,5 @@
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 from jax_baselines.core.env_protocols import (
@@ -25,6 +27,8 @@ def _discrete_action_conv(a):
 
 
 def _continuous_action_conv(a):
+    if isinstance(a, jax.Array):
+        return jnp.clip(a, -5.0, 5.0)
     return np.clip(a, -5.0, 5.0)
 
 
