@@ -90,13 +90,16 @@ def test_eval_and_recording_restore_checkpoint_normalization(tmp_path, monkeypat
 
 
 class _SingleEnv:
-    def __init__(self):
+    def __init__(self, reset_value):
+        self.reset_value = reset_value
         self.resets = 0
         self.steps = 0
 
     def reset(self):
         self.resets += 1
-        return {"unified_obs": np.array([10 if self.resets == 1 else 2], np.float32)}, {}
+        return {
+            "unified_obs": np.array([10 if self.resets == 1 else self.reset_value], np.float32)
+        }, {}
 
     def step(self, action):
         self.steps += 1
@@ -110,12 +113,16 @@ class _SingleEnv:
 
 
 class _VectorEnv:
-    def __init__(self):
+    def __init__(self, reset_value):
+        self.reset_value = reset_value
         self.steps = 0
 
     def current_obs(self):
         return {
-            "unified_obs": np.array([[[10], [12]], [[2], [4]], [[6], [8]]][self.steps], np.float32)
+            "unified_obs": np.array(
+                [[[10], [12]], [[self.reset_value], [4]], [[6], [8]]][self.steps],
+                np.float32,
+            )
         }
 
     def step(self, actions):
@@ -135,9 +142,18 @@ class _VectorEnv:
 
 
 @pytest.mark.parametrize("vectorized", [False, True])
-def test_rollout_counts_action_observations_once_and_preserves_timeout_successor(vectorized):
+@pytest.mark.parametrize("reset_value", [2.0, 1000.0])
+@pytest.mark.parametrize("initial_values", [(), (2.0, 4.0)])
+def test_rollout_normalizes_successors_before_reset_statistics(
+    vectorized, reset_value, initial_values
+):
     agent = _agent()
-    agent.env = _VectorEnv() if vectorized else _SingleEnv()
+    assert agent.obs_rms is not None
+    if initial_values:
+        agent.obs_rms.update({"unified_obs": np.array(initial_values, np.float32)[:, None]})
+    initial_mean = agent.obs_rms.means["unified_obs"].copy()
+    initial_var = agent.obs_rms.vars["unified_obs"].copy()
+    agent.env = _VectorEnv(reset_value) if vectorized else _SingleEnv(reset_value)
     agent.env_type = "VectorizedEnv" if vectorized else "SingleEnv"
     agent.worker_size = 2 if vectorized else 1
     agent.batch_size = 2
@@ -159,20 +175,36 @@ def test_rollout_counts_action_observations_once_and_preserves_timeout_successor
     agent.run_training_loop(ctx)
 
     assert agent.obs_rms is not None
-    assert agent.obs_rms.count == 2 * agent.worker_size
-    assert train_counts == [2 * agent.worker_size]
+    assert agent.obs_rms.count == len(initial_values) + 2 * agent.worker_size
+    assert train_counts == [len(initial_values) + 2 * agent.worker_size]
     np.testing.assert_allclose(
         transitions[0][0]["unified_obs"],
-        np.array([[10], [12]] if vectorized else [[10]]) / 1.01,
+        (np.array([[10], [12]] if vectorized else [[10]]) - initial_mean)
+        / (np.sqrt(initial_var) + 0.01),
     )
     np.testing.assert_allclose(
         transitions[0][3]["unified_obs"],
-        np.array([[97 / 1.01], [1 / 1.01]] if vectorized else [[9800]]),
+        (np.array([[100], [4]] if vectorized else [[100]]) - initial_mean)
+        / (np.sqrt(initial_var) + 0.01),
+    )
+    first_action_values = np.array(
+        [*initial_values, reset_value, 4] if vectorized else [*initial_values, reset_value],
+        np.float32,
     )
     np.testing.assert_allclose(
         transitions[1][0]["unified_obs"],
-        np.array([[-1 / 1.01], [1 / 1.01]] if vectorized else [[0]]),
+        (
+            np.array([[reset_value], [4]] if vectorized else [[reset_value]])
+            - np.mean(first_action_values)
+        )
+        / (np.std(first_action_values) + 0.01),
     )
-    np.testing.assert_array_equal(agent.obs_rms.means["unified_obs"], [5 if vectorized else 3])
-    np.testing.assert_array_equal(agent.obs_rms.vars["unified_obs"], [5 if vectorized else 1])
+    np.testing.assert_allclose(
+        transitions[1][3]["unified_obs"],
+        (np.array([[6], [8]] if vectorized else [[4]]) - np.mean(first_action_values))
+        / (np.std(first_action_values) + 0.01),
+    )
+    action_values = np.concatenate((first_action_values, [6, 8] if vectorized else [4]))
+    np.testing.assert_allclose(agent.obs_rms.means["unified_obs"], [np.mean(action_values)])
+    np.testing.assert_allclose(agent.obs_rms.vars["unified_obs"], [np.var(action_values)])
     assert transitions[0][5][0]

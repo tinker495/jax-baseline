@@ -370,13 +370,15 @@ class Actor_Critic_Policy_Gradient_Family:
                 action_observation = batch_observation(action_observation)
             else:
                 action_observation = next_obs
+            # Timeout bootstraps must not incorporate the next episode's reset sample.
+            next_obs = self.normalize_observation(next_obs)
             if self.obs_rms is not None:
                 self.obs_rms.update(action_observation)
             self.buffer.add(
                 obs,
                 actions,
                 [reward],
-                self.normalize_observation(next_obs),
+                next_obs,
                 [terminated],
                 [truncated],
             )
@@ -452,9 +454,10 @@ class Actor_Critic_Policy_Gradient_Family:
                 infos,
             ) = self.env.get_result()
             action_observation = self.env.current_obs()
+            # Autoreset observations belong to the next action, not this successor.
+            next_obses = self.normalize_observation(next_obses)
             if self.obs_rms is not None:
                 self.obs_rms.update(action_observation)
-            next_obses = self.normalize_observation(next_obses)
             action_observation = self.normalize_observation(action_observation)
 
             train_due = (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0
