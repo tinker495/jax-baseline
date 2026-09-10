@@ -10,7 +10,7 @@ from flax import struct
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.distributional import categorical_projection
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.param_updates import (
     project_dense_kernels,
     scaled_by_reset,
@@ -133,14 +133,14 @@ class XQC(Deteministic_Policy_Gradient_Family):
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         (mu, log_std), _ = self.actor(
-            params, None, self.preproc(params, None, convert_jax(obses)), False
+            params, None, self.preproc(params, None, convert_normalized_obs(obses)), False
         )
         std = jnp.exp(log_std)
         pi = jax.nn.tanh(mu + std * jax.random.normal(key, std.shape))
         return pi
 
     def _get_eval_actions(self, params, obses) -> jnp.ndarray:
-        (mu, _), _ = self.actor(params, None, self.preproc(params, None, convert_jax(obses)), False)
+        (mu, _), _ = self.actor(params, None, self.preproc(params, None, convert_normalized_obs(obses)), False)
         return jax.nn.tanh(mu)
 
     def _train_on_batch(self, data, context):
@@ -272,8 +272,8 @@ class XQC(Deteministic_Policy_Gradient_Family):
         weights=1,
         indexes=None,
     ):
-        obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
+        obses = convert_normalized_obs(obses)
+        nxtobses = convert_normalized_obs(nxtobses)
         not_terminateds = 1.0 - terminateds
         ent_coef = jnp.exp(log_ent_coef)
         key1, key2 = jax.random.split(key, 2)

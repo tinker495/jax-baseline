@@ -4,7 +4,7 @@ import numpy as np
 import optax
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.returns import (
     get_gaes,
     normalize_advantage,
@@ -90,8 +90,8 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
         rewards = jnp.stack(rewards)
         terminateds = jnp.stack(terminateds)
         truncateds = jnp.stack(truncateds)
-        obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
+        obses = convert_normalized_obs(obses)
+        nxtobses = convert_normalized_obs(nxtobses)
         feature = jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, obses)
         value = jax.vmap(self.critic, in_axes=(None, None, 0))(params, key, feature)
         next_value = jax.vmap(self.critic, in_axes=(None, None, 0))(

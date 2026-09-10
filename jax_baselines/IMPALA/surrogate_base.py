@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import optax
 
 from jax_baselines.IMPALA.base_class import IMPALA_Family
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 
 
 class SurrogateIMPALA(IMPALA_Family):
@@ -147,8 +147,8 @@ class SurrogateIMPALA(IMPALA_Family):
         rewards = jnp.stack(rewards)
         terminateds = jnp.stack(terminateds)
         truncateds = jnp.stack(truncateds)
-        obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
+        obses = convert_normalized_obs(obses)
+        nxtobses = convert_normalized_obs(nxtobses)
         feature = jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, obses)
         value = jax.vmap(self.critic, in_axes=(None, None, 0))(params, key, feature)
         next_value = jax.vmap(self.critic, in_axes=(None, None, 0))(

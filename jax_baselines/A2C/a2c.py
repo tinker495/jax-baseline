@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import optax
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.returns import discount_with_terminated
 
 
@@ -61,8 +61,8 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         rewards = jnp.stack(rewards)
         terminateds = jnp.stack(terminateds)
         truncateds = jnp.stack(truncateds)
-        obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
+        obses = convert_normalized_obs(obses)
+        nxtobses = convert_normalized_obs(nxtobses)
         value = jax.vmap(self.critic, in_axes=(None, None, 0))(
             params,
             key,

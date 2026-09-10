@@ -10,7 +10,7 @@ from jax_baselines.math.distributional import (
     MunchausenSpec,
     distributional_td_target,
 )
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.param_updates import (
     filter_like_tree,
     scaled_by_reset_with_filter,
@@ -105,7 +105,7 @@ class HL_GAUSS_SPR(SPR):
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         return jnp.argmax(
-            self.hl_gauss.to_scalar(self.get_q(params, convert_jax(obses), key)),
+            self.hl_gauss.to_scalar(self.get_q(params, convert_normalized_obs(obses), key)),
             axis=1,
             keepdims=True,
         )
@@ -154,7 +154,7 @@ class HL_GAUSS_SPR(SPR):
         weights=1,
         indexes=None,
     ):
-        obses = convert_jax(obses)
+        obses = convert_normalized_obs(obses)
         actions = actions.astype(jnp.int32)
         not_terminateds = 1.0 - terminateds
         obses = jax.tree.map(

@@ -6,7 +6,7 @@ import optax
 
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import QNetTrainResult
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.losses import QuantileHuberLosses
 from jax_baselines.math.param_updates import hard_update
 from jax_baselines.math.policy_math import q_log_pi
@@ -62,7 +62,7 @@ class QRDQN(Q_Network_Family):
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         return jnp.expand_dims(
-            jnp.argmax(jnp.mean(self.get_q(params, convert_jax(obses), key), axis=2), axis=1),
+            jnp.argmax(jnp.mean(self.get_q(params, convert_normalized_obs(obses), key), axis=2), axis=1),
             axis=1,
         )
 
@@ -147,8 +147,8 @@ class QRDQN(Q_Network_Family):
         weights=1,
         indexes=None,
     ):
-        obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
+        obses = convert_normalized_obs(obses)
+        nxtobses = convert_normalized_obs(nxtobses)
         actions = jnp.expand_dims(actions.astype(jnp.int32), axis=2)
         not_terminateds = 1.0 - terminateds
         targets = self._target(

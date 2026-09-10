@@ -8,7 +8,7 @@ import optax
 
 from jax_baselines.APE_X.base_class import Ape_X_Family
 from jax_baselines.core.seeding import key_gen
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.losses import QuantileHuberLosses
 from jax_baselines.math.param_updates import hard_update
 from jax_baselines.math.policy_math import q_log_pi
@@ -139,7 +139,7 @@ class APE_X_IQN(Ape_X_Family):
                 key,
             ):
                 key1, key2, key3 = jax.random.split(key, 3)
-                conv_obses = convert_jax(obses)
+                conv_obses = convert_normalized_obs(obses)
                 batch_size = next(iter(conv_obses.values())).shape[0]
                 tau = jax.random.uniform(key1, (batch_size, n_support))
                 next_tau = jax.random.uniform(key2, (batch_size, n_support))
@@ -148,7 +148,7 @@ class APE_X_IQN(Ape_X_Family):
                     jnp.expand_dims(actions.astype(jnp.int32), axis=2),
                     axis=1,
                 )
-                next_q = model(params, key3, preproc(params, key3, convert_jax(nxtobses)), next_tau)
+                next_q = model(params, key3, preproc(params, key3, convert_normalized_obs(nxtobses)), next_tau)
                 next_actions = jnp.expand_dims(
                     jnp.argmax(jnp.mean(next_q, axis=2), axis=1), axis=(1, 2)
                 )
@@ -164,7 +164,7 @@ class APE_X_IQN(Ape_X_Family):
                 # mirroring local IQN._get_actions; the priority/TD-error path
                 # (get_abs_td_error) deliberately uses plain U[0,1] like iqn.py _loss/_target.
                 tau = jax.random.uniform(key, (1, n_support)) * CVaR
-                q_values = model(params, key, preproc(params, key, convert_jax(obses)), tau)
+                q_values = model(params, key, preproc(params, key, convert_normalized_obs(obses)), tau)
                 return jnp.expand_dims(jnp.argmax(jnp.mean(q_values, axis=2), axis=1), axis=1)
 
             if param_noise:
@@ -213,8 +213,8 @@ class APE_X_IQN(Ape_X_Family):
         weights=1,
         indexes=None,
     ):
-        obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
+        obses = convert_normalized_obs(obses)
+        nxtobses = convert_normalized_obs(nxtobses)
         actions = jnp.expand_dims(actions.astype(jnp.int32), axis=2)
         not_terminateds = 1.0 - terminateds
         key1, key2 = jax.random.split(key, 2)

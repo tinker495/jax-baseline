@@ -17,7 +17,7 @@ from jax_baselines.core.replay_protocol import (
 )
 from jax_baselines.core.runtime_adapters import make_progress
 from jax_baselines.core.seeding import key_gen, set_global_seeds
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.returns import get_vtrace
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
@@ -193,7 +193,7 @@ class IMPALA_Family(object):
             if action_type == "discrete":
 
                 def actor(actor_model, preproc, params, obses, key=None):
-                    prob = actor_model(params, key, preproc(params, key, convert_jax(obses)))
+                    prob = actor_model(params, key, preproc(params, key, convert_normalized_obs(obses)))
                     return jax.nn.softmax(prob)
 
                 def get_action_prob(actor, params, obses):
@@ -208,7 +208,7 @@ class IMPALA_Family(object):
 
                 def actor(actor_model, preproc, params, obses, key=None):
                     mean, log_std = actor_model(
-                        params, key, preproc(params, key, convert_jax(obses))
+                        params, key, preproc(params, key, convert_normalized_obs(obses))
                     )
                     return mean, log_std
 

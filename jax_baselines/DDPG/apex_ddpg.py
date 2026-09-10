@@ -8,7 +8,7 @@ import optax
 
 from jax_baselines.APE_X.dpg_base_class import Ape_X_Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.ou_noise import OUNoise
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.param_updates import soft_update
 
 
@@ -53,17 +53,17 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
                 terminateds,
                 key,
             ):
-                next_feature = preproc(params, key, convert_jax(nxtobses))
+                next_feature = preproc(params, key, convert_normalized_obs(nxtobses))
                 next_action = actor(params, key, next_feature)
                 next_q = critic(params, key, next_feature, next_action)
-                feature = preproc(params, key, convert_jax(obses))
+                feature = preproc(params, key, convert_normalized_obs(obses))
                 q_values = critic(params, key, feature, actions)
                 target = rewards + gamma * (1.0 - terminateds) * next_q
                 td_error = q_values - target
                 return jnp.squeeze(jnp.abs(td_error))
 
             def actor(actor, preproc, params, obses, key):
-                return actor(params, key, preproc(params, key, convert_jax(obses)))
+                return actor(params, key, preproc(params, key, convert_normalized_obs(obses)))
 
             def get_action(actor, params, obs, noise, epsilon, key):
                 actions = np.clip(np.asarray(actor(params, obs, key)) + noise() * epsilon, -1, 1)[0]
@@ -93,8 +93,8 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
         weights=1,
         indexes=None,
     ):
-        obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
+        obses = convert_normalized_obs(obses)
+        nxtobses = convert_normalized_obs(nxtobses)
         not_terminateds = 1.0 - terminateds
         batch_idxes = jnp.arange(self.batch_size).reshape(-1, self.mini_batch_size)
         obses_batch = jax.tree.map(lambda value: value[batch_idxes], obses)

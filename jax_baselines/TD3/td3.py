@@ -9,7 +9,7 @@ from flax import struct
 
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.training import DPGTrainReport
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.param_updates import scaled_by_reset, soft_update
 
 
@@ -79,7 +79,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         self.target_critic_params = bundle.target_critic_params
 
     def _get_actions(self, policy_params, obses, key=None) -> jnp.ndarray:
-        return self.actor(policy_params, key, self.preproc(policy_params, key, convert_jax(obses)))
+        return self.actor(policy_params, key, self.preproc(policy_params, key, convert_normalized_obs(obses)))
 
     def _policy_action_from_state(self, state, obs, eval, steps):
         return np.asarray(self._get_actions(state["policy"], obs, None))
@@ -206,8 +206,8 @@ class TD3(Deteministic_Policy_Gradient_Family):
         weights=1,
         indexes=None,
     ):
-        obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
+        obses = convert_normalized_obs(obses)
+        nxtobses = convert_normalized_obs(nxtobses)
         not_terminateds = 1.0 - terminateds
         targets = self._target(
             target_policy_params,

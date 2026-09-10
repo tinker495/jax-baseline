@@ -5,7 +5,7 @@ import jax.numpy as jnp
 import optax
 
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.param_updates import hard_update
 from jax_baselines.math.policy_math import q_log_pi
 
@@ -39,7 +39,7 @@ class DQN(Q_Network_Family):
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         return jnp.expand_dims(
-            jnp.argmax(self.get_q(params, convert_jax(obses), key), axis=1), axis=1
+            jnp.argmax(self.get_q(params, convert_normalized_obs(obses), key), axis=1), axis=1
         )
 
     def _train_step(
@@ -57,8 +57,8 @@ class DQN(Q_Network_Family):
         weights=1,
         indexes=None,
     ):
-        obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
+        obses = convert_normalized_obs(obses)
+        nxtobses = convert_normalized_obs(nxtobses)
         actions = actions.astype(jnp.int32)
         not_terminateds = 1.0 - terminateds
         targets = self._target(
