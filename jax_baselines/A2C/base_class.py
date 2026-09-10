@@ -28,7 +28,7 @@ from jax_baselines.core.eval import (
 from jax_baselines.core.rollout_stats import EpisodeTracker
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.training_session import TrainingSession
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
@@ -145,13 +145,13 @@ class Actor_Critic_Policy_Gradient_Family(object):
 
     def _get_actions_discrete(self, params, obses, key=None) -> jnp.ndarray:
         prob = jax.nn.softmax(
-            self.actor(params, key, self.preproc(params, key, convert_jax(obses))),
+            self.actor(params, key, self.preproc(params, key, convert_normalized_obs(obses))),
             axis=1,
         )
         return prob
 
     def _get_actions_continuous(self, params, obses, key=None) -> jnp.ndarray:
-        mu, std = self.actor(params, key, self.preproc(params, key, convert_jax(obses)))
+        mu, std = self.actor(params, key, self.preproc(params, key, convert_normalized_obs(obses)))
         return mu, jnp.exp(std)
 
     def action_discrete(self, obs):

@@ -89,7 +89,7 @@ def _model_factory(cur_dist, nxt_dist):
     """A `model` mapping obs->cur_dist and nxtobs->nxt_dist.
 
     The two are distinguished by a marker scalar in the (real-array) observation
-    so the closure's `convert_jax` boundary stays exercised.
+    so the closure's `convert_normalized_obs` boundary stays exercised.
     """
 
     def preproc(params, key, obses):

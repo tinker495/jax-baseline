@@ -10,7 +10,7 @@ from jax_baselines.math.distributional import (
     MunchausenSpec,
     distributional_td_target,
 )
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.param_updates import hard_update
 
 
@@ -73,7 +73,7 @@ class C51(Q_Network_Family):
         return jnp.expand_dims(
             jnp.argmax(
                 jnp.sum(
-                    self.get_q(params, convert_jax(obses), key) * self._categorial_bar,
+                    self.get_q(params, convert_normalized_obs(obses), key) * self._categorial_bar,
                     axis=2,
                 ),
                 axis=1,
@@ -96,8 +96,8 @@ class C51(Q_Network_Family):
         weights=1,
         indexes=None,
     ):
-        obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
+        obses = convert_normalized_obs(obses)
+        nxtobses = convert_normalized_obs(nxtobses)
         actions = jnp.expand_dims(actions.astype(jnp.int32), axis=2)
         not_terminateds = 1.0 - terminateds
         target_distribution = self._target(

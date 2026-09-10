@@ -7,7 +7,7 @@ import optax
 
 from jax_baselines.APE_X.dpg_base_class import Ape_X_Deteministic_Policy_Gradient_Family
 from jax_baselines.core.seeding import key_gen
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.param_updates import soft_update
 
 
@@ -136,7 +136,7 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
                 key,
             ):
                 size = next(iter(obses.values())).shape[0]
-                next_feature = preproc(params, key, convert_jax(nxtobses))
+                next_feature = preproc(params, key, convert_normalized_obs(nxtobses))
                 next_action = jnp.clip(
                     actor(params, key, next_feature)
                     + jnp.clip(
@@ -149,14 +149,14 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
                 )
                 q1, q2 = critic(params, key, next_feature, next_action)
                 next_q = jnp.minimum(q1, q2)
-                feature = preproc(params, key, convert_jax(obses))
+                feature = preproc(params, key, convert_normalized_obs(obses))
                 q_values1, _ = critic(params, key, feature, actions)
                 target = rewards + gamma * (1.0 - terminateds) * next_q
                 td1_error = jnp.abs(q_values1 - target)
                 return jnp.squeeze(td1_error)
 
             def actor(actor, preproc, params, obses, key):
-                return actor(params, key, preproc(params, key, convert_jax(obses)))
+                return actor(params, key, preproc(params, key, convert_normalized_obs(obses)))
 
             def get_action(actor, params, obs, noise, epsilon, key):
                 actions = np.clip(np.asarray(actor(params, obs, key)) + noise() * epsilon, -1, 1)[0]
@@ -189,8 +189,8 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
         weights=1,
         indexes=None,
     ):
-        obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
+        obses = convert_normalized_obs(obses)
+        nxtobses = convert_normalized_obs(nxtobses)
         not_terminateds = 1.0 - terminateds
         batch_idxes = jnp.arange(self.batch_size).reshape(-1, self.mini_batch_size)
         obses_batch = jax.tree.map(lambda value: value[batch_idxes], obses)

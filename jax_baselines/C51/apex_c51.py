@@ -14,7 +14,7 @@ from jax_baselines.math.distributional import (
     categorical_projection,
     distributional_td_target,
 )
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.param_updates import hard_update
 
 
@@ -153,14 +153,14 @@ class APE_X_C51(Ape_X_Family):
                         model(
                             params,
                             key,
-                            preproc(params, key, convert_jax(obses)),
+                            preproc(params, key, convert_normalized_obs(obses)),
                         ),
                         jnp.expand_dims(actions.astype(jnp.int32), axis=2),
                         axis=1,
                     )
                 )
 
-                next_q = model(params, key, preproc(params, key, convert_jax(nxtobses)))
+                next_q = model(params, key, preproc(params, key, convert_normalized_obs(nxtobses)))
                 next_actions = jnp.expand_dims(
                     jnp.argmax(jnp.sum(next_q * categorial_bar, axis=2), axis=1),
                     axis=(1, 2),
@@ -183,7 +183,7 @@ class APE_X_C51(Ape_X_Family):
 
             def actor(model, preproc, params, obses, key):
                 q_values = jnp.sum(
-                    model(params, key, preproc(params, key, convert_jax(obses))) * categorial_bar,
+                    model(params, key, preproc(params, key, convert_normalized_obs(obses))) * categorial_bar,
                     axis=2,
                 )
                 return jnp.argmax(q_values, axis=1)
@@ -229,8 +229,8 @@ class APE_X_C51(Ape_X_Family):
         weights=1,
         indexes=None,
     ):
-        obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
+        obses = convert_normalized_obs(obses)
+        nxtobses = convert_normalized_obs(nxtobses)
         actions = jnp.expand_dims(actions.astype(jnp.int32), axis=2)
         not_terminateds = 1.0 - terminateds
         batch_idxes = jnp.arange(self.batch_size).reshape(-1, self.mini_batch_size)

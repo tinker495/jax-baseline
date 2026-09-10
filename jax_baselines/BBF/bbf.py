@@ -2,7 +2,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.param_updates import (
     filter_like_tree,
     scaled_by_reset_with_filter,
@@ -124,7 +124,7 @@ class BBF(SPR):
         weights=1,
         indexes=None,
     ):
-        obses = convert_jax(obses)
+        obses = convert_normalized_obs(obses)
         actions = actions.astype(jnp.int32)
         not_terminateds = 1.0 - terminateds
         obses = jax.tree.map(

@@ -6,7 +6,7 @@ import optax
 
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import QNetTrainResult
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.losses import FQFQuantileLosses, QuantileHuberLosses
 from jax_baselines.math.param_updates import hard_update
 from jax_baselines.math.policy_math import q_log_pi
@@ -76,7 +76,7 @@ class FQF(Q_Network_Family):
         return self._epsilon_greedy_actions(greedy_actions, epsilon)
 
     def _get_actions(self, params, fqf_params, obses, key=None) -> jnp.ndarray:
-        feature = self.preproc(params, key, convert_jax(obses))
+        feature = self.preproc(params, key, convert_normalized_obs(obses))
         tau, tau_hat, _ = self.fpf(fqf_params, key, feature)
         return jnp.argmax(self.get_q(params, feature, tau, tau_hat, key), axis=1, keepdims=True)
 
@@ -215,8 +215,8 @@ class FQF(Q_Network_Family):
         weights=1,
         indexes=None,
     ):
-        obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
+        obses = convert_normalized_obs(obses)
+        nxtobses = convert_normalized_obs(nxtobses)
         actions = jnp.expand_dims(actions.astype(jnp.int32), axis=2)
         not_terminateds = 1.0 - terminateds
         (

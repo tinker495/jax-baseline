@@ -9,7 +9,7 @@ from flax import struct
 
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.training import DPGTrainReport
-from jax_baselines.math.jax_utils import convert_jax
+from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.losses import hubberloss
 from jax_baselines.math.param_updates import hard_update, scaled_by_reset
 
@@ -116,7 +116,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.target_critic_params = bundle.target_critic_params
 
     def _get_actions(self, encoder_params, policy_params, obses, key=None) -> jnp.ndarray:
-        feature = self.preproc(encoder_params, key, convert_jax(obses))
+        feature = self.preproc(encoder_params, key, convert_normalized_obs(obses))
         zs = self.encoder(encoder_params, key, feature)
         return self.actor(policy_params, key, feature, zs)
 
@@ -320,8 +320,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
         weights=1,
         indexes=None,
     ):
-        obses = convert_jax(obses)
-        nxtobses = convert_jax(nxtobses)
+        obses = convert_normalized_obs(obses)
+        nxtobses = convert_normalized_obs(nxtobses)
         not_terminateds = 1.0 - terminateds
 
         repr_loss, grad = jax.value_and_grad(self._encoder_loss)(
@@ -427,7 +427,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         )
 
     def feature_and_zs(self, encoder_params, obses, key):
-        feature = self.preproc(encoder_params, key, convert_jax(obses))
+        feature = self.preproc(encoder_params, key, convert_normalized_obs(obses))
         zs = self.encoder(encoder_params, key, feature)
         return feature, zs
 
