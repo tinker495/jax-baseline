@@ -533,19 +533,10 @@ class Q_Network_Family:
         )
 
     def eval(self, ctx, steps):
-        # Deterministic greedy evaluation using public actions() API.
-        def eval_action_fn(obs):
-            a = self.actions(obs, 0.0, eval_mode=True)
-            arr = np.asarray(a)
-            if arr.size == 1:
-                return int(arr.item())
-            else:
-                return int(arr[0][0])
-
         return evaluate_policy(
             self.eval_env,
             self.eval_eps,
-            eval_action_fn,
+            lambda obs: self.actions(obs, 0.0, eval_mode=True),
             logger_run=ctx.logger_run,
             steps=steps,
         )

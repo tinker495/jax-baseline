@@ -652,7 +652,7 @@ class Actor_Critic_Policy_Gradient_Family:
             lambda obs: self.actions(self.normalize_observation(obs), eval=True),
             logger_run=ctx.logger_run,
             steps=steps,
-            conv_action=self.conv_action,
+            conv_action=self.conv_action if self.action_type == "continuous" else None,
         )
 
     def test(self, episode=10):

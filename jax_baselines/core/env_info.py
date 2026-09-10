@@ -8,6 +8,7 @@ from jax_baselines.core.env_protocols import (
     PreparedWorkerEnvSpec,
     SingleEnv,
     VectorizedEnv,
+    VectorizedEvalEnv,
 )
 
 REQUIRED_ENV_INFO_KEYS = (
@@ -86,13 +87,29 @@ def get_local_env_info(env_builder, num_workers=1, seed=None, include_action_typ
     worker_size = int(env_info["worker_num"])
     env_type = _validate_core_env_type(env_info)
 
-    if env_type == "VectorizedEnv" and not isinstance(prepared.env, VectorizedEnv):
-        raise ValueError(
-            "Prepared train env metadata says VectorizedEnv but env is not VectorizedEnv"
-        )
-    if env_type == "SingleEnv":
+    if env_type == "VectorizedEnv":
+        if not isinstance(prepared.env, VectorizedEnv):
+            raise ValueError(
+                "Prepared train env metadata says VectorizedEnv but env is not VectorizedEnv"
+            )
+        if not isinstance(prepared.eval_env, VectorizedEvalEnv):
+            raise ValueError("Prepared eval env must satisfy the VectorizedEvalEnv protocol")
+        eval_info = _require_env_info(prepared.eval_env.get_info())
+        if _validate_core_env_type(eval_info) != env_type or eval_info["worker_num"] != worker_size:
+            raise ValueError(
+                "Prepared train and eval envs must have the same type and worker count"
+            )
+    else:
+        if (
+            worker_size != 1
+            or isinstance(prepared.env, VectorizedEnv)
+            or isinstance(prepared.eval_env, VectorizedEnv)
+        ):
+            raise ValueError(
+                "Prepared single train and eval envs must be single-worker environments"
+            )
         _require_single_env(prepared.env, "Prepared train env")
-    _require_single_env(prepared.eval_env, "Prepared eval env")
+        _require_single_env(prepared.eval_env, "Prepared eval env")
 
     result = (
         prepared.env,

@@ -522,15 +522,10 @@ class Deteministic_Policy_Gradient_Family(object):
         )
 
     def eval(self, ctx, steps):
-        # Evaluation should use the public actions() API with eval=True so that
-        # subclasses can implement snapshot-aware behavior consistently.
-        def eval_action_fn(obs):
-            return self.actions(obs, steps, eval=True)
-
         return evaluate_policy(
             self.eval_env,
             self.eval_eps,
-            eval_action_fn,
+            lambda obs: self.actions(obs, steps, eval=True),
             logger_run=ctx.logger_run,
             steps=steps,
         )
