@@ -160,7 +160,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
                 if self.gae_normalize and self.gae_normalize_scope == "minibatch":
                     adv = normalize_advantage(adv)
                 use_key, key = jax.random.split(key)
-                (total_loss, (c_loss, a_loss, entropy_loss, kl),), grad = jax.value_and_grad(
+                (_total_loss, (c_loss, a_loss, entropy_loss, kl),), grad = jax.value_and_grad(
                     self._loss, has_aux=True
                 )(params, obs, act, old_value, target, old_prob, old_act_prob, adv, use_key)
                 updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
@@ -231,7 +231,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             adv * ratio
             - self.kl_coef
             * jnp.where(
-                (kl >= self.kl_range) & (ratio > 1.0),
+                (kl >= self.kl_range) & (ratio * adv >= adv),
                 kl,
                 self.kl_range,
             )
@@ -267,9 +267,10 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             1.0 + jnp.log(2.0 * jnp.pi)
         )
         if self.use_entropy_adv_shaping:
-            # Paper's shaping: psi(H) = min(alpha * H, |A| / kappa) >= 0
+            # Differential entropy can be negative; shaping must preserve the advantage sign.
             psi_h = jnp.minimum(
-                self.ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa
+                self.ent_coef * jnp.maximum(entropy_h, 0.0),
+                jnp.abs(adv) / self.entropy_adv_shaping_kappa,
             )
             adv += psi_h
         adv = jax.lax.stop_gradient(adv)
@@ -280,7 +281,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             adv * ratio
             - self.kl_coef
             * jnp.where(
-                (kl >= self.kl_range) & (ratio > 1.0),
+                (kl >= self.kl_range) & (ratio * adv >= adv),
                 kl,
                 self.kl_range,
             )

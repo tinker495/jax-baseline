@@ -6,23 +6,23 @@ def discount_with_terminated(rewards, terminateds, truncateds, next_values, gamm
     # rewards/terminateds/truncateds arrive flat ([T]) from the scalar-per-step
     # buffer, while the critic's next_values keep a trailing unit dim ([T, 1]).
     # Reshape so the scan stays [T, 1] (otherwise truncateds[-1] is a scalar and
-    # the boundary-set below fails to broadcast), and cast the bool done-flags to
-    # float so ``done = term + trunc - term*trunc`` is valid -- JAX rejects
-    # subtraction on bool. Mirrors get_gaes' flat->[T,1] alignment.
+    # the boundary-set below fails to broadcast). Mirrors get_gaes' flat->[T,1]
+    # alignment.
     rewards = rewards.reshape(next_values.shape)
-    terminateds = terminateds.reshape(next_values.shape).astype(jnp.float32)
-    truncateds = truncateds.reshape(next_values.shape).astype(jnp.float32)
+    terminateds = terminateds.reshape(next_values.shape).astype(bool)
+    truncateds = truncateds.reshape(next_values.shape).astype(bool)
 
     def f(ret, info):
         reward, term, trunc, nextval = info
         # done marks the episode boundary (terminated OR truncated); the return
         # accumulation resets there. At a boundary the value is bootstrapped from
         # nextval only on truncation (term == 0), never on a true terminal.
-        done = term + trunc - term * trunc
-        ret = reward + gamma * (ret * (1.0 - done) + nextval * (1.0 - term) * done)
+        done = jnp.logical_or(term, trunc)
+        bootstrap = jnp.where(term, jnp.zeros_like(nextval), nextval)
+        ret = reward + gamma * jnp.where(done, bootstrap, ret)
         return ret, ret
 
-    truncateds = truncateds.at[-1].set(jnp.ones((1,), dtype=jnp.float32))
+    truncateds = truncateds.at[-1].set(jnp.ones((1,), dtype=bool))
     _, discounted = jax.lax.scan(
         f,
         jnp.zeros((1,), dtype=jnp.float32),
@@ -38,13 +38,16 @@ def get_gaes(rewards, terminateds, truncateds, values, next_values, gamma, lamda
     # ([T, 1]). Align them so deltas stays [T, 1]; otherwise [T] broadcasts
     # against [T, 1] into a [T, T] matrix and the scan carry shape blows up.
     rewards = rewards.reshape(values.shape)
-    terminateds = terminateds.reshape(values.shape)
-    truncateds = truncateds.reshape(values.shape)
-    deltas = rewards + gamma * (1.0 - terminateds) * next_values - values
+    terminateds = terminateds.reshape(values.shape).astype(bool)
+    truncateds = truncateds.reshape(values.shape).astype(bool)
+    bootstrap = jnp.where(terminateds, jnp.zeros_like(next_values), next_values)
+    deltas = rewards + gamma * bootstrap - values
 
     def f(last_gae_lam, info):
         delta, term, trunc = info
-        last_gae_lam = delta + gamma * lamda * (1.0 - term) * (1.0 - trunc) * last_gae_lam
+        boundary = jnp.logical_or(term, trunc)
+        continuation = jnp.where(boundary, jnp.zeros_like(last_gae_lam), last_gae_lam)
+        last_gae_lam = delta + gamma * lamda * continuation
         return last_gae_lam, last_gae_lam
 
     _, advs = jax.lax.scan(
@@ -79,11 +82,16 @@ def validate_advantage_normalize_scope(scope):
 
 
 def get_vtrace(rewards, rhos, c_ts, terminateds, truncateds, values, next_values, gamma):
-    deltas = rhos * (rewards + gamma * (1.0 - terminateds) * next_values - values)
+    terminateds = terminateds.astype(bool)
+    truncateds = truncateds.astype(bool)
+    bootstrap = jnp.where(terminateds, jnp.zeros_like(next_values), next_values)
+    deltas = rhos * (rewards + gamma * bootstrap - values)
 
     def f(last_v, info):
         delta, c_t, term, trunc = info
-        last_v = delta + gamma * c_t * (1.0 - term) * (1.0 - trunc) * last_v
+        boundary = jnp.logical_or(term, trunc)
+        continuation = jnp.where(boundary, jnp.zeros_like(last_v), last_v)
+        last_v = delta + gamma * c_t * continuation
         return last_v, last_v
 
     _, A = jax.lax.scan(

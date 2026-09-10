@@ -22,7 +22,7 @@ from jax_baselines.math.returns import get_vtrace
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
-class IMPALA_Family(object):
+class IMPALA_Family:
     _run_name = "IMPALA"
     _learn_log_interval = 1000
 
@@ -52,6 +52,11 @@ class IMPALA_Family(object):
         worker_replay_factory: WorkerReplayBufferFactory | None = None,
         checkpoint_store: CheckpointStore | None = None,
     ):
+        if use_entropy_adv_shaping:
+            if not np.isfinite(ent_coef) or ent_coef < 0:
+                raise ValueError("entropy shaping requires finite ent_coef >= 0")
+            if not np.isfinite(entropy_adv_shaping_kappa) or entropy_adv_shaping_kappa <= 1:
+                raise ValueError("entropy shaping requires finite entropy_adv_shaping_kappa > 1")
         self.workers = workers
         self.model_builder_maker = model_builder_maker
         self.worker_replay_factory = worker_replay_factory
@@ -162,7 +167,8 @@ class IMPALA_Family(object):
             ),
             in_axes=(0, 0, 0),
         )(vs, next_value, truncateds)
-        adv = rewards + self.gamma * (1.0 - terminateds) * vs_t_plus_1 - value
+        bootstrap = jnp.where(terminateds.astype(bool), 0.0, vs_t_plus_1)
+        adv = rewards + self.gamma * bootstrap - value
         adv = rho * adv
         return vs, rho, adv
 
@@ -228,14 +234,14 @@ class IMPALA_Family(object):
                     )
 
                 def convert_action(action):
-                    return np.clip(action[0], -3.0, 3.0) / 3.0
+                    return action[0]
 
             return actor, get_action_prob, convert_action
 
         return builder
 
     def description(self):
-        return "loss : {:.3f} |".format(np.mean(self.lossque))
+        return f"loss : {np.mean(self.lossque):.3f} |"
 
     def run_name_update(self, run_name):
         return run_name
@@ -323,7 +329,7 @@ class IMPALA_Family(object):
             for steps in pbar:
                 if stop.is_set():
                     raise RuntimeError("distributed worker stopped during training")
-                loss, rho = self.train_step(steps)
+                loss, _rho = self.train_step(steps)
                 self.lossque.append(loss)
                 if steps % log_interval == 0:
                     pbar.set_description(self.description())

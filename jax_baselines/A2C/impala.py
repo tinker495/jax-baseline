@@ -132,7 +132,7 @@ class IMPALA(IMPALA_Family):
             terminateds,
             truncateds,
         )
-        (total_loss, (critic_loss, actor_loss, entropy_loss),), grad = jax.value_and_grad(
+        (_total_loss, (critic_loss, actor_loss, entropy_loss),), grad = jax.value_and_grad(
             self._loss, has_aux=True
         )(params, obses, actions, vs, adv, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
@@ -185,7 +185,8 @@ class IMPALA(IMPALA_Family):
         )
         if self.use_entropy_adv_shaping:
             psi_h = jnp.minimum(
-                self.ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa
+                self.ent_coef * jnp.maximum(entropy_h, 0.0),
+                jnp.abs(adv) / self.entropy_adv_shaping_kappa,
             )
             adv += psi_h
         adv = jax.lax.stop_gradient(adv)

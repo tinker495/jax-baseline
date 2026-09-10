@@ -25,7 +25,7 @@ def _discrete_action_conv(a):
 
 
 def _continuous_action_conv(a):
-    return np.clip(a, -3.0, 3.0) / 3.0
+    return np.clip(a, -5.0, 5.0)
 
 
 def _require_env_info(env_info: EnvInfo | None) -> EnvInfo:
