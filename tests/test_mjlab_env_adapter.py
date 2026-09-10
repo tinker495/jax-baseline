@@ -2,12 +2,16 @@ import builtins
 import sys
 from types import ModuleType, SimpleNamespace
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
 from env_builder.env_builder import get_env_builder
 from env_builder.mjlab_env import MjlabSingleEnv, MjlabVectorizedEnv, make_mjlab_env
 from jax_baselines.core.env_protocols import SingleEnv, VectorizedEnv
+
+torch = pytest.importorskip("torch")
 
 
 class FakeEnv:
@@ -17,16 +21,16 @@ class FakeEnv:
         self.cfg, self.device = cfg, device
         self.num_envs = cfg.scene.num_envs
         self.single_action_space = SimpleNamespace(shape=(1,))
-        self.obs = np.zeros((self.num_envs, 1), dtype=np.float32)
-        self.critic_obs = np.zeros((self.num_envs, 2), dtype=np.float32)
-        self.rewards = np.zeros(self.num_envs, dtype=np.float32)
-        self.terminated = np.zeros(self.num_envs, dtype=bool)
-        self.truncated = self.terminated.copy()
+        self.obs = torch.zeros((self.num_envs, 1))
+        self.critic_obs = torch.zeros((self.num_envs, 2))
+        self.rewards = torch.zeros(self.num_envs)
+        self.terminated = torch.zeros(self.num_envs, dtype=torch.bool)
+        self.truncated = self.terminated.clone()
         self.resets, self.closed = [], 0
 
     def reset(self, *, seed=None, env_ids=None):
         self.resets.append((seed, env_ids))
-        ids = np.arange(self.num_envs) if env_ids is None else env_ids
+        ids = torch.arange(self.num_envs) if env_ids is None else env_ids
         self.obs[ids] = 0 if seed is None else seed
         self.critic_obs[ids] = 100 if seed is None else seed + 100
         self.rewards[ids] = 0
@@ -71,11 +75,6 @@ def install_runtime(monkeypatch):
         episode_length_s=20,
     )
     modules = {
-        "torch": {
-            "as_tensor": lambda a, dtype, device: np.asarray(a, dtype=dtype),
-            "float32": np.float32,
-            "int64": np.int64,
-        },
         "mjlab": {},
         "mjlab.tasks": {},
         "mjlab.envs": {"ManagerBasedRlEnv": FakeEnv},
@@ -88,9 +87,10 @@ def install_runtime(monkeypatch):
     return cfg
 
 
-def test_vector_factory_and_terminal_snapshots_survive_partial_reset(monkeypatch):
+@pytest.mark.parametrize("jax_arrays", [False, True])
+def test_vector_factory_and_terminal_snapshots_survive_partial_reset(monkeypatch, jax_arrays):
     cfg = install_runtime(monkeypatch)
-    env = make_mjlab_env("task", 3, seed=7, episode_length=5, device="cpu")
+    env = make_mjlab_env("task", 3, seed=7, episode_length=5, device="cpu", jax_arrays=jax_arrays)
     assert isinstance(env, MjlabVectorizedEnv)
     assert VectorizedEnv in type(env).__mro__
     assert cfg.scene.num_envs == 3 and cfg.seed == 7 and not cfg.auto_reset
@@ -111,6 +111,7 @@ def test_vector_factory_and_terminal_snapshots_survive_partial_reset(monkeypatch
     with pytest.raises(RuntimeError, match="in flight"):
         env.reset()
     obs, reward, terminated, truncated, info = env.get_result()
+    assert isinstance(obs["actor_state"], jax.Array if jax_arrays else np.ndarray)
     np.testing.assert_array_equal(obs["actor_state"], [[8], [8], [8]])
     np.testing.assert_array_equal(env.current_obs()["actor_state"], [[0], [0], [8]])
     np.testing.assert_array_equal(obs["critic_obs"], [[117, 117]] * 3)
@@ -128,9 +129,34 @@ def test_vector_factory_and_terminal_snapshots_survive_partial_reset(monkeypatch
         env.real_reset_mask(terminated, truncated, {}), [True, True, False]
     )
     assert not env.autoreset_mask(terminated, truncated, {}).any()
+    env.step(jnp.zeros((3, 1)) if jax_arrays else np.zeros((3, 1)))
+    env.get_result()
+    np.testing.assert_array_equal(obs["actor_state"], [[8], [8], [8]])
+    np.testing.assert_array_equal(reward, [-1, 2, 1])
+    np.testing.assert_array_equal(info["metric"], [-1, 2, 1])
     env.close()
     env.close()
     assert env.env.closed == 1
+
+
+def test_jax_exchange_does_not_convert_torch_tensors_to_cpu_or_numpy(monkeypatch):
+    install_runtime(monkeypatch)
+
+    def host_conversion(*args, **kwargs):
+        raise AssertionError("JAX tensor exchange must stay on the device")
+
+    with monkeypatch.context() as guard:
+        guard.setattr(torch.Tensor, "cpu", host_conversion)
+        guard.setattr(torch.Tensor, "numpy", host_conversion)
+        env = make_mjlab_env("task", 2, device="cpu", jax_arrays=True)
+        assert isinstance(env, MjlabVectorizedEnv)
+        env.step(jnp.array([[-1.0], [1.0]]))
+        obs, reward, terminated, truncated, info = env.get_result()
+        assert all(
+            isinstance(value, jax.Array)
+            for value in (*obs.values(), reward, terminated, truncated, info["metric"])
+        )
+        env.close()
 
 
 def test_single_reset_cache_explicit_seed_and_default_duration(monkeypatch):
@@ -221,6 +247,7 @@ def test_missing_optional_runtime_has_install_hint(monkeypatch):
 def test_recording_preserves_terminal_frame_until_the_next_reset(monkeypatch):
     install_runtime(monkeypatch)
     env = make_mjlab_env("task", seed=3, device="cpu", render_mode="rgb_array")
+    assert isinstance(env, MjlabSingleEnv)
     assert env.render_mode == "rgb_array" and env.metadata["render_fps"] == 50
     env.reset()
     assert (env.render() == 3).all()
@@ -239,6 +266,7 @@ def test_training_does_not_render(monkeypatch):
 
     monkeypatch.setattr(FakeEnv, "render", unexpected_render)
     env = make_mjlab_env("task", worker_num=2, device="cpu")
+    assert isinstance(env, MjlabVectorizedEnv)
     env.step(np.zeros((2, 1)))
     env.get_result()
     env.close()

@@ -81,7 +81,9 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         self.target_critic_params = bundle.target_critic_params
 
     def _get_actions(self, policy_params, obses, key=None) -> jnp.ndarray:
-        return self.actor(policy_params, key, self.preproc(policy_params, key, convert_normalized_obs(obses)))
+        return self.actor(
+            policy_params, key, self.preproc(policy_params, key, convert_normalized_obs(obses))
+        )
 
     def description(self, eval_result=None):
         description = ""

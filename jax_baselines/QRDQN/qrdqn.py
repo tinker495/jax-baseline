@@ -62,7 +62,9 @@ class QRDQN(Q_Network_Family):
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         return jnp.expand_dims(
-            jnp.argmax(jnp.mean(self.get_q(params, convert_normalized_obs(obses), key), axis=2), axis=1),
+            jnp.argmax(
+                jnp.mean(self.get_q(params, convert_normalized_obs(obses), key), axis=2), axis=1
+            ),
             axis=1,
         )
 

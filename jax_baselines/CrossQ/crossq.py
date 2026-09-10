@@ -99,7 +99,9 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         return pi, log_prob
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        mu, log_std = self.actor(params, None, self.preproc(params, None, convert_normalized_obs(obses)))
+        mu, log_std = self.actor(
+            params, None, self.preproc(params, None, convert_normalized_obs(obses))
+        )
         std = jnp.exp(log_std)
         pi = jax.nn.tanh(mu + std * jax.random.normal(key, std.shape))
         return pi

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, TypeAlias
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 from gymnasium import spaces
 
@@ -17,28 +19,19 @@ from jax_baselines.core.env_protocols import (
     VectorizedEnv,
 )
 
-
-def _snapshot(value):
-    if isinstance(value, Mapping):
-        return {key: _snapshot(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return type(value)(_snapshot(item) for item in value)
-    if hasattr(value, "shape"):
-        return _to_numpy(value).copy()
-    return value
+Array: TypeAlias = np.ndarray | jax.Array
 
 
 class MjlabVectorizedEnv(VectorizedEnv):
     env_info: EnvInfo
 
-    def __init__(self, env_id, env, torch, seed=None, observation_key=None):
+    def __init__(self, env_id, env, torch, seed=None, observation_key=None, jax_arrays=False):
         self.env = env
         self._torch = torch
+        self.jax_arrays = jax_arrays
         self.worker_num = env.num_envs
         self._observation_key = observation_key
-        self._pending: (
-            tuple[Observation, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]] | None
-        ) = None
+        self._pending: tuple[Observation, Array, Array, Array, dict[str, Any]] | None = None
         self._closed = False
         self._frame = None
         self.reset(seed=seed)
@@ -57,6 +50,25 @@ class MjlabVectorizedEnv(VectorizedEnv):
             "core_env_type": "VectorizedEnv",
         }
 
+    def _array(self, value) -> Array:
+        if not self.jax_arrays:
+            return _to_numpy(value).copy()
+        if isinstance(value, self._torch.Tensor):
+            # Clone on the producer stream before mjlab mutates/reset its buffers.
+            return jax.dlpack.from_dlpack(
+                value.detach().clone(memory_format=self._torch.contiguous_format)
+            )
+        return jnp.array(value, copy=True)
+
+    def _snapshot(self, value):
+        if isinstance(value, Mapping):
+            return {key: self._snapshot(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple)):
+            return type(value)(self._snapshot(item) for item in value)
+        if isinstance(value, (self._torch.Tensor, np.ndarray, jax.Array)):
+            return self._array(value)
+        return value
+
     def _selected(self, observation) -> Observation:
         if (
             self._observation_key is None
@@ -66,19 +78,20 @@ class MjlabVectorizedEnv(VectorizedEnv):
             shared = {
                 key: value for key, value in observation.items() if key not in ("actor", "critic")
             }
-            selected = normalize_observation(shared) if shared else {}
+            selected = normalize_observation(shared, array_converter=self._array) if shared else {}
             for role in ("actor", "critic"):
                 selected.update(
                     {
                         f"{role}_{key.removeprefix('unified_')}": value
-                        for key, value in normalize_observation(observation[role]).items()
+                        for key, value in normalize_observation(
+                            observation[role], array_converter=self._array
+                        ).items()
                     }
                 )
-            return {key: value.copy() for key, value in sorted(selected.items())}
-        return {
-            key: value.copy()
-            for key, value in normalize_observation(observation, self._observation_key).items()
-        }
+            return dict(sorted(selected.items()))
+        return normalize_observation(
+            observation, self._observation_key, array_converter=self._array
+        )
 
     def reset(self, *, seed: int | None = None) -> tuple[Observation, dict[str, Any]]:
         if self._pending is not None:
@@ -86,7 +99,7 @@ class MjlabVectorizedEnv(VectorizedEnv):
         self._frame = None
         observation, info = self.env.reset(seed=seed)
         self._obs = self._selected(observation)
-        return self._obs, _snapshot(info)
+        return self._obs, self._snapshot(info)
 
     def current_obs(self) -> Observation:
         return self._obs
@@ -97,33 +110,43 @@ class MjlabVectorizedEnv(VectorizedEnv):
     def step(self, action: Any) -> None:
         if self._pending is not None:
             raise RuntimeError("step() called before collecting the previous result")
-        actions = np.asarray(action)
+        actions = (
+            self._torch.from_dlpack(action)
+            if isinstance(action, jax.Array)
+            else self._torch.as_tensor(action)
+        )
         expected = (self.worker_num, *self.action_space.shape)
         if actions.shape != expected:
             raise ValueError(f"Expected actions with shape {expected}, got {actions.shape}")
-        actions = self._torch.as_tensor(actions, dtype=self._torch.float32, device=self.env.device)
+        actions = actions.to(dtype=self._torch.float32, device=self.env.device)
         observation, reward, terminated, truncated, info = self.env.step(actions)
         if self.env.render_mode == "rgb_array":
             self._frame = np.array(self.env.render(), copy=True)
-        # CPU tensors can share storage with arrays; snapshot before reset mutates buffers.
+        # Snapshot terminal data before partial reset mutates simulator buffers.
         successor = self._selected(observation)
-        reward = _to_numpy(reward).copy()
-        terminated = _to_numpy(terminated).astype(bool, copy=True)
-        truncated = _to_numpy(truncated).astype(bool, copy=True)
-        info = _snapshot(info)
+        done_ids = self._torch.nonzero(terminated | truncated, as_tuple=False).flatten()
+        reward = self._array(reward)
+        terminated = self._array(terminated).astype(bool)
+        truncated = self._array(truncated).astype(bool)
+        info = self._snapshot(info)
         self._obs = successor
-        done_ids = np.flatnonzero(terminated | truncated)
-        if done_ids.size:
-            ids = self._torch.as_tensor(done_ids, dtype=self._torch.int64, device=self.env.device)
-            current, _ = self.env.reset(env_ids=ids)
+        if done_ids.numel():
+            current, _ = self.env.reset(env_ids=done_ids)
             # Only replace reset rows: a partial reset may recompute noisy observations.
             current = self._selected(current)
-            self._obs = {key: value.copy() for key, value in successor.items()}
-            for key in self._obs:
-                self._obs[key][done_ids] = current[key][done_ids]
+            array_module = jnp if self.jax_arrays else np
+            done = terminated | truncated
+            self._obs = {
+                key: array_module.where(
+                    done.reshape((self.worker_num,) + (1,) * (value.ndim - 1)),
+                    current[key],
+                    value,
+                )
+                for key, value in successor.items()
+            }
         self._pending = successor, reward, terminated, truncated, info
 
-    def get_result(self) -> tuple[Observation, np.ndarray, np.ndarray, np.ndarray, dict[str, Any]]:
+    def get_result(self) -> tuple[Observation, Array, Array, Array, dict[str, Any]]:
         if self._pending is None:
             raise RuntimeError("get_result() called without a preceding step()")
         result, self._pending = self._pending, None
@@ -131,11 +154,11 @@ class MjlabVectorizedEnv(VectorizedEnv):
 
     def real_reset_mask(self, terminateds, truncateds, infos):
         del infos
-        return np.asarray(terminateds, dtype=bool) | np.asarray(truncateds, dtype=bool)
+        return terminateds | truncateds
 
     def autoreset_mask(self, terminateds, truncateds, infos):
         del truncateds, infos
-        return np.zeros_like(np.asarray(terminateds), dtype=bool)
+        return (jnp if self.jax_arrays else np).zeros_like(terminateds, dtype=bool)
 
     def close(self) -> None:
         if not self._closed:
@@ -168,7 +191,7 @@ class MjlabSingleEnv(SingleEnv):
         return self._current(), info
 
     def step(self, action: Any) -> tuple[Observation, float, bool, bool, dict[str, Any]]:
-        action = np.asarray(action)
+        action = (jnp if self._vector.jax_arrays else np).asarray(action)
         self._vector.step(action[None])
         observation, reward, terminated, truncated, info = self._vector.get_result()
         if terminated[0] or truncated[0]:
@@ -198,6 +221,7 @@ def make_mjlab_env(
     episode_length=None,
     device="cuda:0",
     render_mode=None,
+    jax_arrays=False,
 ) -> MjlabSingleEnv | MjlabVectorizedEnv:
     if render_mode not in (None, "rgb_array"):
         raise ValueError("mjlab supports only render_mode=None or 'rgb_array'")
@@ -223,7 +247,7 @@ def make_mjlab_env(
         cfg.episode_length_s = episode_length * (cfg.sim.mujoco.timestep * cfg.decimation)
     env = ManagerBasedRlEnv(cfg, device=device, render_mode=render_mode)
     try:
-        vector = MjlabVectorizedEnv(env_id, env, torch, seed, observation_key)
+        vector = MjlabVectorizedEnv(env_id, env, torch, seed, observation_key, jax_arrays)
         return MjlabSingleEnv(vector) if worker_num == 1 else vector
     except Exception:
         env.close()

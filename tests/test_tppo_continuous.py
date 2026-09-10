@@ -73,7 +73,9 @@ def test_continuous_tppo_full_train_step_handles_gaussian_minibatches(cls, famil
     obses, actions, scalars = _rollout(timesteps=2)
 
     if kind == "local":
-        obses = {"unified_obs": np.stack([observation["unified_obs"] for observation in obses])}
+        obses = {"unified_obs": jnp.asarray([observation["unified_obs"] for observation in obses])}
+        actions = jnp.asarray(actions)
+        scalars = jnp.asarray(scalars).squeeze(-1)
         agent.gae_normalize = False
         agent.gae_normalize_scope = "batch"
         agent.value_clip = 0.3

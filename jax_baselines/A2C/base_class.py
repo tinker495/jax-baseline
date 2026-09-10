@@ -1,11 +1,15 @@
 from collections import deque
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from itertools import chain, pairwise
+from typing import Literal
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 
+from jax_baselines.core.checkpoint_state import ACCheckpointState
 from jax_baselines.core.checkpoint_store import (
     CheckpointStore,
     checkpoint_store_or_default,
@@ -25,15 +29,37 @@ from jax_baselines.core.eval import (
     extract_vector_original_rewards,
     record_and_test,
 )
-from jax_baselines.core.rollout_stats import EpisodeTracker
+from jax_baselines.core.rollout_stats import EpisodeTracker, device_episode_step
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.training_session import TrainingSession
 from jax_baselines.math.jax_utils import convert_normalized_obs
+from jax_baselines.math.statistics import RunningMeanStd
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
+
+
+@jax.jit
+def _sample_continuous(mu, std, key):
+    return mu + std * jax.random.normal(key, mu.shape, dtype=mu.dtype)
+
+
+@jax.jit
+def _sample_discrete(prob, key):
+    return jax.random.categorical(key, jnp.log(prob), axis=-1)[:, None]
+
+
+@jax.jit
+def _normalize_observation(obs, means, variances):
+    return {
+        key: (value - means[key]) / (jnp.sqrt(variances[key]) + 0.01) for key, value in obs.items()
+    }
 
 
 class Actor_Critic_Policy_Gradient_Family:
     _run_name = "A2C"
+    actor: Callable
+    _get_actions: Callable
+    preproc: Callable
+    logger: AbstractContextManager
 
     def __init__(
         self,
@@ -56,7 +82,11 @@ class Actor_Critic_Policy_Gradient_Family:
         optimizer_factory: OptimizerFactory | None = None,
         lr_annealing=False,
         checkpoint_store: CheckpointStore | None = None,
+        obs_normalization=False,
+        memory_backend: Literal["auto", "cpu", "gpu"] = "auto",
     ):
+        if memory_backend not in ("auto", "cpu", "gpu"):
+            raise ValueError("memory_backend must be 'auto', 'cpu', or 'gpu'")
         if use_entropy_adv_shaping:
             if not np.isfinite(ent_coef) or ent_coef < 0:
                 raise ValueError("entropy shaping requires finite ent_coef >= 0")
@@ -89,16 +119,85 @@ class Actor_Critic_Policy_Gradient_Family:
         self.optimizer = self._make_optimizer(self.learning_rate)
 
         self.get_env_setup()
+        self._initial_reset: tuple[dict, dict] | None = None
+        self.memory_backend: Literal["cpu", "gpu"] = "cpu"
+        if memory_backend == "gpu":
+            self.memory_backend = "gpu"
+        elif memory_backend == "auto":
+            if self.env_type == "SingleEnv":
+                self._initial_reset = self.env.reset()
+                initial_obs = self._initial_reset[0]
+            else:
+                initial_obs = self.env.current_obs()
+            if all(
+                isinstance(value, jax.Array)
+                and all(device.platform == "gpu" for device in value.devices())
+                for value in initial_obs.values()
+            ):
+                self.memory_backend = "gpu"
+        print("memory backend : ", self.memory_backend)
+        self.obs_normalization = obs_normalization
+        self.obs_rms = (
+            RunningMeanStd(
+                epsilon=0.0,
+                shapes=self.observation_space,
+                dtype=np.float32,
+                on_device=self.memory_backend == "gpu",
+            )
+            if obs_normalization
+            else None
+        )
         # Control model initialization timing across children
         self._init_setup_model = _init_setup_model
         if self._init_setup_model:
             self.setup_model()
 
     def save_params(self, path):
-        self.checkpoint_store.save(path, self.params)
+        self.checkpoint_store.save(
+            path,
+            ACCheckpointState(
+                params=self.params,
+                obs_rms_state=self.obs_rms.to_state() if self.obs_rms is not None else None,
+            ),
+        )
 
     def load_params(self, path):
-        self.params = self.checkpoint_store.restore(path)
+        state = self.checkpoint_store.restore(path)
+        if not isinstance(state, ACCheckpointState):
+            raise TypeError("Expected ACCheckpointState with observation-normalization state")
+        obs_rms = (
+            RunningMeanStd.from_state(state.obs_rms_state, on_device=self.memory_backend == "gpu")
+            if state.obs_rms_state is not None
+            else None
+        )
+        if obs_rms is not None and (
+            obs_rms.means.keys() != self.observation_space.keys()
+            or any(
+                obs_rms.means[key].shape != tuple(shape)
+                for key, shape in self.observation_space.items()
+            )
+        ):
+            raise ValueError("Checkpoint observation statistics do not match the environment")
+        self.params = state.params
+        self.obs_rms = obs_rms
+        self.obs_normalization = obs_rms is not None
+
+    def normalize_observation(self, obs):
+        """Prepare model inputs using frozen, per-key empirical observation statistics."""
+        if self.memory_backend == "cpu":
+            if self.obs_rms is None:
+                return {key: np.asarray(value) for key, value in obs.items()}
+            return {
+                key: np.asarray(
+                    (np.asarray(value) - self.obs_rms.means[key])
+                    / (np.sqrt(self.obs_rms.vars[key]) + 0.01),
+                    dtype=np.float32,
+                )
+                for key, value in obs.items()
+            }
+        if self.obs_rms is None:
+            return obs
+        return _normalize_observation(obs, self.obs_rms.means, self.obs_rms.vars)
 
     def get_memory_setup(self):
         self.buffer = EpochBuffer(
@@ -106,6 +205,7 @@ class Actor_Critic_Policy_Gradient_Family:
             self.observation_space,
             self.worker_size,
             [1] if self.action_type == "discrete" else self.action_size,
+            memory_backend=self.memory_backend,
         )
 
     def get_env_setup(self):
@@ -148,6 +248,9 @@ class Actor_Critic_Policy_Gradient_Family:
     def _train_step(self, steps):
         pass
 
+    def train_step(self, steps, logger_run=None):
+        raise NotImplementedError
+
     def _get_actions_discrete(self, params, obses, key=None) -> jnp.ndarray:
         prob = jax.nn.softmax(
             self.actor(params, key, self.preproc(params, key, convert_normalized_obs(obses))),
@@ -155,24 +258,34 @@ class Actor_Critic_Policy_Gradient_Family:
         )
         return prob
 
-    def _get_actions_continuous(self, params, obses, key=None) -> jnp.ndarray:
+    def _get_actions_continuous(self, params, obses, key=None) -> tuple[jnp.ndarray, jnp.ndarray]:
         mu, std = self.actor(params, key, self.preproc(params, key, convert_normalized_obs(obses)))
         return mu, jnp.exp(std)
 
     def action_discrete(self, obs, eval=False):
-        prob = np.asarray(self._get_actions(self.params, obs))
+        prob = self._get_actions(self.params, obs)
+        if self.memory_backend == "cpu":
+            prob = np.asarray(prob)
+            if eval:
+                return np.argmax(prob, axis=1, keepdims=True)
+            cumulative = np.cumsum(prob, axis=1)
+            cumulative[:, -1] = 1.0
+            return np.argmax(np.random.uniform(size=(prob.shape[0], 1)) < cumulative, axis=1)[
+                :, None
+            ]
         if eval:
-            return np.argmax(prob, axis=1, keepdims=True)
-        return np.expand_dims(
-            np.stack([np.random.choice(self.action_size[0], p=p) for p in prob], axis=0),
-            axis=1,
-        )
+            return jnp.argmax(prob, axis=1, keepdims=True)
+        return _sample_discrete(prob, next(self.key_seq))
 
     def action_continuous(self, obs, eval=False):
         mu, std = self._get_actions(self.params, obs)
+        if self.memory_backend == "cpu":
+            if eval:
+                return np.asarray(mu)
+            return np.random.normal(np.asarray(mu), np.asarray(std)).astype(np.float32)
         if eval:
-            return np.asarray(mu)
-        return np.random.normal(mu, std)
+            return mu
+        return _sample_continuous(mu, std, next(self.key_seq))
 
     def get_logprob_discrete(self, prob, action, key, out_prob=False):
         prob = jax.nn.softmax(prob)
@@ -297,8 +410,9 @@ class Actor_Critic_Policy_Gradient_Family:
         )
 
     def learn_SingleEnv(self, ctx):
-        obs, info = self.env.reset()
-        obs = batch_observation(obs)
+        obs, info = self.env.reset() if self._initial_reset is None else self._initial_reset
+        self._initial_reset = None
+        obs = self.normalize_observation(batch_observation(obs))
         self.lossque = deque(maxlen=10)
         self.rollout_tracker = EpisodeTracker(ctx.logger_run.log_metric, ctx.log_interval)
         eval_result = None
@@ -311,19 +425,35 @@ class Actor_Critic_Policy_Gradient_Family:
             step_action = _normalize_action_for_step(self.conv_action(actions))
             next_obs, reward, terminated, truncated, info = self.env.step(step_action)
             next_obs = batch_observation(next_obs)
-            self.buffer.add(obs, actions, [reward], next_obs, [terminated], [truncated])
+            step_original = extract_original_reward(info)
+            if terminated or truncated:
+                real_episode_end = single_real_episode_end(terminated, truncated, info)
+                next_obs = {key: value.copy() for key, value in next_obs.items()}
+                action_observation, _ = self.env.reset()
+                action_observation = batch_observation(action_observation)
+            else:
+                action_observation = next_obs
+            # Timeout bootstraps must not incorporate the next episode's reset sample.
+            next_obs = self.normalize_observation(next_obs)
+            if self.obs_rms is not None:
+                self.obs_rms.update(action_observation)
+            self.buffer.add(
+                obs,
+                actions,
+                [reward],
+                next_obs,
+                [terminated],
+                [truncated],
+            )
             score += float(reward)
             eplen += 1
-            step_original = extract_original_reward(info)
             if step_original is not None:
                 have_original = True
                 original += float(step_original)
-            obs = next_obs
+            obs = self.normalize_observation(action_observation)
 
             if terminated or truncated:
-                emit_original = have_original and single_real_episode_end(
-                    terminated, truncated, info
-                )
+                emit_original = have_original and real_episode_end
                 self.rollout_tracker.record(
                     steps,
                     episode_reward=score,
@@ -336,8 +466,6 @@ class Actor_Critic_Policy_Gradient_Family:
                 if emit_original:
                     original = 0.0
                     have_original = False
-                obs, info = self.env.reset()
-                obs = batch_observation(obs)
 
             if (steps + 1) % self.batch_size == 0:
                 loss = self.train_step(steps, logger_run=ctx.logger_run)
@@ -350,6 +478,20 @@ class Actor_Critic_Policy_Gradient_Family:
                 ctx.pbar.set_description(self.description(eval_result))
 
     def learn_VectorizedEnv(self, ctx):
+        raw_obs = self.env.current_obs()
+        device_rollout = self.memory_backend == "gpu" and isinstance(
+            next(iter(raw_obs.values())), jax.Array
+        )
+        if device_rollout:
+            device_state = (
+                jnp.zeros(self.worker_size),
+                jnp.zeros(self.worker_size, dtype=jnp.int32),
+                jnp.zeros(self.worker_size),
+                jnp.zeros(self.worker_size, dtype=bool),
+                jnp.zeros(self.worker_size, dtype=bool),
+            )
+        completed_steps = []
+        completed_rows = []
         self.lossque = deque(maxlen=10)
         self.rollout_tracker = EpisodeTracker(ctx.logger_run.log_metric, ctx.log_interval)
         eval_result = None
@@ -373,7 +515,7 @@ class Actor_Critic_Policy_Gradient_Family:
         # the next send until train_step finishes so the new rollout cannot start
         # with an action sampled from the previous policy. Pair each step with its
         # successor so the final iteration does not leave an env result pending.
-        obs = self.env.current_obs()
+        obs = self.normalize_observation(raw_obs)
         actions = self.actions(obs)
         end = object()
         first = True
@@ -389,6 +531,11 @@ class Actor_Critic_Policy_Gradient_Family:
                 infos,
             ) = self.env.get_result()
             action_observation = self.env.current_obs()
+            # Autoreset observations belong to the next action, not this successor.
+            next_obses = self.normalize_observation(next_obses)
+            if self.obs_rms is not None:
+                self.obs_rms.update(action_observation)
+            action_observation = self.normalize_observation(action_observation)
 
             train_due = (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0
             if not train_due and next_step is not end:
@@ -396,43 +543,88 @@ class Actor_Critic_Policy_Gradient_Family:
                 next_actions = self.actions(action_observation)
                 send(next_actions)
 
-            done = np.logical_or(terminateds, truncateds)
-            real_reset = vector_real_reset_mask(self.env, terminateds, truncateds, infos)
-            autoreset = vector_autoreset_mask(self.env, terminateds, truncateds, infos)
-            active = np.ones(self.worker_size, dtype=bool) if prev_done is None else ~prev_done
-            scores[active] += rewards[active]
-            eplens[active] += 1
-            step_original, step_original_present = extract_vector_original_rewards(
-                infos, self.worker_size
-            )
-            active_original = active & step_original_present
-            originals[active_original] += step_original[active_original]
-            original_present[active_original] = True
-
-            if prev_done is not None and prev_done.any():
-                # Flag the dummy step terminal AND zero its reward so it is fully
-                # inert (zero-value target, no episode bridge), independent of
-                # whatever the env reports on the discarded autoreset step.
-                terminateds = np.where(prev_done, True, terminateds)
-                rewards = np.where(prev_done, np.float32(0.0), rewards)
-            self.buffer.add(obs, actions, rewards, next_obses, terminateds, truncateds)
-
-            for idx in np.where(done & active)[0]:
-                emit_original = original_present[idx] and real_reset[idx]
-                self.rollout_tracker.record(
-                    steps,
-                    episode_reward=float(scores[idx]),
-                    episode_length=int(eplens[idx]),
-                    timeout=float(truncateds[idx]),
-                    original_reward=float(originals[idx]) if emit_original else None,
+            if device_rollout:
+                if isinstance(infos, dict):
+                    original = (
+                        jnp.broadcast_to(jnp.asarray(infos["original_reward"]), (self.worker_size,))
+                        if "original_reward" in infos
+                        else jnp.zeros_like(rewards)
+                    )
+                    present = (
+                        jnp.broadcast_to(
+                            jnp.asarray(infos["_original_reward"], dtype=bool), (self.worker_size,)
+                        )
+                        if "_original_reward" in infos
+                        else jnp.full_like(terminateds, "original_reward" in infos)
+                    )
+                else:
+                    original, present = extract_vector_original_rewards(infos, self.worker_size)
+                device_state, rewards, terminateds, completed = device_episode_step(
+                    device_state,
+                    rewards,
+                    terminateds,
+                    truncateds,
+                    vector_real_reset_mask(self.env, terminateds, truncateds, infos),
+                    vector_autoreset_mask(self.env, terminateds, truncateds, infos),
+                    original,
+                    present,
                 )
-                scores[idx] = 0.0
-                eplens[idx] = 0
-                if emit_original:
-                    originals[idx] = 0.0
-                    original_present[idx] = False
+                self.buffer.add(obs, actions, rewards, next_obses, terminateds, truncateds)
+                completed_steps.append(steps)
+                completed_rows.append(completed)
+                if train_due or next_step is end:
+                    # Transfer logging payload once per rollout; training tensors stay on device.
+                    with jax.profiler.TraceAnnotation("rollout.metrics"):
+                        episode_rows = jax.device_get(jnp.stack(completed_rows))
+                    for time_idx, worker_idx in np.argwhere(episode_rows[..., 0]):
+                        row = episode_rows[time_idx, worker_idx]
+                        self.rollout_tracker.record(
+                            completed_steps[time_idx],
+                            episode_reward=float(row[1]),
+                            episode_length=int(row[2]),
+                            timeout=float(row[3]),
+                            original_reward=float(row[4]) if row[5] else None,
+                        )
+                    completed_steps.clear()
+                    completed_rows.clear()
+            else:
+                done = np.logical_or(terminateds, truncateds)
+                real_reset = vector_real_reset_mask(self.env, terminateds, truncateds, infos)
+                autoreset = vector_autoreset_mask(self.env, terminateds, truncateds, infos)
+                active = np.ones(self.worker_size, dtype=bool) if prev_done is None else ~prev_done
+                scores[active] += rewards[active]
+                eplens[active] += 1
+                step_original, step_original_present = extract_vector_original_rewards(
+                    infos, self.worker_size
+                )
+                active_original = active & step_original_present
+                originals[active_original] += step_original[active_original]
+                original_present[active_original] = True
 
-            prev_done = done & autoreset & active
+                if prev_done is not None and prev_done.any():
+                    # Flag the dummy step terminal AND zero its reward so it is fully
+                    # inert (zero-value target, no episode bridge), independent of
+                    # whatever the env reports on the discarded autoreset step.
+                    terminateds = np.where(prev_done, True, terminateds)
+                    rewards = np.where(prev_done, np.float32(0.0), rewards)
+                self.buffer.add(obs, actions, rewards, next_obses, terminateds, truncateds)
+
+                for idx in np.where(done & active)[0]:
+                    emit_original = original_present[idx] and real_reset[idx]
+                    self.rollout_tracker.record(
+                        steps,
+                        episode_reward=float(scores[idx]),
+                        episode_length=int(eplens[idx]),
+                        timeout=float(truncateds[idx]),
+                        original_reward=float(originals[idx]) if emit_original else None,
+                    )
+                    scores[idx] = 0.0
+                    eplens[idx] = 0
+                    if emit_original:
+                        originals[idx] = 0.0
+                        original_present[idx] = False
+
+                prev_done = done & autoreset & active
 
             if train_due:
                 loss = self.train_step(steps, logger_run=ctx.logger_run)
@@ -457,7 +649,7 @@ class Actor_Critic_Policy_Gradient_Family:
         return evaluate_policy(
             self.eval_env,
             self.eval_eps,
-            lambda obs: self.actions(obs, eval=True),
+            lambda obs: self.actions(self.normalize_observation(obs), eval=True),
             logger_run=ctx.logger_run,
             steps=steps,
             conv_action=self.conv_action,
@@ -472,7 +664,7 @@ class Actor_Critic_Policy_Gradient_Family:
         return record_test_fn(
             self.env_builder,
             logger_run,
-            lambda obs: self.actions(obs, eval=True),
+            lambda obs: self.actions(self.normalize_observation(obs), eval=True),
             episode,
             conv_action=self.conv_action,
         )

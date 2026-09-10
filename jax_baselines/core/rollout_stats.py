@@ -15,9 +15,43 @@ families keep their own server-side aggregation and do not use this tracker
 
 from collections import deque
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 from jax_baselines.core.eval import log_measurement
+
+
+@jax.jit
+def device_episode_step(
+    state, rewards, terminateds, truncateds, real_reset, autoreset, original, original_present
+):
+    """Accumulate one vector step without transferring episode state to the host.
+
+    State is ``(scores, lengths, originals, seen_original, prev_done)``. Completed
+    rows retain worker order: ``(done, score, length, timeout, original, emit_original)``.
+    """
+    scores, lengths, originals, seen_original, prev_done = state
+    active = ~prev_done
+    done = (terminateds | truncateds) & active
+    scores = scores + jnp.where(active, rewards, 0)
+    lengths = lengths + active.astype(lengths.dtype)
+    originals = originals + jnp.where(active & original_present, original, 0)
+    seen_original = seen_original | (active & original_present)
+    emit_original = done & real_reset & seen_original
+    completed = jnp.stack((done, scores, lengths, truncateds, originals, emit_original), axis=-1)
+    return (
+        (
+            jnp.where(done, 0, scores),
+            jnp.where(done, 0, lengths),
+            jnp.where(emit_original, 0, originals),
+            seen_original & ~emit_original,
+            done & autoreset,
+        ),
+        jnp.where(prev_done, 0, rewards),
+        terminateds | prev_done,
+        completed,
+    )
 
 
 class EpisodeTracker:

@@ -5,6 +5,7 @@ base:
   env: Mjlab-Velocity-Flat-Unitree-Go1
   env_backend: mjlab
   env_device: cuda:0
+  env_jax_arrays: true
   worker: 4096
   steps: 491520000
   eval_num: 5
@@ -20,6 +21,7 @@ base:
   value_clip: 0.2
   ent_coef: 0.01
   val_coef: 0.01
+  obs_normalization: true
   gae_normalize: true
   gae_normalize_scope: minibatch
   max_grad_norm: 1.0

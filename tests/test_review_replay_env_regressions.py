@@ -1,3 +1,4 @@
+import jax.numpy as jnp
 import numpy as np
 import pytest
 
@@ -157,11 +158,22 @@ def test_gym_vector_env_exposes_normalized_continuous_actions():
         env.close()
 
 
-def test_envpool_maps_normalized_actions_to_backend_bounds():
+def test_envpool_maps_normalized_actions_to_backend_bounds(monkeypatch):
     pytest.importorskip("envpool")
     env = EnvPoolVectorizedEnv("Pendulum-v1", worker_num=2, seed=7)
     try:
-        converted = env.action_conv(np.array([[-1.0], [1.0]], dtype=np.float32))
-        assert np.array_equal(converted, np.array([[-2.0], [2.0]], dtype=np.float32))
+        send = env.env.send
+
+        def send_numpy(actions, env_ids):
+            assert isinstance(actions, np.ndarray)
+            np.testing.assert_array_equal(actions, np.array([[-2.0], [2.0]], dtype=np.float32))
+            return send(actions, env_ids)
+
+        monkeypatch.setattr(env.env, "send", send_numpy)
+        env.step(jnp.asarray([[-1.0], [1.0]], dtype=jnp.float32))
+        observations, rewards, terminateds, truncateds, _ = env.get_result()
+        assert all(isinstance(value, np.ndarray) for value in observations.values())
+        assert rewards.shape == terminateds.shape == truncateds.shape == (2,)
+        assert np.isfinite(rewards).all()
     finally:
         env.close()

@@ -30,6 +30,7 @@ def test_pg_cli_preserves_ppo2_control_defaults():
         assert "optimizer_eps" not in built
         assert "max_grad_norm" not in built
         assert built["lr_annealing"] is False
+        assert built["memory_backend"] == "auto"
 
     assert ppo["ppo_eps"] == pytest.approx(0.2)
     assert ppo["value_clip"] == pytest.approx(2.0)
@@ -37,6 +38,12 @@ def test_pg_cli_preserves_ppo2_control_defaults():
     assert "ppo_eps" not in tppo
     assert "ppo_eps" not in a2c
     assert "value_clip" not in a2c
+
+
+@pytest.mark.parametrize("algo", ["A2C", "PPO", "TPPO", "SPO"])
+@pytest.mark.parametrize("backend", ["cpu", "gpu"])
+def test_pg_cli_forwards_memory_backend(algo, backend):
+    assert _build(algo, ["--memory_backend", backend])["memory_backend"] == backend
 
 
 @pytest.mark.parametrize(

@@ -199,7 +199,9 @@ class IMPALA_Family:
             if action_type == "discrete":
 
                 def actor(actor_model, preproc, params, obses, key=None):
-                    prob = actor_model(params, key, preproc(params, key, convert_normalized_obs(obses)))
+                    prob = actor_model(
+                        params, key, preproc(params, key, convert_normalized_obs(obses))
+                    )
                     return jax.nn.softmax(prob)
 
                 def get_action_prob(actor, params, obses):

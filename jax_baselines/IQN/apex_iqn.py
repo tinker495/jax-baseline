@@ -148,7 +148,9 @@ class APE_X_IQN(Ape_X_Family):
                     jnp.expand_dims(actions.astype(jnp.int32), axis=2),
                     axis=1,
                 )
-                next_q = model(params, key3, preproc(params, key3, convert_normalized_obs(nxtobses)), next_tau)
+                next_q = model(
+                    params, key3, preproc(params, key3, convert_normalized_obs(nxtobses)), next_tau
+                )
                 next_actions = jnp.expand_dims(
                     jnp.argmax(jnp.mean(next_q, axis=2), axis=1), axis=(1, 2)
                 )
@@ -164,7 +166,9 @@ class APE_X_IQN(Ape_X_Family):
                 # mirroring local IQN._get_actions; the priority/TD-error path
                 # (get_abs_td_error) deliberately uses plain U[0,1] like iqn.py _loss/_target.
                 tau = jax.random.uniform(key, (1, n_support)) * CVaR
-                q_values = model(params, key, preproc(params, key, convert_normalized_obs(obses)), tau)
+                q_values = model(
+                    params, key, preproc(params, key, convert_normalized_obs(obses)), tau
+                )
                 return jnp.expand_dims(jnp.argmax(jnp.mean(q_values, axis=2), axis=1), axis=1)
 
             if param_noise:

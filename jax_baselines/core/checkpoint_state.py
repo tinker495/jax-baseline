@@ -1,4 +1,4 @@
-"""Serializable checkpoint state for the local off-policy families.
+"""Serializable checkpoint state for the local algorithm families.
 
 Sibling to :mod:`jax_baselines.core.checkpoint` (the schedule) and
 :mod:`jax_baselines.core.rollout` (the rollout loop): where
@@ -22,9 +22,17 @@ This is deliberately not an exact execution-resume snapshot: optimizer moments,
 PRNG streams, replay contents, and environment state are not serialized.
 """
 
-from typing import Any, Optional
+from typing import Any
 
 from flax import struct
+
+
+@struct.dataclass
+class ACCheckpointState:
+    """Actor-critic parameters and the observation statistics used for inference."""
+
+    params: Any
+    obs_rms_state: dict | None = None
 
 
 @struct.dataclass
@@ -32,7 +40,7 @@ class QNetCheckpointState:
     """Q-Net parameters plus optional discounted-return statistics."""
 
     params: Any
-    reward_rms_state: Optional[dict] = None
+    reward_rms_state: dict | None = None
 
 
 @struct.dataclass
@@ -59,8 +67,8 @@ class CheckpointState:
     train_steps_count: Any
     ckpt_residual: Any
     controller_state: dict
-    eval_snapshot: Optional[Any] = None
-    obs_rms_state: Optional[dict] = None
-    action_obs_rms_state: Optional[dict] = None
-    checkpoint_obs_rms_state: Optional[dict] = None
-    reward_rms_state: Optional[dict] = None
+    eval_snapshot: Any | None = None
+    obs_rms_state: dict | None = None
+    action_obs_rms_state: dict | None = None
+    checkpoint_obs_rms_state: dict | None = None
+    reward_rms_state: dict | None = None

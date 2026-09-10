@@ -1,3 +1,4 @@
+import jax
 import numpy as np
 
 from jax_baselines.core.env_info import prepare_worker_env
@@ -92,12 +93,10 @@ def _normalize_action_for_step(step_action):
     therefore always returned as a 1-D array. A leading batch dim of size 1
     (single-env rollout) is squeezed in both cases.
     """
-    arr = np.asarray(step_action)
-    if arr.ndim >= 2 and arr.shape[0] == 1:
-        arr = np.asarray(arr[0])
+    arr = step_action if isinstance(step_action, jax.Array) else np.asarray(step_action)
     if np.issubdtype(arr.dtype, np.integer) and arr.size == 1:
-        return arr.reshape(-1)[0].item()
-    return np.reshape(arr, (-1,))
+        return arr.item()
+    return arr.reshape(-1)
 
 
 def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, conv_action=None):

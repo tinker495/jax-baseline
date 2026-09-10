@@ -119,9 +119,12 @@ def get_env_builder(
     observation_key=None,
     episode_length=None,
     device="cuda:0",
+    jax_arrays=False,
 ):
     if env_backend not in _ENV_BACKENDS:
         raise ValueError(f"env_backend must be one of {_ENV_BACKENDS}, got {env_backend!r}")
+    if jax_arrays and env_backend != "mjlab":
+        raise ValueError("jax_arrays requires env_backend='mjlab'")
 
     def env_builder(worker=1, render_mode=None, seed=None):
         if env_backend == "mjlab":
@@ -135,6 +138,7 @@ def get_env_builder(
                 episode_length=episode_length,
                 device=device,
                 render_mode=render_mode,
+                jax_arrays=jax_arrays,
             )
         if worker > 1:
             # Vectorized backend is an explicit choice: gymnasium AsyncVectorEnv
@@ -321,7 +325,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
 
         # Set up action conversion for the normalized [-1, 1] core contract.
         if not isinstance(self.env.action_space, spaces.Box):
-            self.action_conv = lambda a: np.asarray(a).flatten().astype(np.int32)
+            self.action_conv = lambda a: a.flatten().astype(np.int32)
         elif (
             np.isfinite(self.env.action_space.low).all()
             and np.isfinite(self.env.action_space.high).all()
@@ -329,7 +333,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
             unit = np.ones(self.env.action_space.shape, dtype=self.env.action_space.dtype)
             _, _, self.action_conv = rescale_box(self.env.action_space, -unit, unit)
         else:
-            self.action_conv = lambda a: np.asarray(a)
+            self.action_conv = lambda a: a
 
         # env_id vector for send(); recv() may hand back envs in completion
         # order, so every result is re-sorted to the canonical 0..N-1 layout
@@ -365,7 +369,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
         step) while the environments advance. ``get_result()`` collects the
         outcome via ``recv()``.
         """
-        self.env.send(self.action_conv(actions), self._all_env_ids)
+        self.env.send(self.action_conv(np.asarray(actions)), self._all_env_ids)
         self._awaiting_recv = True
 
     def get_result(self):

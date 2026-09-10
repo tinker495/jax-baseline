@@ -57,10 +57,6 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         terminateds,
         truncateds,
     ):
-        actions = jnp.stack(actions)
-        rewards = jnp.stack(rewards)
-        terminateds = jnp.stack(terminateds)
-        truncateds = jnp.stack(truncateds)
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
         value = jax.vmap(self.critic, in_axes=(None, None, 0))(

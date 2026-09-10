@@ -140,7 +140,9 @@ class XQC(Deteministic_Policy_Gradient_Family):
         return pi
 
     def _get_eval_actions(self, params, obses) -> jnp.ndarray:
-        (mu, _), _ = self.actor(params, None, self.preproc(params, None, convert_normalized_obs(obses)), False)
+        (mu, _), _ = self.actor(
+            params, None, self.preproc(params, None, convert_normalized_obs(obses)), False
+        )
         return jax.nn.tanh(mu)
 
     def _train_on_batch(self, data, context):

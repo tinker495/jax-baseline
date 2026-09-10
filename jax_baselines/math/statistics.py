@@ -1,3 +1,5 @@
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 
@@ -42,33 +44,86 @@ def compute_ckpt_window_stat(
         )
 
 
+@jax.jit
+def _update_device_moments(xs, means, variances, count):
+    batch_count = next(iter(xs.values())).shape[0]
+    total_count = count + batch_count
+    next_means = {}
+    next_variances = {}
+    for key, mean in means.items():
+        x = jnp.asarray(xs[key], dtype=mean.dtype)
+        delta = jnp.mean(x, axis=0) - mean
+        next_means[key] = mean + delta * batch_count / total_count
+        next_variances[key] = (
+            variances[key] * count
+            + jnp.var(x, axis=0) * batch_count
+            + jnp.square(delta) * count * batch_count / total_count
+        ) / total_count
+    return next_means, next_variances, total_count
+
+
+@jax.jit
+def _normalize_device_observations(xs, means, variances):
+    return {key: (xs[key] - mean) / jnp.sqrt(variances[key] + 1e-8) for key, mean in means.items()}
+
+
 class RunningMeanStd:
     """Tracks the mean, variance and count of values."""
 
-    def __init__(self, epsilon=1e-4, shapes: dict | None = None, dtype=np.float64):
-        """Tracks the mean, variance and count of values."""
+    def __init__(
+        self, epsilon=1e-4, shapes: dict | None = None, dtype=np.float64, *, on_device: bool = False
+    ):
+        """Track running statistics; device mode keeps all runtime state in float32 JAX arrays."""
         if shapes is None:
             shapes = {"unified_obs": ()}
         elif not isinstance(shapes, dict):
             raise TypeError("shapes must be a dict")
-        self.dtype = np.dtype(dtype)
-        self.means = {key: np.zeros(shape, dtype=self.dtype) for key, shape in shapes.items()}
-        self.vars = {key: np.ones(shape, dtype=self.dtype) for key, shape in shapes.items()}
-        self.count = epsilon
+        self.on_device = on_device
+        self.dtype = np.dtype(np.float32 if on_device else dtype)
+        array_module = jnp if on_device else np
+        self.means = {
+            key: array_module.zeros(shape, dtype=self.dtype) for key, shape in shapes.items()
+        }
+        self.vars = {
+            key: array_module.ones(shape, dtype=self.dtype) for key, shape in shapes.items()
+        }
+        self.count = jnp.asarray(epsilon, dtype=jnp.float32) if on_device else epsilon
 
     def normalize(self, xs):
         """Normalizes the input using the running mean and variance."""
+        if self.on_device:
+            return _normalize_device_observations(xs, self.means, self.vars)
         return {
-            key: (xs[key] - self.means[key]) / np.sqrt(self.vars[key] + 1e-8) for key in self.means
+            key: (np.asarray(xs[key]) - self.means[key]) / np.sqrt(self.vars[key] + 1e-8)
+            for key in self.means
         }
 
     def update(self, xs):
         """Updates the mean, var and count from a batch of samples."""
+        if self.on_device:
+            if not isinstance(xs, dict) or xs.keys() != self.means.keys():
+                raise ValueError("Observation batches must match the running-statistics keys")
+            if not self.means:
+                return
+            batch_sizes = set()
+            for key, mean in self.means.items():
+                x = xs[key]
+                if x.ndim != mean.ndim + 1 or x.shape[1:] != mean.shape:
+                    raise ValueError(
+                        f"Observation batch {key!r} must have shape (batch, {mean.shape})"
+                    )
+                batch_sizes.add(x.shape[0])
+            if len(batch_sizes) != 1 or 0 in batch_sizes:
+                raise ValueError("Observation batches must share a positive leading dimension")
+            self.means, self.vars, self.count = _update_device_moments(
+                xs, self.means, self.vars, self.count
+            )
+            return
         means = {}
         vars = {}
         batch_count = None
         for key, mean in self.means.items():
-            x = xs[key]
+            x = np.asarray(xs[key])
             var = self.vars[key]
             batch_mean = np.mean(x, axis=0)
             batch_var = np.var(x, axis=0)
@@ -108,25 +163,33 @@ class RunningMeanStd:
         }
 
     @classmethod
-    def from_state(cls, state):
+    def from_state(cls, state, *, on_device: bool = False):
         """Deserialize running statistics from a saved state."""
-        means = state.get("means", {})
-        vars_ = state.get("vars", {})
-        if not isinstance(means, dict):
-            keys = ["obs"] if len(means) == 1 else [str(index) for index in range(len(means))]
-            means = dict(zip(keys, means))
-            vars_ = dict(zip(keys, vars_))
+        means = state["means"]
+        vars_ = state["vars"]
+        if not isinstance(means, dict) or not isinstance(vars_, dict):
+            raise TypeError("Running statistics means and vars must be dictionaries")
+        if means.keys() != vars_.keys():
+            raise ValueError("Running statistics means and vars must have matching keys")
         means = {key: np.asarray(arr) for key, arr in means.items()}
         vars_ = {key: np.asarray(arr) for key, arr in vars_.items()}
+        if any(means[key].shape != vars_[key].shape for key in means):
+            raise ValueError("Running statistics means and vars must have matching shapes")
         dtype = next(iter(means.values())).dtype if means else np.float64
         shapes = {key: arr.shape for key, arr in means.items()}
-        instance = cls(shapes=shapes, dtype=dtype)
-        if means:
-            instance.means = {key: arr.astype(dtype, copy=False) for key, arr in means.items()}
-        if vars_:
-            instance.vars = {key: arr.astype(dtype, copy=False) for key, arr in vars_.items()}
-        count = state.get("count", np.array(0.0))
-        instance.count = float(np.asarray(count))
+        instance = cls(shapes=shapes, dtype=dtype, on_device=on_device)
+        array_module = jnp if on_device else np
+        instance.means = {
+            key: array_module.asarray(arr, dtype=instance.dtype) for key, arr in means.items()
+        }
+        instance.vars = {
+            key: array_module.asarray(arr, dtype=instance.dtype) for key, arr in vars_.items()
+        }
+        instance.count = (
+            jnp.asarray(state["count"], dtype=jnp.float32)
+            if on_device
+            else float(np.asarray(state["count"]))
+        )
         return instance
 
 

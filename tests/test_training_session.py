@@ -13,6 +13,7 @@ Behaviors pinned:
 - ``save_params`` is called once with the logger's local path.
 """
 
+import numpy as np
 import pytest
 
 from jax_baselines.A2C.a2c import A2C
@@ -306,14 +307,18 @@ class FakeOnPolicyAgent(Actor_Critic_Policy_Gradient_Family):
         self.calls = []
         self.eval_env = "eval-env"
         self.eval_eps = 3
-        self.actions = lambda obs, eval=False: (obs, eval)
-        self.record_test_fn = lambda builder, logger, actions, episode, conv_action: actions("obs")
+        self.actions = lambda obs, eval=False: (obs["unified_obs"].tolist(), eval)
+        self.record_test_fn = lambda builder, logger, actions, episode, conv_action: actions(
+            {"unified_obs": np.array([1.0, 2.0])}
+        )
         self.conv_action = "conv-action"
         # Mirror the real base __init__ defaults (base_class.py:68,70) so the
         # hardened prepare_run (direct attribute access) keeps its no-op
         # semantics: lr_annealing off and params unset.
         self.lr_annealing = False
         self.params = None
+        self.obs_rms = None
+        self.memory_backend = "cpu"
 
     def learn_SingleEnv(self, ctx):
         self.calls.append(("single", ctx))
@@ -382,7 +387,16 @@ def test_on_policy_eval_uses_run_context_logger(monkeypatch):
     rec = []
 
     def fake_evaluate_policy(eval_env, eval_eps, actions, logger_run, steps, conv_action):
-        rec.append((eval_env, eval_eps, actions("obs"), logger_run, steps, conv_action))
+        rec.append(
+            (
+                eval_env,
+                eval_eps,
+                actions({"unified_obs": np.array([1.0, 2.0])}),
+                logger_run,
+                steps,
+                conv_action,
+            )
+        )
         return {"score": 1.0}
 
     monkeypatch.setattr(
@@ -395,14 +409,14 @@ def test_on_policy_eval_uses_run_context_logger(monkeypatch):
     result = agent.eval(ctx, 42)
 
     assert result == {"score": 1.0}
-    assert rec == [("eval-env", 3, ("obs", True), "ctx-logger", 42, "conv-action")]
+    assert rec == [("eval-env", 3, ([1.0, 2.0], True), "ctx-logger", 42, "conv-action")]
 
 
 def test_on_policy_recording_uses_eval_actions():
     agent = FakeOnPolicyAgent()
     agent.env_builder = "builder"
 
-    assert agent.test_eval_env("logger", 1) == ("obs", True)
+    assert agent.test_eval_env("logger", 1) == ([1.0, 2.0], True)
 
 
 class _MetricLoggerRun:
