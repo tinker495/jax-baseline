@@ -65,6 +65,11 @@ def add_args(parser):
     )
     parser.add_argument("--gae_normalize", action="store_true")
     parser.add_argument(
+        "--obs_normalization",
+        action="store_true",
+        help="normalize observations with running per-feature mean and standard deviation",
+    )
+    parser.add_argument(
         "--gae_normalize_scope",
         type=str,
         default="batch",
@@ -97,6 +102,7 @@ def _common(a):
         "batch_size": a.batch,
         "val_coef": a.val_coef,
         "ent_coef": a.ent_coef,
+        "obs_normalization": a.obs_normalization,
         "use_entropy_adv_shaping": a.use_entropy_adv_shaping,
         "log_dir": a.logdir,
         "optimizer_factory": make_optimizer_factory(

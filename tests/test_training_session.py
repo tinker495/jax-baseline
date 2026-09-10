@@ -314,6 +314,7 @@ class FakeOnPolicyAgent(Actor_Critic_Policy_Gradient_Family):
         # semantics: lr_annealing off and params unset.
         self.lr_annealing = False
         self.params = None
+        self.obs_rms = None
 
     def learn_SingleEnv(self, ctx):
         self.calls.append(("single", ctx))

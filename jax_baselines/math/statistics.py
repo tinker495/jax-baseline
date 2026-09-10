@@ -110,23 +110,22 @@ class RunningMeanStd:
     @classmethod
     def from_state(cls, state):
         """Deserialize running statistics from a saved state."""
-        means = state.get("means", {})
-        vars_ = state.get("vars", {})
-        if not isinstance(means, dict):
-            keys = ["obs"] if len(means) == 1 else [str(index) for index in range(len(means))]
-            means = dict(zip(keys, means))
-            vars_ = dict(zip(keys, vars_))
+        means = state["means"]
+        vars_ = state["vars"]
+        if not isinstance(means, dict) or not isinstance(vars_, dict):
+            raise TypeError("Running statistics means and vars must be dictionaries")
+        if means.keys() != vars_.keys():
+            raise ValueError("Running statistics means and vars must have matching keys")
         means = {key: np.asarray(arr) for key, arr in means.items()}
         vars_ = {key: np.asarray(arr) for key, arr in vars_.items()}
+        if any(means[key].shape != vars_[key].shape for key in means):
+            raise ValueError("Running statistics means and vars must have matching shapes")
         dtype = next(iter(means.values())).dtype if means else np.float64
         shapes = {key: arr.shape for key, arr in means.items()}
         instance = cls(shapes=shapes, dtype=dtype)
-        if means:
-            instance.means = {key: arr.astype(dtype, copy=False) for key, arr in means.items()}
-        if vars_:
-            instance.vars = {key: arr.astype(dtype, copy=False) for key, arr in vars_.items()}
-        count = state.get("count", np.array(0.0))
-        instance.count = float(np.asarray(count))
+        instance.means = {key: arr.astype(dtype, copy=False) for key, arr in means.items()}
+        instance.vars = {key: arr.astype(dtype, copy=False) for key, arr in vars_.items()}
+        instance.count = float(np.asarray(state["count"]))
         return instance
 
 

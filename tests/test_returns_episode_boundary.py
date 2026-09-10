@@ -346,6 +346,7 @@ class _Ctx:
 
 def test_a2c_vectorized_flags_autoreset_dummy_step_as_terminal():
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.obs_rms = None
     # step0 normal, step1 worker0 terminates, step2 worker0 emits autoreset dummy.
     agent.env = _ScriptEnv(
         [
@@ -380,6 +381,7 @@ def test_a2c_vectorized_flags_autoreset_dummy_step_as_terminal():
 
 def test_a2c_vectorized_stores_successor_but_acts_on_current_observation():
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.obs_rms = None
     agent.env = _DistinctObservationEnv()
     agent.buffer = _RecordingBuffer()
     agent.worker_size = 1
@@ -401,6 +403,7 @@ def test_a2c_vectorized_stores_successor_but_acts_on_current_observation():
 
 def test_a2c_vectorized_preserves_continuous_actions_before_env_step():
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.obs_rms = None
     agent.env = _ScriptEnv([np.array([False, False])])
     agent.buffer = _RecordingBuffer()
     agent.worker_size = 2
@@ -420,6 +423,7 @@ def test_a2c_vectorized_preserves_continuous_actions_before_env_step():
 
 def test_a2c_vectorized_recomputes_pipelined_action_after_policy_update():
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.obs_rms = None
     agent.env = _ScriptEnv([np.array([False, False]), np.array([False, False])])
     agent.buffer = _RecordingBuffer()
     agent.worker_size = 2
@@ -450,6 +454,7 @@ def test_a2c_vectorized_recomputes_pipelined_action_after_policy_update():
 
 def test_a2c_vectorized_can_run_twice_without_a_pending_step():
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.obs_rms = None
     agent.env = _ScriptEnv([np.array([False, False]), np.array([False, False])])
     agent.buffer = _RecordingBuffer()
     agent.worker_size = 2
@@ -469,6 +474,7 @@ def test_a2c_vectorized_can_run_twice_without_a_pending_step():
 
 def test_a2c_vectorized_keeps_post_lifeloss_step_real():
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.obs_rms = None
     agent.env = _LivesScriptEnv(
         [
             ([False, False], [False, False], [3, 3]),
@@ -494,6 +500,7 @@ def test_a2c_vectorized_keeps_post_lifeloss_step_real():
 
 def test_a2c_vectorized_drops_gymnasium_lifeloss_autoreset_dummy():
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.obs_rms = None
     env = _LivesScriptEnv(
         [
             ([False, False], [False, False], [3, 3]),
@@ -552,6 +559,7 @@ def test_a2c_single_env_action_plumbing_and_buffer_shape(action_type, action, ex
     # env.step ever ran. The loop now mirrors eval: conv_action(self.actions(obs))
     # normalized exactly once.
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.obs_rms = None
     env = _ScriptSingleEnv()
     agent.env = env
     agent.batch_size = 10_000  # train cadence never fires
@@ -601,6 +609,7 @@ def test_pipelined_loop_drives_real_async_envpool_end_to_end():
     env = eb.EnvPoolVectorizedEnv("CartPole-v1", worker_num=worker, seed=0)
     try:
         agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+        agent.obs_rms = None
         agent.env = env
         agent.worker_size = worker
         agent.batch_size = 2

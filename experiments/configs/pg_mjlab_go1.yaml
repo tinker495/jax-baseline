@@ -20,6 +20,7 @@ base:
   value_clip: 0.2
   ent_coef: 0.01
   val_coef: 0.01
+  obs_normalization: true
   gae_normalize: true
   gae_normalize_scope: minibatch
   max_grad_norm: 1.0
