@@ -6,7 +6,11 @@ import numpy as np
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.layers import SimbaV2Block, SimbaV2Embedding, SimbaV2Head
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import dummy_observation, print_flax_model_summary
+from model_builder.utils import (
+    ActorCriticFeatures,
+    dummy_observation,
+    print_flax_model_summary,
+)
 
 
 class Encoder(nn.Module):
@@ -14,8 +18,8 @@ class Encoder(nn.Module):
     hidden_n: int = 3
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
-        encoded = SimbaV2Embedding(self.node)(feature)
+    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
+        encoded = SimbaV2Embedding(self.node)(features["actor"])
         for _ in range(self.hidden_n):
             encoded = SimbaV2Block(self.node)(encoded)
         return encoded
@@ -40,8 +44,8 @@ class Actor(nn.Module):
     hidden_n: int = 2
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray, zs: jnp.ndarray) -> jnp.ndarray:
-        base = SimbaV2Embedding(self.node)(feature)
+    def __call__(self, features: ActorCriticFeatures, zs: jnp.ndarray) -> jnp.ndarray:
+        base = SimbaV2Embedding(self.node)(features["actor"])
         for _ in range(self.hidden_n):
             base = SimbaV2Block(self.node)(base)
         embed = jnp.concatenate([base, zs], axis=1)
@@ -58,9 +62,13 @@ class Critic(nn.Module):
 
     @nn.compact
     def __call__(
-        self, feature: jnp.ndarray, zs: jnp.ndarray, zsa: jnp.ndarray, actions: jnp.ndarray
+        self,
+        features: ActorCriticFeatures,
+        zs: jnp.ndarray,
+        zsa: jnp.ndarray,
+        actions: jnp.ndarray,
     ) -> jnp.ndarray:
-        concat = jnp.concatenate([feature, actions], axis=1)
+        concat = jnp.concatenate([features["critic"], actions], axis=1)
         base = SimbaV2Embedding(self.node)(concat)
         for _ in range(self.hidden_n):
             base = SimbaV2Block(self.node)(base)
@@ -78,7 +86,9 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
     def model_builder(key=None, print_model=False):
         class Merge_encoder(nn.Module):
             def setup(self):
-                self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
+                self.preproc = PreProcess(
+                    observation_space, embedding_mode=embedding_mode, paired=True
+                )
                 self.enc = Encoder(**policy_kwargs)
                 self.act_enc = ActionEncoder(**policy_kwargs)
 
@@ -89,7 +99,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 return feature, zs, zsa
 
             def preprocess(self, x):
-                return self.preproc(x)
+                return self.preproc.actor_critic(x)
 
             def encoder(self, feature):
                 return self.enc(feature)

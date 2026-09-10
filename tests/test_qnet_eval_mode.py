@@ -113,7 +113,7 @@ def test_iqn_get_actions_uses_observation_batch_for_tau_not_worker_size():
     actions = IQN._get_actions(
         stub,
         BEHAVIOR_PARAMS,
-        {"obs": np.zeros((1, 4), dtype=np.float32)},
+        {"unified_obs": np.zeros((1, 4), dtype=np.float32)},
         jax.random.PRNGKey(0),
     )
 

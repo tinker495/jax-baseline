@@ -291,21 +291,21 @@ def test_bulk_helpers_recurse_into_dict_observations():
     agent = FakeBulkAgent()
     lifecycle = DPGTrainingLifecycle(agent)
     data = {
-        "obses": {"obs": np.ones((8, 3))},
+        "obses": {"unified_obs": np.ones((8, 3))},
         "actions": np.ones((8, 1)),
         "rewards": np.ones((8, 1)),
-        "nxtobses": {"obs": np.ones((8, 3))},
+        "nxtobses": {"unified_obs": np.ones((8, 3))},
         "terminateds": np.zeros((8, 1)),
     }
 
     reshaped = lifecycle._reshape_bulk_batch(data, chunk_size=2)
 
-    assert reshaped["obses"]["obs"].shape == (2, 4, 3)
-    assert reshaped["nxtobses"]["obs"].shape == (2, 4, 3)
+    assert reshaped["obses"]["unified_obs"].shape == (2, 4, 3)
+    assert reshaped["nxtobses"]["unified_obs"].shape == (2, 4, 3)
     assert reshaped["actions"].shape == (2, 4, 1)
     first = next(iter_bulk_batches(reshaped, (object(), object())))
-    assert first["obses"]["obs"].shape == (4, 3)
-    assert flatten_bulk_batch(reshaped)["obses"]["obs"].shape == (8, 3)
+    assert first["obses"]["unified_obs"].shape == (4, 3)
+    assert flatten_bulk_batch(reshaped)["obses"]["unified_obs"].shape == (8, 3)
 
 
 class FakeMissingBulkHookAgent(FakeAgent):

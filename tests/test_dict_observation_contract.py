@@ -15,15 +15,21 @@ def test_observation_contract_normalizes_arrays_and_nested_mappings():
     array = np.arange(3, dtype=np.float32)
 
     normalized = normalize_observation(array)
-    assert list(normalized) == ["obs"]
-    assert normalized["obs"] is array
+    assert list(normalized) == ["unified_obs"]
+    assert normalized["unified_obs"] is array
 
     nested = normalize_observation({"z": array + 2, "a": {"b": array + 1}})
-    assert list(nested) == ["a.b", "z"]
-    np.testing.assert_array_equal(nested["a.b"], array + 1)
+    assert list(nested) == ["unified_a.b", "unified_z"]
+    np.testing.assert_array_equal(nested["unified_a.b"], array + 1)
+
+    selected = normalize_observation({"policy": {"joints": array}}, "policy.joints")
+    assert list(selected) == ["unified_policy.joints"]
+    assert selected["unified_policy.joints"] is array
+    with pytest.raises(KeyError, match="available keys: joints"):
+        normalize_observation({"policy": {"joints": array}}, "policy.velocity")
 
     tuple_observation = normalize_observation((array, {"velocity": array + 3}))
-    assert list(tuple_observation) == ["0", "1.velocity"]
+    assert list(tuple_observation) == ["unified_0", "unified_1.velocity"]
 
     tuple_space = spaces.Tuple(
         (
@@ -31,17 +37,37 @@ def test_observation_contract_normalizes_arrays_and_nested_mappings():
             spaces.Dict({"velocity": spaces.Box(-1, 1, (3,))}),
         )
     )
-    assert normalize_observation_space(tuple_space) == {"0": [3], "1.velocity": [3]}
+    assert normalize_observation_space(tuple_space) == {
+        "unified_0": [3],
+        "unified_1.velocity": [3],
+    }
+    assert normalize_observation_space(spaces.Box(-1, 1, (3,))) == {"unified_obs": [3]}
+    assert list(normalize_observation({"actor_obs": array})) == ["unified_actor_obs"]
+
+    class Tensor:
+        def detach(self):
+            return self
+
+        def cpu(self):
+            return self
+
+        def numpy(self):
+            return array
+
+    np.testing.assert_array_equal(normalize_observation(Tensor())["unified_obs"], array)
 
 
 def test_core_batches_observation_dict_without_losing_keys():
-    observation = {"position": np.array([1.0, 2.0]), "velocity": np.array([3.0])}
+    observation = {
+        "unified_position": np.array([1.0, 2.0]),
+        "unified_velocity": np.array([3.0]),
+    }
 
     batched = batch_observation(observation)
 
-    assert list(batched) == ["position", "velocity"]
-    assert batched["position"].shape == (1, 2)
-    assert batched["velocity"].shape == (1, 1)
+    assert list(batched) == ["unified_position", "unified_velocity"]
+    assert batched["unified_position"].shape == (1, 2)
+    assert batched["unified_velocity"].shape == (1, 1)
 
 
 def test_core_and_storage_reject_legacy_list_observations():
@@ -54,10 +80,10 @@ def test_core_and_storage_reject_legacy_list_observations():
 
 
 def test_epoch_and_replay_buffers_keep_observation_keys():
-    space = {"position": [2], "velocity": [1]}
+    space = {"unified_position": [2], "unified_velocity": [1]}
     obs = {
-        "position": np.array([[1.0, 2.0]], dtype=np.float32),
-        "velocity": np.array([[3.0]], dtype=np.float32),
+        "unified_position": np.array([[1.0, 2.0]], dtype=np.float32),
+        "unified_velocity": np.array([[3.0]], dtype=np.float32),
     }
     next_obs = {key: value + 1 for key, value in obs.items()}
 
@@ -65,7 +91,7 @@ def test_epoch_and_replay_buffers_keep_observation_keys():
     epoch.add(obs, [[0]], [1.0], next_obs, [False], [False])
     epoch_data = epoch.get_buffer()
     assert set(epoch_data["obses"]) == set(space)
-    assert epoch_data["obses"]["position"].shape == (1, 1, 2)
+    assert epoch_data["obses"]["unified_position"].shape == (1, 1, 2)
 
     replay = ReplayBuffer(4, space)
     replay.add(obs, [0], 1.0, next_obs, False)
@@ -81,19 +107,25 @@ def test_crossq_critic_loss_concatenates_dict_observation_values():
 
     def preproc(_params, _key, observations):
         seen.update(observations)
-        return observations["obs"]
+        return {
+            "actor": observations["unified_obs"],
+            "critic": observations["unified_obs"],
+        }
 
     agent.preproc = preproc
     agent._get_pi_log_prob = lambda _params, features, _key: (
-        jnp.zeros((features.shape[0], 1)),
-        jnp.zeros((features.shape[0], 1)),
+        jnp.zeros((features["actor"].shape[0], 1)),
+        jnp.zeros((features["actor"].shape[0], 1)),
     )
     agent.critic = lambda params, _key, features, _actions, _training: (
-        (jnp.zeros((features.shape[0], 1)), jnp.zeros((features.shape[0], 1))),
+        (
+            jnp.zeros((features["actor"].shape[0], 1)),
+            jnp.zeros((features["actor"].shape[0], 1)),
+        ),
         {"batch_stats": params["batch_stats"]},
     )
-    observations = {"obs": jnp.ones((2, 3))}
-    next_observations = {"obs": jnp.full((2, 3), 2.0)}
+    observations = {"unified_obs": jnp.ones((2, 3))}
+    next_observations = {"unified_obs": jnp.full((2, 3), 2.0)}
 
     loss, _ = agent._critic_loss(
         {"batch_stats": {}},
@@ -110,6 +142,6 @@ def test_crossq_critic_loss_concatenates_dict_observation_values():
 
     assert jnp.isfinite(loss)
     np.testing.assert_array_equal(
-        seen["obs"],
-        jnp.concatenate([observations["obs"], next_observations["obs"]]),
+        seen["unified_obs"],
+        jnp.concatenate([observations["unified_obs"], next_observations["unified_obs"]]),
     )

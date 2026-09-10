@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
+import pytest
 
 from experiments.cli.dpg import DPG_RUNNER
 from jax_baselines.CrossQ.crossq import CrossQ
@@ -33,51 +34,66 @@ def test_dpg_eval_path_uses_sac_mode_without_sampling():
     agent.learning_starts = 100
     agent.use_checkpointing = False
     agent.policy_params = None
-    agent.preproc = lambda params, key, obs: obs["obs"]
-    agent.actor = lambda params, key, feature: (feature, jnp.full_like(feature, 10.0))
+    agent.preproc = lambda params, key, obs: {
+        "actor": obs["unified_obs"],
+        "critic": obs["unified_obs"],
+    }
+    agent.actor = lambda params, key, feature: (
+        feature["actor"],
+        jnp.full_like(feature["actor"], 10.0),
+    )
 
-    obs = {"obs": jnp.array([[0.25, -0.5]])}
+    obs = {"unified_obs": jnp.array([[0.25, -0.5]])}
     actions = agent.actions(obs, steps=0, eval=True)
 
-    np.testing.assert_allclose(actions, jnp.tanh(obs["obs"]))
+    np.testing.assert_allclose(actions, jnp.tanh(obs["unified_obs"]))
 
 
 def test_sac_actor_loss_uses_minimum_expected_q():
     agent = object.__new__(SAC)
     agent.preproc = lambda params, key, obs: obs
     agent._get_pi_log_prob = lambda params, feature, key: (
-        jnp.zeros((feature.shape[0], 1)),
-        jnp.zeros((feature.shape[0], 1)),
+        jnp.zeros((feature["actor"].shape[0], 1)),
+        jnp.zeros((feature["actor"].shape[0], 1)),
     )
     agent.critic = lambda params, key, feature, policy: (
         jnp.array([[0.0], [10.0]]),
         jnp.array([[4.0], [2.0]]),
     )
 
-    loss, _ = SAC._actor_loss(agent, None, None, jnp.ones((2, 1)), None, 0.01)
+    loss, _ = SAC._actor_loss(
+        agent,
+        None,
+        None,
+        {"actor": jnp.ones((2, 1)), "critic": jnp.ones((2, 1))},
+        None,
+        0.01,
+    )
 
     np.testing.assert_allclose(loss, -1.0)
 
 
-def test_other_stochastic_dpg_algorithms_also_use_mode_for_evaluation():
-    obs = {"obs": jnp.array([[0.25, -0.5]])}
+@pytest.mark.parametrize("cls", [TQC, CrossQ])
+def test_other_stochastic_dpg_algorithms_also_use_mode_for_evaluation(cls):
+    obs = {"unified_obs": jnp.array([[0.25, -0.5]])}
 
-    tqc = object.__new__(TQC)
-    tqc.preproc = lambda params, key, value: value["obs"]
-    tqc.actor = lambda params, key, feature: (feature, jnp.full_like(feature, 10.0))
+    agent = object.__new__(cls)
+    agent.preproc = lambda params, key, value: {
+        "actor": value["unified_obs"],
+        "critic": value["unified_obs"],
+    }
+    agent.actor = lambda params, key, feature: (
+        feature["actor"],
+        jnp.full_like(feature["actor"], 10.0),
+    )
 
-    crossq = object.__new__(CrossQ)
-    crossq.preproc = lambda params, key, value: value["obs"]
-    crossq.actor = lambda params, key, feature: (feature, jnp.full_like(feature, 10.0))
-
-    np.testing.assert_allclose(tqc._get_eval_actions(None, obs), jnp.tanh(obs["obs"]))
-    np.testing.assert_allclose(crossq._get_eval_actions(None, obs), jnp.tanh(obs["obs"]))
+    np.testing.assert_allclose(agent._get_eval_actions(None, obs), jnp.tanh(obs["unified_obs"]))
 
 
 def test_crossq_actors_have_no_batch_stats_but_critics_do():
     for make_builder in (crossq_model_builder_maker, simba_crossq_model_builder_maker):
         builder = make_builder(
-            {"obs": [4]},
+            {"unified_obs": [4]},
             [2],
             {"node": 16, "hidden_n": 1, "embedding_mode": "normal"},
         )
@@ -86,7 +102,7 @@ def test_crossq_actors_have_no_batch_stats_but_critics_do():
         assert "batch_stats" not in policy_params
         assert "batch_stats" in critic_params
 
-        feature = preproc(policy_params, None, {"obs": jnp.zeros((2, 4))})
+        feature = preproc(policy_params, None, {"unified_obs": jnp.zeros((2, 4))})
         mu, log_std = actor(policy_params, None, feature)
         (q1, q2), updates = critic(critic_params, None, feature, jnp.zeros((2, 2)), True)
 
@@ -109,10 +125,13 @@ def test_flashsac_entropy_target_and_defaults():
 
 def test_sac_actor_and_temperature_update_on_configured_period():
     agent = object.__new__(SAC)
-    agent.preproc = lambda params, key, obs: obs["obs"]
+    agent.preproc = lambda params, key, obs: {
+        "actor": obs["unified_obs"],
+        "critic": obs["unified_obs"],
+    }
     agent.actor = lambda params, key, feature: (
-        jnp.full((feature.shape[0], 1), params),
-        jnp.full((feature.shape[0], 1), -1.0),
+        jnp.full((feature["actor"].shape[0], 1), params),
+        jnp.full((feature["actor"].shape[0], 1), -1.0),
     )
     agent.critic = lambda params, key, feature, actions: (
         params + actions,
@@ -136,10 +155,10 @@ def test_sac_actor_and_temperature_update_on_configured_period():
     log_ent_coef = jnp.log(jnp.asarray(0.01))
     opt_ent_coef_state = agent.ent_coef_optimizer.init(log_ent_coef)
     data = {
-        "obses": {"obs": jnp.ones((2, 1))},
+        "obses": {"unified_obs": jnp.ones((2, 1))},
         "actions": jnp.zeros((2, 1)),
         "rewards": jnp.zeros((2, 1)),
-        "nxtobses": {"obs": jnp.ones((2, 1))},
+        "nxtobses": {"unified_obs": jnp.ones((2, 1))},
         "terminateds": jnp.zeros((2, 1)),
     }
 
@@ -211,10 +230,10 @@ def test_sac_actor_and_target_use_distinct_fresh_keys():
         key,
         1,
         log_ent_coef,
-        obses={"obs": jnp.zeros((1, 1))},
+        obses={"unified_obs": jnp.zeros((1, 1))},
         actions=jnp.zeros((1, 1)),
         rewards=jnp.zeros((1, 1)),
-        nxtobses={"obs": jnp.zeros((1, 1))},
+        nxtobses={"unified_obs": jnp.zeros((1, 1))},
         terminateds=jnp.zeros((1, 1)),
     )
     target_key, _, actor_key = jax.random.split(key, 3)

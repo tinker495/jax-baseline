@@ -11,6 +11,7 @@ import jax.numpy as jnp
 
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense, ResidualBlock
+from model_builder.utils import ActorCriticFeatures
 
 
 class Actor(nn.Module):
@@ -19,7 +20,7 @@ class Actor(nn.Module):
     hidden_n: int = 2
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
         action = nn.Sequential(
             [Dense(self.node)]
             + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
@@ -28,7 +29,7 @@ class Actor(nn.Module):
                 Dense(self.action_size[0], kernel_init=clip_factorized_uniform(3)),
                 jax.nn.tanh,
             ]
-        )(feature)
+        )(features["actor"])
         return action
 
 
@@ -37,8 +38,8 @@ class Critic(nn.Module):
     hidden_n: int = 2
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([feature, actions], axis=1)
+    def __call__(self, features: ActorCriticFeatures, actions: jnp.ndarray) -> jnp.ndarray:
+        concat = jnp.concatenate([features["critic"], actions], axis=1)
         q_net = nn.Sequential(
             [Dense(self.node)]
             + [ResidualBlock(self.node) for _ in range(self.hidden_n)]

@@ -57,7 +57,9 @@ def test_xqc_categorical_q_uses_fixed_support_expectation():
 
 def test_xqc_categorical_train_step_updates_online_and_target_critics():
     agent = XQC.__new__(XQC)
-    builder = model_builder_maker({"obs": [4]}, [2], {"node": 16, "embedding_mode": "normal"})
+    builder = model_builder_maker(
+        {"unified_obs": [4]}, [2], {"node": 16, "embedding_mode": "normal"}
+    )
     (
         agent.preproc,
         agent.actor,
@@ -92,10 +94,10 @@ def test_xqc_categorical_train_step_updates_online_and_target_critics():
         jax.random.PRNGKey(1),
         1,
         log_ent_coef,
-        {"obs": jnp.zeros((4, 4))},
+        {"unified_obs": jnp.zeros((4, 4))},
         jnp.zeros((4, 2)),
         jnp.ones((4, 1)),
-        {"obs": jnp.ones((4, 4))},
+        {"unified_obs": jnp.ones((4, 4))},
         jnp.zeros((4, 1)),
     )
 

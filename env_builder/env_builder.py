@@ -1,4 +1,5 @@
 import warnings
+from typing import Literal
 
 import gymnasium as gym
 import numpy as np
@@ -32,7 +33,7 @@ __all__ = [
 ]
 
 
-def _action_meta(action_space) -> tuple[list[int], str]:
+def _action_meta(action_space) -> tuple[list[int], Literal["discrete", "continuous"]]:
     if hasattr(action_space, "n"):
         return [int(action_space.n)], "discrete"
     if hasattr(action_space, "shape") and action_space.shape:
@@ -69,8 +70,13 @@ def _single_env_info(env, env_id: str) -> EnvInfo:
     if not isinstance(env, SingleEnv):
         raise ValueError("Single env must satisfy the SingleEnv protocol")
     action_size, action_type = _action_meta(env.action_space)
+    observation_space = env.observation_space
+    if isinstance(observation_space, spaces.Dict):
+        observation_space = {
+            key: list(leaf.shape) for key, leaf in observation_space.spaces.items()
+        }
     return {
-        "observation_space": normalize_observation_space(env.observation_space),
+        "observation_space": observation_space,
         "action_size": action_size,
         "action_type": action_type,
         "env_type": "single",

@@ -73,7 +73,7 @@ class _Runtime:
 class _Worker:
     def get_info(self):
         return {
-            "observation_space": {"obs": [4]},
+            "observation_space": {"unified_obs": [4]},
             "action_size": [2],
             "action_type": "discrete",
             "env_type": "single",
@@ -87,7 +87,7 @@ def test_distributed_runtime_core_surface_is_normal_python_calls():
     runtime = _Runtime()
 
     assert get_worker_env_info([_Worker()], runtime.worker_info) == (
-        {"obs": [4]},
+        {"unified_obs": [4]},
         [2],
         "SingleEnv",
     )

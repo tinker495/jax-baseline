@@ -128,7 +128,7 @@ def test_apex_dpg_constructors_initialize_model_setup_dependencies(monkeypatch, 
     class _Worker:
         def get_info(self):
             return {
-                "observation_space": {"obs": [3]},
+                "observation_space": {"unified_obs": [3]},
                 "action_size": [1],
                 "action_type": "continuous",
                 "env_type": "single",
@@ -209,14 +209,14 @@ def test_flax_ac_continuous_actor_initializes_log_std_param():
     from model_builder.flax.ac.ac_builder import model_builder_maker
 
     builder = model_builder_maker(
-        {"obs": [3]},
+        {"unified_obs": [3]},
         [1],
         "continuous",
         {"node": 8, "hidden_n": 1, "embedding_mode": "normal"},
     )
     preproc, actor, critic, params = builder(jax.random.PRNGKey(0))
 
-    obs = {"obs": np.zeros((1, 3), dtype=np.float32)}
+    obs = {"unified_obs": np.zeros((1, 3), dtype=np.float32)}
     feature = preproc(params, None, obs)
     mu, log_std = actor(params, None, feature)
     value = critic(params, None, feature)

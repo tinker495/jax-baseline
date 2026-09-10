@@ -20,7 +20,7 @@ H = W = 6
 S = 4
 NSTEP = 3
 GAMMA = 0.99
-OBS = {"obs": [H, W, S]}  # Cf = 1 (Atari grayscale frame stack)
+OBS = {"unified_obs": [H, W, S]}  # Cf = 1 (Atari grayscale frame stack)
 EPISODES = [(10, 5), (40, 7), (80, 6)]
 
 
@@ -79,10 +79,10 @@ def _feed(buf):
         for t in range(length):
             nxt = fs.step(base + t + 1)
             buf.add(
-                {"obs": obs[None]},
+                {"unified_obs": obs[None]},
                 np.float32(1.0),
                 np.float32(base + t),
-                {"obs": nxt[None]},
+                {"unified_obs": nxt[None]},
                 t == length - 1,
                 False,
             )
@@ -99,17 +99,17 @@ def test_nstep_transitions_match_cpprb():
     fb = FrameStackReplayBuffer(1000, OBS, 1, NSTEP, GAMMA, n_frames=S)
     _feed(fb)
     ref = _reference()
-    total = len(ref["obs:obs"])
+    total = len(ref["obs:unified_obs"])
     g = fb._gather(np.arange(0, total, dtype=np.int64))
     # obs stack reconstruction is lossless
-    assert np.array_equal(g["obses"]["obs"], ref["obs:obs"])
+    assert np.array_equal(g["obses"]["unified_obs"], ref["obs:unified_obs"])
     # n-step discounted reward and done match for every row
     assert np.allclose(g["rewards"][:, 0], ref["reward"][:, 0], atol=1e-4)
     assert np.array_equal(g["terminateds"][:, 0].astype(bool), ref["done"][:, 0].astype(bool))
     # next_obs matches wherever it is used (done == 0; done == 1 is masked in the target)
     mask = ref["done"][:, 0] == 0
     assert mask.sum() > 0
-    assert np.array_equal(g["nxtobses"]["obs"][mask], ref["next_obs:obs"][mask])
+    assert np.array_equal(g["nxtobses"]["unified_obs"][mask], ref["next_obs:unified_obs"][mask])
 
 
 def test_single_frame_storage():
@@ -128,12 +128,14 @@ def test_prioritized_sample_consistent_with_ground_truth():
     leaves = s["indexes"]
     assert (leaves < pri._ready()).all()
     for i, leaf in enumerate(leaves):
-        assert np.array_equal(s["obses"]["obs"][i], ground["obses"]["obs"][leaf])
+        assert np.array_equal(s["obses"]["unified_obs"][i], ground["obses"]["unified_obs"][leaf])
         assert np.isclose(s["rewards"][i, 0], ground["rewards"][leaf, 0])
-        assert np.array_equal(s["nxtobses"]["obs"][i], ground["nxtobses"]["obs"][leaf])
+        assert np.array_equal(
+            s["nxtobses"]["unified_obs"][i], ground["nxtobses"]["unified_obs"][leaf]
+        )
     assert (s["weights"] > 0).all() and (s["weights"] <= 1.0 + 1e-6).all()
     pri.update_priorities(leaves, np.abs(np.random.randn(64)).astype(np.float32) + 0.1)
-    assert pri.sample(16)["obses"]["obs"].shape == (16, H, W, S)
+    assert pri.sample(16)["obses"]["unified_obs"].shape == (16, H, W, S)
 
 
 class _FrameBufferBulkAgent:
@@ -181,7 +183,7 @@ def test_qnet_bulk_priority_updates_flatten_for_prioritized_frame_buffer():
 
     assert loss == 2.0
     assert agent.train_steps_count == 2
-    assert pri.sample(4)["obses"]["obs"].shape == (4, H, W, S)
+    assert pri.sample(4)["obses"]["unified_obs"].shape == (4, H, W, S)
 
 
 def test_truncation_bootstraps_without_crash():
@@ -191,10 +193,10 @@ def test_truncation_bootstraps_without_crash():
     for t in range(6):
         nxt = fs.step(t + 1)
         fb.add(
-            {"obs": obs[None]},
+            {"unified_obs": obs[None]},
             np.float32(1),
             np.float32(1),
-            {"obs": nxt[None]},
+            {"unified_obs": nxt[None]},
             False,
             t == 5,
         )
@@ -204,17 +206,17 @@ def test_truncation_bootstraps_without_crash():
     for t in range(6):
         nxt = fs2.step(51 + t)
         fb.add(
-            {"obs": obs[None]},
+            {"unified_obs": obs[None]},
             np.float32(1),
             np.float32(1),
-            {"obs": nxt[None]},
+            {"unified_obs": nxt[None]},
             False,
             False,
         )
         obs = nxt
     g = fb._gather(np.arange(0, fb._ready(), dtype=np.int64))
     assert (g["terminateds"] == 0).all()  # truncation does not set done
-    assert g["obses"]["obs"].shape[1:] == (H, W, S)
+    assert g["obses"]["unified_obs"].shape[1:] == (H, W, S)
 
 
 @pytest.mark.parametrize("prioritized", [False, True])
@@ -238,7 +240,7 @@ def test_factory_keeps_cpprb_for_vector_or_singlestep():
     # vector obs -> not frame-compressible
     assert isinstance(
         make_replay_buffer(
-            _need(observation_space={"obs": [4]}, n_step=NSTEP, compress_memory=True)
+            _need(observation_space={"unified_obs": [4]}, n_step=NSTEP, compress_memory=True)
         ),
         Cpprb,
     )

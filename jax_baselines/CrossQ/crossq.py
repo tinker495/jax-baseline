@@ -353,7 +353,9 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             nxtobses,
         )
         concated_preproc = self.preproc(policy_params, key, concated_obses)
-        next_preproc = jnp.split(concated_preproc, 2, axis=0)[1]
+        next_preproc = jax.tree_util.tree_map(
+            lambda feature: jnp.split(feature, 2, axis=0)[1], concated_preproc
+        )
         next_policy, log_prob = self._get_pi_log_prob(policy_params, next_preproc, key)
         concated_actions = jnp.concatenate([actions, next_policy])
         (q1, q2), variable_updates = self.critic(

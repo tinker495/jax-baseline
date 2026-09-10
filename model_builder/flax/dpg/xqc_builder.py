@@ -5,7 +5,11 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import dummy_observation, print_flax_model_summary
+from model_builder.utils import (
+    ActorCriticFeatures,
+    dummy_observation,
+    print_flax_model_summary,
+)
 
 
 class Actor(nn.Module):
@@ -17,7 +21,8 @@ class Actor(nn.Module):
         return nn.BatchNorm(use_running_average=not training, momentum=0.99, epsilon=0.001)(feature)
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray, training: bool = True) -> jnp.ndarray:
+    def __call__(self, features: ActorCriticFeatures, training: bool = True) -> jnp.ndarray:
+        feature = features["actor"]
         feature = self.normalize(feature, training)
         for _ in range(self.hidden_n):
             feature = nn.Dense(
@@ -48,8 +53,9 @@ class Critic(nn.Module):
 
     @nn.compact
     def __call__(
-        self, feature: jnp.ndarray, actions: jnp.ndarray, training: bool = True
+        self, features: ActorCriticFeatures, actions: jnp.ndarray, training: bool = True
     ) -> jnp.ndarray:
+        feature = features["critic"]
         concat = jnp.concatenate([feature, actions], axis=1)
         feature = self.normalize(concat, training)
         for _ in range(self.hidden_n):
@@ -73,7 +79,9 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
     def model_builder(key=None, print_model=False):
         class Merged_Actor(nn.Module):
             def setup(self):
-                self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
+                self.preproc = PreProcess(
+                    observation_space, embedding_mode=embedding_mode, paired=True
+                )
                 self.act = Actor(action_size, **policy_kwargs)
 
             def __call__(self, x, training: bool = True):
@@ -82,7 +90,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 return mu, log_std
 
             def preprocess(self, x):
-                x = self.preproc(x)
+                x = self.preproc.actor_critic(x)
                 return x
 
             def actor(self, x, training: bool = True):

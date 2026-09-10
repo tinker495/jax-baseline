@@ -459,7 +459,9 @@ class XQC(Deteministic_Policy_Gradient_Family):
             name: jnp.concatenate([obs, nxtobses[name]]) for name, obs in obses.items()
         }
         concated_preproc = self.preproc(policy_params, key, concated_obses)
-        next_preproc = jnp.split(concated_preproc, 2, axis=0)[1]
+        next_preproc = jax.tree_util.tree_map(
+            lambda feature: jnp.split(feature, 2, axis=0)[1], concated_preproc
+        )
         next_policy, log_prob, _ = self._get_pi_log_prob(policy_params, next_preproc, key, False)
         concated_actions = jnp.concatenate([actions, next_policy])
         (logits1, logits2), _ = self.critic(
