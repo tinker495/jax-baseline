@@ -21,7 +21,7 @@ class _Env:
     def prepare_envs(self, num_workers=1, seed=None):
         return PreparedEnvSpec(
             self,
-            self,
+            _Env(self.observation),
             {
                 "observation_space": self.observation_space,
                 "action_size": [1],

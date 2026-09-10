@@ -1,9 +1,14 @@
+import random
 import warnings
+from collections.abc import Iterator
+from contextlib import contextmanager
+from copy import deepcopy
 from typing import Any, Literal
 
 import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
+from gymnasium.vector.utils import concatenate, iterate
 from gymnasium.wrappers.utils import rescale_box
 
 from env_builder.observations import (
@@ -121,11 +126,14 @@ def get_env_builder(
     episode_length=None,
     device="cuda:0",
     jax_arrays=False,
+    reuse_for_eval=False,
 ):
     if env_backend not in _ENV_BACKENDS:
         raise ValueError(f"env_backend must be one of {_ENV_BACKENDS}, got {env_backend!r}")
     if jax_arrays and env_backend != "mjlab":
         raise ValueError("jax_arrays requires env_backend='mjlab'")
+    if reuse_for_eval and env_backend == "envpool":
+        raise ValueError("EnvPool does not support training environment state preservation")
 
     def env_builder(worker=1, render_mode=None, seed=None):
         if env_backend == "mjlab":
@@ -140,6 +148,7 @@ def get_env_builder(
                 device=device,
                 render_mode=render_mode,
                 jax_arrays=jax_arrays,
+                reuse_for_eval=reuse_for_eval and render_mode is None,
             )
         if worker > 1:
             # Vectorized backend is an explicit choice: gymnasium AsyncVectorEnv
@@ -161,6 +170,7 @@ def get_env_builder(
                 worker_num=worker,
                 seed=seed,
                 observation_key=observation_key,
+                reuse_for_eval=reuse_for_eval and render_mode is None,
             )
         else:
             from env_builder.atari_wrappers import get_env_type, make_wrap_atari
@@ -176,6 +186,16 @@ def get_env_builder(
                 spaces.Dict(flatten_observation_space(env.observation_space, observation_key)),
             )
             env = _normalize_action_space(env)
+            if reuse_for_eval and render_mode is None:
+                from env_builder.gym_state import GymStateWrapper
+
+                try:
+                    env = GymStateWrapper(env)
+                except (TypeError, ValueError):
+                    env.close()
+                    raise
+                if seed is None:
+                    env.reset()
             seed_env(env, seed)
             return env
 
@@ -184,7 +204,7 @@ def get_env_builder(
         env = eval_env = None
         try:
             env = env_builder(num_workers, seed=seed)
-            eval_env = env_builder(num_workers, seed=eval_seed)
+            eval_env = env if reuse_for_eval else env_builder(num_workers, seed=eval_seed)
             return PreparedEnvSpec(
                 env=env,
                 eval_env=eval_env,
@@ -468,10 +488,15 @@ class GymVectorizedEnv(VectorizedEnv):
     Used when EnvPool doesn't support the requested environment.
     """
 
-    def __init__(self, env_id, worker_num=8, seed=None, observation_key=None):
+    def __init__(
+        self, env_id, worker_num=8, seed=None, observation_key=None, *, reuse_for_eval=False
+    ):
         self.env_id = env_id
         self.worker_num = worker_num
         self._observation_key = observation_key
+        self._reuse_for_eval = reuse_for_eval
+        self._evaluation_active = False
+        self._pending_result: tuple[Observation, Any, Any, Any, dict[str, Any]] | None = None
 
         # Create vectorized environment using gymnasium
         # For Atari, we need to use custom wrappers, so we use AsyncVectorEnv with explicit constructors
@@ -479,18 +504,35 @@ class GymVectorizedEnv(VectorizedEnv):
 
         env_type, _ = get_env_type(env_id)
         self._is_atari = env_type == "atari_env"
+        spec = gym.spec(env_id)
 
         def make_env():
             def _make():
                 if self._is_atari:
                     env = make_wrap_atari(env_id, clip_rewards=True)
                 else:
-                    env = gym.make(env_id)
-                return _normalize_action_space(env)
+                    env = gym.make(spec)
+                env = _normalize_action_space(env)
+                if reuse_for_eval:
+                    from env_builder.gym_state import GymStateWrapper
+
+                    try:
+                        return GymStateWrapper(gym.wrappers.Autoreset(env))
+                    except (TypeError, ValueError):
+                        env.close()
+                        raise
+                return env
 
             return _make
 
-        if env_type != "atari_env":
+        if reuse_for_eval:
+            # Keep NEXT_STEP reset state inside a wrapper that can be snapshotted.
+            vector_env = gym.vector.AsyncVectorEnv(
+                [make_env() for _ in range(worker_num)],
+                context="spawn",
+                autoreset_mode=gym.vector.AutoresetMode.DISABLED,
+            )
+        elif env_type != "atari_env":
             # Non-Atari: prefer the registry's efficient make_vec, falling back to
             # explicit AsyncVectorEnv if the env has no vectorized entry point.
             try:
@@ -557,6 +599,8 @@ class GymVectorizedEnv(VectorizedEnv):
 
     def step(self, actions):
         """Dispatch actions without blocking (gymnasium ``step_async``)."""
+        if self._awaiting_result:
+            raise RuntimeError("step() called before collecting the preceding result")
         self.env.step_async(self.action_conv(actions))
         self._awaiting_result = True
 
@@ -565,12 +609,54 @@ class GymVectorizedEnv(VectorizedEnv):
         if not self._awaiting_result:
             raise RuntimeError("get_result() called without a preceding step()")
         self._awaiting_result = False
+        if self._pending_result is not None:
+            result, self._pending_result = self._pending_result, None
+            self.obs = result[0]
+            return result
 
         next_obs, rewards, terminateds, truncateds, infos = self.env.step_wait()
         next_obs = normalize_observation(next_obs, self._observation_key)
         self.obs = next_obs
 
         return next_obs, rewards, terminateds, truncateds, infos
+
+    @contextmanager
+    def evaluation_context(self) -> Iterator[None]:
+        if not self._reuse_for_eval:
+            yield
+            return
+        if self._evaluation_active:
+            raise RuntimeError("Training environment is already borrowed for evaluation")
+        from env_builder.gym_state import preserve_gym_spaces
+
+        observation = self.obs
+        awaiting = self._awaiting_result
+        pending = self.get_result() if awaiting else None
+        vector_observation = deepcopy(self.env.observations)
+        global_rng = random.getstate(), np.random.get_state()
+        with preserve_gym_spaces(self.env.action_space, self.env.observation_space):
+            self._evaluation_active = True
+            try:
+                self.env.call("save_training_state")
+                try:
+                    yield
+                finally:
+                    # Finish an evaluation step even when its action callback raises.
+                    if self._awaiting_result:
+                        self.get_result()
+                    self.env.call("restore_training_state")
+            finally:
+                concatenate(
+                    self.env.single_observation_space,
+                    tuple(iterate(self.env.observation_space, vector_observation)),
+                    self.env.observations,
+                )
+                self.obs = observation
+                self._pending_result = pending
+                self._awaiting_result = awaiting
+                self._evaluation_active = False
+                random.setstate(global_rng[0])
+                np.random.set_state(global_rng[1])
 
     def real_reset_mask(self, terminateds, truncateds, infos):
         return _real_reset_mask(self._is_atari, terminateds, truncateds, infos)

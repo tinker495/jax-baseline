@@ -134,7 +134,7 @@ def test_is_envpool_supported_false_and_quiet_for_unknown_env(recwarn):
 
 
 def _fake_vec(tag):
-    def _make(env_id, worker_num, seed=None, observation_key=None):
+    def _make(env_id, worker_num, seed=None, observation_key=None, *, reuse_for_eval=False):
         return (tag, env_id, worker_num, observation_key)
 
     return _make

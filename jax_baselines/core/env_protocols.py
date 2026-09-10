@@ -7,6 +7,7 @@ instead of concrete backend packages.
 
 from __future__ import annotations
 
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, TypeAlias, TypedDict, runtime_checkable
 
@@ -100,6 +101,18 @@ class VectorizedEvalEnv(VectorizedEnv, Protocol):
     """Vector environment that can start an independent evaluation measurement."""
 
     def reset(self, *, seed: int | None = None) -> tuple[Observation, dict[str, Any]]:
+        ...
+
+
+@runtime_checkable
+class EvaluationContextEnv(Protocol):
+    """Adapter-owned evaluation isolation, including restoration on failure.
+
+    Shared train/eval environments must preserve their simulator, task, RNG,
+    observation caches and any completed result waiting for collection.
+    """
+
+    def evaluation_context(self) -> AbstractContextManager[None]:
         ...
 
 

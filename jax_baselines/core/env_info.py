@@ -4,6 +4,7 @@ import numpy as np
 
 from jax_baselines.core.env_protocols import (
     EnvInfo,
+    EvaluationContextEnv,
     PreparedEnvSpec,
     PreparedWorkerEnvSpec,
     SingleEnv,
@@ -71,6 +72,8 @@ def _prepare_envs(env_builder, num_workers=1, seed=None):
         raise ValueError("prepare_envs must return PreparedEnvSpec")
     if prepared.eval_env is None:
         raise ValueError("Prepared local eval_env is required")
+    if prepared.env is prepared.eval_env and not isinstance(prepared.env, EvaluationContextEnv):
+        raise ValueError("Shared train/eval env must provide an evaluation_context()")
     return prepared
 
 
