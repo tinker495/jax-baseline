@@ -49,5 +49,12 @@ def test_single_distribution_includes_experiment_packages_and_commands():
         "tensorboardx",
     } <= dependencies
     assert "jax-baselines-adapters" not in dependencies
-    assert {"all", "distributed", "envpool", "haiku"} <= set(project["optional-dependencies"])
-    assert config["dependency-groups"]["dev"][0] == "jax-baselines[all]"
+    assert {"all", "mjlab", "distributed", "envpool", "haiku"} <= set(
+        project["optional-dependencies"]
+    )
+    assert set(config["dependency-groups"]["dev"]) == {"pre-commit", "pytest"}
+    assert not any(
+        item.get("group") == "dev"
+        for conflict in config["tool"]["uv"].get("conflicts", [])
+        for item in conflict
+    )

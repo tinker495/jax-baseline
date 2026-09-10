@@ -39,6 +39,7 @@ distributed = ["ray"]
 envpool = ["envpool"]
 haiku = ["dm-haiku"]
 mujoco = ["gymnasium[mujoco]"]
+mjlab = ["mjlab>=1.6,<1.7; python_version < '3.14'"]
 other = ["gymnasium[other]"]
 wandb = ["wandb"]
 all = [
@@ -69,7 +70,6 @@ dashboard = "experiments.cli.dashboard:main"
 
 [dependency-groups]
 dev = [
-    "jax-baselines[all]",
     "pre-commit",
     "pytest",
 ]
@@ -85,6 +85,10 @@ experiments = ["configs/*.yaml"]
 
 [tool.uv]
 package = true
+conflicts = [
+    [{ extra = "mjlab" }, { extra = "all" }],
+    [{ extra = "mjlab" }, { extra = "other" }],
+]
 
 [tool.uv.sources]
 cpprb = { git = "https://github.com/tinker495/cpprb" }

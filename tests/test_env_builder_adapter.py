@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import ast
 import importlib
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import gymnasium as gym
 import numpy as np
@@ -23,11 +25,6 @@ from jax_baselines.core.env_protocols import (
     SingleEnv,
     VectorizedEnv,
 )
-
-
-class _ObservationSpace:
-    def __init__(self, shape):
-        self.shape = shape
 
 
 class _DiscreteActionSpace:
@@ -405,8 +402,8 @@ def test_experiments_composition_path_uses_adapter_prepared_envs(monkeypatch):
 
     calls = []
 
-    def fake_get_env_builder(env_name, env_backend="gymnasium"):
-        calls.append(("get_env_builder", env_name, {"env_backend": env_backend}))
+    def fake_get_env_builder(env_name, **kwargs):
+        calls.append(("get_env_builder", env_name, kwargs))
 
         def builder(*args, **kwargs):
             raise AssertionError("core must not call the raw builder on the experiments path")
@@ -459,10 +456,120 @@ def test_experiments_composition_path_uses_adapter_prepared_envs(monkeypatch):
         (
             "get_env_builder",
             "CartPole-v1",
-            {"env_backend": "gymnasium"},
+            {
+                "env_backend": "gymnasium",
+                "observation_key": None,
+                "episode_length": None,
+                "device": "cuda:0",
+            },
         ),
         ("prepare_envs", 4, 21),
     ]
+
+
+def test_mjlab_backend_is_lazy_and_receives_its_supported_options(monkeypatch):
+    adapter = importlib.import_module("env_builder.env_builder")
+    calls = []
+
+    def make_mjlab_env(env_id, **kwargs):
+        calls.append(("mjlab", env_id, kwargs))
+        return _FakeSingleEnv()
+
+    monkeypatch.setitem(
+        sys.modules, "env_builder.mjlab_env", SimpleNamespace(make_mjlab_env=make_mjlab_env)
+    )
+
+    mjlab, mjlab_info = adapter.get_env_builder(
+        "cartpole",
+        "mjlab",
+        observation_key="policy.obs",
+        episode_length=7,
+        device="cpu",
+    )
+
+    mjlab(3, seed=4, render_mode="rgb_array")
+    assert calls == [
+        (
+            "mjlab",
+            "cartpole",
+            {
+                "worker_num": 3,
+                "seed": 4,
+                "observation_key": "policy.obs",
+                "episode_length": 7,
+                "device": "cpu",
+                "render_mode": "rgb_array",
+            },
+        ),
+    ]
+    assert mjlab.supports_render is mjlab_info["supports_render"] is True
+
+
+@pytest.mark.parametrize("backend", ["mjx", "isaaclab"])
+def test_removed_backends_are_rejected(backend):
+    adapter = importlib.import_module("env_builder.env_builder")
+
+    with pytest.raises(ValueError, match="env_backend must be one of"):
+        adapter.get_env_builder("cartpole", backend)
+
+
+def test_prepare_envs_closes_train_when_eval_construction_fails(monkeypatch):
+    adapter = importlib.import_module("env_builder.env_builder")
+    train = _FakeSingleEnv()
+    train.closed = False
+    train.close = lambda: setattr(train, "closed", True)
+    calls = iter((train, RuntimeError("eval failed")))
+
+    def make_mjlab_env(*args, **kwargs):
+        result = next(calls)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setitem(
+        sys.modules, "env_builder.mjlab_env", SimpleNamespace(make_mjlab_env=make_mjlab_env)
+    )
+    builder, _ = adapter.get_env_builder("cartpole", "mjlab")
+
+    with pytest.raises(RuntimeError, match="eval failed"):
+        builder.prepare_envs(num_workers=2, seed=3)
+
+    assert train.closed is True
+
+
+def test_shared_local_cli_env_options_forward_to_builder(monkeypatch):
+    import experiments.cli.pg as pg
+
+    captured = {}
+    monkeypatch.setattr(
+        pg,
+        "get_env_builder",
+        lambda env, **kwargs: (captured.update(env=env, **kwargs) or (lambda: None), {}),
+    )
+    parser = importlib.import_module("argparse").ArgumentParser()
+    pg.PG_RUNNER.add_args(parser)
+    args = parser.parse_args(
+        [
+            "--env_backend",
+            "mjlab",
+            "--env_observation_key",
+            "policy.joints",
+            "--env_episode_length",
+            "12",
+            "--env_device",
+            "cpu",
+        ]
+    )
+
+    pg.PG_RUNNER.build_env(args)
+
+    assert captured == {
+        "env": "Pendulum-v1",
+        "env_backend": "mjlab",
+        "observation_key": "policy.joints",
+        "episode_length": 12,
+        "device": "cpu",
+    }
 
 
 def test_core_env_info_does_not_infer_concrete_space_shapes():

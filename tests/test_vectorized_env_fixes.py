@@ -134,8 +134,8 @@ def test_is_envpool_supported_false_and_quiet_for_unknown_env(recwarn):
 
 
 def _fake_vec(tag):
-    def _make(env_id, worker_num, seed=None):
-        return (tag, env_id, worker_num)
+    def _make(env_id, worker_num, seed=None, observation_key=None):
+        return (tag, env_id, worker_num, observation_key)
 
     return _make
 
@@ -144,14 +144,21 @@ def test_env_builder_default_backend_is_gymnasium(monkeypatch):
     monkeypatch.setattr(eb, "GymVectorizedEnv", _fake_vec("gym"))
     monkeypatch.setattr(eb, "EnvPoolVectorizedEnv", _fake_vec("envpool"))
     builder, _ = eb.get_env_builder("CartPole-v1")  # default backend
-    assert builder(worker=4, seed=0) == ("gym", "CartPole-v1", 4)
+    assert builder(worker=4, seed=0) == ("gym", "CartPole-v1", 4, None)
 
 
 def test_env_builder_envpool_backend_uses_envpool(monkeypatch):
     monkeypatch.setattr(eb, "GymVectorizedEnv", _fake_vec("gym"))
     monkeypatch.setattr(eb, "EnvPoolVectorizedEnv", _fake_vec("envpool"))
     builder, _ = eb.get_env_builder("CartPole-v1", env_backend="envpool")
-    assert builder(worker=4, seed=0) == ("envpool", "CartPole-v1", 4)
+    assert builder(worker=4, seed=0) == ("envpool", "CartPole-v1", 4, None)
+
+
+def test_env_builder_threads_observation_key_to_vector_backend(monkeypatch):
+    monkeypatch.setattr(eb, "GymVectorizedEnv", _fake_vec("gym"))
+    builder, _ = eb.get_env_builder("DictEnv-v0", observation_key="policy")
+
+    assert builder(worker=4, seed=0) == ("gym", "DictEnv-v0", 4, "policy")
 
 
 def test_env_builder_envpool_backend_unsupported_env_raises():
@@ -182,6 +189,7 @@ def _fake_recv_env(is_atari):
     """
     env = eb.EnvPoolVectorizedEnv.__new__(eb.EnvPoolVectorizedEnv)
     env._is_atari = is_atari
+    env._observation_key = None
     env.worker_num = 2
     env.obs = None
     env._awaiting_recv = True
@@ -260,6 +268,7 @@ def test_envpool_get_result_resorts_recv_into_canonical_env_order():
     # the rollout loops index scores/prev_done/replay rows by that position.
     env = eb.EnvPoolVectorizedEnv.__new__(eb.EnvPoolVectorizedEnv)
     env._is_atari = False
+    env._observation_key = None
     env.worker_num = 3
     env.obs = None
     env._awaiting_recv = True

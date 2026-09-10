@@ -95,11 +95,47 @@ def _prepared_env_info(env, env_id: str) -> EnvInfo:
     return _single_env_info(env, env_id)
 
 
-def get_env_builder(env_name, env_backend="gymnasium"):
-    if env_backend not in ("gymnasium", "envpool"):
-        raise ValueError(f"env_backend must be 'gymnasium' or 'envpool', got {env_backend!r}")
+_ENV_BACKENDS = ("gymnasium", "envpool", "mjlab")
+
+
+def _close_envs(*envs):
+    seen = set()
+    for env in envs:
+        if env is None or id(env) in seen:
+            continue
+        seen.add(id(env))
+        close = getattr(env, "close", None)
+        if callable(close):
+            try:
+                close()
+            except Exception:
+                pass
+
+
+def get_env_builder(
+    env_name,
+    env_backend="gymnasium",
+    *,
+    observation_key=None,
+    episode_length=None,
+    device="cuda:0",
+):
+    if env_backend not in _ENV_BACKENDS:
+        raise ValueError(f"env_backend must be one of {_ENV_BACKENDS}, got {env_backend!r}")
 
     def env_builder(worker=1, render_mode=None, seed=None):
+        if env_backend == "mjlab":
+            from env_builder.mjlab_env import make_mjlab_env
+
+            return make_mjlab_env(
+                env_name,
+                worker_num=worker,
+                seed=seed,
+                observation_key=observation_key,
+                episode_length=episode_length,
+                device=device,
+                render_mode=render_mode,
+            )
         if worker > 1:
             # Vectorized backend is an explicit choice: gymnasium AsyncVectorEnv
             # (default, portable) or EnvPool (faster, only for envs it ships).
@@ -109,8 +145,18 @@ def get_env_builder(env_name, env_backend="gymnasium"):
                         f"env_backend='envpool' requested but EnvPool has no spec for "
                         f"{env_name!r}; use env_backend='gymnasium' or a supported env id."
                     )
-                return EnvPoolVectorizedEnv(env_name, worker_num=worker, seed=seed)
-            return GymVectorizedEnv(env_name, worker_num=worker, seed=seed)
+                return EnvPoolVectorizedEnv(
+                    env_name,
+                    worker_num=worker,
+                    seed=seed,
+                    observation_key=observation_key,
+                )
+            return GymVectorizedEnv(
+                env_name,
+                worker_num=worker,
+                seed=seed,
+                observation_key=observation_key,
+            )
         else:
             from env_builder.atari_wrappers import get_env_type, make_wrap_atari
 
@@ -121,8 +167,8 @@ def get_env_builder(env_name, env_backend="gymnasium"):
                 env = gym.make(env_name, render_mode=render_mode)
             env = gym.wrappers.TransformObservation(
                 env,
-                normalize_observation,
-                spaces.Dict(flatten_observation_space(env.observation_space)),
+                lambda observation: normalize_observation(observation, observation_key),
+                spaces.Dict(flatten_observation_space(env.observation_space, observation_key)),
             )
             env = _normalize_action_space(env)
             seed_env(env, seed)
@@ -130,13 +176,18 @@ def get_env_builder(env_name, env_backend="gymnasium"):
 
     def prepare_envs(num_workers=1, seed=None):
         eval_seed = None if seed is None else seed + 1
-        env = env_builder(num_workers, seed=seed)
-        eval_env = env_builder(1, seed=eval_seed)
-        return PreparedEnvSpec(
-            env=env,
-            eval_env=eval_env,
-            env_info=_prepared_env_info(env, env_name),
-        )
+        env = eval_env = None
+        try:
+            env = env_builder(num_workers, seed=seed)
+            eval_env = env_builder(1, seed=eval_seed)
+            return PreparedEnvSpec(
+                env=env,
+                eval_env=eval_env,
+                env_info=_prepared_env_info(env, env_name),
+            )
+        except Exception:
+            _close_envs(env, eval_env)
+            raise
 
     def prepare_worker_env(seed=None):
         env = env_builder(1, seed=seed)
@@ -144,10 +195,12 @@ def get_env_builder(env_name, env_backend="gymnasium"):
 
     env_builder.prepare_envs = prepare_envs
     env_builder.prepare_worker_env = prepare_worker_env
+    env_builder.supports_render = True
 
     env_info = {
         "env_type": "adapter_factory",
         "env_id": env_name,
+        "supports_render": env_builder.supports_render,
     }
     return env_builder, env_info
 
@@ -206,11 +259,12 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
     - High performance: Up to 1M FPS for Atari, 3M FPS for MuJoCo
     """
 
-    def __init__(self, env_id, worker_num=8, seed=None):
+    def __init__(self, env_id, worker_num=8, seed=None, observation_key=None):
         import envpool
 
         self.env_id = env_id
         self.worker_num = worker_num
+        self._observation_key = observation_key
 
         # Convert env_id to EnvPool format
         envpool_env_id = _get_envpool_env_id(env_id)
@@ -378,7 +432,9 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
 
     def _process_observations(self, obs, order):
         """Convert EnvPool outputs to channel-last format expected by models."""
-        normalized = {key: value[order] for key, value in normalize_observation(obs).items()}
+        normalized = normalize_observation(obs, self._observation_key)
+        if order is not None:
+            normalized = {key: value[order] for key, value in normalized.items()}
         if self._is_atari:
             normalized = {
                 key: np.transpose(value, (0, 2, 3, 1)) if value.ndim == 4 else value
@@ -392,7 +448,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
             low = np.transpose(obs_space.low, (1, 2, 0))
             high = np.transpose(obs_space.high, (1, 2, 0))
             obs_space = spaces.Box(low=low, high=high, dtype=obs_space.dtype)
-        return normalize_observation_space(obs_space)
+        return normalize_observation_space(obs_space, self._observation_key)
 
 
 class GymVectorizedEnv(VectorizedEnv):
@@ -401,9 +457,10 @@ class GymVectorizedEnv(VectorizedEnv):
     Used when EnvPool doesn't support the requested environment.
     """
 
-    def __init__(self, env_id, worker_num=8, seed=None):
+    def __init__(self, env_id, worker_num=8, seed=None, observation_key=None):
         self.env_id = env_id
         self.worker_num = worker_num
+        self._observation_key = observation_key
 
         # Create vectorized environment using gymnasium
         # For Atari, we need to use custom wrappers, so we use AsyncVectorEnv with explicit constructors
@@ -447,7 +504,9 @@ class GymVectorizedEnv(VectorizedEnv):
         # Store environment info
         action_size, action_type = _action_meta(self.env.single_action_space)
         self.env_info: EnvInfo = {
-            "observation_space": normalize_observation_space(self.env.single_observation_space),
+            "observation_space": normalize_observation_space(
+                self.env.single_observation_space, self._observation_key
+            ),
             "action_size": action_size,
             "action_type": action_type,
             "env_type": "gym_vector",
@@ -476,7 +535,7 @@ class GymVectorizedEnv(VectorizedEnv):
 
         # Initialize
         self.obs, _ = self.env.reset(seed=seed)
-        self.obs = normalize_observation(self.obs)
+        self.obs = normalize_observation(self.obs, self._observation_key)
         self._awaiting_result = False
 
     def get_info(self):
@@ -497,7 +556,7 @@ class GymVectorizedEnv(VectorizedEnv):
         self._awaiting_result = False
 
         next_obs, rewards, terminateds, truncateds, infos = self.env.step_wait()
-        next_obs = normalize_observation(next_obs)
+        next_obs = normalize_observation(next_obs, self._observation_key)
         self.obs = next_obs
 
         return next_obs, rewards, terminateds, truncateds, infos
