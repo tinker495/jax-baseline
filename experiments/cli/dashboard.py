@@ -15,6 +15,7 @@ Unknown arguments are forwarded to the underlying viewer, e.g.
 from __future__ import annotations
 
 import argparse
+import functools
 import importlib.util
 import os
 import shutil
@@ -119,9 +120,7 @@ def main(argv=None) -> int:
         package = "aim"
         repo = args.aim_repo or ".aim"
         cmd = ["aim", "up", "--repo", repo, "--host", args.host]
-
-        def prepare():
-            _ensure_aim_repo(repo)
+        prepare = functools.partial(_ensure_aim_repo, repo)
 
     if args.port is not None:
         cmd += ["--port", str(args.port)]
