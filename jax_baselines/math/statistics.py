@@ -48,7 +48,7 @@ class RunningMeanStd:
     def __init__(self, epsilon=1e-4, shapes: dict | None = None, dtype=np.float64):
         """Tracks the mean, variance and count of values."""
         if shapes is None:
-            shapes = {"obs": ()}
+            shapes = {"unified_obs": ()}
         elif not isinstance(shapes, dict):
             raise TypeError("shapes must be a dict")
         self.dtype = np.dtype(dtype)

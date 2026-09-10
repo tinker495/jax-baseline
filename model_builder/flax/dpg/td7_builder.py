@@ -7,7 +7,11 @@ from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense, avgl1norm
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import dummy_observation, print_flax_model_summary
+from model_builder.utils import (
+    ActorCriticFeatures,
+    dummy_observation,
+    print_flax_model_summary,
+)
 
 
 class Encoder(nn.Module):
@@ -16,13 +20,13 @@ class Encoder(nn.Module):
     layer: nn.Module = Dense
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
         encoder = nn.Sequential(
             [
                 self.layer(self.node) if i % 2 == 0 else jax.nn.elu
                 for i in range(2 * self.hidden_n - 1)
             ]
-        )(feature)
+        )(features["actor"])
         return avgl1norm(encoder)
 
 
@@ -50,8 +54,8 @@ class Actor(nn.Module):
     layer: nn.Module = Dense
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray, zs: jnp.ndarray) -> jnp.ndarray:
-        a0 = avgl1norm(self.layer(self.node)(feature))
+    def __call__(self, features: ActorCriticFeatures, zs: jnp.ndarray) -> jnp.ndarray:
+        a0 = avgl1norm(self.layer(self.node)(features["actor"]))
         embed_concat = jnp.concatenate([a0, zs], axis=1)
         action = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
@@ -70,9 +74,13 @@ class Critic(nn.Module):
 
     @nn.compact
     def __call__(
-        self, feature: jnp.ndarray, zs: jnp.ndarray, zsa: jnp.ndarray, actions: jnp.ndarray
+        self,
+        features: ActorCriticFeatures,
+        zs: jnp.ndarray,
+        zsa: jnp.ndarray,
+        actions: jnp.ndarray,
     ) -> jnp.ndarray:
-        concat = jnp.concatenate([feature, actions], axis=1)
+        concat = jnp.concatenate([features["critic"], actions], axis=1)
         embedding = jnp.concatenate([zs, zsa], axis=1)
         q0 = avgl1norm(self.layer(self.node)(concat))
         embed_concat = jnp.concatenate([q0, embedding], axis=1)
@@ -89,7 +97,9 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
     def model_builder(key=None, print_model=False):
         class Merge_encoder(nn.Module):
             def setup(self):
-                self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
+                self.preproc = PreProcess(
+                    observation_space, embedding_mode=embedding_mode, paired=True
+                )
                 self.enc = Encoder()
                 self.act_enc = Action_Encoder()
 
@@ -100,7 +110,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 return feature, zs, zsa
 
             def preprocess(self, x):
-                return self.preproc(x)
+                return self.preproc.actor_critic(x)
 
             def encoder(self, feature):
                 return self.enc(feature)
@@ -123,7 +133,10 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 return q
 
             def critic(self, feature, zs, zsa, a):
-                return (self.crit1(feature, zs, zsa, a), self.crit2(feature, zs, zsa, a))
+                return (
+                    self.crit1(feature, zs, zsa, a),
+                    self.crit2(feature, zs, zsa, a),
+                )
 
         encoder_model = Merge_encoder()
         preproc_fn = get_apply_fn_flax_module(encoder_model, encoder_model.preprocess)

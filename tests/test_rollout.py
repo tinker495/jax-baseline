@@ -125,19 +125,19 @@ class FakeSingleEnv:
     def reset(self):
         self.rec.append(("reset",))
         self.c += 1
-        return {"obs": np.array([float(self.c)])}, {}
+        return {"unified_obs": np.array([float(self.c)])}, {}
 
     def true_reset(self):
         self.rec.append(("true_reset",))
         self.c += 1
-        return {"obs": np.array([float(self.c)])}, {}
+        return {"unified_obs": np.array([float(self.c)])}, {}
 
     def step(self, action):
         self.rec.append(("env_step", rep(action)))
         r, term, trunc = self.script[self.t]
         self.t += 1
         self.c += 1
-        return {"obs": np.array([float(self.c)])}, r, term, trunc, {}
+        return {"unified_obs": np.array([float(self.c)])}, r, term, trunc, {}
 
 
 class FakeVecEnv:
@@ -151,7 +151,7 @@ class FakeVecEnv:
 
     def current_obs(self):
         self.c += 1
-        return {"obs": np.array([float(self.c)] * self.ws)}
+        return {"unified_obs": np.array([float(self.c)] * self.ws)}
 
     def step(self, actions):
         self.rec.append(("env_step", rep(actions)))
@@ -160,7 +160,7 @@ class FakeVecEnv:
 
     def get_result(self):
         rewards, terms, truncs = self._last
-        nxt = {"obs": np.array([float(self.c) + 0.5] * self.ws)}
+        nxt = {"unified_obs": np.array([float(self.c) + 0.5] * self.ws)}
         return nxt, rewards, terms, truncs, {}
 
     def true_reset(self):
@@ -849,7 +849,7 @@ def test_qnet_single_action_double_indexes_discrete_action():
     agent.update_eps = 0.5
     agent.actions = lambda obs, eps: np.array([[7]])
 
-    sel = agent._single_action_selection(["obs"], steps=3)
+    sel = agent._single_action_selection(["unified_obs"], steps=3)
 
     assert sel.env_action == 7
     assert list(sel.store_action) == [7]
@@ -880,7 +880,7 @@ def test_dpg_single_action_single_indexes_continuous_action():
     agent = Deteministic_Policy_Gradient_Family.__new__(Deteministic_Policy_Gradient_Family)
     agent.actions = lambda obs, steps: np.array([[0.5]])
 
-    sel = agent._single_action_selection(["obs"], steps=3)
+    sel = agent._single_action_selection(["unified_obs"], steps=3)
 
     assert list(sel.env_action) == [0.5]
     assert list(sel.store_action) == [0.5]
@@ -925,7 +925,7 @@ class _ShapeCheckingEvalEnv:
         self.actions = []
 
     def reset(self):
-        return {"obs": np.zeros(3)}, {}
+        return {"unified_obs": np.zeros(3)}, {}
 
     def step(self, action):
         action = np.asarray(action)
@@ -934,7 +934,7 @@ class _ShapeCheckingEvalEnv:
                 f"Action dimension mismatch. Expected {self.action_shape}, found {action.shape}"
             )
         self.actions.append(action)
-        return {"obs": np.zeros(3)}, 0.0, True, False, {}
+        return {"unified_obs": np.zeros(3)}, 0.0, True, False, {}
 
 
 def _dpg_action_agent():
@@ -949,7 +949,7 @@ def _dpg_action_agent():
     agent.worker_size = 1
     agent.action_size = (1,)
     agent._select_action_state = lambda eval, steps: {"encoder": None, "policy": None}
-    agent._policy_action_from_state = lambda state, obs, eval, steps: np.asarray(obs["obs"])
+    agent._policy_action_from_state = lambda state, obs, eval, steps: np.asarray(obs["unified_obs"])
     agent._apply_action_noise = lambda actions, steps, eval: actions
     return agent
 
@@ -957,23 +957,23 @@ def _dpg_action_agent():
 def test_dpg_rollout_actions_use_policy_update_normalizer_and_update_live_rms():
     agent = _dpg_action_agent()
 
-    action = agent.actions({"obs": np.array([1.0])}, steps=5, eval=False)
+    action = agent.actions({"unified_obs": np.array([1.0])}, steps=5, eval=False)
 
     assert np.array_equal(action, np.array([11.0]))
-    assert agent.obs_rms.calls == [("update", {"obs": np.array([1.0])})]
-    assert agent.action_obs_rms.calls == [("normalize", {"obs": np.array([1.0])})]
+    assert agent.obs_rms.calls == [("update", {"unified_obs": np.array([1.0])})]
+    assert agent.action_obs_rms.calls == [("normalize", {"unified_obs": np.array([1.0])})]
     assert agent.checkpoint_obs_rms.calls == []
 
 
 def test_dpg_eval_actions_use_checkpoint_normalizer():
     agent = _dpg_action_agent()
 
-    action = agent.actions({"obs": np.array([1.0])}, steps=5, eval=True)
+    action = agent.actions({"unified_obs": np.array([1.0])}, steps=5, eval=True)
 
     assert np.array_equal(action, np.array([1001.0]))
     assert agent.obs_rms.calls == []
     assert agent.action_obs_rms.calls == []
-    assert agent.checkpoint_obs_rms.calls == [("normalize", {"obs": np.array([1.0])})]
+    assert agent.checkpoint_obs_rms.calls == [("normalize", {"unified_obs": np.array([1.0])})]
 
 
 def test_dpg_eval_skips_random_warmup_and_uses_policy_action():

@@ -21,10 +21,13 @@ def _continuous_agent(cls, family):
     agent.lamda = 0.95
     agent.gae_normalize = False
     agent.gae_normalize_scope = "batch"
-    agent.preproc = lambda params, key, obses: obses["obs"]
-    agent.critic = lambda params, key, feature: jnp.zeros((*feature.shape[:-1], 1))
+    agent.preproc = lambda params, key, obses: {
+        "actor": obses["unified_obs"],
+        "critic": obses["unified_obs"],
+    }
+    agent.critic = lambda params, key, feature: jnp.zeros((*feature["critic"].shape[:-1], 1))
     agent.actor = lambda params, key, feature: (
-        jnp.zeros((*feature.shape[:-1], 2)),
+        jnp.zeros((*feature["actor"].shape[:-1], 2)),
         jnp.zeros((1, 2)),
     )
     agent.get_logprob = MethodType(family.get_logprob_continuous, agent)
@@ -32,7 +35,9 @@ def _continuous_agent(cls, family):
 
 
 def _rollout(worker_count=2, timesteps=3):
-    obses = [{"obs": np.zeros((timesteps, 3), dtype=np.float32)} for _ in range(worker_count)]
+    obses = [
+        {"unified_obs": np.zeros((timesteps, 3), dtype=np.float32)} for _ in range(worker_count)
+    ]
     actions = [np.zeros((timesteps, 2), dtype=np.float32) for _ in range(worker_count)]
     scalars = [np.zeros((timesteps, 1), dtype=np.float32) for _ in range(worker_count)]
     return obses, actions, scalars
@@ -48,12 +53,11 @@ def _rollout(worker_count=2, timesteps=3):
 def test_continuous_tppo_full_train_step_handles_gaussian_minibatches(cls, family, kind):
     agent = _continuous_agent(cls, family)
     agent.params = {"bias": jnp.asarray(0.0, dtype=jnp.float32)}
-    agent.preproc = lambda params, key, obses: obses["obs"]
     agent.critic = lambda params, key, feature: (
-        jnp.zeros((*feature.shape[:-1], 1)) + params["bias"]
+        jnp.zeros((*feature["critic"].shape[:-1], 1)) + params["bias"]
     )
     agent.actor = lambda params, key, feature: (
-        jnp.zeros((*feature.shape[:-1], 2)) + params["bias"],
+        jnp.zeros((*feature["actor"].shape[:-1], 2)) + params["bias"],
         jnp.zeros((1, 2)),
     )
     agent.optimizer = optax.sgd(1e-3)
@@ -69,7 +73,7 @@ def test_continuous_tppo_full_train_step_handles_gaussian_minibatches(cls, famil
     obses, actions, scalars = _rollout(timesteps=2)
 
     if kind == "local":
-        obses = {"obs": np.stack([observation["obs"] for observation in obses])}
+        obses = {"unified_obs": np.stack([observation["unified_obs"] for observation in obses])}
         agent.gae_normalize = False
         agent.gae_normalize_scope = "batch"
         agent.value_clip = 0.3

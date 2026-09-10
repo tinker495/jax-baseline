@@ -23,27 +23,29 @@ from replay_memory.replay_factory import make_replay_buffer
 H = W = 8
 S = 4  # frame-stack depth, as in Atari
 IMG = [H, W, S]
-OBS = {"obs": IMG}
+OBS = {"unified_obs": IMG}
 
 
 def test_transition_projection_has_one_plain_and_prioritized_shape():
     transitions = {
-        "obs:obs": np.zeros((2, 4), dtype=np.float32),
+        "obs:unified_obs": np.zeros((2, 4), dtype=np.float32),
         "action": np.zeros((2, 1), dtype=np.float32),
         "reward": np.zeros((2, 1), dtype=np.float32),
-        "next_obs:obs": np.ones((2, 4), dtype=np.float32),
+        "next_obs:unified_obs": np.ones((2, 4), dtype=np.float32),
         "done": np.zeros((2, 1), dtype=np.float32),
         "weights": np.ones(2, dtype=np.float32),
         "indexes": np.arange(2),
     }
 
-    plain = _project_transitions(transitions, ["obs:obs"], ["next_obs:obs"])
-    prioritized = _project_transitions(transitions, ["obs:obs"], ["next_obs:obs"], prioritized=True)
+    plain = _project_transitions(transitions, ["obs:unified_obs"], ["next_obs:unified_obs"])
+    prioritized = _project_transitions(
+        transitions, ["obs:unified_obs"], ["next_obs:unified_obs"], prioritized=True
+    )
 
     assert set(plain) == {"obses", "actions", "rewards", "nxtobses", "terminateds"}
     assert set(prioritized) == set(plain) | {"weights", "indexes"}
-    assert plain["obses"] == {"obs": transitions["obs:obs"]}
-    assert plain["nxtobses"] == {"obs": transitions["next_obs:obs"]}
+    assert plain["obses"] == {"unified_obs": transitions["obs:unified_obs"]}
+    assert plain["nxtobses"] == {"unified_obs": transitions["next_obs:unified_obs"]}
 
 
 def _frame(v):
@@ -103,14 +105,18 @@ def _feed_single(buf):
     for base, length in EPISODES:
         for step, (obs, nxt) in enumerate(_episode(base, length)):
             terminated = step == length - 1
-            buf.add({"obs": obs}, 1, 1.0, {"obs": nxt}, terminated, False)
+            buf.add({"unified_obs": obs}, 1, 1.0, {"unified_obs": nxt}, terminated, False)
 
 
 def _assert_lossless(compressed, reference):
     c = compressed.get_buffer()
     r = reference.get_buffer()
-    assert np.array_equal(c["obs:obs"], r["obs:obs"]), "obs0 reconstruction diverged"
-    assert np.array_equal(c["next_obs:obs"], r["next_obs:obs"]), "next_obs0 reconstruction diverged"
+    assert np.array_equal(
+        c["obs:unified_obs"], r["obs:unified_obs"]
+    ), "obs0 reconstruction diverged"
+    assert np.array_equal(
+        c["next_obs:unified_obs"], r["next_obs:unified_obs"]
+    ), "next_obs0 reconstruction diverged"
 
 
 def test_replay_buffer_compress_lossless():
@@ -122,8 +128,8 @@ def test_replay_buffer_compress_lossless():
     _assert_lossless(comp, ref)
     # sample returns both obs and next_obs for the image modality
     smpl = comp.sample(16)
-    assert smpl["obses"]["obs"].shape == (16, H, W, S)
-    assert smpl["nxtobses"]["obs"].shape == (16, H, W, S)
+    assert smpl["obses"]["unified_obs"].shape == (16, H, W, S)
+    assert smpl["nxtobses"]["unified_obs"].shape == (16, H, W, S)
 
 
 def test_prioritized_buffer_compress_lossless():
@@ -134,7 +140,7 @@ def test_prioritized_buffer_compress_lossless():
     assert comp._compress_active is True
     _assert_lossless(comp, ref)
     smpl = comp.sample(16, 0.4)
-    assert smpl["nxtobses"]["obs"].shape == (16, H, W, S)
+    assert smpl["nxtobses"]["unified_obs"].shape == (16, H, W, S)
     assert "weights" in smpl and "indexes" in smpl
 
 
@@ -177,31 +183,41 @@ def test_nstep_multiworker_compress_lossless():
             term = np.array([step == length - 1] * workers)
             trunc = np.array([False] * workers)
             comp.add(
-                {"obs": obs_w}, np.ones((workers, 1)), np.ones(workers), {"obs": nxt_w}, term, trunc
+                {"unified_obs": obs_w},
+                np.ones((workers, 1)),
+                np.ones(workers),
+                {"unified_obs": nxt_w},
+                term,
+                trunc,
             )
             ref.add(
-                {"obs": obs_w}, np.ones((workers, 1)), np.ones(workers), {"obs": nxt_w}, term, trunc
+                {"unified_obs": obs_w},
+                np.ones((workers, 1)),
+                np.ones(workers),
+                {"unified_obs": nxt_w},
+                term,
+                trunc,
             )
     _assert_lossless(comp, ref)
 
 
 def test_vector_obs_compress_is_noop():
     # No image modality -> compression must be inert and still round-trip.
-    vec = {"obs": [4]}
+    vec = {"unified_obs": [4]}
     buf = ReplayBuffer(100, vec, action_space=1, compress_memory=True)
     assert buf._compress_active is False
     for t in range(10):
         buf.add(
-            {"obs": np.arange(t, t + 4, dtype=np.float32)[np.newaxis, :]},
+            {"unified_obs": np.arange(t, t + 4, dtype=np.float32)[np.newaxis, :]},
             1,
             1.0,
-            {"obs": np.arange(t + 1, t + 5, dtype=np.float32)[np.newaxis, :]},
+            {"unified_obs": np.arange(t + 1, t + 5, dtype=np.float32)[np.newaxis, :]},
             t == 9,
             False,
         )
     smpl = buf.sample(5)
-    assert smpl["obses"]["obs"].shape == (5, 4)
-    assert smpl["nxtobses"]["obs"].shape == (5, 4)
+    assert smpl["obses"]["unified_obs"].shape == (5, 4)
+    assert smpl["nxtobses"]["unified_obs"].shape == (5, 4)
 
 
 @pytest.mark.parametrize("prioritized", [False, True])
@@ -255,13 +271,15 @@ def test_multiworker_single_step_image_compress_accepts_vector_done_arrays(prior
     reward = np.ones(2, dtype=np.float32)
     no_done = np.array([False, False])
 
-    buf.add({"obs": obs}, action, reward, {"obs": nxt}, no_done, no_done)
-    buf.add({"obs": obs}, action, reward, {"obs": nxt}, np.array([True, False]), no_done)
+    buf.add({"unified_obs": obs}, action, reward, {"unified_obs": nxt}, no_done, no_done)
+    buf.add(
+        {"unified_obs": obs}, action, reward, {"unified_obs": nxt}, np.array([True, False]), no_done
+    )
 
     assert len(buf) == 4
     sample = buf.sample(1, 0.4) if prioritized else buf.sample(1)
-    assert sample["obses"]["obs"].shape == (1, H, W, S)
-    assert sample["nxtobses"]["obs"].shape == (1, H, W, S)
+    assert sample["obses"]["unified_obs"].shape == (1, H, W, S)
+    assert sample["nxtobses"]["unified_obs"].shape == (1, H, W, S)
 
 
 @pytest.mark.parametrize("prioritized", [False, True])
@@ -276,12 +294,12 @@ def test_multiworker_single_step_image_compress_is_available_before_done(priorit
     reward = np.ones(2, dtype=np.float32)
     no_done = np.array([False, False])
 
-    buf.add({"obs": obs}, action, reward, {"obs": nxt}, no_done, no_done)
+    buf.add({"unified_obs": obs}, action, reward, {"unified_obs": nxt}, no_done, no_done)
 
     assert len(buf) == 2
     sample = buf.sample(1, 0.4) if prioritized else buf.sample(1)
-    assert sample["obses"]["obs"].shape == (1, H, W, S)
-    assert sample["nxtobses"]["obs"].shape == (1, H, W, S)
+    assert sample["obses"]["unified_obs"].shape == (1, H, W, S)
+    assert sample["nxtobses"]["unified_obs"].shape == (1, H, W, S)
 
 
 @pytest.mark.parametrize("prioritized", [False, True])
@@ -318,9 +336,23 @@ def test_multiworker_single_step_image_compress_store_mask_is_lossless(prioritiz
             axis=0,
         )
         comp.add(
-            {"obs": obs}, action, reward, {"obs": nxt}, no_done, no_done, store_mask=store_mask
+            {"unified_obs": obs},
+            action,
+            reward,
+            {"unified_obs": nxt},
+            no_done,
+            no_done,
+            store_mask=store_mask,
         )
-        ref.add({"obs": obs}, action, reward, {"obs": nxt}, no_done, no_done, store_mask=store_mask)
+        ref.add(
+            {"unified_obs": obs},
+            action,
+            reward,
+            {"unified_obs": nxt},
+            no_done,
+            no_done,
+            store_mask=store_mask,
+        )
 
     _assert_lossless(comp, ref)
 
@@ -346,7 +378,13 @@ def test_multiworker_single_step_image_compress_does_not_cap_long_episode(priori
     for step in range(2501):
         terminated = np.array([step == 2500, False])
         buf.add(
-            {"obs": obs}, action, reward, {"obs": nxt}, terminated, truncated, store_mask=store_mask
+            {"unified_obs": obs},
+            action,
+            reward,
+            {"unified_obs": nxt},
+            terminated,
+            truncated,
+            store_mask=store_mask,
         )
 
     assert len(buf) == 2501
@@ -389,4 +427,4 @@ def test_multiprioritized_warns_and_keeps_next_obs():
             compress_memory=True,
         )
     # central buffer must store next_obs fully (no broken deletion)
-    assert "next_obs:obs" in mp.env_dict
+    assert "next_obs:unified_obs" in mp.env_dict

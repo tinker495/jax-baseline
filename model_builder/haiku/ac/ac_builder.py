@@ -3,7 +3,11 @@ import jax
 import jax.numpy as jnp
 
 from model_builder.haiku.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import dummy_observation, print_haiku_model_summary
+from model_builder.utils import (
+    ActorCriticFeatures,
+    dummy_observation,
+    print_haiku_model_summary,
+)
 
 
 class Actor(hk.Module):
@@ -15,10 +19,10 @@ class Actor(hk.Module):
         self.hidden_n = hidden_n
         self.layer = hk.Linear
 
-    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
         mlp = hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-        )(feature)
+        )(features["actor"])
         if self.action_type == "discrete":
             return self.layer(
                 self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
@@ -40,11 +44,11 @@ class Critic(hk.Module):
         self.hidden_n = hidden_n
         self.layer = hk.Linear
 
-    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
         return hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
-        )(feature)
+        )(features["critic"])
 
 
 def model_builder_maker(observation_space, action_size, action_type, policy_kwargs):
@@ -52,7 +56,9 @@ def model_builder_maker(observation_space, action_size, action_type, policy_kwar
 
     def _model_builder(key=None, print_model=False):
         preproc = hk.transform(
-            lambda x: PreProcess(observation_space, embedding_mode=embedding_mode)(x)
+            lambda x: PreProcess(
+                observation_space, embedding_mode=embedding_mode, paired=True
+            ).actor_critic(x)
         )
         actor = hk.transform(lambda x: Actor(action_size, action_type, **policy_kwargs)(x))
         critic = hk.transform(lambda x: Critic(**policy_kwargs)(x))

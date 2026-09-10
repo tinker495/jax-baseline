@@ -12,6 +12,7 @@ import jax.numpy as jnp
 
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense
+from model_builder.utils import ActorCriticFeatures
 
 
 class Actor(nn.Module):
@@ -21,14 +22,14 @@ class Actor(nn.Module):
     layer: nn.Module = Dense
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
         action = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [
                 self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3)),
                 jax.nn.tanh,
             ]
-        )(feature)
+        )(features["actor"])
         return action
 
 
@@ -38,8 +39,8 @@ class Critic(nn.Module):
     layer: nn.Module = Dense
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([feature, actions], axis=1)
+    def __call__(self, features: ActorCriticFeatures, actions: jnp.ndarray) -> jnp.ndarray:
+        concat = jnp.concatenate([features["critic"], actions], axis=1)
         q_net = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [self.layer(1, kernel_init=clip_factorized_uniform(3))]

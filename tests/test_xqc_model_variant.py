@@ -6,7 +6,7 @@ from model_builder.flax.dpg.xqc_builder import model_builder_maker
 
 def test_xqc_builder_uses_four_layer_batchnorm_mlp():
     builder = model_builder_maker(
-        {"obs": [4]},
+        {"unified_obs": [4]},
         [2],
         {"node": 16, "hidden_n": 1, "embedding_mode": "normal"},
     )
@@ -27,7 +27,7 @@ def test_xqc_builder_uses_four_layer_batchnorm_mlp():
     assert critic_one["Dense_3"]["kernel"].shape == (32, 32)
     assert critic_one["Dense_4"]["kernel"].shape == (32, 101)
 
-    feature = preproc(policy_params, None, {"obs": jnp.zeros((2, 4), dtype=jnp.float32)})
+    feature = preproc(policy_params, None, {"unified_obs": jnp.zeros((2, 4), dtype=jnp.float32)})
     (mu, log_std), actor_updates = actor(policy_params, None, feature, True)
     (q1, q2), critic_updates = critic(
         critic_params, None, feature, jnp.zeros((2, 2), dtype=jnp.float32), True

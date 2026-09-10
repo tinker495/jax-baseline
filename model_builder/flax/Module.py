@@ -1,4 +1,5 @@
-from typing import Any, Callable, Optional, Tuple
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any
 
 import flax
 import flax.linen as nn
@@ -11,6 +12,8 @@ from flax.linen.module import (  # pylint: disable=g-multiple-import
 from flax.linen.normalization import _canonicalize_axes, _compute_stats, _normalize
 from jax import lax
 from jax.nn import initializers
+
+from model_builder.utils import ActorCriticFeatures, observation_role_keys
 
 
 class ResBlock(nn.Module):
@@ -61,7 +64,7 @@ def flatten_fn(x: jnp.ndarray) -> jnp.ndarray:
     return x.reshape((x.shape[0], -1))
 
 
-def pop_embedding_mode(policy_kwargs: Optional[dict], default: str = "normal") -> Tuple[dict, str]:
+def pop_embedding_mode(policy_kwargs: dict | None, default: str = "normal") -> tuple[dict, str]:
     """Normalize policy_kwargs and split out the embedding_mode entry.
 
     Returns the (mutated) policy_kwargs dict with ``embedding_mode`` removed and
@@ -122,13 +125,16 @@ def visual_embedding(
 
 
 class PreProcess(nn.Module):
-    states_size: dict[str, Tuple[int, ...]]
+    states_size: Mapping[str, Sequence[int]]
     embedding_mode: str = "normal"
     flatten: bool = True
     pre_postprocess: Callable = lambda x: x  # Identity function
     multiple: int = 1
+    paired: bool = False
 
     def setup(self):
+        self.role_keys = observation_role_keys(self.states_size, self.paired)
+        selected = {key for keys in self.role_keys.values() for key in keys}
         self.embedding = {
             key: (
                 visual_embedding(self.embedding_mode, self.flatten, multiple=self.multiple)
@@ -136,28 +142,39 @@ class PreProcess(nn.Module):
                 else lambda x: x
             )
             for key, st in self.states_size.items()
+            if key in selected
         }
 
     @nn.compact
     def __call__(self, obses: dict[str, jnp.ndarray]) -> jnp.ndarray:
         return self.pre_postprocess(
             jnp.concatenate(
-                [pre(obses[key]) for key, pre in self.embedding.items()],
-                axis=1,
+                [self.embedding[key](obses[key]) for key in self.role_keys["actor"]], axis=1
             )
+        )
+
+    def actor_critic(self, obses: dict[str, jnp.ndarray]) -> ActorCriticFeatures:
+        embedded = {key: pre(obses[key]) for key, pre in self.embedding.items()}
+        return ActorCriticFeatures(
+            actor=self.pre_postprocess(
+                jnp.concatenate([embedded[key] for key in self.role_keys["actor"]], axis=1)
+            ),
+            critic=self.pre_postprocess(
+                jnp.concatenate([embedded[key] for key in self.role_keys["critic"]], axis=1)
+            ),
         )
 
     @property
     def output_size(self):
         return sum(
-            pre(jnp.zeros((1,) + self.states_size[key])).shape[1]
+            pre(jnp.zeros((1, *self.states_size[key]))).shape[1]
             for key, pre in self.embedding.items()
         )
 
 
 PRNGKey = Any
 Array = Any
-Shape = Tuple[int, ...]
+Shape = tuple[int, ...]
 Dtype = Any  # this could be a real type?
 
 
@@ -194,24 +211,24 @@ class BatchReNorm(Module):
         calculation for the variance.
     """
 
-    use_running_average: Optional[bool] = None
+    use_running_average: bool | None = None
     axis: int = -1
     momentum: float = 0.999
     epsilon: float = 0.001
-    dtype: Optional[Dtype] = None
+    dtype: Dtype | None = None
     param_dtype: Dtype = jnp.float32
     use_bias: bool = True
     use_scale: bool = True
     bias_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.zeros
     scale_init: Callable[[PRNGKey, Shape, Dtype], Array] = initializers.ones
-    axis_name: Optional[str] = None
+    axis_name: str | None = None
     axis_index_groups: Any = None
     r_max: float = 3.0
     d_max: float = 5.0
     use_fast_variance: bool = True
 
     @compact
-    def __call__(self, x, use_running_average: Optional[bool] = None):
+    def __call__(self, x, use_running_average: bool | None = None):
         """
         Args:
           x: the input to be normalized.

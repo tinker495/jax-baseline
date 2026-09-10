@@ -12,7 +12,11 @@ from model_builder.flax.layers import (
     SimbaV2Head,
 )
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import dummy_observation, print_flax_model_summary
+from model_builder.utils import (
+    ActorCriticFeatures,
+    dummy_observation,
+    print_flax_model_summary,
+)
 
 
 class Actor(nn.Module):
@@ -21,8 +25,8 @@ class Actor(nn.Module):
     hidden_n: int = 2
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
-        encoded = SimbaV2Embedding(self.node)(feature)
+    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
+        encoded = SimbaV2Embedding(self.node)(features["actor"])
         for _ in range(self.hidden_n):
             encoded = SimbaV2Block(self.node)(encoded)
         mu = SimbaV2Head(
@@ -43,8 +47,8 @@ class Critic(nn.Module):
     support_n: int = 200
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([feature, actions], axis=1)
+    def __call__(self, features: ActorCriticFeatures, actions: jnp.ndarray) -> jnp.ndarray:
+        concat = jnp.concatenate([features["critic"], actions], axis=1)
         encoded = SimbaV2Embedding(self.node)(concat)
         for _ in range(self.hidden_n):
             encoded = SimbaV2Block(self.node)(encoded)
@@ -61,7 +65,9 @@ def model_builder_maker(observation_space, action_size, support_n, policy_kwargs
     def model_builder(key=None, print_model=False):
         class Merged_Actor(nn.Module):
             def setup(self):
-                self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
+                self.preproc = PreProcess(
+                    observation_space, embedding_mode=embedding_mode, paired=True
+                )
                 self.act = Actor(action_size, **policy_kwargs)
 
             def __call__(self, x):
@@ -69,7 +75,7 @@ def model_builder_maker(observation_space, action_size, support_n, policy_kwargs
                 return self.actor(feature)
 
             def preprocess(self, x):
-                return self.preproc(x)
+                return self.preproc.actor_critic(x)
 
             def actor(self, x):
                 return self.act(x)

@@ -12,7 +12,9 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
 
     def _model_builder(key=None, print_model=False):
         preproc = hk.transform(
-            lambda x: PreProcess(observation_space, embedding_mode=embedding_mode)(x)
+            lambda x: PreProcess(
+                observation_space, embedding_mode=embedding_mode, paired=True
+            ).actor_critic(x)
         )
         actor = hk.transform(lambda x: Actor(action_size, **policy_kwargs)(x))
         critic = hk.transform(

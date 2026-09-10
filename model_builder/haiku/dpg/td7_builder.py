@@ -4,7 +4,11 @@ import jax.numpy as jnp
 import numpy as np
 
 from model_builder.haiku.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import dummy_observation, print_haiku_model_summary
+from model_builder.utils import (
+    ActorCriticFeatures,
+    dummy_observation,
+    print_haiku_model_summary,
+)
 
 
 def avgl1norm(x, epsilon=1e-6):
@@ -18,13 +22,13 @@ class Encoder(hk.Module):
         self.hidden_n = hidden_n
         self.layer = hk.Linear
 
-    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
         encoder = hk.Sequential(
             [
                 self.layer(self.node) if i % 2 == 0 else jax.nn.elu
                 for i in range(2 * self.hidden_n - 1)
             ]
-        )(feature)
+        )(features["actor"])
         return avgl1norm(encoder)
 
 
@@ -53,13 +57,16 @@ class Actor(hk.Module):
         self.hidden_n = hidden_n
         self.layer = hk.Linear
 
-    def __call__(self, feature: jnp.ndarray, zs: jnp.ndarray) -> jnp.ndarray:
-        a0 = avgl1norm(self.layer(self.node)(feature))
+    def __call__(self, features: ActorCriticFeatures, zs: jnp.ndarray) -> jnp.ndarray:
+        a0 = avgl1norm(self.layer(self.node)(features["actor"]))
         embed_concat = jnp.concatenate([a0, zs], axis=1)
         return hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [
-                self.layer(self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)),
+                self.layer(
+                    self.action_size[0],
+                    w_init=hk.initializers.RandomUniform(-0.03, 0.03),
+                ),
                 jax.nn.tanh,
             ]
         )(embed_concat)
@@ -73,9 +80,13 @@ class Critic(hk.Module):
         self.layer = hk.Linear
 
     def __call__(
-        self, feature: jnp.ndarray, zs: jnp.ndarray, zsa: jnp.ndarray, actions: jnp.ndarray
+        self,
+        features: ActorCriticFeatures,
+        zs: jnp.ndarray,
+        zsa: jnp.ndarray,
+        actions: jnp.ndarray,
     ) -> jnp.ndarray:
-        concat = jnp.concatenate([feature, actions], axis=1)
+        concat = jnp.concatenate([features["critic"], actions], axis=1)
         embedding = jnp.concatenate([zs, zsa], axis=1)
         q0 = avgl1norm(self.layer(self.node)(concat))
         embed_concat = jnp.concatenate([q0, embedding], axis=1)
@@ -90,7 +101,9 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
 
     def _model_builder(key=None, print_model=False):
         preproc = hk.transform(
-            lambda x: PreProcess(observation_space, embedding_mode=embedding_mode)(x)
+            lambda x: PreProcess(
+                observation_space, embedding_mode=embedding_mode, paired=True
+            ).actor_critic(x)
         )
         encoder = hk.transform(lambda x: Encoder()(x))
         action_encoder = hk.transform(lambda zs, a: Action_Encoder()(zs, a))

@@ -13,7 +13,9 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
     def model_builder(key=None, print_model=False):
         class Merged_Actor(nn.Module):
             def setup(self):
-                self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
+                self.preproc = PreProcess(
+                    observation_space, embedding_mode=embedding_mode, paired=True
+                )
                 self.act = Actor(action_size, **policy_kwargs)
 
             def __call__(self, x):
@@ -22,7 +24,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 return mu, log_std
 
             def preprocess(self, x):
-                x = self.preproc(x)
+                x = self.preproc.actor_critic(x)
                 return x
 
             def actor(self, x):

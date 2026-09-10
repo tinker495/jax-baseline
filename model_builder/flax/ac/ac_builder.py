@@ -6,7 +6,11 @@ from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import dummy_observation, print_flax_model_summary
+from model_builder.utils import (
+    ActorCriticFeatures,
+    dummy_observation,
+    print_flax_model_summary,
+)
 
 
 class Actor(nn.Module):
@@ -17,10 +21,10 @@ class Actor(nn.Module):
     layer: nn.Module = Dense
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
         mlp = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-        )(feature)
+        )(features["actor"])
         if self.action_type == "discrete":
             action_probs = self.layer(
                 self.action_size[0], kernel_init=clip_factorized_uniform(0.01)
@@ -38,11 +42,11 @@ class Critic(nn.Module):
     layer: nn.Module = Dense
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
         net = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [self.layer(1, kernel_init=clip_factorized_uniform(0.01))]
-        )(feature)
+        )(features["critic"])
         return net
 
 
@@ -52,16 +56,18 @@ def model_builder_maker(observation_space, action_size, action_type, policy_kwar
     def _model_builder(key=None, print_model=False):
         class Merged(nn.Module):
             def setup(self):
-                self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
+                self.preproc = PreProcess(
+                    observation_space, embedding_mode=embedding_mode, paired=True
+                )
                 self.act = Actor(action_size, action_type, **policy_kwargs)
                 self.cri = Critic(**policy_kwargs)
 
             def __call__(self, x):
-                x = self.preproc(x)
+                x = self.preproc.actor_critic(x)
                 return self.act(x), self.cri(x)
 
             def preprocess(self, x):
-                return self.preproc(x)
+                return self.preproc.actor_critic(x)
 
             def actor(self, x):
                 return self.act(x)

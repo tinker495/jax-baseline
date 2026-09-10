@@ -8,7 +8,11 @@ from model_builder.flax.dpg.gaussian_blocks import Actor
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import dummy_observation, print_flax_model_summary
+from model_builder.utils import (
+    ActorCriticFeatures,
+    dummy_observation,
+    print_flax_model_summary,
+)
 
 
 class Critic(nn.Module):
@@ -18,8 +22,8 @@ class Critic(nn.Module):
     layer: nn.Module = Dense
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([feature, actions], axis=1)
+    def __call__(self, features: ActorCriticFeatures, actions: jnp.ndarray) -> jnp.ndarray:
+        concat = jnp.concatenate([features["critic"], actions], axis=1)
         q_net = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [
@@ -38,7 +42,9 @@ def model_builder_maker(observation_space, action_size, support_n, policy_kwargs
     def model_builder(key=None, print_model=False):
         class Merged_Actor(nn.Module):
             def setup(self):
-                self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
+                self.preproc = PreProcess(
+                    observation_space, embedding_mode=embedding_mode, paired=True
+                )
                 self.act = Actor(action_size, **policy_kwargs)
 
             def __call__(self, x):
@@ -47,7 +53,7 @@ def model_builder_maker(observation_space, action_size, support_n, policy_kwargs
                 return mu, log_std
 
             def preprocess(self, x):
-                x = self.preproc(x)
+                x = self.preproc.actor_critic(x)
                 return x
 
             def actor(self, x):

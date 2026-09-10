@@ -12,6 +12,8 @@ from typing import Any, Literal, Protocol, TypeAlias, TypedDict, runtime_checkab
 
 import numpy as np
 
+# Keys retain their role from the environment boundary through replay and model input:
+# unified_* is shared, actor_* is policy-only, and critic_* is value-only.
 Observation: TypeAlias = dict[str, Any]
 ObservationSpace: TypeAlias = dict[str, list[int]]
 

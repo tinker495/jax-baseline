@@ -21,14 +21,16 @@ def _make_model_builder(
     def model_builder(key=None, print_model=False):
         class Merged_Actor(nn.Module):
             def setup(self):
-                self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
+                self.preproc = PreProcess(
+                    observation_space, embedding_mode=embedding_mode, paired=True
+                )
                 self.act = actor_cls(action_size, **policy_kwargs)
 
             def __call__(self, x):
                 return self.actor(self.preprocess(x))
 
             def preprocess(self, x):
-                return self.preproc(x)
+                return self.preproc.actor_critic(x)
 
             def actor(self, x):
                 return self.act(x)

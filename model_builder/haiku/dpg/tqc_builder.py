@@ -5,7 +5,11 @@ import numpy as np
 
 from model_builder.haiku.dpg.ddpg_td3_blocks import GaussianActor
 from model_builder.haiku.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import dummy_observation, print_haiku_model_summary
+from model_builder.utils import (
+    ActorCriticFeatures,
+    dummy_observation,
+    print_haiku_model_summary,
+)
 
 
 class Critic(hk.Module):
@@ -16,8 +20,8 @@ class Critic(hk.Module):
         self.support_n = support_n
         self.layer = hk.Linear
 
-    def __call__(self, feature: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([feature, actions], axis=1)
+    def __call__(self, features: ActorCriticFeatures, actions: jnp.ndarray) -> jnp.ndarray:
+        concat = jnp.concatenate([features["critic"], actions], axis=1)
         return hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [self.layer(self.support_n, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
@@ -29,7 +33,9 @@ def model_builder_maker(observation_space, action_size, support_n, policy_kwargs
 
     def _model_builder(key=None, print_model=False):
         preproc = hk.transform(
-            lambda x: PreProcess(observation_space, embedding_mode=embedding_mode)(x)
+            lambda x: PreProcess(
+                observation_space, embedding_mode=embedding_mode, paired=True
+            ).actor_critic(x)
         )
         actor = hk.transform(lambda x: GaussianActor(action_size, **policy_kwargs)(x))
         critic = hk.transform(
