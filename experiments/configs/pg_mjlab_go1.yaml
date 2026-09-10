@@ -6,6 +6,7 @@ base:
   env_backend: mjlab
   env_device: cuda:0
   env_jax_arrays: true
+  env_reuse_for_eval: true
   worker: 4096
   steps: 491520000
   eval_num: 5

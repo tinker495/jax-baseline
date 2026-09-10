@@ -1,8 +1,11 @@
+from contextlib import nullcontext
+
 import jax
 import numpy as np
 
 from jax_baselines.core.env_info import prepare_worker_env
 from jax_baselines.core.env_protocols import (
+    EvaluationContextEnv,
     VectorizedEvalEnv,
     batch_observation,
     reset_for_evaluation,
@@ -208,9 +211,14 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
         if isinstance(eval_env, VectorizedEvalEnv)
         else _evaluate_single_episodes
     )
-    total_reward, total_ep_len, total_truncated, original_rewards = collect(
-        eval_env, eval_eps, act_eval_fn, conv_action
-    )
+    with (
+        eval_env.evaluation_context()
+        if isinstance(eval_env, EvaluationContextEnv)
+        else nullcontext()
+    ):
+        total_reward, total_ep_len, total_truncated, original_rewards = collect(
+            eval_env, eval_eps, act_eval_fn, conv_action
+        )
     mean_reward = np.mean(total_reward)
     mean_ep_len = np.mean(total_ep_len)
 

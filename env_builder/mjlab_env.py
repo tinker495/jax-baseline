@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from typing import Any, TypeAlias
 
 import jax
@@ -25,16 +26,31 @@ Array: TypeAlias = np.ndarray | jax.Array
 class MjlabVectorizedEnv(VectorizedEnv):
     env_info: EnvInfo
 
-    def __init__(self, env_id, env, torch, seed=None, observation_key=None, jax_arrays=False):
+    def __init__(
+        self,
+        env_id,
+        env,
+        torch,
+        seed=None,
+        observation_key=None,
+        jax_arrays=False,
+        *,
+        reuse_for_eval=False,
+    ):
         self.env = env
         self._torch = torch
         self.jax_arrays = jax_arrays
+        self._reuse_for_eval = reuse_for_eval
         self.worker_num = env.num_envs
         self._observation_key = observation_key
         self._pending: tuple[Observation, Array, Array, Array, dict[str, Any]] | None = None
         self._closed = False
         self._frame = None
         self.reset(seed=seed)
+        if reuse_for_eval:
+            from env_builder.mjlab_state import validate_state_preservation
+
+            validate_state_preservation(env)
         shape = tuple(env.single_action_space.shape)
         self.action_space = spaces.Box(-1.0, 1.0, shape=shape, dtype=np.float32)
         self.observation_space: ObservationSpace = {
@@ -103,6 +119,24 @@ class MjlabVectorizedEnv(VectorizedEnv):
 
     def current_obs(self) -> Observation:
         return self._obs
+
+    @contextmanager
+    def evaluation_context(self) -> Iterator[None]:
+        if not self._reuse_for_eval:
+            yield
+            return
+        if self._closed:
+            raise RuntimeError("Cannot evaluate a closed environment")
+        from env_builder.mjlab_state import preserve_mjlab_state
+
+        observation, frame, pending = self._obs, self._frame, self._pending
+        with preserve_mjlab_state(self.env):
+            # mjlab.step has finished; _pending contains copied transition data.
+            self._pending = None
+            try:
+                yield
+            finally:
+                self._obs, self._frame, self._pending = observation, frame, pending
 
     def get_info(self) -> EnvInfo:
         return self.env_info
@@ -178,6 +212,19 @@ class MjlabSingleEnv(SingleEnv):
     def _current(self) -> Observation:
         return {key: value[0].copy() for key, value in self._vector.current_obs().items()}
 
+    @contextmanager
+    def evaluation_context(self) -> Iterator[None]:
+        if not self._vector._reuse_for_eval:
+            yield
+            return
+        cached_reset = self._cached_reset
+        with self._vector.evaluation_context():
+            self._cached_reset = None
+            try:
+                yield
+            finally:
+                self._cached_reset = cached_reset
+
     def reset(
         self, *, seed: int | None = None, options: dict[str, Any] | None = None
     ) -> tuple[Observation, dict[str, Any]]:
@@ -222,6 +269,7 @@ def make_mjlab_env(
     device="cuda:0",
     render_mode=None,
     jax_arrays=False,
+    reuse_for_eval=False,
 ) -> MjlabSingleEnv | MjlabVectorizedEnv:
     if render_mode not in (None, "rgb_array"):
         raise ValueError("mjlab supports only render_mode=None or 'rgb_array'")
@@ -229,6 +277,8 @@ def make_mjlab_env(
         raise ValueError("worker_num must be at least 1")
     if episode_length is not None and episode_length < 1:
         raise ValueError("episode_length must be at least 1")
+    if reuse_for_eval and render_mode is not None:
+        raise ValueError("reuse_for_eval requires a headless training environment")
     try:
         import mjlab.tasks  # noqa: F401 - registers built-in tasks
         import torch
@@ -247,7 +297,15 @@ def make_mjlab_env(
         cfg.episode_length_s = episode_length * (cfg.sim.mujoco.timestep * cfg.decimation)
     env = ManagerBasedRlEnv(cfg, device=device, render_mode=render_mode)
     try:
-        vector = MjlabVectorizedEnv(env_id, env, torch, seed, observation_key, jax_arrays)
+        vector = MjlabVectorizedEnv(
+            env_id,
+            env,
+            torch,
+            seed,
+            observation_key,
+            jax_arrays,
+            reuse_for_eval=reuse_for_eval,
+        )
         return MjlabSingleEnv(vector) if worker_num == 1 else vector
     except Exception:
         env.close()

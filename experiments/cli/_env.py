@@ -14,6 +14,11 @@ def add_env_args(parser):
     parser.add_argument(
         "--env_jax_arrays", action="store_true", help="exchange mjlab tensors with JAX via DLPack"
     )
+    parser.add_argument(
+        "--env_reuse_for_eval",
+        action="store_true",
+        help="reuse the training environment for evaluation (Gymnasium or mjlab)",
+    )
 
 
 def env_builder_kwargs(args):
@@ -23,4 +28,5 @@ def env_builder_kwargs(args):
         "episode_length": args.env_episode_length,
         "device": args.env_device,
         "jax_arrays": args.env_jax_arrays,
+        "reuse_for_eval": args.env_reuse_for_eval,
     }

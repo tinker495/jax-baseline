@@ -465,6 +465,7 @@ def test_experiments_composition_path_uses_adapter_prepared_envs(monkeypatch):
                 "episode_length": None,
                 "device": "cuda:0",
                 "jax_arrays": False,
+                "reuse_for_eval": False,
             },
         ),
         ("prepare_envs", 4, 21),
@@ -505,6 +506,7 @@ def test_mjlab_backend_is_lazy_and_receives_its_supported_options(monkeypatch):
                 "device": "cpu",
                 "render_mode": "rgb_array",
                 "jax_arrays": True,
+                "reuse_for_eval": False,
             },
         ),
     ]
@@ -577,6 +579,7 @@ def test_shared_local_cli_env_options_forward_to_builder(monkeypatch):
         "episode_length": 12,
         "device": "cpu",
         "jax_arrays": True,
+        "reuse_for_eval": False,
     }
 
 
