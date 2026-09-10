@@ -56,8 +56,9 @@ class _FakeSingleEnv:
 
 
 class _FakeVectorizedEnv(VectorizedEnv):
-    def __init__(self, worker_num=3):
+    def __init__(self, worker_num=3, seed=None):
         self.worker_num = worker_num
+        self.seed = seed
         self.env_info = {
             "observation_space": {"unified_obs": [5]},
             "action_size": [2],
@@ -73,6 +74,9 @@ class _FakeVectorizedEnv(VectorizedEnv):
 
     def current_obs(self):
         return {"unified_obs": np.zeros((self.worker_num, 5), dtype=np.float32)}
+
+    def reset(self, *, seed=None):
+        return self.current_obs(), {}
 
     def step(self, action):
         pass
@@ -261,7 +265,11 @@ def test_get_local_env_info_consumes_adapter_prepared_vectorized_envs():
         def prepare_envs(self, num_workers=1, seed=None):
             calls.append((num_workers, seed))
             env = _FakeVectorizedEnv(worker_num=num_workers)
-            return PreparedEnvSpec(env=env, eval_env=_FakeSingleEnv(), env_info=env.env_info)
+            return PreparedEnvSpec(
+                env=env,
+                eval_env=_FakeVectorizedEnv(worker_num=num_workers),
+                env_info=env.env_info,
+            )
 
     _, _, observation_space, action_size, worker_size, env_type = get_local_env_info(
         _Builder(),
@@ -280,7 +288,11 @@ def test_get_local_env_info_requires_explicit_vectorized_env_info_contract():
     class _Builder:
         def prepare_envs(self, num_workers=1, seed=None):
             env = _BrokenVectorizedEnv(worker_num=num_workers)
-            return PreparedEnvSpec(env=env, eval_env=_FakeSingleEnv(), env_info=env.env_info)
+            return PreparedEnvSpec(
+                env=env,
+                eval_env=_FakeVectorizedEnv(worker_num=num_workers),
+                env_info=env.env_info,
+            )
 
     try:
         get_local_env_info(_Builder(), num_workers=2)
@@ -347,40 +359,28 @@ def test_infer_action_meta_uses_adapter_normalized_action_type():
     np.testing.assert_array_equal(action, [6.0, -6.0])
 
 
-def test_env_builder_adapter_prepares_train_eval_pair_and_seed_policy():
+@pytest.mark.parametrize("worker_num", [1, 4])
+def test_env_builder_adapter_prepares_train_eval_pair_and_seed_policy(monkeypatch, worker_num):
     calls = []
 
-    def fake_env_builder(worker=1, render_mode=None, seed=None):
-        calls.append((worker, seed))
-        return _FakeVectorizedEnv(worker_num=worker) if worker > 1 else _FakeSingleEnv()
-
-    # Replace the attached method with a deterministic local equivalent so this
-    # test stays backend-free while asserting the adapter-owned contract shape.
-    def prepare_envs(num_workers=1, seed=None):
-        eval_seed = None if seed is None else seed + 1
-        env = fake_env_builder(num_workers, seed=seed)
-        eval_env = fake_env_builder(1, seed=eval_seed)
-        return PreparedEnvSpec(
-            env=env,
-            eval_env=eval_env,
-            env_info=env.env_info
-            if isinstance(env, VectorizedEnv)
-            else {
-                "observation_space": {"unified_obs": [4]},
-                "action_size": [3],
-                "action_type": "discrete",
-                "env_type": "single",
-                "env_id": "FakeSingle-v0",
-                "worker_num": 1,
-                "core_env_type": "SingleEnv",
-            },
+    def make_mjlab_env(env_id, *, worker_num, seed, **kwargs):
+        calls.append((worker_num, seed))
+        return (
+            _FakeVectorizedEnv(worker_num=worker_num, seed=seed)
+            if worker_num > 1
+            else _FakeSingleEnv(seed=seed)
         )
 
-    fake_env_builder.prepare_envs = prepare_envs
+    monkeypatch.setitem(
+        sys.modules, "env_builder.mjlab_env", SimpleNamespace(make_mjlab_env=make_mjlab_env)
+    )
+    builder, _ = importlib.import_module("env_builder.env_builder").get_env_builder(
+        "Fake-v0", "mjlab"
+    )
+    env, eval_env, *_ = get_local_env_info(builder, num_workers=worker_num, seed=21)
 
-    get_local_env_info(fake_env_builder, num_workers=4, seed=21)
-
-    assert calls == [(4, 21), (1, 22)]
+    assert env is not eval_env
+    assert calls == [(worker_num, 21), (worker_num, 22)]
 
 
 def test_experiments_build_env_returns_prepared_env_builder():
@@ -412,7 +412,9 @@ def test_experiments_composition_path_uses_adapter_prepared_envs(monkeypatch):
         def prepare_envs(num_workers=1, seed=None):
             calls.append(("prepare_envs", num_workers, seed))
             env = _FakeVectorizedEnv(worker_num=num_workers)
-            eval_env = _FakeSingleEnv(seed=None if seed is None else seed + 100)
+            eval_env = _FakeVectorizedEnv(
+                worker_num=num_workers, seed=None if seed is None else seed + 100
+            )
             return PreparedEnvSpec(env=env, eval_env=eval_env, env_info=env.env_info)
 
         def prepare_worker_env(seed=None):

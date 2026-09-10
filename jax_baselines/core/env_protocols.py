@@ -95,6 +95,14 @@ class VectorizedEnv(Protocol):
         ...
 
 
+@runtime_checkable
+class VectorizedEvalEnv(VectorizedEnv, Protocol):
+    """Vector environment that can start an independent evaluation measurement."""
+
+    def reset(self, *, seed: int | None = None) -> tuple[Observation, dict[str, Any]]:
+        ...
+
+
 # Backward-compatible name exported by env_builder; no separate ABC needed.
 Env = VectorizedEnv
 

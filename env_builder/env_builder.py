@@ -1,5 +1,5 @@
 import warnings
-from typing import Literal
+from typing import Any, Literal
 
 import gymnasium as gym
 import numpy as np
@@ -15,6 +15,7 @@ from env_builder.seeding import seed_env
 from jax_baselines.core.env_protocols import (
     Env,
     EnvInfo,
+    Observation,
     PreparedEnvSpec,
     PreparedWorkerEnvSpec,
     SingleEnv,
@@ -183,7 +184,7 @@ def get_env_builder(
         env = eval_env = None
         try:
             env = env_builder(num_workers, seed=seed)
-            eval_env = env_builder(1, seed=eval_seed)
+            eval_env = env_builder(num_workers, seed=eval_seed)
             return PreparedEnvSpec(
                 env=env,
                 eval_env=eval_env,
@@ -341,12 +342,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
         self._all_env_ids = np.arange(worker_num, dtype=np.int32)
         self._awaiting_recv = False
 
-        # Async handshake: async_reset() launches every reset on the C++ side,
-        # the first recv() collects the initial observation. From here the
-        # contract is a strict send (step) / recv (get_result) alternation.
-        self.env.async_reset()
-        raw_obs, _, _, _, info = self.env.recv()
-        self.obs = self._process_observations(raw_obs, np.argsort(info["env_id"]))
+        self.reset()
 
     def _check_atari_env(self, env_id: str) -> bool:
         """Check if the environment is an Atari game."""
@@ -360,6 +356,17 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
 
     def current_obs(self):
         return self.obs
+
+    def reset(self, *, seed: int | None = None) -> tuple[Observation, dict[str, Any]]:
+        if self._awaiting_recv:
+            raise RuntimeError("reset() called while a step is in flight")
+        if seed is not None:
+            raise ValueError("EnvPool seeds are fixed at construction; recreate the env to reseed")
+        self.env.async_reset()
+        raw_obs, _, _, _, info = self.env.recv()
+        order = np.argsort(info["env_id"])
+        self.obs = self._process_observations(raw_obs, order)
+        return self.obs, self._reorder_info(info, order)
 
     def step(self, actions):
         """Fire actions into all environments without blocking.
@@ -487,7 +494,7 @@ class GymVectorizedEnv(VectorizedEnv):
             # Non-Atari: prefer the registry's efficient make_vec, falling back to
             # explicit AsyncVectorEnv if the env has no vectorized entry point.
             try:
-                self.env = gym.make_vec(
+                vector_env = gym.make_vec(
                     env_id,
                     num_envs=worker_num,
                     vectorization_mode="async",
@@ -495,15 +502,19 @@ class GymVectorizedEnv(VectorizedEnv):
                     wrappers=(_normalize_action_space,),
                 )
             except Exception:
-                self.env = gym.vector.AsyncVectorEnv(
+                vector_env = gym.vector.AsyncVectorEnv(
                     [make_env() for _ in range(worker_num)], context="spawn"
                 )
         else:
             # Atari needs the custom wrappers, so build AsyncVectorEnv from the
             # explicit per-env constructors.
-            self.env = gym.vector.AsyncVectorEnv(
+            vector_env = gym.vector.AsyncVectorEnv(
                 [make_env() for _ in range(worker_num)], context="spawn"
             )
+
+        if not isinstance(vector_env, gym.vector.AsyncVectorEnv):
+            raise TypeError("GymVectorizedEnv requires an AsyncVectorEnv")
+        self.env = vector_env
 
         # Store environment info
         action_size, action_type = _action_meta(self.env.single_action_space)
@@ -525,28 +536,24 @@ class GymVectorizedEnv(VectorizedEnv):
         else:
             self.action_conv = lambda a: np.asarray(a)
 
-        # gymnasium vector envs split into step_async()/step_wait(); for
-        # AsyncVectorEnv each sub-env runs in its own subprocess, so
-        # step_async() returns immediately and the envs advance while the
-        # caller works, with step_wait() collecting. Every construction path
-        # above builds an async-capable vector env; fail loudly if one without
-        # the split slips through (e.g. SyncVectorEnv lacks it).
-        if not (hasattr(self.env, "step_async") and hasattr(self.env, "step_wait")):
-            raise TypeError(
-                f"{type(self.env).__name__} lacks step_async/step_wait; "
-                "GymVectorizedEnv requires an async-capable vector env."
-            )
-
-        # Initialize
-        self.obs, _ = self.env.reset(seed=seed)
-        self.obs = normalize_observation(self.obs, self._observation_key)
         self._awaiting_result = False
+        self.reset(seed=seed)
 
     def get_info(self):
         return self.env_info
 
     def current_obs(self):
         return self.obs
+
+    def reset(self, *, seed: int | None = None) -> tuple[Observation, dict[str, Any]]:
+        if self._awaiting_result:
+            raise RuntimeError("reset() called while a step is in flight")
+        if self._is_atari:
+            # Restart the game before outer wrappers rebuild their frame/reward state.
+            self.env.set_attr("was_real_done", True)
+        obs, info = self.env.reset(seed=seed)
+        self.obs = normalize_observation(obs, self._observation_key)
+        return self.obs, info
 
     def step(self, actions):
         """Dispatch actions without blocking (gymnasium ``step_async``)."""

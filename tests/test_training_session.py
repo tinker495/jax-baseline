@@ -304,6 +304,7 @@ class FakeOnPolicySession(TrainingSession):
 class FakeOnPolicyAgent(Actor_Critic_Policy_Gradient_Family):
     def __init__(self, env_type="SingleEnv"):
         self.env_type = env_type
+        self.action_type = "continuous"
         self.calls = []
         self.eval_env = "eval-env"
         self.eval_eps = 3

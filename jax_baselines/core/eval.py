@@ -3,9 +3,12 @@ import numpy as np
 
 from jax_baselines.core.env_info import prepare_worker_env
 from jax_baselines.core.env_protocols import (
+    VectorizedEvalEnv,
     batch_observation,
     reset_for_evaluation,
     single_real_episode_end,
+    vector_autoreset_mask,
+    vector_real_reset_mask,
 )
 
 
@@ -99,12 +102,7 @@ def _normalize_action_for_step(step_action):
     return arr.reshape(-1)
 
 
-def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, conv_action=None):
-    """General evaluation helper used by multiple base classes.
-
-    act_eval_fn: callable(obs) -> action (already formatted for step)
-    conv_action: optional function to convert action before stepping (A2C)
-    """
+def _evaluate_single_episodes(eval_env, eval_eps, act_eval_fn, conv_action):
     original_rewards = []
     total_reward = np.zeros(eval_eps)
     total_ep_len = np.zeros(eval_eps)
@@ -129,8 +127,8 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
 
             observation, reward, terminated, truncated, info = eval_env.step(action_to_step)
             obs = batch_observation(observation)
-            if have_original_reward:
-                original_reward += info.get("original_reward", 0)
+            if have_original_reward and "original_reward" in info:
+                original_reward += info["original_reward"]
             total_reward[ep] += reward
             eplen += 1
 
@@ -146,11 +144,78 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
         truncated = False
         eplen = 0
 
+    return total_reward, total_ep_len, total_truncated, original_rewards
+
+
+def _evaluate_vector_episodes(eval_env: VectorizedEvalEnv, eval_eps, act_eval_fn, conv_action):
+    workers = eval_env.get_info()["worker_num"]
+    if workers < 1:
+        raise ValueError("Evaluation worker count must be positive")
+    # Fixed quotas prevent fast, short episodes from dominating the measurement.
+    # ponytail: life quotas may omit Atari game scores; use game quotas for full-game eval.
+    targets = (eval_eps + np.arange(workers)) // workers
+    counts = np.zeros(workers, dtype=np.int64)
+    rewards_sum = np.zeros(workers)
+    lengths = np.zeros(workers, dtype=np.int64)
+    _, info = eval_env.reset()
+    originals, original_present = extract_vector_original_rewards(info, workers)
+    prev_done = np.zeros(workers, dtype=bool)
+    total_reward = np.zeros(eval_eps)
+    total_ep_len = np.zeros(eval_eps)
+    total_truncated = np.zeros(eval_eps)
+    original_rewards = []
+    completed = 0
+
+    while completed < eval_eps:
+        # Keep the full batch, including workers that have exhausted their quotas.
+        actions = act_eval_fn(eval_env.current_obs())
+        eval_env.step(conv_action(actions) if conv_action is not None else actions)
+        _, rewards, terminateds, truncateds, infos = eval_env.get_result()
+        rewards, terminateds, truncateds = jax.device_get((rewards, terminateds, truncateds))
+        done = np.logical_or(terminateds, truncateds)
+        active = ~prev_done & (counts < targets)
+        rewards_sum[active] += rewards[active]
+        lengths[active] += 1
+        original, present = extract_vector_original_rewards(infos, workers)
+        originals[active & present] += original[active & present]
+        original_present[active & present] = True
+        real_reset = np.asarray(vector_real_reset_mask(eval_env, terminateds, truncateds, infos))
+        autoreset = np.asarray(vector_autoreset_mask(eval_env, terminateds, truncateds, infos))
+        finished = done & active
+        emit_original = finished & real_reset & original_present
+        original_rewards.extend(originals[emit_original].tolist())
+        originals[emit_original] = 0
+        original_present[emit_original] = False
+        end = completed + int(finished.sum())
+        total_reward[completed:end] = rewards_sum[finished]
+        total_ep_len[completed:end] = lengths[finished]
+        total_truncated[completed:end] = truncateds[finished]
+        completed = end
+        counts[finished] += 1
+        rewards_sum[finished] = 0
+        lengths[finished] = 0
+        prev_done = done & autoreset & active
+
+    return total_reward, total_ep_len, total_truncated, original_rewards
+
+
+def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, conv_action=None):
+    """Measure exactly eval_eps episodes using the environment's native batch shape."""
+    if eval_eps < 1:
+        raise ValueError("eval_eps must be positive")
+    collect = (
+        _evaluate_vector_episodes
+        if isinstance(eval_env, VectorizedEvalEnv)
+        else _evaluate_single_episodes
+    )
+    total_reward, total_ep_len, total_truncated, original_rewards = collect(
+        eval_env, eval_eps, act_eval_fn, conv_action
+    )
     mean_reward = np.mean(total_reward)
     mean_ep_len = np.mean(total_ep_len)
 
     mean_original_score = None
-    if have_original_reward and len(original_rewards) > 0:
+    if original_rewards:
         mean_original_score = np.mean(original_rewards)
 
     if logger_run:
