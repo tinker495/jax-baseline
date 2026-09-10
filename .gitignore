@@ -133,6 +133,7 @@ dmypy.json
 .pyre/
 
 docs/adr/
+notebooks/
 **log/
 log.zip
 
@@ -140,3 +141,6 @@ log.zip
 !.python-version
 !.vscode/
 !.vscode/settings.json
+
+# graft's local graph cache — regenerable, not committed (run `graft build`).
+/graft/
