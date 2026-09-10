@@ -1,0 +1,21 @@
+family: dpg
+runtime:
+  device: 0
+base:
+  env: Mjlab-Velocity-Flat-Unitree-Go1
+  env_backend: mjlab
+  env_device: cuda:0
+  worker: 4096
+  train_freq: 4096
+  steps: 491520000
+  eval_num: 5
+  learning_rate: 0.0003
+  buffer_size: 1e6
+  batch: 24576
+  node: 512
+  hidden_n: 3
+  target_update_tau: 5e-3
+  learning_starts: 50000
+  optimizer: adam
+variants:
+  - {algo: SAC, enabled: true}

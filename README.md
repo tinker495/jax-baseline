@@ -11,8 +11,8 @@ Jax-Baseline is a Reinforcement Learning implementation using JAX and Flax/Haiku
 
 This repository defaults to a uv-managed native virtual environment at `.venv`.
 A single `jax-baselines` package includes algorithms, environments, replay, model
-builders, logging, and experiment commands. The default development group selects
-the `all` extra.
+builders, logging, and experiment commands. The default development group installs
+only development tools. Select optional runtime dependencies with `--extra`.
 
 ```
 uv sync
@@ -29,7 +29,7 @@ uv run qnet --help
 Atari ROMs still require license acceptance through AutoROM before Atari runs:
 
 ```
-uv run AutoROM --accept-license
+uv run --extra atari AutoROM --accept-license
 ```
 
 For an editable pip install with all optional experiment dependencies:
@@ -50,6 +50,7 @@ python -m pip install -e '.[all]'
 | --------- | ------------------ | ---------------------- | ------------------ |
 | Gymnasium | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
 | EnvPool   | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
+| mjlab     | :heavy_check_mark: | :heavy_check_mark:     | :heavy_check_mark: |
 
 ### Implemented Algorithms
 

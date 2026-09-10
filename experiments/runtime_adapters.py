@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Optional
 
@@ -50,7 +51,12 @@ class TensorboardRun:
                     "Multiline",
                     [f"rollout/{leaf}/eps{e:.2f}" for e in eps] + [f"rollout/{leaf}"],
                 ]
-                for leaf in ("episode_reward", "original_reward", "episode_length", "timeout_rate")
+                for leaf in (
+                    "episode_reward",
+                    "original_reward",
+                    "episode_length",
+                    "timeout_rate",
+                )
             },
         }
         self._writer.add_custom_scalars(layout)
@@ -103,13 +109,81 @@ def make_progress(*args, **kwargs):
     return trange(*args, **kwargs)
 
 
-def record_and_test(env_builder, logger_run, actions_eval_fn, episode, conv_action=None):
-    from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
+class _MjlabVideoRecorder:
+    def __init__(self, env, directory):
+        from imageio_ffmpeg import write_frames
 
+        self.env = env
+        self.directory = Path(directory)
+        self._write_frames = write_frames
+        self._writer = None
+        self._episode = 0
+
+    def _close_writer(self):
+        if self._writer is not None:
+            writer, self._writer = self._writer, None
+            writer.close()
+
+    def _write_frame(self):
+        frame = self.env.render()
+        if self._writer is None:
+            height, width = frame.shape[:2]
+            self._writer = self._write_frames(
+                self.directory / f"rl-video-episode-{self._episode}.mp4",
+                (width, height),
+                fps=self.env.metadata["render_fps"],
+            )
+            self._episode += 1
+            self._writer.send(None)
+        self._writer.send(frame)
+
+    def reset(self):
+        self._close_writer()
+        result = self.env.reset()
+        self._write_frame()
+        return result
+
+    def step(self, action):
+        result = self.env.step(action)
+        self._write_frame()
+        if result[2] or result[3]:
+            self._close_writer()
+        return result
+
+    def close(self):
+        try:
+            self._close_writer()
+        finally:
+            self.env.close()
+
+
+def record_and_test(env_builder, logger_run, actions_eval_fn, episode, conv_action=None):
     directory = logger_run.get_local_path("video")
     os.makedirs(directory, exist_ok=True)
     test_env = env_builder(1, render_mode="rgb_array")
-    render_env = RecordVideo(test_env, directory, episode_trigger=lambda x: True)
-    render_env = RecordEpisodeStatistics(render_env)
+    from env_builder.mjlab_env import MjlabSingleEnv
+
+    if isinstance(test_env, MjlabSingleEnv):
+        try:
+            render_env = _MjlabVideoRecorder(test_env, directory)
+        except Exception:
+            test_env.close()
+            raise
+        with closing(render_env):
+            return run_test_episodes(render_env, actions_eval_fn, episode, conv_action)
+
+    from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
+
+    try:
+        render_env = RecordVideo(test_env, directory, episode_trigger=lambda x: True)
+        render_env = RecordEpisodeStatistics(render_env)
+    except Exception:
+        test_env.close()
+        raise
     with render_env:
         return run_test_episodes(render_env, actions_eval_fn, episode, conv_action)
+
+
+def headless_test(env_builder, logger_run, actions_eval_fn, episode, conv_action=None):
+    with closing(env_builder(1)) as test_env:
+        return run_test_episodes(test_env, actions_eval_fn, episode, conv_action)

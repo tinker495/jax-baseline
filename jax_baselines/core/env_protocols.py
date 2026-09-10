@@ -75,7 +75,7 @@ class VectorizedEnv(Protocol):
 
     env_info: EnvInfo | None = None
 
-    def get_info(self) -> dict[str, Any]:
+    def get_info(self) -> EnvInfo:
         ...
 
     def current_obs(self) -> Observation:

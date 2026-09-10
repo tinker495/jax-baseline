@@ -3,6 +3,7 @@ from experiments.cli._common import default_logdir
 from env_builder.env_builder import get_env_builder
 
 # isort: on
+from experiments.cli._env import add_env_args, env_builder_kwargs
 from experiments.cli._run import AlgoSpec, FamilyRunner, run_family
 from experiments.optimizers import (
     make_batch_scaled_optimizer_factory,
@@ -26,13 +27,7 @@ def add_args(parser):
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="CartPole-v1", help="environment")
-    parser.add_argument(
-        "--env_backend",
-        type=str,
-        default="gymnasium",
-        choices=["gymnasium", "envpool"],
-        help="vectorized-env backend when worker>1 (gymnasium default; envpool is faster)",
-    )
+    add_env_args(parser)
     parser.add_argument("--algo", type=str, default="DQN", help="algo ID")
     parser.add_argument("--gamma", type=float, default=0.99, help="gamma")
     parser.add_argument("--target_update", type=int, default=2000, help="target update intervals")
@@ -101,7 +96,7 @@ def add_args(parser):
 def build_env(args):
     env_builder, _ = get_env_builder(
         args.env,
-        env_backend=args.env_backend,
+        **env_builder_kwargs(args),
     )
     policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n}
     return env_builder, policy_kwargs

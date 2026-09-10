@@ -8,7 +8,7 @@ from typing import Callable, Protocol
 from experiments.checkpoint_store import FileCheckpointStore
 from experiments.cli._common import load_runtime_env
 from experiments.cli._loggers import add_logger_args, resolve_logger_factory
-from experiments.runtime_adapters import make_progress, record_and_test
+from experiments.runtime_adapters import headless_test, make_progress, record_and_test
 from jax_baselines.core.distributed_runtime import DistributedRuntime
 
 
@@ -87,16 +87,38 @@ def run_family(runner: FamilyRunner, argv=None):
         checkpoint_store=FileCheckpointStore(),
         **spec.build(args),
     )
-    agent.learn(
-        int(args.steps),
-        experiment_name=args.experiment_name,
-        eval_num=args.eval_num,
-        logger_factory=resolve_logger_factory(args),
-        progress_factory=make_progress,
-        record_test_fn=record_and_test,
-    )
+    test_fn = record_and_test if getattr(env_builder, "supports_render", True) else headless_test
+    try:
+        agent.learn(
+            int(args.steps),
+            experiment_name=args.experiment_name,
+            eval_num=args.eval_num,
+            logger_factory=resolve_logger_factory(args),
+            progress_factory=make_progress,
+            record_test_fn=test_fn,
+        )
+    finally:
+        _close_agent_envs(agent)
     agent.test()
     return agent
+
+
+def _close_agent_envs(agent):
+    seen = set()
+    error = None
+    for name in ("env", "eval_env"):
+        env = getattr(agent, name, None)
+        if env is None or id(env) in seen:
+            continue
+        seen.add(id(env))
+        close = getattr(env, "close", None)
+        if callable(close):
+            try:
+                close()
+            except BaseException as exc:
+                error = error or exc
+    if error is not None:
+        raise error
 
 
 @dataclass(frozen=True)
