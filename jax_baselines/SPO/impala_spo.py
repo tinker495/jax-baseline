@@ -54,9 +54,10 @@ class IMPALA_SPO(SurrogateIMPALA):
             1.0 + jnp.log(2.0 * jnp.pi)
         )
         if self.use_entropy_adv_shaping:
-            # Paper's shaping: psi(H) = min(alpha * H, |A| / kappa) >= 0
+            # Differential entropy can be negative; shaping must preserve the advantage sign.
             psi_h = jnp.minimum(
-                self.ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa
+                self.ent_coef * jnp.maximum(entropy_h, 0.0),
+                jnp.abs(adv) / self.entropy_adv_shaping_kappa,
             )
             adv += psi_h
         adv = jax.lax.stop_gradient(adv)

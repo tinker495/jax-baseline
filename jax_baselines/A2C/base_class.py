@@ -32,7 +32,7 @@ from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
-class Actor_Critic_Policy_Gradient_Family(object):
+class Actor_Critic_Policy_Gradient_Family:
     _run_name = "A2C"
 
     def __init__(
@@ -57,6 +57,11 @@ class Actor_Critic_Policy_Gradient_Family(object):
         lr_annealing=False,
         checkpoint_store: CheckpointStore | None = None,
     ):
+        if use_entropy_adv_shaping:
+            if not np.isfinite(ent_coef) or ent_coef < 0:
+                raise ValueError("entropy shaping requires finite ent_coef >= 0")
+            if not np.isfinite(entropy_adv_shaping_kappa) or entropy_adv_shaping_kappa <= 1:
+                raise ValueError("entropy shaping requires finite entropy_adv_shaping_kappa > 1")
         self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
         self.num_workers = num_workers
@@ -154,15 +159,19 @@ class Actor_Critic_Policy_Gradient_Family(object):
         mu, std = self.actor(params, key, self.preproc(params, key, convert_normalized_obs(obses)))
         return mu, jnp.exp(std)
 
-    def action_discrete(self, obs):
+    def action_discrete(self, obs, eval=False):
         prob = np.asarray(self._get_actions(self.params, obs))
+        if eval:
+            return np.argmax(prob, axis=1, keepdims=True)
         return np.expand_dims(
             np.stack([np.random.choice(self.action_size[0], p=p) for p in prob], axis=0),
             axis=1,
         )
 
-    def action_continuous(self, obs):
+    def action_continuous(self, obs, eval=False):
         mu, std = self._get_actions(self.params, obs)
+        if eval:
+            return np.asarray(mu)
         return np.random.normal(mu, std)
 
     def get_logprob_discrete(self, prob, action, key, out_prob=False):
@@ -379,10 +388,12 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 truncateds,
                 infos,
             ) = self.env.get_result()
+            action_observation = self.env.current_obs()
+
             train_due = (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0
             if not train_due and next_step is not end:
                 # Keep the async overlap except when train_step changes the policy.
-                next_actions = self.actions(next_obses)
+                next_actions = self.actions(action_observation)
                 send(next_actions)
 
             done = np.logical_or(terminateds, truncateds)
@@ -427,12 +438,13 @@ class Actor_Critic_Policy_Gradient_Family(object):
                 loss = self.train_step(steps, logger_run=ctx.logger_run)
                 self.lossque.append(loss)
                 if next_step is not end:
-                    next_actions = self.actions(next_obses)
+                    next_actions = self.actions(action_observation)
                     send(next_actions)
 
             if next_step is not end:
-                # Advance the pipeline: the action just sent belongs to next_obses.
-                obs = next_obses
+                # The successor stored in replay may be a terminal observation;
+                # the action just sent belongs to the env's current observation.
+                obs = action_observation
                 actions = next_actions
 
             if steps % ctx.eval_freq == 0:
@@ -445,7 +457,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         return evaluate_policy(
             self.eval_env,
             self.eval_eps,
-            self.actions,
+            lambda obs: self.actions(obs, eval=True),
             logger_run=ctx.logger_run,
             steps=steps,
             conv_action=self.conv_action,
@@ -460,7 +472,7 @@ class Actor_Critic_Policy_Gradient_Family(object):
         return record_test_fn(
             self.env_builder,
             logger_run,
-            self.actions,
+            lambda obs: self.actions(obs, eval=True),
             episode,
             conv_action=self.conv_action,
         )

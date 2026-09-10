@@ -81,7 +81,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         value = jnp.vstack(value)
         targets = jnp.vstack(targets)
         adv = targets - value
-        (total_loss, (critic_loss, actor_loss, entropy_loss)), grad = jax.value_and_grad(
+        (_total_loss, (critic_loss, actor_loss, entropy_loss)), grad = jax.value_and_grad(
             self._loss, has_aux=True
         )(params, obses, actions, targets, adv, key)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
@@ -128,9 +128,10 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             1.0 + jnp.log(2.0 * jnp.pi)
         )
         if self.use_entropy_adv_shaping:
-            # Paper's shaping: psi(H) = min(alpha * H, |A| / kappa) >= 0
+            # Differential entropy can be negative; shaping must preserve the advantage sign.
             psi_h = jnp.minimum(
-                self.ent_coef * entropy_h, jnp.abs(adv) / self.entropy_adv_shaping_kappa
+                self.ent_coef * jnp.maximum(entropy_h, 0.0),
+                jnp.abs(adv) / self.entropy_adv_shaping_kappa,
             )
             adv += psi_h
 

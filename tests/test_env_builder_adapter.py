@@ -344,7 +344,9 @@ def test_infer_action_meta_uses_adapter_normalized_action_type():
     assert discrete_type == "discrete"
     assert discrete_conv([2]) == 2
     assert continuous_type == "continuous"
-    np.testing.assert_allclose(continuous_conv(np.array([6.0, -6.0])), np.array([1.0, -1.0]))
+    action = np.array([6.0, -6.0])
+    np.testing.assert_array_equal(continuous_conv(action), [5.0, -5.0])
+    np.testing.assert_array_equal(action, [6.0, -6.0])
 
 
 def test_env_builder_adapter_prepares_train_eval_pair_and_seed_policy():

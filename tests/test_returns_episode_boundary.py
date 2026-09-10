@@ -26,8 +26,10 @@ from env_builder import env_builder as eb
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.APE_X.dpg_worker import Ape_X_Worker as ApeXDPGWorker
 from jax_baselines.APE_X.worker import Ape_X_Worker as ApeXQWorker
+from jax_baselines.core.env_info import infer_action_meta
+from jax_baselines.IMPALA.base_class import IMPALA_Family
 from jax_baselines.IMPALA.worker import Impala_Worker
-from jax_baselines.math.returns import discount_with_terminated, get_vtrace
+from jax_baselines.math.returns import discount_with_terminated, get_gaes, get_vtrace
 
 GAMMA = 0.9
 
@@ -62,6 +64,53 @@ def test_discount_bootstraps_on_truncation_not_termination():
     term_returns = _returns([1, 1, 1, 1], [0, 0, 1, 0], [0, 0, 1, 0], [10, 10, 10, 10])
     assert trunc_returns[2] == round(1 + GAMMA * 10, 3)  # 10.0
     assert term_returns[2] == 1.0
+
+
+def test_terminal_nan_next_value_is_ignored_by_return_estimators():
+    rewards = jnp.array([[1.0]], dtype=jnp.float32)
+    terminateds = jnp.array([[True]])
+    truncateds = jnp.array([[False]])
+    values = jnp.array([[0.0]], dtype=jnp.float32)
+    next_values = jnp.array([[jnp.nan]], dtype=jnp.float32)
+
+    discounted = discount_with_terminated(rewards, terminateds, truncateds, next_values, GAMMA)
+    gae = get_gaes(rewards, terminateds, truncateds, values, next_values, GAMMA, 0.95)
+    vtrace = get_vtrace(
+        rewards,
+        jnp.ones_like(rewards),
+        jnp.ones_like(rewards),
+        terminateds,
+        truncateds,
+        values,
+        next_values,
+        GAMMA,
+    )
+
+    np.testing.assert_allclose(discounted, [[1.0]])
+    np.testing.assert_allclose(gae, [[1.0]])
+    np.testing.assert_allclose(vtrace, [[1.0]])
+
+
+def test_impala_terminal_nan_next_value_is_ignored_by_advantage():
+    agent = IMPALA_Family.__new__(IMPALA_Family)
+    agent.gamma = GAMMA
+    agent.lamda = 0.95
+    agent.rho_max = 1.0
+    agent.cut_max = 1.0
+    shape = (1, 1, 1)
+
+    vs, _, advantage = agent._compute_vtrace(
+        jnp.zeros(shape),
+        jnp.zeros(shape),
+        jnp.ones(shape),
+        jnp.ones(shape),
+        jnp.zeros(shape),
+        jnp.zeros(shape),
+        jnp.full(shape, jnp.nan),
+    )
+
+    np.testing.assert_allclose(vs, [[[1.0]]])
+    np.testing.assert_allclose(advantage, [[[1.0]]])
 
 
 def test_discount_does_not_bleed_across_episode_boundary():
@@ -208,6 +257,26 @@ class _ScriptEnv:
         return {"unified_obs": nxt}, rewards, terms, truncs, {}
 
 
+class _DistinctObservationEnv(_ScriptEnv):
+    ws = 1
+
+    def __init__(self):
+        self._t = 0
+        self.sent_actions = []
+        self.awaiting_result = False
+
+    def current_obs(self):
+        return {"unified_obs": np.array([[2 * self._t]], dtype=np.float32)}
+
+    def get_result(self):
+        if not self.awaiting_result:
+            raise RuntimeError("get_result called without a pending step")
+        self.awaiting_result = False
+        successor = {"unified_obs": np.array([[2 * self._t + 1]], dtype=np.float32)}
+        self._t += 1
+        return successor, np.ones(1), np.zeros(1, dtype=bool), np.zeros(1, dtype=bool), {}
+
+
 class _LivesScriptEnv(_ScriptEnv):
     def __init__(self, rows):
         self._rows = rows
@@ -245,12 +314,16 @@ class _RecordingBuffer:
         self.rewards = []
         self.truncateds = []
         self.actions = []
+        self.obses = []
+        self.nxtobses = []
 
     def add(self, obs, action, reward, nxtobs, terminated, truncated):
         self.terminateds.append(np.asarray(terminated).copy())
         self.rewards.append(np.asarray(reward).copy())
         self.truncateds.append(np.asarray(truncated).copy())
         self.actions.append(np.asarray(action).copy())
+        self.obses.append(np.asarray(obs["unified_obs"]).copy())
+        self.nxtobses.append(np.asarray(nxtobs["unified_obs"]).copy())
 
 
 class _Pbar(list):
@@ -305,15 +378,35 @@ def test_a2c_vectorized_flags_autoreset_dummy_step_as_terminal():
     assert stored_trunc == [[False, False], [False, False], [False, False]]
 
 
-def test_a2c_vectorized_converts_continuous_actions_before_env_step():
+def test_a2c_vectorized_stores_successor_but_acts_on_current_observation():
+    agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
+    agent.env = _DistinctObservationEnv()
+    agent.buffer = _RecordingBuffer()
+    agent.worker_size = 1
+    agent.batch_size = 2
+    agent.action_type = "discrete"
+    agent.lossque = deque(maxlen=10)
+    agent.actions = lambda obs: np.asarray(obs["unified_obs"])
+    agent.train_step = lambda steps, logger_run=None: 0.0
+    agent.eval = lambda ctx, steps: None
+    agent.description = lambda result: ""
+
+    Actor_Critic_Policy_Gradient_Family.learn_VectorizedEnv(agent, _Ctx([0, 1, 2]))
+
+    assert [obs.item() for obs in agent.buffer.obses] == [0.0, 2.0, 4.0]
+    assert [obs.item() for obs in agent.buffer.nxtobses] == [1.0, 3.0, 5.0]
+    assert [action.item() for action in agent.env.sent_actions] == [0.0, 2.0, 4.0]
+    assert not agent.env.awaiting_result
+
+
+def test_a2c_vectorized_preserves_continuous_actions_before_env_step():
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
     agent.env = _ScriptEnv([np.array([False, False])])
     agent.buffer = _RecordingBuffer()
     agent.worker_size = 2
     agent.batch_size = 10_000
-    agent.action_type = "continuous"
-    agent.actions = lambda obs: np.full((2, 1), 6.0, dtype=np.float32)
-    agent.conv_action = lambda actions: np.clip(actions, -3.0, 3.0) / 3.0
+    agent.action_type, agent.conv_action = infer_action_meta("continuous")
+    agent.actions = lambda obs: np.array([[-6.0], [2.0]], dtype=np.float32)
     agent.train_step = lambda steps: 0.0
     agent.eval = lambda ctx, steps: None
     agent.description = lambda eval_result: "desc"
@@ -321,8 +414,8 @@ def test_a2c_vectorized_converts_continuous_actions_before_env_step():
     Actor_Critic_Policy_Gradient_Family.learn_VectorizedEnv(agent, _Ctx([0]))
 
     assert len(agent.env.sent_actions) == 1
-    assert all(np.array_equal(action, np.ones((2, 1))) for action in agent.env.sent_actions)
-    assert np.array_equal(agent.buffer.actions[0], np.full((2, 1), 6.0))
+    np.testing.assert_array_equal(agent.env.sent_actions[0], [[-5.0], [2.0]])
+    np.testing.assert_array_equal(agent.buffer.actions[0], [[-6.0], [2.0]])
 
 
 def test_a2c_vectorized_recomputes_pipelined_action_after_policy_update():
@@ -444,7 +537,15 @@ class _ScriptSingleEnv:
         return {"unified_obs": np.ones(2, dtype=np.float32)}, 1.0, False, False, {}
 
 
-def test_a2c_single_env_action_plumbing_and_buffer_shape():
+@pytest.mark.parametrize(
+    "action_type, action, expected_action",
+    [
+        ("discrete", [[1]], 1),
+        ("continuous", [[6.0]], [5.0]),
+        ("continuous", [[-6.0, 2.0]], [-5.0, 2.0]),
+    ],
+)
+def test_a2c_single_env_action_plumbing_and_buffer_shape(action_type, action, expected_action):
     # Regression for the worker=1 SingleEnv path: it used to double-collapse the
     # action (`self.actions(obs)[0]` then `conv_action(...)[0]`), so conv_action's
     # own a[0] already left a scalar and the extra [0] raised IndexError before
@@ -455,9 +556,8 @@ def test_a2c_single_env_action_plumbing_and_buffer_shape():
     agent.env = env
     agent.batch_size = 10_000  # train cadence never fires
     agent.lossque = deque(maxlen=10)
-    # action_discrete returns [worker=1, action_dim=1]; _discrete_action_conv is a[0].
-    agent.actions = lambda obs: np.array([[1]], dtype=np.int32)
-    agent.conv_action = lambda a: a[0]
+    agent.actions = lambda obs: np.asarray(action)
+    agent.action_type, agent.conv_action = infer_action_meta(action_type)
     agent.train_step = lambda steps: 0.0
     agent.eval = lambda ctx, steps: None
     agent.description = lambda eval_result: "desc"
@@ -465,13 +565,27 @@ def test_a2c_single_env_action_plumbing_and_buffer_shape():
 
     Actor_Critic_Policy_Gradient_Family.learn_SingleEnv(agent, _Ctx([0, 1, 2]))
 
-    # env.step received a bare scalar action each step (not an array, no crash).
     assert len(env.received_actions) == 3
-    assert all(np.ndim(a) == 0 for a in env.received_actions)
+    for received in env.received_actions:
+        if action_type == "discrete":
+            assert np.ndim(received) == 0
+            assert received == expected_action
+        else:
+            np.testing.assert_array_equal(received, expected_action)
     # The buffer keeps the worker dim so a real EpochBuffer's action[worker_idx]
     # stays indexable -- stored shape [worker=1, action_dim=1], matching the
     # vectorized path rather than the pre-fix collapsed scalar.
-    assert all(a.shape == (1, 1) for a in agent.buffer.actions)
+    for stored in agent.buffer.actions:
+        np.testing.assert_array_equal(stored, action)
+
+
+def test_impala_worker_preserves_continuous_actions():
+    agent = IMPALA_Family.__new__(IMPALA_Family)
+    agent.action_type = "continuous"
+    agent.action_size = [3]
+    _, _, convert_action = agent.get_actor_builder()()
+
+    np.testing.assert_array_equal(convert_action(np.array([[-6.0, 2.0, 6.0]])), [-6.0, 2.0, 6.0])
 
 
 def test_pipelined_loop_drives_real_async_envpool_end_to_end():

@@ -32,7 +32,11 @@ class Actor(nn.Module):
             return action_probs
         elif self.action_type == "continuous":
             mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.01))(mlp)
-            log_std = self.param("log_std", nn.initializers.zeros, (1, self.action_size[0]))
+            log_std = jnp.clip(
+                self.param("log_std", nn.initializers.zeros, (1, self.action_size[0])),
+                -20,
+                2,
+            )
             return mu, log_std
 
 
