@@ -63,7 +63,6 @@ class Actor_Critic_Policy_Gradient_Family:
         gamma=0.995,
         learning_rate=3e-4,
         batch_size=32,
-        val_coef=0.2,
         ent_coef=0.01,
         use_entropy_adv_shaping=True,
         entropy_adv_shaping_kappa=2.0,
@@ -99,7 +98,6 @@ class Actor_Critic_Policy_Gradient_Family:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.gamma = gamma
-        self.val_coef = val_coef
         self.ent_coef = ent_coef
         self.log_dir = log_dir
         self.use_entropy_adv_shaping = use_entropy_adv_shaping

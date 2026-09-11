@@ -29,7 +29,6 @@ class SurrogateIMPALA(IMPALA_Family):
         update_freq=100,
         batch_size=1024,
         sample_size=1,
-        val_coef=0.2,
         ent_coef=0.01,
         use_entropy_adv_shaping=True,
         entropy_adv_shaping_kappa=2.0,
@@ -58,7 +57,6 @@ class SurrogateIMPALA(IMPALA_Family):
             update_freq=update_freq,
             batch_size=batch_size,
             sample_size=sample_size,
-            val_coef=val_coef,
             ent_coef=ent_coef,
             use_entropy_adv_shaping=use_entropy_adv_shaping,
             entropy_adv_shaping_kappa=entropy_adv_shaping_kappa,
@@ -237,7 +235,7 @@ class SurrogateIMPALA(IMPALA_Family):
                 (_, (actor_loss, entropy_loss)), actor_grad = jax.value_and_grad(
                     self._actor_loss, has_aux=True
                 )(actor_params, obs, act, mu_prob, pi_prob, adv, use_key)
-                (_, critic_loss), critic_grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
+                critic_loss, critic_grad = jax.value_and_grad(self._critic_loss)(
                     critic_params, actor_params, obs, vs, use_key
                 )
                 actor_updates, actor_opt_state = self.optimizer.update(

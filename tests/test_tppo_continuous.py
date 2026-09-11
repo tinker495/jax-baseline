@@ -62,7 +62,6 @@ def test_continuous_tppo_full_train_step_handles_gaussian_minibatches(cls, famil
     agent.optimizer = optax.sgd(1e-3)
     agent.actor_opt_state = agent.optimizer.init(agent.actor_params)
     agent.critic_opt_state = agent.optimizer.init(agent.critic_params)
-    agent.val_coef = 0.2
     agent.ent_coef = 0.01
     agent.use_entropy_adv_shaping = False
     agent.kl_coef = 5.0

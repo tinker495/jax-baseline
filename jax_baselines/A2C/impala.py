@@ -145,7 +145,7 @@ class IMPALA(IMPALA_Family):
         (_, (actor_loss, entropy_loss)), actor_grad = jax.value_and_grad(
             self._actor_loss, has_aux=True
         )(actor_params, obses, actions, adv, key)
-        (_, critic_loss), critic_grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
+        critic_loss, critic_grad = jax.value_and_grad(self._critic_loss)(
             critic_params, actor_params, obses, vs, key
         )
         actor_updates, actor_opt_state = self.optimizer.update(

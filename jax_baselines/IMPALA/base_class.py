@@ -42,7 +42,6 @@ class IMPALA_Family:
         update_freq=100,
         batch_size=1024,
         sample_size=1,
-        val_coef=0.2,
         ent_coef=0.01,
         use_entropy_adv_shaping=True,
         entropy_adv_shaping_kappa=2.0,
@@ -80,7 +79,6 @@ class IMPALA_Family:
         self.learning_rate = learning_rate
         self.gamma = gamma
         self.lamda = lamda
-        self.val_coef = val_coef
         self.ent_coef = ent_coef
         self.use_entropy_adv_shaping = use_entropy_adv_shaping
         self.entropy_adv_shaping_kappa = entropy_adv_shaping_kappa
@@ -120,9 +118,7 @@ class IMPALA_Family:
         return self.optimizer_factory(learning_rate)
 
     def _critic_loss(self, critic_params, actor_params, obses, targets, key):
-        values = self.critic(critic_params, actor_params, key, obses)
-        critic_loss = jnp.mean(jnp.square(targets - values))
-        return self.val_coef * critic_loss, critic_loss
+        return jnp.mean(jnp.square(targets - self.critic(critic_params, actor_params, key, obses)))
 
     def get_env_setup(self):
         (

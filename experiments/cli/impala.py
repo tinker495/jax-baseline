@@ -40,7 +40,6 @@ def add_args(parser):
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
     parser.add_argument("--optimizer", type=str, default="rmsprop", help="optimaizer")
     parser.add_argument("--ent_coef", type=float, default=0.1, help="entropy coefficient")
-    parser.add_argument("--val_coef", type=float, default=0.6, help="val coefficient")
 
 
 def make_workers(args, runtime):
@@ -61,7 +60,6 @@ def _common(a):
         "sample_size": a.sample_size,
         "buffer_size": int(a.buffer_size),
         "optimizer_factory": make_batch_scaled_optimizer_factory(a.optimizer, a.batch),
-        "val_coef": a.val_coef,
         "ent_coef": a.ent_coef,
         "rho_max": a.rho_max,
         "log_dir": a.logdir,

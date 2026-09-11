@@ -190,7 +190,7 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
                 (_, (a_loss, entropy_loss)), actor_grad = jax.value_and_grad(
                     self._actor_loss, has_aux=True
                 )(actor_params, obs, act, act_prob, adv, use_key)
-                (_, c_loss), critic_grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
+                c_loss, critic_grad = jax.value_and_grad(self._critic_loss)(
                     critic_params, actor_params, obs, oldv, target, use_key
                 )
                 actor_updates, actor_opt_state = self.optimizer.update(
@@ -265,7 +265,6 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
     def _critic_loss(self, critic_params, actor_params, obses, old_value, targets, key):
         values = self.critic(critic_params, actor_params, key, obses)
         clipped_values = old_value + jnp.clip(values - old_value, -self.value_clip, self.value_clip)
-        critic_loss = jnp.mean(
+        return jnp.mean(
             jnp.maximum(jnp.square(values - targets), jnp.square(clipped_values - targets))
         )
-        return self.val_coef * critic_loss, critic_loss
