@@ -513,7 +513,7 @@ class Actor_Critic_Policy_Gradient_Family:
         # terminal so it contributes a zero-value target and never bridges the
         # two episodes in the return. prev_done chains off the *real* env dones,
         # and the same mask keeps the dummy out of the rollout episode stats.
-        prev_done = None
+        prev_done = np.zeros(self.worker_size, dtype=bool)
         convert_action = self.conv_action if self.action_type == "continuous" else None
 
         def send(actions):
@@ -599,7 +599,7 @@ class Actor_Critic_Policy_Gradient_Family:
                 done = np.logical_or(terminateds, truncateds)
                 real_reset = vector_real_reset_mask(self.env, terminateds, truncateds, infos)
                 autoreset = vector_autoreset_mask(self.env, terminateds, truncateds, infos)
-                active = np.ones(self.worker_size, dtype=bool) if prev_done is None else ~prev_done
+                active = ~prev_done
                 scores[active] += rewards[active]
                 eplens[active] += 1
                 step_original, step_original_present = extract_vector_original_rewards(
@@ -609,7 +609,7 @@ class Actor_Critic_Policy_Gradient_Family:
                 originals[active_original] += step_original[active_original]
                 original_present[active_original] = True
 
-                if prev_done is not None and prev_done.any():
+                if prev_done.any():
                     # Flag the dummy step terminal AND zero its reward so it is fully
                     # inert (zero-value target, no episode bridge), independent of
                     # whatever the env reports on the discarded autoreset step.
