@@ -6,8 +6,8 @@ from gymnasium import spaces
 from env_builder.observations import normalize_observation, normalize_observation_space
 from jax_baselines.core.env_protocols import batch_observation
 from jax_baselines.core.epoch_buffer import EpochBuffer
+from jax_baselines.core.normalization import RunningMeanStd
 from jax_baselines.CrossQ.crossq import CrossQ
-from jax_baselines.math.statistics import RunningMeanStd
 from replay_memory.cpprb_buffers import ReplayBuffer
 
 

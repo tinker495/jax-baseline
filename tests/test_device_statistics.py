@@ -3,7 +3,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from jax_baselines.math.statistics import RunningMeanStd
+from jax_baselines.core.normalization import RunningMeanStd
 
 
 def test_host_statistics_keep_jax_observations_on_numpy_boundary():

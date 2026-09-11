@@ -8,6 +8,7 @@ import pytest
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.core.env_protocols import PreparedEnvSpec
+from jax_baselines.core.normalization import normalize_empirical_observation
 
 
 class _Env:
@@ -63,7 +64,11 @@ def test_host_environment_keeps_rollout_arrays_on_cpu(backend, jax_observation):
     assert agent.buffer.memory_backend == "cpu"
     assert agent.obs_rms is not None
     assert all(isinstance(value, np.ndarray) for value in agent.obs_rms.means.values())
-    normalized = agent.normalize_observation({"unified_obs": observation[None, :]})
+    normalized = normalize_empirical_observation(
+        {"unified_obs": observation[None, :]},
+        agent.obs_rms,
+        on_device=agent.memory_backend == "gpu",
+    )
     assert isinstance(normalized["unified_obs"], np.ndarray)
     agent._get_actions = lambda params, obs: (jnp.zeros((1, 1)), jnp.ones((1, 1)))
     assert isinstance(agent.action_continuous(normalized), np.ndarray)

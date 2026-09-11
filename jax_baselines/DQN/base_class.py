@@ -13,6 +13,7 @@ from jax_baselines.core.checkpoint_store import (
 )
 from jax_baselines.core.env_info import get_local_env_info
 from jax_baselines.core.eval import evaluate_policy, record_and_test
+from jax_baselines.core.normalization import RewardNormalizer
 from jax_baselines.core.replay_protocol import (
     LocalReplayNeed,
     PriorityNeed,
@@ -33,7 +34,6 @@ from jax_baselines.DQN.training import (
     QNetTrainReport,
     QNetTrainResult,
 )
-from jax_baselines.math.statistics import RewardNormalizer
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
