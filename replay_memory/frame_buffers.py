@@ -88,7 +88,7 @@ class FrameStackReplayBuffer:
     def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False):
         r = self._count % self.max_size
         self._boundary_next.pop(r, None)
-        self._frame[r] = np.asarray(obs_t[self.observation_key])[0, :, :, -self.cf :]
+        self._frame[r] = np.asarray(obs_t[self.observation_key][0, :, :, -self.cf :])
         self._action[r] = np.asarray(action, dtype=np.float32).reshape(self.action_shape)
         self._reward[r] = reward
         self._terminated[r] = bool(terminated)
@@ -96,9 +96,9 @@ class FrameStackReplayBuffer:
         self._ep_id[r] = self._ep
         self._ep_step[r] = self._cur_step
         if terminated or truncated:
-            self._boundary_next[r] = np.asarray(nxtobs_t[self.observation_key])[
-                0, :, :, -self.cf :
-            ].copy()
+            self._boundary_next[r] = np.asarray(
+                nxtobs_t[self.observation_key][0, :, :, -self.cf :]
+            ).copy()
         self._count += 1
         if terminated or truncated:
             self._ep += 1

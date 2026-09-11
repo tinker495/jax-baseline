@@ -2,6 +2,7 @@ import time
 from collections import deque
 
 import jax
+import jax.numpy as jnp
 import numpy as np
 
 from jax_baselines.APE_X.exploration import worker_epsilons
@@ -117,7 +118,7 @@ class Ape_X_Family(object):
         self.checkpoint_store.save(path, self.params)
 
     def load_params(self, path):
-        self.params = self.target_params = self.checkpoint_store.restore(path)
+        self.params = self.target_params = jax.device_put(self.checkpoint_store.restore(path))
 
     def _make_optimizer(self, learning_rate):
         return self.optimizer_factory(learning_rate)
@@ -157,8 +158,10 @@ class Ape_X_Family(object):
         pass
 
     def description(self):
-        return "buffer len : {} loss : {:.3f} |".format(
-            len(self.replay_buffer), np.mean(self.lossque)
+        array_module = jnp if any(isinstance(loss, jax.Array) for loss in self.lossque) else np
+        return (
+            f"buffer len : {len(self.replay_buffer)} "
+            f"loss : {array_module.mean(array_module.asarray(tuple(self.lossque))):.3f} |"
         )
 
     def train_step(self, steps, gradient_steps):
@@ -178,8 +181,15 @@ class Ape_X_Family(object):
             self.replay_buffer.update_priorities(data["indexes"], new_priorities)
 
         if steps % self.log_interval == 0:
-            log_dict = {"loss/qloss": float(loss), "loss/targets": float(t_mean)}
-            self.logger_server.log_trainer(steps, log_dict)
+            self.logger_server.log_trainer(
+                steps,
+                {
+                    key: float(value)
+                    for key, value in jax.device_get(
+                        {"loss/qloss": loss, "loss/targets": t_mean}
+                    ).items()
+                },
+            )
 
         return loss
 

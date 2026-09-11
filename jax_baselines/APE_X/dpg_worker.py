@@ -64,7 +64,7 @@ class Ape_X_Worker(object):
             else:
                 obs, info = self.env.reset()
             obs = batch_observation(obs)
-            params = param_server.get_params()
+            params = jax.device_put(param_server.get_params())
             eplen = 0
             episode = 0
             if eps is None:
@@ -78,7 +78,7 @@ class Ape_X_Worker(object):
 
             while not stop.is_set():
                 if update.is_set():
-                    params = param_server.get_params()
+                    params = jax.device_put(param_server.get_params())
                     update.clear()
                     get_action = _get_action
 

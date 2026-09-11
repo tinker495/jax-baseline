@@ -239,19 +239,11 @@ class Deteministic_Policy_Gradient_Family:
         )
 
     def _restore_checkpoint_state(self, state: CheckpointState):
-        self.load_checkpoint_params(
-            jax.device_put(state.params, self.memory_device)
-            if self.memory_backend == "gpu"
-            else state.params
-        )
+        self.load_checkpoint_params(jax.device_put(state.params, self.memory_device))
         self.train_steps_count = int(np.asarray(state.train_steps_count).item())
         self._ckpt_update_residual = float(np.asarray(state.ckpt_residual).item())
         self.ckpt.from_state(state.controller_state)
-        self.eval_snapshot = (
-            jax.device_put(state.eval_snapshot, self.memory_device)
-            if self.memory_backend == "gpu"
-            else state.eval_snapshot
-        )
+        self.eval_snapshot = jax.device_put(state.eval_snapshot, self.memory_device)
 
         with jax.default_device(self.memory_device):
             if self.simba:
@@ -444,7 +436,8 @@ class Deteministic_Policy_Gradient_Family:
             for k, v in eval_result.items():
                 description += f"{k} : {v:8.2f}, "
 
-        description += f"loss : {np.mean(self.lossque):.3f}"
+        array_module = jnp if any(isinstance(loss, jax.Array) for loss in self.lossque) else np
+        description += f"loss : {array_module.mean(array_module.asarray(tuple(self.lossque))):.3f}"
         if self.use_checkpointing and (self.ckpt.last_update_step is not None):
             description += f", ckpt_upd_step : {int(self.ckpt.last_update_step)}"
         description += self._rollout_pbar_suffix()

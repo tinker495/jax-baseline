@@ -869,11 +869,15 @@ def test_qnet_vector_action_passes_array_through():
 
 def test_qnet_refresh_exploration_updates_epsilon():
     agent = Q_Network_Family.__new__(Q_Network_Family)
-    agent.exploration = lambda steps: 0.42
+    agent.param_noise = False
+    agent.exploration_fraction = 0.5
+    agent.exploration_initial_eps = 1.0
+    agent.exploration_final_eps = 0.0
+    agent.prepare_run(100)
 
     agent._refresh_exploration(steps=10)
 
-    assert agent.update_eps == 0.42
+    assert agent.update_eps == 0.8
 
 
 def test_dpg_single_action_single_indexes_continuous_action():

@@ -100,7 +100,7 @@ def test_gpu_environment_selects_device_memory_unless_cpu_requested(backend):
 def test_forced_gpu_fails_without_gpu():
     if any(device.platform == "gpu" for device in jax.devices()):
         pytest.skip("Requires a CPU-only JAX runtime")
-    with pytest.raises(RuntimeError, match="GPU|gpu"):
+    with pytest.raises(ValueError, match="GPU|gpu"):
         agent = Actor_Critic_Policy_Gradient_Family(
             _Env(np.ones(2, np.float32)),
             None,

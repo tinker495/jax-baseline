@@ -242,13 +242,15 @@ class MjlabSingleEnv(SingleEnv):
         action = (jnp if self._vector.jax_arrays else np).asarray(action)
         self._vector.step(action[None])
         observation, reward, terminated, truncated, info = self._vector.get_result()
-        if terminated[0] or truncated[0]:
+        reward, terminated, truncated = jax.device_get((reward[0], terminated[0], truncated[0]))
+        terminated, truncated = bool(terminated), bool(truncated)
+        if terminated or truncated:
             self._cached_reset = self._current()
         return (
             {key: value[0] for key, value in observation.items()},
-            float(reward[0]),
-            bool(terminated[0]),
-            bool(truncated[0]),
+            float(reward),
+            terminated,
+            truncated,
             info,
         )
 

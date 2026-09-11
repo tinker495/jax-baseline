@@ -29,6 +29,7 @@ from jax_baselines.core.eval import (
     extract_vector_original_rewards,
     record_and_test,
 )
+from jax_baselines.core.replay_protocol import select_replay_device
 from jax_baselines.core.rollout_stats import EpisodeTracker, device_episode_step
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.training_session import TrainingSession
@@ -120,37 +121,35 @@ class Actor_Critic_Policy_Gradient_Family:
 
         self.get_env_setup()
         self._initial_reset: tuple[dict, dict] | None = None
-        self.memory_backend: Literal["cpu", "gpu"] = "cpu"
-        if memory_backend == "gpu":
-            self.memory_backend = "gpu"
-        elif memory_backend == "auto":
+        self.memory_device = None
+        if memory_backend != "cpu":
             if self.env_type == "SingleEnv":
                 self._initial_reset = self.env.reset()
                 initial_obs = self._initial_reset[0]
             else:
                 initial_obs = self.env.current_obs()
-            if all(
-                isinstance(value, jax.Array)
-                and all(device.platform == "gpu" for device in value.devices())
-                for value in initial_obs.values()
-            ):
-                self.memory_backend = "gpu"
+            self.memory_device = select_replay_device(initial_obs, required=memory_backend == "gpu")
+        self.memory_backend: Literal["cpu", "gpu"] = (
+            "gpu" if self.memory_device is not None else "cpu"
+        )
         print("memory backend : ", self.memory_backend)
         self.obs_normalization = obs_normalization
-        self.obs_rms = (
-            RunningMeanStd(
-                epsilon=0.0,
-                shapes=self.observation_space,
-                dtype=np.float32,
-                on_device=self.memory_backend == "gpu",
+        with jax.default_device(self.memory_device):
+            self.obs_rms = (
+                RunningMeanStd(
+                    epsilon=0.0,
+                    shapes=self.observation_space,
+                    dtype=np.float32,
+                    on_device=self.memory_backend == "gpu",
+                )
+                if obs_normalization
+                else None
             )
-            if obs_normalization
-            else None
-        )
         # Control model initialization timing across children
         self._init_setup_model = _init_setup_model
         if self._init_setup_model:
-            self.setup_model()
+            with jax.default_device(self.memory_device):
+                self.setup_model()
 
     def save_params(self, path):
         self.checkpoint_store.save(
@@ -165,11 +164,14 @@ class Actor_Critic_Policy_Gradient_Family:
         state = self.checkpoint_store.restore(path)
         if not isinstance(state, ACCheckpointState):
             raise TypeError("Expected ACCheckpointState with observation-normalization state")
-        obs_rms = (
-            RunningMeanStd.from_state(state.obs_rms_state, on_device=self.memory_backend == "gpu")
-            if state.obs_rms_state is not None
-            else None
-        )
+        with jax.default_device(self.memory_device):
+            obs_rms = (
+                RunningMeanStd.from_state(
+                    state.obs_rms_state, on_device=self.memory_backend == "gpu"
+                )
+                if state.obs_rms_state is not None
+                else None
+            )
         if obs_rms is not None and (
             obs_rms.means.keys() != self.observation_space.keys()
             or any(
@@ -178,7 +180,7 @@ class Actor_Critic_Policy_Gradient_Family:
             )
         ):
             raise ValueError("Checkpoint observation statistics do not match the environment")
-        self.params = state.params
+        self.params = jax.device_put(state.params, self.memory_device)
         self.obs_rms = obs_rms
         self.obs_normalization = obs_rms is not None
 
@@ -206,6 +208,7 @@ class Actor_Critic_Policy_Gradient_Family:
             self.worker_size,
             [1] if self.action_type == "discrete" else self.action_size,
             memory_backend=self.memory_backend,
+            memory_device=self.memory_device,
         )
 
     def get_env_setup(self):
@@ -282,7 +285,8 @@ class Actor_Critic_Policy_Gradient_Family:
         if self.memory_backend == "cpu":
             if eval:
                 return np.asarray(mu)
-            return np.random.normal(np.asarray(mu), np.asarray(std)).astype(np.float32)
+            mu, std = jax.device_get((mu, std))
+            return np.random.normal(mu, std).astype(np.float32)
         if eval:
             return mu
         return _sample_continuous(mu, std, next(self.key_seq))
@@ -325,7 +329,8 @@ class Actor_Critic_Policy_Gradient_Family:
             for k, v in eval_result.items():
                 description += f"{k} : {v:8.2f}, "
 
-        description += f"loss : {np.mean(self.lossque):.3f}"
+        array_module = jnp if any(isinstance(loss, jax.Array) for loss in self.lossque) else np
+        description += f"loss : {array_module.mean(array_module.asarray(tuple(self.lossque))):.3f}"
 
         description += self._rollout_pbar_suffix()
 
@@ -372,13 +377,15 @@ class Actor_Critic_Policy_Gradient_Family:
             transition_steps=self._lr_annealing_transition_steps(total_timesteps),
         )
         self.optimizer = self._make_optimizer(schedule)
-        self.opt_state = self.optimizer.init(self.params)
+        with jax.default_device(self.memory_device):
+            self.opt_state = self.optimizer.init(self.params)
 
     def run_training_loop(self, ctx):
-        if self.env_type == "SingleEnv":
-            self.learn_SingleEnv(ctx)
-        if self.env_type == "VectorizedEnv":
-            self.learn_VectorizedEnv(ctx)
+        with jax.default_device(self.memory_device):
+            if self.env_type == "SingleEnv":
+                self.learn_SingleEnv(ctx)
+            if self.env_type == "VectorizedEnv":
+                self.learn_VectorizedEnv(ctx)
 
     def learn(
         self,

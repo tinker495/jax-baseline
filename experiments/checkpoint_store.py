@@ -9,7 +9,7 @@ class FileCheckpointStore:
     def save(self, path, state):
         os.makedirs(path, exist_ok=True)
         with open(os.path.join(path, "arrays.npy"), "wb") as handle:
-            for leaf in jax.tree_util.tree_leaves(state):
+            for leaf in jax.tree_util.tree_leaves(jax.device_get(state)):
                 np.save(handle, leaf, allow_pickle=False)
 
         structure = jax.tree_util.tree_map(lambda _leaf: 0, state)

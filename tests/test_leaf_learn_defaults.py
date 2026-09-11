@@ -186,12 +186,16 @@ def test_ddpg_prepare_run_keeps_exploration_initialization():
     agent.exploration_fraction = 0.5
     agent.exploration_initial_eps = 1.0
     agent.exploration_final_eps = 0.1
+    agent.memory_backend = "cpu"
+    agent.noise = lambda: 0.0
 
     agent.prepare_run(100)
 
     assert agent.epsilon == 1.0
-    assert agent.exploration.value(0) == pytest.approx(1.0)
-    assert agent.exploration.value(50) == pytest.approx(0.1)
+    agent._apply_action_noise(0.0, steps=0, eval=False)
+    assert agent.epsilon == pytest.approx(1.0)
+    agent._apply_action_noise(0.0, steps=50, eval=False)
+    assert agent.epsilon == pytest.approx(0.1)
 
 
 def _set_q_run_name_flags(agent):

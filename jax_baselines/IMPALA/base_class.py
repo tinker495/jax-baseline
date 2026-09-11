@@ -102,7 +102,7 @@ class IMPALA_Family:
         self.checkpoint_store.save(path, self.params)
 
     def load_params(self, path):
-        self.params = self.target_params = self.checkpoint_store.restore(path)
+        self.params = self.target_params = jax.device_put(self.checkpoint_store.restore(path))
 
     def _make_optimizer(self, learning_rate):
         return self.optimizer_factory(learning_rate)
@@ -221,7 +221,7 @@ class IMPALA_Family:
                     return mean, log_std
 
                 def get_action_prob(actor, params, obses):
-                    mean, log_std = actor(params, obses)
+                    mean, log_std = jax.device_get(actor(params, obses))
                     std = np.exp(log_std)
                     action = np.random.normal(mean, std)
                     return action, -(
@@ -243,7 +243,8 @@ class IMPALA_Family:
         return builder
 
     def description(self):
-        return f"loss : {np.mean(self.lossque):.3f} |"
+        array_module = jnp if any(isinstance(loss, jax.Array) for loss in self.lossque) else np
+        return f"loss : {array_module.mean(array_module.asarray(tuple(self.lossque))):.3f} |"
 
     def run_name_update(self, run_name):
         return run_name

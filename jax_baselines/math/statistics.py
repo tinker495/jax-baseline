@@ -156,29 +156,32 @@ class RunningMeanStd:
 
     def to_state(self):
         """Serialize running statistics to a numpy-friendly state."""
+        means, variances, count = jax.device_get((self.means, self.vars, self.count))
         return {
-            "means": {key: np.asarray(arr) for key, arr in self.means.items()},
-            "vars": {key: np.asarray(arr) for key, arr in self.vars.items()},
-            "count": np.asarray(self.count, dtype=np.float64),
+            "means": {key: np.asarray(arr) for key, arr in means.items()},
+            "vars": {key: np.asarray(arr) for key, arr in variances.items()},
+            "count": np.asarray(count, dtype=np.float64),
         }
 
     @classmethod
     def from_state(cls, state, *, on_device: bool = False):
         """Deserialize running statistics from a saved state."""
+        if not on_device:
+            state = jax.device_get(state)
         means = state["means"]
         vars_ = state["vars"]
         if not isinstance(means, dict) or not isinstance(vars_, dict):
             raise TypeError("Running statistics means and vars must be dictionaries")
         if means.keys() != vars_.keys():
             raise ValueError("Running statistics means and vars must have matching keys")
-        means = {key: np.asarray(arr) for key, arr in means.items()}
-        vars_ = {key: np.asarray(arr) for key, arr in vars_.items()}
+        array_module = jnp if on_device else np
+        means = {key: array_module.asarray(arr) for key, arr in means.items()}
+        vars_ = {key: array_module.asarray(arr) for key, arr in vars_.items()}
         if any(means[key].shape != vars_[key].shape for key in means):
             raise ValueError("Running statistics means and vars must have matching shapes")
         dtype = next(iter(means.values())).dtype if means else np.float64
         shapes = {key: arr.shape for key, arr in means.items()}
         instance = cls(shapes=shapes, dtype=dtype, on_device=on_device)
-        array_module = jnp if on_device else np
         instance.means = {
             key: array_module.asarray(arr, dtype=instance.dtype) for key, arr in means.items()
         }

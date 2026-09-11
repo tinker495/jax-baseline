@@ -2,6 +2,7 @@ import warnings
 from collections.abc import Mapping
 
 import cpprb
+import jax
 import numpy as np
 
 
@@ -263,7 +264,13 @@ class NstepReplayBuffer(ReplayBuffer):
         truncated=False,
         store_mask=None,
     ):
-        for w in _active_worker_indices(self.worker_size, store_mask):
+        workers = _active_worker_indices(self.worker_size, store_mask)
+        if not len(workers):
+            return
+        obs_t, action, reward, nxtobs_t, terminated, truncated = jax.device_get(
+            (obs_t, action, reward, nxtobs_t, terminated, truncated)
+        )
+        for w in workers:
             obsdict = _storage_observation(
                 self.obsdict, {key: value[w] for key, value in obs_t.items()}, "obs"
             )
@@ -309,7 +316,13 @@ class NstepReplayBuffer(ReplayBuffer):
         truncated=False,
         store_mask=None,
     ):
-        for w in _active_worker_indices(self.worker_size, store_mask):
+        workers = _active_worker_indices(self.worker_size, store_mask)
+        if not len(workers):
+            return
+        obs_t, action, reward, nxtobs_t, terminated, truncated = jax.device_get(
+            (obs_t, action, reward, nxtobs_t, terminated, truncated)
+        )
+        for w in workers:
             obsdict = _storage_observation(
                 self.obsdict, {key: value[w] for key, value in obs_t.items()}, "obs"
             )
