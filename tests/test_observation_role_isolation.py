@@ -15,44 +15,31 @@ def test_actor_critic_observation_roles_are_isolated(backend, family):
         f"model_builder.{backend}.{family}.{'ac' if family == 'ac' else 'ddpg'}_builder"
     )
     space = {"actor_sensor": [2], "critic_privileged": [3], "unified_command": [1]}
-    kwargs = {"node": 16, "hidden_n": 1}
+    kwargs = {"actor_node": 16, "critic_node": 32, "hidden_n": 1}
     key = jax.random.PRNGKey(3)
     if family == "ac":
-        preproc, actor, critic, params = module.model_builder_maker(
+        actor, critic, params, critic_params = module.model_builder_maker(
             space, (2,), "continuous", kwargs
         )(key)
-        critic_params = params
-    elif backend == "flax":
-        preproc, actor, critic, params, critic_params = module.model_builder_maker(
-            space, (2,), kwargs
-        )(key)
     else:
-        preproc, actor, critic, params = module.model_builder_maker(space, (2,), kwargs)(key)
-        critic_params = params
+        actor, critic, params, critic_params = module.model_builder_maker(space, (2,), kwargs)(key)
 
     obs = {name: jnp.ones((2, *shape)) for name, shape in space.items()}
 
     def outputs(observations):
-        feature = preproc(params, key, observations)
-        policy = actor(params, key, feature)
+        policy = actor(params, key, observations)
         value = (
-            critic(critic_params, key, feature)
+            critic(critic_params, params, key, observations)
             if family == "ac"
-            else critic(critic_params, key, feature, jnp.zeros((2, 2)))
+            else critic(critic_params, params, key, observations, jnp.zeros((2, 2)))
         )
         return policy[0] if family == "ac" else policy, value
 
-    features = preproc(params, key, obs)
-    assert features["actor"].shape == (2, 3)
-    assert features["critic"].shape == (2, 4)
-    for role, name in (("actor", "actor_sensor"), ("critic", "critic_privileged")):
-        changed = preproc(params, key, {**obs, name: obs[name] * 7})
-        assert not np.array_equal(changed[role], features[role])
-    shared = preproc(params, key, {**obs, "unified_command": obs["unified_command"] * 7})
-    for role in ("actor", "critic"):
-        assert not np.array_equal(shared[role], features[role])
-
     policy, value = outputs(obs)
+    actor_only = actor(
+        params, key, {name: obs[name] for name in ("actor_sensor", "unified_command")}
+    )
+    np.testing.assert_array_equal(actor_only[0] if family == "ac" else actor_only, policy)
     actor_changed, critic_unchanged = outputs({**obs, "actor_sensor": obs["actor_sensor"] * 7})
     actor_unchanged, _ = outputs({**obs, "critic_privileged": obs["critic_privileged"] * 7})
     shared_actor, _ = outputs({**obs, "unified_command": obs["unified_command"] * 7})
@@ -67,16 +54,21 @@ def test_td7_encoder_and_actor_ignore_privileged_observations(backend):
     module = importlib.import_module(f"model_builder.{backend}.dpg.td7_builder")
     space = {"actor_sensor": [2], "critic_privileged": [3], "unified_command": [1]}
     key = jax.random.PRNGKey(3)
-    built = module.model_builder_maker(space, (2,), {"node": 16, "hidden_n": 1})(key)
-    preproc, encoder, _, actor, _ = built[:5]
-    encoder_params, policy_params = built[5:7]
+    built = module.model_builder_maker(
+        space, (2,), {"actor_node": 16, "critic_node": 32, "hidden_n": 1}
+    )(key)
+    encoder, _, _, _, actor, _ = built[:6]
+    encoder_params, _, policy_params, _ = built[6:]
     obs = {name: jnp.ones((2, *shape)) for name, shape in space.items()}
-    feature = preproc(encoder_params, key, obs)
-    privileged = preproc(
+    feature, zs = encoder(encoder_params, key, obs)
+    privileged, privileged_zs = encoder(
         encoder_params, key, {**obs, "critic_privileged": obs["critic_privileged"] * 7}
     )
-    zs = encoder(encoder_params, key, feature)
-    privileged_zs = encoder(encoder_params, key, privileged)
+    actor_only, actor_only_zs = encoder(
+        encoder_params, key, {name: obs[name] for name in ("actor_sensor", "unified_command")}
+    )
+    np.testing.assert_array_equal(actor_only, feature)
+    np.testing.assert_array_equal(actor_only_zs, zs)
     np.testing.assert_array_equal(privileged_zs, zs)
     np.testing.assert_array_equal(
         actor(policy_params, key, feature, zs),

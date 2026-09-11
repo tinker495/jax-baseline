@@ -1,13 +1,4 @@
-"""Golden-master param-tree structure for the Haiku DPG builders.
-
-Locks the Haiku param-tree keypaths + shapes that the five Haiku DPG builders
-(``ddpg``, ``td3``, ``sac``, ``tqc``, ``td7``) produce. Haiku param keys derive
-from the ``hk.Module`` subclass name (lowercased, e.g. ``actor``/``critic``) and
-the enclosing ``hk.transform`` scope, so extracting the shared ``Actor``/
-``Critic`` classes into ``ddpg_td3_blocks`` must leave these structures
-byte-identical. A future change that silently broke checkpoint compatibility
-would change this structure and fail here.
-"""
+"""Parameter shapes for independently owned Haiku DPG actor and critic models."""
 
 from __future__ import annotations
 
@@ -29,7 +20,7 @@ from model_builder.haiku.dpg.tqc_builder import (
     model_builder_maker as tqc_model_builder_maker,
 )
 
-_POLICY_KWARGS = {"node": 16, "hidden_n": 2, "embedding_mode": "normal"}
+_POLICY_KWARGS = {"actor_node": 16, "critic_node": 16, "hidden_n": 2, "embedding_mode": "normal"}
 _OBSERVATION_SPACE = {"unified_obs": [4]}
 _ACTION_SIZE = [2]
 _TQC_SUPPORT_N = 25
@@ -74,23 +65,26 @@ def _critic_tower(name, head):
 
 def test_ddpg_builder_param_tree_structure():
     builder = ddpg_model_builder_maker(_OBSERVATION_SPACE, _ACTION_SIZE, dict(_POLICY_KWARGS))
-    _preproc, _actor, _critic, params = builder(jax.random.PRNGKey(0))
-    assert _param_structure(params) == _DET_ACTOR_STRUCTURE | _critic_tower("critic", 1)
+    _actor, _critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
+    assert _param_structure(policy_params) == _DET_ACTOR_STRUCTURE
+    assert _param_structure(critic_params) == _critic_tower("critic", 1)
 
 
 def test_td3_builder_param_tree_structure():
     builder = td3_model_builder_maker(_OBSERVATION_SPACE, _ACTION_SIZE, dict(_POLICY_KWARGS))
-    _preproc, _actor, _critic, params = builder(jax.random.PRNGKey(0))
-    assert _param_structure(params) == (
-        _DET_ACTOR_STRUCTURE | _critic_tower("critic", 1) | _critic_tower("critic_1", 1)
+    _actor, _critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
+    assert _param_structure(policy_params) == _DET_ACTOR_STRUCTURE
+    assert _param_structure(critic_params) == _critic_tower("critic", 1) | _critic_tower(
+        "critic_1", 1
     )
 
 
 def test_sac_builder_param_tree_structure():
     builder = sac_model_builder_maker(_OBSERVATION_SPACE, _ACTION_SIZE, dict(_POLICY_KWARGS))
-    _preproc, _actor, _critic, params = builder(jax.random.PRNGKey(0))
-    assert _param_structure(params) == (
-        _GAUSSIAN_ACTOR_STRUCTURE | _critic_tower("critic", 1) | _critic_tower("critic_1", 1)
+    _actor, _critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
+    assert _param_structure(policy_params) == _GAUSSIAN_ACTOR_STRUCTURE
+    assert _param_structure(critic_params) == _critic_tower("critic", 1) | _critic_tower(
+        "critic_1", 1
     )
 
 
@@ -98,30 +92,27 @@ def test_tqc_builder_param_tree_structure():
     builder = tqc_model_builder_maker(
         _OBSERVATION_SPACE, _ACTION_SIZE, _TQC_SUPPORT_N, dict(_POLICY_KWARGS)
     )
-    _preproc, _actor, _critic, params = builder(jax.random.PRNGKey(0))
-    assert _param_structure(params) == (
-        _GAUSSIAN_ACTOR_STRUCTURE
-        | _critic_tower("critic", _TQC_SUPPORT_N)
-        | _critic_tower("critic_1", _TQC_SUPPORT_N)
+    _actor, _critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
+    assert _param_structure(policy_params) == _GAUSSIAN_ACTOR_STRUCTURE
+    assert _param_structure(critic_params) == (
+        _critic_tower("critic", _TQC_SUPPORT_N) | _critic_tower("critic_1", _TQC_SUPPORT_N)
     )
 
 
-# --- td7 keeps its own Encoder/Action_Encoder/Actor/Critic (structurally
-# distinct: avgl1norm preamble, embedding concat). These trees are locked here
-# to prove the S2 extraction did not perturb td7 at all. ---
+# TD7 gives each role its own state and action encoders.
 _TD7_ENCODER_PARAMS = {
-    ("['encoder/linear']['w']", (4, 256)),
-    ("['encoder/linear']['b']", (256,)),
-    ("['encoder/linear_1']['w']", (256, 256)),
-    ("['encoder/linear_1']['b']", (256,)),
-    ("['encoder/linear_2']['w']", (256, 256)),
-    ("['encoder/linear_2']['b']", (256,)),
-    ("['action__encoder/linear']['w']", (258, 256)),
-    ("['action__encoder/linear']['b']", (256,)),
-    ("['action__encoder/linear_1']['w']", (256, 256)),
-    ("['action__encoder/linear_1']['b']", (256,)),
-    ("['action__encoder/linear_2']['w']", (256, 256)),
-    ("['action__encoder/linear_2']['b']", (256,)),
+    ("['encoder/linear']['w']", (4, 16)),
+    ("['encoder/linear']['b']", (16,)),
+    ("['encoder/linear_1']['w']", (16, 16)),
+    ("['encoder/linear_1']['b']", (16,)),
+    ("['encoder/linear_2']['w']", (16, 16)),
+    ("['encoder/linear_2']['b']", (16,)),
+    ("['action__encoder/linear']['w']", (18, 16)),
+    ("['action__encoder/linear']['b']", (16,)),
+    ("['action__encoder/linear_1']['w']", (16, 16)),
+    ("['action__encoder/linear_1']['b']", (16,)),
+    ("['action__encoder/linear_2']['w']", (16, 16)),
+    ("['action__encoder/linear_2']['b']", (16,)),
 }
 
 
@@ -129,7 +120,7 @@ def _td7_critic_tower(name):
     return {
         (f"['{name}/linear']['w']", (6, 16)),
         (f"['{name}/linear']['b']", (16,)),
-        (f"['{name}/linear_1']['w']", (528, 16)),
+        (f"['{name}/linear_1']['w']", (48, 16)),
         (f"['{name}/linear_1']['b']", (16,)),
         (f"['{name}/linear_2']['w']", (16, 16)),
         (f"['{name}/linear_2']['b']", (16,)),
@@ -141,7 +132,7 @@ def _td7_critic_tower(name):
 _TD7_ACTOR_PARAMS = {
     ("['actor/linear']['w']", (4, 16)),
     ("['actor/linear']['b']", (16,)),
-    ("['actor/linear_1']['w']", (272, 16)),
+    ("['actor/linear_1']['w']", (32, 16)),
     ("['actor/linear_1']['b']", (16,)),
     ("['actor/linear_2']['w']", (16, 16)),
     ("['actor/linear_2']['b']", (16,)),
@@ -153,15 +144,20 @@ _TD7_ACTOR_PARAMS = {
 def test_td7_builder_param_tree_structure():
     builder = td7_model_builder_maker(_OBSERVATION_SPACE, _ACTION_SIZE, dict(_POLICY_KWARGS))
     (
-        _preproc,
-        _encoder,
-        _action_encoder,
+        _actor_encoder,
+        _critic_encoder,
+        _actor_action_encoder,
+        _critic_action_encoder,
         _actor,
         _critic,
-        encoder_params,
-        params,
+        actor_encoder_params,
+        critic_encoder_params,
+        policy_params,
+        critic_params,
     ) = builder(jax.random.PRNGKey(0))
-    assert _param_structure(encoder_params) == _TD7_ENCODER_PARAMS
-    assert _param_structure(params) == (
-        _TD7_ACTOR_PARAMS | _td7_critic_tower("critic") | _td7_critic_tower("critic_1")
+    assert _param_structure(actor_encoder_params) == _TD7_ENCODER_PARAMS
+    assert _param_structure(critic_encoder_params) == _TD7_ENCODER_PARAMS
+    assert _param_structure(policy_params) == _TD7_ACTOR_PARAMS
+    assert _param_structure(critic_params) == _td7_critic_tower("critic") | _td7_critic_tower(
+        "critic_1"
     )

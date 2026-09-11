@@ -14,7 +14,8 @@ base:
   learning_starts: 5000
   optimizer: adam
   ent_coef: auto_0.01
-  node: 256
+  actor_node: 256
+  critic_node: 512
   hidden_n: 4
 variants:
   - {algo: XQC}

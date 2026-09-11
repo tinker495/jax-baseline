@@ -950,7 +950,7 @@ def _dpg_action_agent():
     agent.learning_starts = 0
     agent.worker_size = 1
     agent.action_size = (1,)
-    agent._select_action_state = lambda eval, steps: {"encoder": None, "policy": None}
+    agent._select_action_state = lambda eval, steps: {"actor_encoder": None, "policy": None}
     agent._policy_action_from_state = lambda state, obs, eval, steps: np.asarray(obs["unified_obs"])
     agent._apply_action_noise = lambda actions, steps, eval: actions
     return agent
@@ -985,7 +985,7 @@ def test_dpg_eval_skips_random_warmup_and_uses_policy_action():
     agent.learning_starts = 100
     agent.worker_size = 32
     agent.action_size = (17,)
-    agent._select_action_state = lambda eval, steps: {"encoder": None, "policy": None}
+    agent._select_action_state = lambda eval, steps: {"actor_encoder": None, "policy": None}
     agent._policy_action_from_state = lambda state, obs, eval, steps: np.full((1, 17), 0.5)
     agent._apply_action_noise = lambda actions, steps, eval: actions
     env = _ShapeCheckingEvalEnv((17,))
@@ -1004,7 +1004,7 @@ def test_td3_test_action_uses_eval_action_shape_with_many_workers():
     agent.worker_size = 32
     agent.action_size = (17,)
     agent.action_noise = 0.1
-    agent._select_action_state = lambda eval, steps: {"encoder": None, "policy": None}
+    agent._select_action_state = lambda eval, steps: {"actor_encoder": None, "policy": None}
     agent._policy_action_from_state = lambda state, obs, eval, steps: np.ones((1, 17))
     env = _ShapeCheckingEvalEnv((17,))
 
@@ -1018,14 +1018,14 @@ def test_td7_eval_snapshot_waits_for_checkpoint_enabled_gate():
     agent.use_checkpointing = True
     agent.ckpt = type("Ckpt", (), {"enabled": False})()
     agent.eval_snapshot = {
-        "encoder": "checkpoint-encoder",
+        "actor_encoder": "checkpoint-encoder",
         "policy": "checkpoint-policy",
     }
-    agent.fixed_encoder_params = "live-encoder"
+    agent.fixed_actor_encoder_params = "live-encoder"
     agent.policy_params = "live-policy"
 
     assert TD7._select_action_state(agent, eval=True, steps=5) == {
-        "encoder": "live-encoder",
+        "actor_encoder": "live-encoder",
         "policy": "live-policy",
     }
 

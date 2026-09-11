@@ -17,7 +17,8 @@ base:
   mini_batch: 256
   gamma: 0.995
   lamda: 0.95
-  node: 128
+  actor_node: 128
+  critic_node: 128
   hidden_n: 2
   optimizer: rmsprop
 variants:

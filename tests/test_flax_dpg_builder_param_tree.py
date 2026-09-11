@@ -1,14 +1,4 @@
-"""Golden-master param-tree structure for the shared flax DPG builders.
-
-Locks the Flax param-tree keypaths + shapes that ``ddpg_builder``/``td3_builder``
-produce after their deterministic ``Actor``/``Critic`` were extracted into the
-shared ``ddpg_td3_blocks`` module, and that ``sac_builder``/``tqc_builder``
-produce after their squashed-Gaussian ``Actor`` + plain ``Critic`` were extracted
-into the shared ``gaussian_blocks`` module. Flax param keys depend on the
-enclosing module attribute names (``act``, ``crit1``, ``crit2``) and the inner
-class identifiers; a future rename or layer-count change that silently broke
-checkpoint compatibility would change this structure and fail here.
-"""
+"""Independent Flax DPG parameter trees with different actor and critic widths."""
 
 from __future__ import annotations
 
@@ -31,7 +21,7 @@ from model_builder.flax.dpg.tqc_builder import (
     model_builder_maker as tqc_model_builder_maker,
 )
 
-_POLICY_KWARGS = {"node": 16, "hidden_n": 2, "embedding_mode": "normal"}
+_POLICY_KWARGS = {"actor_node": 16, "critic_node": 32, "hidden_n": 2, "embedding_mode": "normal"}
 _OBSERVATION_SPACE = {"unified_obs": [4]}
 _ACTION_SIZE = [2]
 _SUPPORT_N = 25
@@ -63,11 +53,11 @@ _ACTOR_STRUCTURE = {
 }
 
 _CRITIC_TOWER = {
-    ("['params']['Dense_0']['kernel']", (6, 16)),
-    ("['params']['Dense_0']['bias']", (16,)),
-    ("['params']['Dense_1']['kernel']", (16, 16)),
-    ("['params']['Dense_1']['bias']", (16,)),
-    ("['params']['Dense_2']['kernel']", (16, 1)),
+    ("['params']['Dense_0']['kernel']", (6, 32)),
+    ("['params']['Dense_0']['bias']", (32,)),
+    ("['params']['Dense_1']['kernel']", (32, 32)),
+    ("['params']['Dense_1']['bias']", (32,)),
+    ("['params']['Dense_2']['kernel']", (32, 1)),
     ("['params']['Dense_2']['bias']", (1,)),
 }
 
@@ -99,11 +89,11 @@ def _quantile_critic_tower(support_n):
     # tqc's Critic mirrors the plain Critic MLP but emits ``support_n`` quantiles
     # from its final Dense instead of a single scalar.
     return {
-        ("['params']['Dense_0']['kernel']", (6, 16)),
-        ("['params']['Dense_0']['bias']", (16,)),
-        ("['params']['Dense_1']['kernel']", (16, 16)),
-        ("['params']['Dense_1']['bias']", (16,)),
-        ("['params']['Dense_2']['kernel']", (16, support_n)),
+        ("['params']['Dense_0']['kernel']", (6, 32)),
+        ("['params']['Dense_0']['bias']", (32,)),
+        ("['params']['Dense_1']['kernel']", (32, 32)),
+        ("['params']['Dense_1']['bias']", (32,)),
+        ("['params']['Dense_2']['kernel']", (32, support_n)),
         ("['params']['Dense_2']['bias']", (support_n,)),
     }
 
@@ -121,7 +111,7 @@ def _param_structure(tree):
 
 def _build(maker):
     builder = maker(_OBSERVATION_SPACE, _ACTION_SIZE, dict(_POLICY_KWARGS))
-    _preproc, _actor, _critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
+    _actor, _critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
     return policy_params, critic_params
 
 
@@ -134,16 +124,17 @@ def test_deterministic_builders_preserve_public_contract_and_param_roots(
     assert hasattr(module, "Critic")
 
     builder = module.model_builder_maker(_OBSERVATION_SPACE, _ACTION_SIZE, dict(_POLICY_KWARGS))
-    assert len(builder()) == 3
-    preproc, actor, critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
+    assert len(builder()) == 2
+    actor, critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
     assert set(policy_params["params"]) == {"act"}
-    assert set(critic_params["params"]) == critic_roots
+    assert set(critic_params["params"]) == (critic_roots if twin else {"crit1"})
+    if not twin:
+        assert set(critic_params["params"]["crit1"]) == critic_roots
 
     key = jax.random.PRNGKey(1)
-    feature = preproc(policy_params, key, {"unified_obs": jnp.zeros((1, 4), dtype=jnp.float32)})
-    action = actor(policy_params, key, feature)
-    values = critic(critic_params, key, feature, action)
-    assert feature["actor"].shape == feature["critic"].shape == (1, 4)
+    observations = {"unified_obs": jnp.zeros((1, 4), dtype=jnp.float32)}
+    action = actor(policy_params, key, observations)
+    values = critic(critic_params, policy_params, key, observations, action)
     assert action.shape == (1, 2)
     if twin:
         assert tuple(value.shape for value in values) == ((1, 1), (1, 1))
@@ -154,7 +145,7 @@ def test_deterministic_builders_preserve_public_contract_and_param_roots(
 def test_ddpg_builder_param_tree_structure():
     policy_params, critic_params = _build(ddpg_model_builder_maker)
     assert _param_structure(policy_params) == _ACTOR_STRUCTURE
-    assert _param_structure(critic_params) == _CRITIC_TOWER
+    assert _param_structure(critic_params) == _twin_tower("crit1")
 
 
 def test_td3_builder_param_tree_structure():
@@ -173,7 +164,7 @@ def test_tqc_builder_param_tree_structure():
     builder = tqc_model_builder_maker(
         _OBSERVATION_SPACE, _ACTION_SIZE, _SUPPORT_N, dict(_POLICY_KWARGS)
     )
-    _preproc, _actor, _critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
+    _actor, _critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
     quantile_tower = _quantile_critic_tower(_SUPPORT_N)
     assert _param_structure(policy_params) == _GAUSSIAN_ACTOR_STRUCTURE
     assert _param_structure(critic_params) == _twin_tower_from(

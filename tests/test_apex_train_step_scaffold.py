@@ -41,7 +41,7 @@ class _RecordingReplay:
         self.update_calls.append((indexes, priorities))
 
 
-def _base_fake():
+def _base_fake(dpg):
     invoked = []
     logged = []
     return (
@@ -53,7 +53,12 @@ def _base_fake():
             replay_buffer=_RecordingReplay(),
             logger_server=SimpleNamespace(log_trainer=lambda steps, d: logged.append((steps, d))),
             _invoke_train_step=lambda steps, data: (
-                invoked.append((steps, data)) or ("P", "TP", "OPT", 0.5, 1.5, [0.1, 0.2])
+                invoked.append((steps, data))
+                or (
+                    ("P", "C", "TP", "TC", "POPT", "COPT", 0.5, 1.5, [0.1, 0.2])
+                    if dpg
+                    else ("P", "TP", "OPT", 0.5, 1.5, [0.1, 0.2])
+                )
             ),
         ),
         invoked,
@@ -63,13 +68,18 @@ def _base_fake():
 
 @pytest.mark.parametrize("base_cls", BASES)
 def test_base_train_step_orchestration(base_cls):
-    obj, invoked, logged = _base_fake()
+    obj, invoked, logged = _base_fake(base_cls is Ape_X_Deteministic_Policy_Gradient_Family)
     loss = base_cls.train_step(obj, steps=10, gradient_steps=3)
 
     assert len(invoked) == 3  # one hook call per gradient step
     assert all(s == 10 for s, _ in invoked)
     assert obj.train_steps_count == 3  # counter advanced from its initialized 0
-    assert (obj.params, obj.target_params, obj.opt_state) == ("P", "TP", "OPT")
+    if base_cls is Ape_X_Deteministic_Policy_Gradient_Family:
+        assert (obj.policy_params, obj.critic_params) == ("P", "C")
+        assert (obj.target_policy_params, obj.target_critic_params) == ("TP", "TC")
+        assert (obj.opt_policy_state, obj.opt_critic_state) == ("POPT", "COPT")
+    else:
+        assert (obj.params, obj.target_params, obj.opt_state) == ("P", "TP", "OPT")
     assert obj.replay_buffer.update_calls == [([0, 1], [0.1, 0.2])] * 3
     assert loss == 0.5  # last loss returned
     assert logged == [(10, {"loss/qloss": 0.5, "loss/targets": 1.5})]
@@ -88,9 +98,16 @@ def _leaf_fake():
             params="P0",
             target_params="TP0",
             opt_state="O0",
+            policy_params="P0",
+            critic_params="C0",
+            target_policy_params="TP0",
+            target_critic_params="TC0",
+            opt_policy_state="PO0",
+            opt_critic_state="CO0",
             key_seq=iter(["K0", "K1", "K2"]),
             param_noise=False,
             _train_step=fake_train_step,
+            _compiled_train_step=fake_train_step,
         ),
         captured,
     )
@@ -100,7 +117,10 @@ def _leaf_fake():
 def test_leaf_invoke_forwards_params_and_data(cls):
     obj, captured = _leaf_fake()
     cls._invoke_train_step(obj, steps=7, data={"obses": "X"})
-    assert captured["args"][:3] == ("P0", "TP0", "O0")
+    if cls in (APE_X_DDPG, APE_X_TD3):
+        assert captured["args"][:6] == ("P0", "C0", "TP0", "TC0", "PO0", "CO0")
+    else:
+        assert captured["args"][:3] == ("P0", "TP0", "O0")
     assert captured["kwargs"] == {"obses": "X"}
 
 
@@ -111,16 +131,16 @@ def test_dqn_family_invoke_passes_steps_then_key():
         assert captured["args"] == ("P0", "TP0", "O0", 7, "K0")
 
 
-def test_ddpg_invoke_omits_steps_and_passes_none_key():
+def test_ddpg_invoke_omits_steps_and_passes_scan_key():
     obj, captured = _leaf_fake()
     APE_X_DDPG._invoke_train_step(obj, steps=7, data={})
-    assert captured["args"] == ("P0", "TP0", "O0", None)
+    assert captured["args"] == ("P0", "C0", "TP0", "TC0", "PO0", "CO0", "K0")
 
 
 def test_td3_invoke_passes_key_then_steps():
     obj, captured = _leaf_fake()
     APE_X_TD3._invoke_train_step(obj, steps=7, data={})
-    assert captured["args"] == ("P0", "TP0", "O0", "K0", 7)
+    assert captured["args"] == ("P0", "C0", "TP0", "TC0", "PO0", "CO0", "K0", 7)
 
 
 def test_iqn_invoke_gates_key_on_param_noise():
@@ -137,8 +157,11 @@ def test_iqn_invoke_gates_key_on_param_noise():
 
 @pytest.mark.parametrize("cls", APEX_ALL)
 def test_leaf_inherits_train_step_and_owns_hook(cls):
-    assert "train_step" not in cls.__dict__  # shared base owns the loop
-    assert "_invoke_train_step" in cls.__dict__  # leaf owns the divergent call
+    assert cls.train_step in (
+        Ape_X_Family.train_step,
+        Ape_X_Deteministic_Policy_Gradient_Family.train_step,
+    )
+    assert cls._invoke_train_step.__qualname__ == f"{cls.__name__}._invoke_train_step"
 
 
 @pytest.mark.parametrize("base_cls", BASES)

@@ -4,7 +4,12 @@ from env_builder.env_builder import get_env_builder
 
 # isort: on
 from experiments.cli._env import add_env_args, env_builder_kwargs
-from experiments.cli._run import AlgoSpec, FamilyRunner, run_family
+from experiments.cli._run import (
+    AlgoSpec,
+    FamilyRunner,
+    actor_critic_policy_kwargs,
+    run_family,
+)
 from experiments.optimizers import (
     make_batch_scaled_optimizer_factory,
     make_optimizer_factory,
@@ -69,9 +74,8 @@ def add_args(parser):
     parser.add_argument("--n_support", type=int, default=25, help="n_support for QRDQN,IQN,FQF")
     parser.add_argument("--mixture", type=str, default="truncated", help="mixture type")
     parser.add_argument("--quantile_drop", type=float, default=0.1, help="quantile_drop ratio")
-    parser.add_argument("--node", type=int, default=256, help="network node number")
-    parser.add_argument("--actor_node", type=int, default=128, help="FlashSAC actor width")
-    parser.add_argument("--critic_node", type=int, default=256, help="FlashSAC critic width")
+    parser.add_argument("--actor_node", type=int, default=None, help="actor hidden width")
+    parser.add_argument("--critic_node", type=int, default=None, help="critic hidden width")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
     parser.add_argument("--action_noise", type=float, default=0.1, help="action_noise")
     parser.add_argument("--optimizer", type=str, default="adopt", help="optimaizer")
@@ -110,18 +114,7 @@ def build_env(args):
         args.env,
         **env_builder_kwargs(args),
     )
-    if args.algo == "FlashSAC":
-        return env_builder, {
-            "actor_node": args.actor_node,
-            "critic_node": args.critic_node,
-            "hidden_n": args.hidden_n,
-        }
-    policy_kwargs = {
-        "node": args.node,
-        "hidden_n": args.hidden_n,
-        "embedding_mode": "normal",
-    }
-    return env_builder, policy_kwargs
+    return env_builder, actor_critic_policy_kwargs(args)
 
 
 def _variant(args):

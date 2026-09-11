@@ -55,7 +55,6 @@ class Actor_Critic_Policy_Gradient_Family:
     _run_name = "A2C"
     actor: Callable
     _get_actions: Callable
-    preproc: Callable
     logger: AbstractContextManager
 
     def __init__(
@@ -112,7 +111,8 @@ class Actor_Critic_Policy_Gradient_Family:
         self.lr_annealing = lr_annealing
         self.checkpoint_store = checkpoint_store_or_default(checkpoint_store)
 
-        self.params = None
+        self.actor_params = None
+        self.critic_params = None
         self.rollout_tracker = None
         self.optimizer = self._make_optimizer(self.learning_rate)
 
@@ -152,7 +152,8 @@ class Actor_Critic_Policy_Gradient_Family:
         self.checkpoint_store.save(
             path,
             ACCheckpointState(
-                params=self.params,
+                actor_params=self.actor_params,
+                critic_params=self.critic_params,
                 obs_rms_state=self.obs_rms.to_state() if self.obs_rms is not None else None,
             ),
         )
@@ -177,7 +178,8 @@ class Actor_Critic_Policy_Gradient_Family:
             )
         ):
             raise ValueError("Checkpoint observation statistics do not match the environment")
-        self.params = jax.device_put(state.params, self.memory_device)
+        self.actor_params = jax.device_put(state.actor_params, self.memory_device)
+        self.critic_params = jax.device_put(state.critic_params, self.memory_device)
         self.obs_rms = obs_rms
         self.obs_normalization = obs_rms is not None
 
@@ -234,19 +236,21 @@ class Actor_Critic_Policy_Gradient_Family:
     def train_step(self, steps, logger_run=None):
         raise NotImplementedError
 
-    def _get_actions_discrete(self, params, obses, key=None) -> jnp.ndarray:
+    def _get_actions_discrete(self, actor_params, obses, key=None) -> jnp.ndarray:
         prob = jax.nn.softmax(
-            self.actor(params, key, self.preproc(params, key, convert_normalized_obs(obses))),
+            self.actor(actor_params, key, convert_normalized_obs(obses)),
             axis=1,
         )
         return prob
 
-    def _get_actions_continuous(self, params, obses, key=None) -> tuple[jnp.ndarray, jnp.ndarray]:
-        mu, std = self.actor(params, key, self.preproc(params, key, convert_normalized_obs(obses)))
+    def _get_actions_continuous(
+        self, actor_params, obses, key=None
+    ) -> tuple[jnp.ndarray, jnp.ndarray]:
+        mu, std = self.actor(actor_params, key, convert_normalized_obs(obses))
         return mu, jnp.exp(std)
 
     def action_discrete(self, obs, eval=False):
-        prob = self._get_actions(self.params, obs)
+        prob = self._get_actions(self.actor_params, obs)
         if self.memory_backend == "cpu":
             prob = np.asarray(prob)
             if eval:
@@ -261,7 +265,7 @@ class Actor_Critic_Policy_Gradient_Family:
         return _sample_discrete(prob, next(self.key_seq))
 
     def action_continuous(self, obs, eval=False):
-        mu, std = self._get_actions(self.params, obs)
+        mu, std = self._get_actions(self.actor_params, obs)
         if self.memory_backend == "cpu":
             if eval:
                 return np.asarray(mu)
@@ -340,7 +344,7 @@ class Actor_Critic_Policy_Gradient_Family:
         return train_steps * self._optimizer_updates_per_train_step()
 
     def prepare_run(self, total_timesteps):
-        if not self.lr_annealing or self.params is None:
+        if not self.lr_annealing or self.actor_params is None:
             return
 
         schedule = optax.linear_schedule(
@@ -350,7 +354,8 @@ class Actor_Critic_Policy_Gradient_Family:
         )
         self.optimizer = self._make_optimizer(schedule)
         with jax.default_device(self.memory_device):
-            self.opt_state = self.optimizer.init(self.params)
+            self.actor_opt_state = self.optimizer.init(self.actor_params)
+            self.critic_opt_state = self.optimizer.init(self.critic_params)
 
     def run_training_loop(self, ctx):
         with jax.default_device(self.memory_device):
