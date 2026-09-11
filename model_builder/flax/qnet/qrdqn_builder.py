@@ -40,35 +40,28 @@ class Model(nn.Module):
                 ]
             )(feature)
             return q_net
-        else:
-            v = nn.Sequential(
-                [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [
-                    self.layer(
-                        self.support_n,
-                        kernel_init=clip_factorized_uniform(3 / self.support_n),
-                    ),
-                    lambda x: jnp.reshape(x, (x.shape[0], 1, self.support_n)),
-                ]
-            )(feature)
-            a = nn.Sequential(
-                [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [
-                    self.layer(
-                        self.action_size[0] * self.support_n,
-                        kernel_init=clip_factorized_uniform(3 / self.support_n),
-                    ),
-                    lambda x: jnp.reshape(x, (x.shape[0], self.action_size[0], self.support_n)),
-                ]
-            )(feature)
-            q = v + a - jnp.mean(a, axis=1, keepdims=True)
-            return q
+        v = nn.Sequential(
+            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            + [
+                self.layer(
+                    self.support_n,
+                    kernel_init=clip_factorized_uniform(3 / self.support_n),
+                ),
+                lambda x: jnp.reshape(x, (x.shape[0], 1, self.support_n)),
+            ]
+        )(feature)
+        a = nn.Sequential(
+            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            + [
+                self.layer(
+                    self.action_size[0] * self.support_n,
+                    kernel_init=clip_factorized_uniform(3 / self.support_n),
+                ),
+                lambda x: jnp.reshape(x, (x.shape[0], self.action_size[0], self.support_n)),
+            ]
+        )(feature)
+        q = v + a - jnp.mean(a, axis=1, keepdims=True)
+        return q
 
 
 def model_builder_maker(
@@ -106,7 +99,6 @@ def model_builder_maker(
             params = model.init(key, observation)
             print_flax_model_summary(print_model, key, (model, observation))
             return preproc_fn, model_fn, params
-        else:
-            return preproc_fn, model_fn
+        return preproc_fn, model_fn
 
     return model_builder
