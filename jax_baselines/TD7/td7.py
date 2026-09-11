@@ -40,7 +40,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         **kwargs,
     ):
         # Set TD7-specific defaults - always enable checkpointing
-        td7_kwargs = {
+        td7_kwargs: dict[str, Any] = {
             "n_step": 1,
             "target_network_update_tau": 0,
             "prioritized_replay": True,
@@ -132,11 +132,17 @@ class TD7(Deteministic_Policy_Gradient_Family):
         return self.get_behavior_state()
 
     def _policy_action_from_state(self, state, obs, eval, steps):
-        return np.asarray(self._get_actions(state["encoder"], state["policy"], obs, None))
+        return self._get_actions(state["encoder"], state["policy"], obs, None)
 
     def _apply_action_noise(self, actions, steps, eval):
         if eval:
             return actions
+        if self.memory_backend == "gpu":
+            return jnp.clip(
+                actions + self.action_noise * jax.random.normal(next(self.key_seq), actions.shape),
+                -1,
+                1,
+            )
         return np.clip(
             actions
             + self.action_noise
@@ -280,7 +286,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
     def _aggregate_train_reports(self, reports):
         counts = jnp.array([report.update_count for report in reports])
-        total = jnp.sum(counts)
+        total = sum(report.update_count for report in reports)
         mean_repr_loss = (
             jnp.sum(jnp.array([report.metrics["loss/encoder_loss"] for report in reports]) * counts)
             / total
@@ -290,7 +296,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         return DPGTrainReport(
             loss=mean_loss,
             target=mean_target,
-            update_count=int(total),
+            update_count=total,
             metrics={
                 "loss/encoder_loss": mean_repr_loss,
                 "loss/min_value": self.critic_params["values"]["min_value"],
@@ -515,5 +521,5 @@ class TD7(Deteministic_Policy_Gradient_Family):
         if self.simba:
             run_name = "Simba_" + run_name
         if self.n_step_method:
-            run_name = "{}Step_".format(self.n_step) + run_name
+            run_name = f"{self.n_step}Step_" + run_name
         return run_name

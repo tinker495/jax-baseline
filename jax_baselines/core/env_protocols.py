@@ -9,7 +9,15 @@ from __future__ import annotations
 
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol, TypeAlias, TypedDict, runtime_checkable
+from typing import (
+    Any,
+    Literal,
+    NotRequired,
+    Protocol,
+    TypeAlias,
+    TypedDict,
+    runtime_checkable,
+)
 
 import jax
 import jax.numpy as jnp
@@ -31,6 +39,7 @@ class EnvInfo(TypedDict):
     env_id: str
     worker_num: int
     core_env_type: str
+    autoreset_steps: NotRequired[bool]
 
 
 @dataclass(frozen=True)

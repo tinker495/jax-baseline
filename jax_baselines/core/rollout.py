@@ -22,12 +22,15 @@ family serializes it as part of the checkpoint state.
 """
 
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
+import jax
+import jax.numpy as jnp
 import numpy as np
 
 from jax_baselines.core.env_protocols import (
+    VectorizedEnv,
     batch_observation,
     single_real_episode_end,
     vector_autoreset_mask,
@@ -37,6 +40,8 @@ from jax_baselines.core.eval import (
     extract_original_reward,
     extract_vector_original_rewards,
 )
+from jax_baselines.core.replay_protocol import ReplayWriter
+from jax_baselines.core.rollout_stats import device_episode_step
 
 
 @dataclass(frozen=True)
@@ -70,7 +75,7 @@ class CheckpointTrainPulse:
         record_loss: Callable[[object], None],
         read_residual: Callable[[], int],
         write_residual: Callable[[int], None],
-        post_pulse: Optional[Callable[[], None]] = None,
+        post_pulse: Callable[[], None] | None = None,
     ):
         self._train_freq = train_freq
         self._gradient_steps = gradient_steps
@@ -101,7 +106,7 @@ class RolloutSpec:
     """Narrow contract the :class:`RolloutEngine` needs from a training agent."""
 
     env: object
-    replay_buffer: object
+    replay_buffer: ReplayWriter
     learning_starts: int
     train_freq: int
     gradient_steps: int
@@ -126,6 +131,9 @@ class RolloutSpec:
     checkpoint_monitor_worker: int = 0
     reward_normalization: bool = False
     record_transition: Callable[..., None] | None = None
+    memory_device: jax.Device | None = None
+    autoreset_steps: bool = True
+    initial_reset: tuple | None = None
 
 
 class RolloutEngine:
@@ -141,7 +149,7 @@ class RolloutEngine:
 
     def learn_single_env(self, pbar, callback=None, log_interval=1000):
         spec = self.spec
-        obs, info = spec.env.reset()
+        obs, info = spec.env.reset() if spec.initial_reset is None else spec.initial_reset
         obs = batch_observation(obs)
         lossque = self._begin()
         eval_result = None
@@ -198,6 +206,8 @@ class RolloutEngine:
 
     def learn_vectorized_env(self, pbar, callback=None, log_interval=1000):
         spec = self.spec
+        if spec.memory_device is not None and not spec.autoreset_steps:
+            return self._learn_vectorized_device(pbar, log_interval, checkpointing=False)
         lossque = self._begin()
         eval_result = None
         scores = np.zeros([spec.worker_size], dtype=np.float64)
@@ -275,7 +285,7 @@ class RolloutEngine:
     def learn_single_env_checkpointing(self, pbar, callback=None, log_interval=1000, obs=None):
         spec = self.spec
         if obs is None:
-            obs, info = spec.env.reset()
+            obs, info = spec.env.reset() if spec.initial_reset is None else spec.initial_reset
             obs = batch_observation(obs)
         lossque = self._begin()
         eval_result = None
@@ -343,6 +353,8 @@ class RolloutEngine:
 
     def learn_vectorized_env_checkpointing(self, pbar, callback=None, log_interval=1000):
         spec = self.spec
+        if spec.memory_device is not None and not spec.autoreset_steps:
+            return self._learn_vectorized_device(pbar, log_interval, checkpointing=True)
         lossque = self._begin()
         eval_result = None
 
@@ -461,3 +473,122 @@ class RolloutEngine:
                 pbar.set_description(spec.describe(eval_result))
 
         flush_checkpoint_pulses()
+
+    def _learn_vectorized_device(self, pbar, log_interval, *, checkpointing):
+        """Keep same-step autoreset rollouts resident; copy only episode reports."""
+        spec = self.spec
+        env = spec.env
+        if not isinstance(env, VectorizedEnv):
+            raise TypeError("Device rollouts require a VectorizedEnv")
+        if checkpointing and spec.force_reset is not None:
+            raise ValueError("Device checkpoint rollouts require same-step environment resets")
+        lossque = self._begin()
+        eval_result = None
+        train_residual = 0
+        with jax.default_device(spec.memory_device):
+            zeros = jnp.zeros(spec.worker_size)
+            false = jnp.zeros(spec.worker_size, dtype=bool)
+            true = jnp.ones(spec.worker_size, dtype=bool)
+            state = (zeros, jnp.zeros(spec.worker_size, dtype=jnp.int32), zeros, false, false)
+        completed_steps = []
+        completed_rows = []
+        pending_pulses = deque()
+        pending_evals = deque()
+
+        def flush_checkpoint_pulses():
+            nonlocal eval_result
+            while pending_pulses:
+                spec.checkpoint_pulse(*pending_pulses.popleft())
+            while pending_evals:
+                eval_result = spec.evaluate(pending_evals.popleft())
+
+        def flush_reports():
+            if not completed_rows:
+                return
+            with jax.profiler.TraceAnnotation("rollout.metrics"):
+                rows = np.asarray(jax.device_get(jnp.stack(completed_rows)))
+            for time_idx, worker_idx in np.argwhere(rows[..., 0]):
+                row = rows[time_idx, worker_idx]
+                spec.record_rollout_episode(
+                    completed_steps[time_idx],
+                    episode_reward=float(row[1]),
+                    episode_length=int(row[2]),
+                    timeout=float(row[3]),
+                    original_reward=float(row[4]) if row[5] else None,
+                )
+            completed_steps.clear()
+            completed_rows.clear()
+
+        for steps in pbar:
+            spec.refresh_exploration(steps)
+            obs = env.current_obs()
+            sel = spec.vector_action(obs, steps)
+            env.step(sel.env_action)
+            flush_checkpoint_pulses()
+            next_obs, rewards, terminated, truncated, infos = env.get_result()
+            if spec.reward_normalization and spec.record_transition is not None:
+                spec.record_transition(rewards, jnp.logical_or(terminated, truncated))
+            if isinstance(infos, dict):
+                original = zeros
+                if "original_reward" in infos:
+                    original = infos["original_reward"]
+                present = true if "original_reward" in infos else false
+                if "_original_reward" in infos:
+                    present = infos["_original_reward"]
+            else:
+                original, present = extract_vector_original_rewards(infos, spec.worker_size)
+            state, _, _, completed = device_episode_step(
+                state,
+                rewards,
+                terminated if not checkpointing or steps > spec.learning_starts else false,
+                truncated if not checkpointing or steps > spec.learning_starts else false,
+                vector_real_reset_mask(env, terminated, truncated, infos),
+                false,
+                original,
+                present,
+            )
+            if not checkpointing and steps > spec.learning_starts:
+                train_residual += spec.worker_size
+                update_iters, train_residual = divmod(train_residual, spec.train_freq)
+                if update_iters:
+                    lossque.append(spec.train(steps, update_iters * spec.gradient_steps))
+            spec.replay_buffer.add(obs, sel.store_action, rewards, next_obs, terminated, truncated)
+
+            if checkpointing and steps > spec.learning_starts:
+                # The checkpoint controller changes the policy at episode boundaries.
+                # Only this compact payload must synchronize on every step.
+                rows = np.asarray(jax.device_get(completed))
+                ended = np.flatnonzero(rows[:, 0]).tolist()
+                monitor = spec.checkpoint_monitor_worker
+                for worker in [idx for idx in ended if idx != monitor] + (
+                    [monitor] if monitor in ended else []
+                ):
+                    spec.checkpoint_on_episode_end(
+                        steps,
+                        float(rows[worker, 1]),
+                        int(rows[worker, 2]),
+                        lambda pulse_steps, count: pending_pulses.append((pulse_steps, count)),
+                        advance_criterion=worker == monitor,
+                    )
+                    spec.record_rollout_episode(
+                        steps,
+                        episode_reward=float(rows[worker, 1]),
+                        episode_length=int(rows[worker, 2]),
+                        timeout=float(rows[worker, 3]),
+                        original_reward=float(rows[worker, 4]) if rows[worker, 5] else None,
+                    )
+            if not checkpointing:
+                completed_steps.append(steps)
+                completed_rows.append(completed)
+            if steps % spec.eval_freq == 0:
+                flush_reports()
+                if pending_pulses:
+                    pending_evals.append(steps)
+                else:
+                    eval_result = spec.evaluate(steps)
+            if steps % log_interval == 0:
+                flush_reports()
+                if eval_result is not None and lossque:
+                    pbar.set_description(spec.describe(eval_result))
+        flush_checkpoint_pulses()
+        flush_reports()

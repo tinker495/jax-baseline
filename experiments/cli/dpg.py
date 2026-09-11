@@ -30,6 +30,12 @@ def add_args(parser):
     )
     parser.add_argument("--batch", type=int, default=32, help="batch size")
     parser.add_argument("--buffer_size", type=float, default=100000, help="buffer_size")
+    parser.add_argument(
+        "--memory_backend",
+        choices=("auto", "cpu", "gpu"),
+        default="auto",
+        help="replay storage device; auto follows environment observations",
+    )
     parser.add_argument("--per", action="store_true")
     parser.add_argument(
         "--n_step",
@@ -115,6 +121,7 @@ def _common(a):
         "learning_rate": a.learning_rate,
         "batch_size": a.batch,
         "buffer_size": int(a.buffer_size),
+        "memory_backend": a.memory_backend,
         "learning_starts": a.learning_starts,
         "prioritized_replay": a.per,
         "scaled_by_reset": a.scaled_by_reset,
@@ -207,6 +214,7 @@ ALGOS = {
             "learning_rate": a.learning_rate,
             "batch_size": a.batch,
             "buffer_size": int(a.buffer_size),
+            "memory_backend": a.memory_backend,
             "target_network_update_freq": 250,
             "learning_starts": a.learning_starts,
             "action_noise": a.action_noise,

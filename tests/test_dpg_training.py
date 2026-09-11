@@ -204,10 +204,10 @@ def test_dpg_training_lifecycle_logs_reward_scale():
     assert ("rollout/reward_scale", 2.0, 10) in agent.logger_run.metrics
 
 
-def test_dpg_priority_update_materializes_jax_values_on_host():
+def test_dpg_priority_update_materializes_device_priorities_for_host_indexes():
     agent = FakeAgent()
     lifecycle = DPGTrainingLifecycle(agent)
-    data = {"indexes": jnp.arange(4).reshape(2, 2)}
+    data = {"indexes": np.arange(4).reshape(2, 2)}
     report = DPGTrainReport(
         loss=1.0,
         new_priorities=jnp.arange(4, dtype=jnp.float32).reshape(2, 2),

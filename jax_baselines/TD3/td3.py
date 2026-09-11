@@ -84,11 +84,17 @@ class TD3(Deteministic_Policy_Gradient_Family):
         )
 
     def _policy_action_from_state(self, state, obs, eval, steps):
-        return np.asarray(self._get_actions(state["policy"], obs, None))
+        return self._get_actions(state["policy"], obs, None)
 
     def _apply_action_noise(self, actions, steps, eval):
         if eval:
             return actions
+        if self.memory_backend == "gpu":
+            return jnp.clip(
+                actions + self.action_noise * jax.random.normal(next(self.key_seq), actions.shape),
+                -1,
+                1,
+            )
         return np.clip(
             actions
             + self.action_noise

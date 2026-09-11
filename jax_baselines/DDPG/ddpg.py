@@ -42,7 +42,11 @@ class DDPG(Deteministic_Policy_Gradient_Family):
 
         super().__init__(env_builder, model_builder_maker, **kwargs)
 
-        self.noise = OUNoise(action_size=self.action_size[0], worker_size=self.worker_size)
+        self.noise = OUNoise(
+            action_size=self.action_size[0],
+            worker_size=self.worker_size,
+            key=next(self.key_seq) if self.memory_backend == "gpu" else None,
+        )
 
     def setup_model(self):
         model_builder = self.model_builder_maker(
@@ -97,13 +101,17 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         return description
 
     def _policy_action_from_state(self, state, obs, eval, steps):
-        return np.asarray(self._get_actions(state["policy"], obs, None))
+        return self._get_actions(state["policy"], obs, None)
 
     def _apply_action_noise(self, actions, steps, eval):
         if eval:
             return actions
-        self.epsilon = float(self.exploration(steps))
-        return np.clip(actions + self.noise() * self.epsilon, -1, 1)
+        self.epsilon = self.exploration(steps)
+        if self.memory_backend == "cpu":
+            self.epsilon = float(self.epsilon)
+        return (jnp if self.memory_backend == "gpu" else np).clip(
+            actions + self.noise() * self.epsilon, -1, 1
+        )
 
     def prepare_run(self, total_timesteps):
         self.exploration = optax.linear_schedule(

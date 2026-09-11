@@ -1,4 +1,5 @@
 from copy import deepcopy
+from typing import Literal
 
 import jax
 import jax.numpy as jnp
@@ -32,7 +33,7 @@ from jax_baselines.math.statistics import RewardNormalizer, RunningMeanStd
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
-class Deteministic_Policy_Gradient_Family(object):
+class Deteministic_Policy_Gradient_Family:
     _run_name = "DPG_network"
 
     supports_bulk_training = False
@@ -76,7 +77,10 @@ class Deteministic_Policy_Gradient_Family(object):
         ckpt_baseline_q=None,
         checkpoint_store: CheckpointStore | None = None,
         reward_normalization=False,
+        memory_backend: Literal["auto", "cpu", "gpu"] = "auto",
     ):
+        if memory_backend not in ("auto", "cpu", "gpu"):
+            raise ValueError("memory_backend must be 'auto', 'cpu', or 'gpu'")
         self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
         self.num_workers = num_workers
@@ -116,19 +120,51 @@ class Deteministic_Policy_Gradient_Family(object):
         self.reward_normalization = bool(reward_normalization)
 
         self.get_env_setup()
-        self.reward_normalizer = (
-            RewardNormalizer(self.worker_size, self.gamma) if self.reward_normalization else None
-        )
+        self._initial_reset = None
+        self.memory_backend: Literal["cpu", "gpu"] = "cpu"
+        self.memory_device = None
+        if memory_backend != "cpu":
+            if self.env_type == "SingleEnv":
+                self._initial_reset = self.env.reset()
+                initial_obs = self._initial_reset[0]
+            else:
+                initial_obs = self.env.current_obs()
+            if all(isinstance(value, jax.Array) for value in initial_obs.values()):
+                devices = set().union(*(value.devices() for value in initial_obs.values()))
+                if len(devices) == 1 and next(iter(devices)).platform == "gpu":
+                    self.memory_device = next(iter(devices))
+            if memory_backend == "gpu" and self.memory_device is None:
+                try:
+                    self.memory_device = jax.devices("gpu")[0]
+                except RuntimeError as error:
+                    raise ValueError("memory_backend='gpu' requires a JAX GPU device") from error
+            if self.memory_device is not None:
+                self.memory_backend = "gpu"
+        print("memory backend : ", self.memory_backend)
+        with jax.default_device(self.memory_device):
+            self.reward_normalizer = (
+                RewardNormalizer(
+                    self.worker_size, self.gamma, on_device=self.memory_backend == "gpu"
+                )
+                if self.reward_normalization
+                else None
+            )
         self.get_memory_setup()
 
         # Control model initialization timing across children
         self._init_setup_model = _init_setup_model
         if self._init_setup_model:
-            self.setup_model()
+            with jax.default_device(self.memory_device):
+                self.setup_model()
 
         self.eval_snapshot = None
         if self.simba:
-            self.obs_rms = RunningMeanStd(shapes=self.observation_space, dtype=np.float64)
+            with jax.default_device(self.memory_device):
+                self.obs_rms = RunningMeanStd(
+                    shapes=self.observation_space,
+                    dtype=np.float64,
+                    on_device=self.memory_backend == "gpu",
+                )
             self.action_obs_rms = None
             self.checkpoint_obs_rms = None
 
@@ -209,32 +245,45 @@ class Deteministic_Policy_Gradient_Family(object):
         )
 
     def _restore_checkpoint_state(self, state: CheckpointState):
-        self.load_checkpoint_params(state.params)
+        self.load_checkpoint_params(
+            jax.device_put(state.params, self.memory_device)
+            if self.memory_backend == "gpu"
+            else state.params
+        )
         self.train_steps_count = int(np.asarray(state.train_steps_count).item())
         self._ckpt_update_residual = float(np.asarray(state.ckpt_residual).item())
         self.ckpt.from_state(state.controller_state)
-        self.eval_snapshot = state.eval_snapshot
+        self.eval_snapshot = (
+            jax.device_put(state.eval_snapshot, self.memory_device)
+            if self.memory_backend == "gpu"
+            else state.eval_snapshot
+        )
 
-        if self.simba:
-            if state.obs_rms_state is not None:
-                self.obs_rms = RunningMeanStd.from_state(state.obs_rms_state)
-            self.action_obs_rms = (
-                RunningMeanStd.from_state(state.action_obs_rms_state)
-                if state.action_obs_rms_state is not None
-                else None
-            )
-            self.checkpoint_obs_rms = (
-                RunningMeanStd.from_state(state.checkpoint_obs_rms_state)
-                if state.checkpoint_obs_rms_state is not None
-                else None
-            )
+        with jax.default_device(self.memory_device):
+            if self.simba:
+                if state.obs_rms_state is not None:
+                    self.obs_rms = RunningMeanStd.from_state(
+                        state.obs_rms_state, on_device=self.memory_backend == "gpu"
+                    )
+                self.action_obs_rms = (
+                    RunningMeanStd.from_state(
+                        state.action_obs_rms_state, on_device=self.memory_backend == "gpu"
+                    )
+                    if state.action_obs_rms_state is not None
+                    else None
+                )
+                self.checkpoint_obs_rms = (
+                    RunningMeanStd.from_state(
+                        state.checkpoint_obs_rms_state, on_device=self.memory_backend == "gpu"
+                    )
+                    if state.checkpoint_obs_rms_state is not None
+                    else None
+                )
 
-        # getattr guards against pre-reward_rms checkpoints, not against self.
-        reward_rms_state = getattr(state, "reward_rms_state", None)
-        if self.reward_normalizer is not None:
-            self.reward_normalizer.reset()
-            if reward_rms_state is not None:
-                self.reward_normalizer.restore(reward_rms_state)
+            if self.reward_normalizer is not None:
+                self.reward_normalizer.reset()
+                if state.reward_rms_state is not None:
+                    self.reward_normalizer.restore(state.reward_rms_state)
 
     def get_env_setup(self):
         # Use common helper to standardize environment info
@@ -246,6 +295,13 @@ class Deteministic_Policy_Gradient_Family(object):
             self.worker_size,
             self.env_type,
         ) = get_local_env_info(self.env_builder, self.num_workers, seed=self.seed)
+        self.autoreset_steps = True
+        if self.env_type == "VectorizedEnv":
+            env_info = self.env.get_info()
+            if "autoreset_steps" in env_info:
+                self.autoreset_steps = env_info["autoreset_steps"]
+                if not isinstance(self.autoreset_steps, bool):
+                    raise TypeError("Environment autoreset_steps must be a bool")
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
         print("worker_size : ", self.worker_size)
@@ -267,6 +323,9 @@ class Deteministic_Policy_Gradient_Family(object):
                 n_step=self.n_step if self.n_step_method else 1,
                 gamma=self.gamma,
                 priority=priority,
+                memory_backend=self.memory_backend,
+                device=self.memory_device,
+                seed=self.seed,
             )
         )
 
@@ -323,7 +382,7 @@ class Deteministic_Policy_Gradient_Family(object):
         if len(reports) == 1:
             return reports[-1]
         counts = jnp.array([report.update_count for report in reports])
-        total = jnp.sum(counts)
+        total = sum(report.update_count for report in reports)
         metrics = {
             name: jnp.sum(jnp.array([report.metrics[name] for report in reports]) * counts) / total
             for name in reports[-1].metrics
@@ -336,7 +395,7 @@ class Deteministic_Policy_Gradient_Family(object):
             loss=jnp.sum(jnp.array([report.loss for report in reports]) * counts) / total,
             target=target,
             metrics=metrics,
-            update_count=int(total),
+            update_count=total,
         )
 
     def get_behavior_state(self):
@@ -360,10 +419,16 @@ class Deteministic_Policy_Gradient_Family(object):
             return self._random_warmup_actions(eval=eval)
         state = self._select_action_state(eval, steps)
         actions = self._policy_action_from_state(state, obs, eval, steps)
+        if self.memory_backend == "cpu":
+            actions = np.asarray(actions)
         return self._apply_action_noise(actions, steps, eval)
 
     def _random_warmup_actions(self, eval=False):
         worker_size = 1 if eval else self.worker_size
+        if self.memory_backend == "gpu":
+            return jax.random.uniform(
+                next(self.key_seq), (worker_size, self.action_size[0]), minval=-1.0, maxval=1.0
+            )
         return np.random.uniform(-1.0, 1.0, size=(worker_size, self.action_size[0]))
 
     def _select_action_state(self, eval, steps):
@@ -373,8 +438,8 @@ class Deteministic_Policy_Gradient_Family(object):
 
     def _policy_action_from_state(self, state, obs, eval, steps):
         if eval:
-            return np.asarray(self._get_eval_actions(state["policy"], obs))
-        return np.asarray(self._get_actions(state["policy"], obs, next(self.key_seq)))
+            return self._get_eval_actions(state["policy"], obs)
+        return self._get_actions(state["policy"], obs, next(self.key_seq))
 
     def _apply_action_noise(self, actions, steps, eval):
         return actions
@@ -405,7 +470,7 @@ class Deteministic_Policy_Gradient_Family(object):
         elif self.simba:
             run_name = "Simba_" + run_name
         if self.n_step_method:
-            run_name = "{}Step_".format(self.n_step) + run_name
+            run_name = f"{self.n_step}Step_" + run_name
         if self.prioritized_replay:
             run_name = run_name + "+PER"
         return run_name
@@ -482,9 +547,10 @@ class Deteministic_Policy_Gradient_Family(object):
 
     def make_rollout_spec(self, ctx):
         self.rollout_tracker = EpisodeTracker(ctx.logger_run.log_metric, ctx.log_interval)
-        train = lambda steps, gradient_steps: self.train_step(  # noqa: E731
-            steps, gradient_steps, ctx.logger_run, ctx.log_interval
-        )
+
+        def train(steps, gradient_steps):
+            return self.train_step(steps, gradient_steps, ctx.logger_run, ctx.log_interval)
+
         pulse = CheckpointTrainPulse(
             train_freq=self.train_freq,
             gradient_steps=self.gradient_steps,
@@ -494,7 +560,7 @@ class Deteministic_Policy_Gradient_Family(object):
             write_residual=self._write_ckpt_residual,
             post_pulse=self._snapshot_action_normalizer,
         )
-        return RolloutSpec(
+        spec = RolloutSpec(
             env=self.env,
             replay_buffer=self.replay_buffer,
             learning_starts=self.learning_starts,
@@ -519,7 +585,12 @@ class Deteministic_Policy_Gradient_Family(object):
             record_transition=(
                 self.reward_normalizer.record if self.reward_normalizer is not None else None
             ),
+            memory_device=self.memory_device,
+            autoreset_steps=self.autoreset_steps,
+            initial_reset=self._initial_reset,
         )
+        self._initial_reset = None
+        return spec
 
     def eval(self, ctx, steps):
         return evaluate_policy(
