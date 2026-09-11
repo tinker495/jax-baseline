@@ -32,16 +32,12 @@ import numpy as np
 from jax_baselines.core.env_protocols import (
     VectorizedEnv,
     batch_observation,
-    single_real_episode_end,
+    log_environment_metrics,
     vector_autoreset_mask,
-    vector_real_reset_mask,
-)
-from jax_baselines.core.eval import (
-    extract_original_reward,
-    extract_vector_original_rewards,
 )
 from jax_baselines.core.replay_protocol import ReplayWriter
 from jax_baselines.core.rollout_stats import device_episode_step
+from jax_baselines.core.runtime_adapters import MetricLogger
 
 
 @dataclass(frozen=True)
@@ -122,8 +118,7 @@ class RolloutSpec:
     evaluate: Callable[[int], object]
     describe: Callable[[object], str]
     bind_loss_window: Callable[[deque], None]
-    # rollout-measurement seam: hands each completed training episode to the
-    # agent's EpisodeTracker (the engine stays logger-free).
+    # Algorithm-level episode statistics remain separate from environment metrics.
     record_rollout_episode: Callable[..., None]
     # checkpoint seam
     checkpoint_on_episode_end: Callable[..., bool]
@@ -134,6 +129,7 @@ class RolloutSpec:
     memory_device: jax.Device | None = None
     autoreset_steps: bool = True
     initial_reset: tuple | None = None
+    logger_run: MetricLogger | None = None
 
 
 class RolloutEngine:
@@ -149,48 +145,41 @@ class RolloutEngine:
 
     def learn_single_env(self, pbar, callback=None, log_interval=1000):
         spec = self.spec
-        obs, info = spec.env.reset() if spec.initial_reset is None else spec.initial_reset
+        obs, _ = spec.env.reset() if spec.initial_reset is None else spec.initial_reset
         obs = batch_observation(obs)
         lossque = self._begin()
         eval_result = None
 
         score = 0.0
         eplen = 0
-        original = 0.0
-        have_original = False
+        steps = 0
+        last_log_step = 0
 
         for steps in pbar:
             sel = spec.single_action(obs, steps)
-            next_obs, reward, terminated, truncated, info = spec.env.step(sel.env_action)
+            next_obs, reward, terminated, truncated, _ = spec.env.step(sel.env_action)
+            log_due = steps - last_log_step >= log_interval
+            log_environment_metrics(spec.env, spec.logger_run, steps, flush=log_due)
+            if log_due:
+                last_log_step = steps
             next_obs = batch_observation(next_obs)
             if spec.reward_normalization and spec.record_transition is not None:
                 spec.record_transition(reward, np.logical_or(terminated, truncated))
             spec.replay_buffer.add(obs, sel.store_action, reward, next_obs, terminated, truncated)
             score += float(reward)
             eplen += 1
-            step_original = extract_original_reward(info)
-            if step_original is not None:
-                have_original = True
-                original += float(step_original)
             obs = next_obs
 
             if terminated or truncated:
-                emit_original = have_original and single_real_episode_end(
-                    terminated, truncated, info
-                )
                 spec.record_rollout_episode(
                     steps,
                     episode_reward=score,
                     episode_length=eplen,
                     timeout=float(truncated),
-                    original_reward=original if emit_original else None,
                 )
                 score = 0.0
                 eplen = 0
-                if emit_original:
-                    original = 0.0
-                    have_original = False
-                obs, info = spec.env.reset()
+                obs, _ = spec.env.reset()
                 obs = batch_observation(obs)
 
             if steps > spec.learning_starts and steps % spec.train_freq == 0:
@@ -201,8 +190,9 @@ class RolloutEngine:
             if steps % spec.eval_freq == 0:
                 eval_result = spec.evaluate(steps)
 
-            if steps % log_interval == 0 and eval_result is not None and len(lossque) > 0:
+            if log_due and eval_result is not None and len(lossque) > 0:
                 pbar.set_description(spec.describe(eval_result))
+        log_environment_metrics(spec.env, spec.logger_run, steps)
 
     def learn_vectorized_env(self, pbar, callback=None, log_interval=1000):
         spec = self.spec
@@ -212,12 +202,11 @@ class RolloutEngine:
         eval_result = None
         scores = np.zeros([spec.worker_size], dtype=np.float64)
         eplens = np.zeros([spec.worker_size], dtype=np.int32)
-        originals = np.zeros([spec.worker_size], dtype=np.float64)
-        original_present = np.zeros([spec.worker_size], dtype=bool)
-        # Adapters classify two backend quirks separately: whether this done row
-        # is a real game reset, and whether the next row is an autoreset dummy.
+        # Only adapters know which done rows are followed by an autoreset dummy.
         prev_done = None
         train_residual = 0
+        steps = 0
+        last_log_step = 0
 
         for steps in pbar:
             spec.refresh_exploration(steps)
@@ -228,18 +217,15 @@ class RolloutEngine:
             next_obses, rewards, terminateds, truncateds, infos = spec.env.get_result()
             done = np.logical_or(terminateds, truncateds)
             active = np.ones(spec.worker_size, dtype=bool) if prev_done is None else ~prev_done
+            log_due = steps - last_log_step >= log_interval
+            log_environment_metrics(spec.env, spec.logger_run, steps, flush=log_due)
+            if log_due:
+                last_log_step = steps
             if spec.reward_normalization and spec.record_transition is not None:
                 spec.record_transition(rewards, done, active)
             scores[active] += rewards[active]
             eplens[active] += 1
-            step_original, step_original_present = extract_vector_original_rewards(
-                infos, spec.worker_size
-            )
-            real_reset = vector_real_reset_mask(spec.env, terminateds, truncateds, infos)
             autoreset = vector_autoreset_mask(spec.env, terminateds, truncateds, infos)
-            active_original = active & step_original_present
-            originals[active_original] += step_original[active_original]
-            original_present[active_original] = True
 
             if steps > spec.learning_starts:
                 train_residual += int(active.sum())
@@ -260,60 +246,53 @@ class RolloutEngine:
             )
 
             for idx in np.where(done & active)[0]:
-                emit_original = original_present[idx] and real_reset[idx]
                 spec.record_rollout_episode(
                     steps,
                     episode_reward=float(scores[idx]),
                     episode_length=int(eplens[idx]),
                     timeout=float(truncateds[idx]),
-                    original_reward=float(originals[idx]) if emit_original else None,
                 )
                 scores[idx] = 0.0
                 eplens[idx] = 0
-                if emit_original:
-                    originals[idx] = 0.0
-                    original_present[idx] = False
 
             prev_done = done & autoreset & active
 
             if steps % spec.eval_freq == 0:
                 eval_result = spec.evaluate(steps)
 
-            if steps % log_interval == 0 and eval_result is not None and len(lossque) > 0:
+            if log_due and eval_result is not None and len(lossque) > 0:
                 pbar.set_description(spec.describe(eval_result))
+        log_environment_metrics(spec.env, spec.logger_run, steps)
 
     def learn_single_env_checkpointing(self, pbar, callback=None, log_interval=1000, obs=None):
         spec = self.spec
         if obs is None:
-            obs, info = spec.env.reset() if spec.initial_reset is None else spec.initial_reset
+            obs, _ = spec.env.reset() if spec.initial_reset is None else spec.initial_reset
             obs = batch_observation(obs)
         lossque = self._begin()
         eval_result = None
 
         score = 0.0
         eplen = 0
-        original = 0.0
-        have_original = False
+        steps = 0
+        last_log_step = 0
 
         for steps in pbar:
             eplen += 1
             sel = spec.single_action(obs, steps)
-            next_obs, reward, terminated, truncated, info = spec.env.step(sel.env_action)
+            next_obs, reward, terminated, truncated, _ = spec.env.step(sel.env_action)
+            log_due = steps - last_log_step >= log_interval
+            log_environment_metrics(spec.env, spec.logger_run, steps, flush=log_due)
+            if log_due:
+                last_log_step = steps
             next_obs = batch_observation(next_obs)
             if spec.reward_normalization and spec.record_transition is not None:
                 spec.record_transition(reward, np.logical_or(terminated, truncated))
             spec.replay_buffer.add(obs, sel.store_action, reward, next_obs, terminated, truncated)
             score += float(reward)
-            step_original = extract_original_reward(info)
-            if step_original is not None:
-                have_original = True
-                original += float(step_original)
             obs = next_obs
 
             if terminated or truncated:
-                emit_original = have_original and single_real_episode_end(
-                    terminated, truncated, info
-                )
                 if steps > spec.learning_starts:
                     ckpt_success = spec.checkpoint_on_episode_end(
                         steps,
@@ -326,20 +305,16 @@ class RolloutEngine:
                         episode_reward=score,
                         episode_length=eplen,
                         timeout=float(truncated),
-                        original_reward=original if emit_original else None,
                     )
                 else:
                     ckpt_success = True
                 score = 0.0
                 eplen = 0
-                if emit_original:
-                    original = 0.0
-                    have_original = False
 
                 if not ckpt_success and spec.force_reset is not None:
-                    obs, info = spec.force_reset()
+                    obs, _ = spec.force_reset()
                 else:
-                    obs, info = spec.env.reset()
+                    obs, _ = spec.env.reset()
                 obs = batch_observation(obs)
 
             if steps > spec.learning_starts and steps % spec.train_freq == 0:
@@ -348,8 +323,9 @@ class RolloutEngine:
             if steps % spec.eval_freq == 0:
                 eval_result = spec.evaluate(steps)
 
-            if steps % log_interval == 0 and eval_result is not None and len(lossque) > 0:
+            if log_due and eval_result is not None and len(lossque) > 0:
                 pbar.set_description(spec.describe(eval_result))
+        log_environment_metrics(spec.env, spec.logger_run, steps)
 
     def learn_vectorized_env_checkpointing(self, pbar, callback=None, log_interval=1000):
         spec = self.spec
@@ -360,14 +336,13 @@ class RolloutEngine:
 
         scores = np.zeros([spec.worker_size], dtype=np.float64)
         eplens = np.zeros([spec.worker_size], dtype=np.int32)
-        originals = np.zeros([spec.worker_size], dtype=np.float64)
-        original_present = np.zeros([spec.worker_size], dtype=bool)
-        # Adapters classify two backend quirks separately: whether this done row
-        # is a real game reset, and whether the next row is an autoreset dummy.
+        # Only adapters know which done rows are followed by an autoreset dummy.
         prev_done = None
         defer_checkpoint_pulses = spec.force_reset is None
         pending_checkpoint_pulses = deque()
         pending_eval_steps = deque()
+        steps = 0
+        last_log_step = 0
 
         def checkpoint_pulse_callback(pulse_steps, accumulated_timesteps):
             if defer_checkpoint_pulses:
@@ -389,8 +364,6 @@ class RolloutEngine:
             while pending_checkpoint_pulses:
                 pulse_steps, accumulated_timesteps = pending_checkpoint_pulses.popleft()
                 spec.checkpoint_pulse(pulse_steps, accumulated_timesteps)
-            while pending_eval_steps:
-                run_eval(pending_eval_steps.popleft())
 
         for steps in pbar:
             spec.refresh_exploration(steps)
@@ -402,18 +375,17 @@ class RolloutEngine:
             next_obses, rewards, terminateds, truncateds, infos = spec.env.get_result()
             done = np.logical_or(terminateds, truncateds)
             active = np.ones(spec.worker_size, dtype=bool) if prev_done is None else ~prev_done
+            log_due = steps - last_log_step >= log_interval
+            log_environment_metrics(spec.env, spec.logger_run, steps, flush=log_due)
+            if log_due:
+                last_log_step = steps
+            while pending_eval_steps:
+                run_eval(pending_eval_steps.popleft())
             if spec.reward_normalization and spec.record_transition is not None:
                 spec.record_transition(rewards, done, active)
             scores[active] += rewards[active]
             eplens[active] += 1
-            step_original, step_original_present = extract_vector_original_rewards(
-                infos, spec.worker_size
-            )
-            real_reset = vector_real_reset_mask(spec.env, terminateds, truncateds, infos)
             autoreset = vector_autoreset_mask(spec.env, terminateds, truncateds, infos)
-            active_original = active & step_original_present
-            originals[active_original] += step_original[active_original]
-            original_present[active_original] = True
 
             store_mask = None if prev_done is None or not prev_done.any() else ~prev_done
             spec.replay_buffer.add(
@@ -446,19 +418,14 @@ class RolloutEngine:
                     )
                     if advance and not ckpt_success:
                         monitor_failed = True
-                    emit_original = original_present[idx] and real_reset[idx]
                     spec.record_rollout_episode(
                         steps,
                         episode_reward=float(scores[idx]),
                         episode_length=int(eplens[idx]),
                         timeout=float(truncateds[idx]),
-                        original_reward=(float(originals[idx]) if emit_original else None),
                     )
                     scores[idx] = 0.0
                     eplens[idx] = 0
-                    if emit_original:
-                        originals[idx] = 0.0
-                        original_present[idx] = False
 
                 if spec.force_reset is not None and monitor_failed:
                     spec.force_reset()
@@ -468,10 +435,13 @@ class RolloutEngine:
             if steps % spec.eval_freq == 0:
                 schedule_eval(steps)
 
-            if steps % log_interval == 0 and eval_result is not None and len(lossque) > 0:
+            if log_due and eval_result is not None and len(lossque) > 0:
                 pbar.set_description(spec.describe(eval_result))
 
         flush_checkpoint_pulses()
+        log_environment_metrics(spec.env, spec.logger_run, steps)
+        while pending_eval_steps:
+            run_eval(pending_eval_steps.popleft())
 
     def _learn_vectorized_device(self, pbar, log_interval, *, checkpointing):
         """Keep same-step autoreset rollouts resident; copy only episode reports."""
@@ -485,21 +455,22 @@ class RolloutEngine:
         eval_result = None
         train_residual = 0
         with jax.default_device(spec.memory_device):
-            zeros = jnp.zeros(spec.worker_size)
             false = jnp.zeros(spec.worker_size, dtype=bool)
-            true = jnp.ones(spec.worker_size, dtype=bool)
-            state = (zeros, jnp.zeros(spec.worker_size, dtype=jnp.int32), zeros, false, false)
+            state = (
+                jnp.zeros(spec.worker_size),
+                jnp.zeros(spec.worker_size, dtype=jnp.int32),
+                false,
+            )
         completed_steps = []
         completed_rows = []
         pending_pulses = deque()
         pending_evals = deque()
+        steps = 0
+        last_log_step = 0
 
         def flush_checkpoint_pulses():
-            nonlocal eval_result
             while pending_pulses:
                 spec.checkpoint_pulse(*pending_pulses.popleft())
-            while pending_evals:
-                eval_result = spec.evaluate(pending_evals.popleft())
 
         def flush_reports():
             if not completed_rows:
@@ -513,7 +484,6 @@ class RolloutEngine:
                     episode_reward=float(row[1]),
                     episode_length=int(row[2]),
                     timeout=float(row[3]),
-                    original_reward=float(row[4]) if row[5] else None,
                 )
             completed_steps.clear()
             completed_rows.clear()
@@ -524,27 +494,21 @@ class RolloutEngine:
             sel = spec.vector_action(obs, steps)
             env.step(sel.env_action)
             flush_checkpoint_pulses()
-            next_obs, rewards, terminated, truncated, infos = env.get_result()
+            next_obs, rewards, terminated, truncated, _ = env.get_result()
+            log_due = steps - last_log_step >= log_interval
+            log_environment_metrics(env, spec.logger_run, steps, flush=log_due)
+            if log_due:
+                last_log_step = steps
+            while pending_evals:
+                eval_result = spec.evaluate(pending_evals.popleft())
             if spec.reward_normalization and spec.record_transition is not None:
                 spec.record_transition(rewards, jnp.logical_or(terminated, truncated))
-            if isinstance(infos, dict):
-                original = zeros
-                if "original_reward" in infos:
-                    original = infos["original_reward"]
-                present = true if "original_reward" in infos else false
-                if "_original_reward" in infos:
-                    present = infos["_original_reward"]
-            else:
-                original, present = extract_vector_original_rewards(infos, spec.worker_size)
             state, _, _, completed = device_episode_step(
                 state,
                 rewards,
                 terminated if not checkpointing or steps > spec.learning_starts else false,
                 truncated if not checkpointing or steps > spec.learning_starts else false,
-                vector_real_reset_mask(env, terminated, truncated, infos),
                 false,
-                original,
-                present,
             )
             if not checkpointing and steps > spec.learning_starts:
                 train_residual += spec.worker_size
@@ -574,7 +538,6 @@ class RolloutEngine:
                         episode_reward=float(rows[worker, 1]),
                         episode_length=int(rows[worker, 2]),
                         timeout=float(rows[worker, 3]),
-                        original_reward=float(rows[worker, 4]) if rows[worker, 5] else None,
                     )
             if not checkpointing:
                 completed_steps.append(steps)
@@ -585,9 +548,12 @@ class RolloutEngine:
                     pending_evals.append(steps)
                 else:
                     eval_result = spec.evaluate(steps)
-            if steps % log_interval == 0:
+            if log_due:
                 flush_reports()
                 if eval_result is not None and lossque:
                     pbar.set_description(spec.describe(eval_result))
         flush_checkpoint_pulses()
         flush_reports()
+        log_environment_metrics(env, spec.logger_run, steps)
+        while pending_evals:
+            eval_result = spec.evaluate(pending_evals.popleft())

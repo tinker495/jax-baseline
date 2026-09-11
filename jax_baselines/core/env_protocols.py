@@ -184,16 +184,6 @@ def _done_mask(terminateds: Any, truncateds: Any) -> np.ndarray | jax.Array:
     )
 
 
-def vector_real_reset_mask(
-    env: Any, terminateds: Any, truncateds: Any, infos: Any
-) -> np.ndarray | jax.Array:
-    real_reset_mask = getattr(env, "real_reset_mask", None)
-    if callable(real_reset_mask):
-        mask = real_reset_mask(terminateds, truncateds, infos)
-        return mask.astype(bool) if isinstance(mask, jax.Array) else np.asarray(mask, dtype=bool)
-    return _done_mask(terminateds, truncateds)
-
-
 def vector_autoreset_mask(
     env: Any, terminateds: Any, truncateds: Any, infos: Any
 ) -> np.ndarray | jax.Array:
@@ -202,13 +192,6 @@ def vector_autoreset_mask(
         mask = autoreset_mask(terminateds, truncateds, infos)
         return mask.astype(bool) if isinstance(mask, jax.Array) else np.asarray(mask, dtype=bool)
     return _done_mask(terminateds, truncateds)
-
-
-def single_real_episode_end(terminated: Any, truncated: Any, info: Any) -> bool:
-    """Return the adapter-normalized real episode boundary for one environment."""
-    if isinstance(info, dict) and "real_episode_end" in info:
-        return bool(info["real_episode_end"])
-    return bool(terminated or truncated)
 
 
 def reset_for_evaluation(env: Any) -> Any:

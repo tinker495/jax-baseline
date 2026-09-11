@@ -554,6 +554,7 @@ class Q_Network_Family:
         )
         spec = RolloutSpec(
             env=self.env,
+            logger_run=ctx.logger_run,
             replay_buffer=self.replay_buffer,
             learning_starts=self.learning_starts,
             train_freq=self.train_freq,

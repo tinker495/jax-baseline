@@ -6,9 +6,9 @@ per ``eval_freq``, rollout episodes finish at irregular and (vectorized)
 parallel times, so completed episodes are pushed into a fixed window and the
 window mean is logged periodically.
 
-The tracker is the only ``rollout/`` writer for these families; it reuses the
-shared :func:`jax_baselines.core.eval.log_measurement` tag-writer so the
-``rollout/`` leaves can never drift from the ``eval/`` leaves. The distributed
+The tracker writes algorithm-level episode statistics; environment adapters
+write their own measurements. It reuses the shared
+:func:`jax_baselines.core.eval.log_measurement` tag-writer. The distributed
 families keep their own server-side aggregation and do not use this tracker
 (documented inconsistency, see ADR 0003).
 """
@@ -23,29 +23,22 @@ from jax_baselines.core.eval import log_measurement
 
 
 @jax.jit
-def device_episode_step(
-    state, rewards, terminateds, truncateds, real_reset, autoreset, original, original_present
-):
+def device_episode_step(state, rewards, terminateds, truncateds, autoreset):
     """Accumulate one vector step without transferring episode state to the host.
 
-    State is ``(scores, lengths, originals, seen_original, prev_done)``. Completed
-    rows retain worker order: ``(done, score, length, timeout, original, emit_original)``.
+    State is ``(scores, lengths, prev_done)``. Completed rows retain worker order:
+    ``(done, score, length, timeout)``.
     """
-    scores, lengths, originals, seen_original, prev_done = state
+    scores, lengths, prev_done = state
     active = ~prev_done
     done = (terminateds | truncateds) & active
     scores = scores + jnp.where(active, rewards, 0)
     lengths = lengths + active.astype(lengths.dtype)
-    originals = originals + jnp.where(active & original_present, original, 0)
-    seen_original = seen_original | (active & original_present)
-    emit_original = done & real_reset & seen_original
-    completed = jnp.stack((done, scores, lengths, truncateds, originals, emit_original), axis=-1)
+    completed = jnp.stack((done, scores, lengths, truncateds), axis=-1)
     return (
         (
             jnp.where(done, 0, scores),
             jnp.where(done, 0, lengths),
-            jnp.where(emit_original, 0, originals),
-            seen_original & ~emit_original,
             done & autoreset,
         ),
         jnp.where(prev_done, 0, rewards),
@@ -62,10 +55,8 @@ class EpisodeTracker:
     boundary, so an empty window is never logged). ``K=10`` matches the loss
     ``deque`` convention, trading smoothness for responsiveness.
 
-    The engine that drives the rollout stays logger-free: it only calls
-    :meth:`record`. The ``log_metric`` callable is bound to the active run and
-    the training session releases the tracker before that run's logger leaves
-    scope.
+    The ``log_metric`` callable is bound to the active run and the training
+    session releases the tracker before that run's logger leaves scope.
     """
 
     def __init__(self, log_metric, log_interval, window=10):
@@ -74,26 +65,17 @@ class EpisodeTracker:
         self._reward = deque(maxlen=window)
         self._length = deque(maxlen=window)
         self._timeout = deque(maxlen=window)
-        self._original = deque(maxlen=window)
         self._last_log_step = 0
 
-    def record(self, steps, *, episode_reward, episode_length, timeout, original_reward=None):
+    def record(self, steps, *, episode_reward, episode_length, timeout):
         """Push one completed episode and flush the window if due.
 
-        ``original_reward`` is recorded only when present (Atari unclipped
-        score); ``timeout`` is the per-episode truncation flag (0/1) whose
-        window mean is the truncation rate. Presence is assumed all-or-nothing
-        per run (``ClipRewardEnv`` injects it on every Atari step and never
-        otherwise), so the reward and original-reward windows stay aligned; an
-        intermittently-present ``original_reward`` would let the two windows
-        cover different episode spans.
+        ``timeout`` is the per-episode truncation flag (0/1) whose window mean
+        is the truncation rate.
         """
         self._reward.append(float(episode_reward))
         self._length.append(float(episode_length))
         self._timeout.append(float(timeout))
-        if original_reward is not None:
-            self._original.append(float(original_reward))
-
         if steps - self._last_log_step >= self._log_interval:
             self._flush(steps)
             self._last_log_step = steps
@@ -101,7 +83,6 @@ class EpisodeTracker:
     def _flush(self, steps):
         if not self._reward:
             return
-        original = float(np.mean(self._original)) if self._original else None
         log_measurement(
             self._log_metric,
             "rollout",
@@ -109,7 +90,6 @@ class EpisodeTracker:
             episode_reward=float(np.mean(self._reward)),
             episode_length=float(np.mean(self._length)),
             timeout_rate=float(np.mean(self._timeout)),
-            original_reward=original,
         )
 
     def describe(self):

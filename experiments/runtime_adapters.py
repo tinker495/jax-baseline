@@ -170,7 +170,14 @@ def record_and_test(env_builder, logger_run, actions_eval_fn, episode, conv_acti
             test_env.close()
             raise
         with closing(render_env):
-            return run_test_episodes(render_env, actions_eval_fn, episode, conv_action)
+            return run_test_episodes(
+                render_env,
+                actions_eval_fn,
+                episode,
+                conv_action,
+                logger_run=logger_run,
+                logging_env=test_env,
+            )
 
     from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
 
@@ -181,9 +188,18 @@ def record_and_test(env_builder, logger_run, actions_eval_fn, episode, conv_acti
         test_env.close()
         raise
     with render_env:
-        return run_test_episodes(render_env, actions_eval_fn, episode, conv_action)
+        return run_test_episodes(
+            render_env,
+            actions_eval_fn,
+            episode,
+            conv_action,
+            logger_run=logger_run,
+            logging_env=test_env,
+        )
 
 
 def headless_test(env_builder, logger_run, actions_eval_fn, episode, conv_action=None):
     with closing(env_builder(1)) as test_env:
-        return run_test_episodes(test_env, actions_eval_fn, episode, conv_action)
+        return run_test_episodes(
+            test_env, actions_eval_fn, episode, conv_action, logger_run=logger_run
+        )

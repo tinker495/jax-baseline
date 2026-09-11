@@ -4,8 +4,7 @@ Two layers:
 
 - :class:`jax_baselines.core.rollout_stats.EpisodeTracker` windowing: the
   window mean is logged under the ``rollout/`` prefix, throttled to
-  ``log_interval`` and skipping an empty window, with ``original_reward`` only
-  when supplied.
+  ``log_interval`` and skipping an empty window.
 - The :class:`jax_baselines.core.rollout.RolloutEngine` episode-end emit: the
   four loops hand each *completed* training episode to the
   ``record_rollout_episode`` callback, and the autoreset dummy step is never
@@ -13,9 +12,11 @@ Two layers:
 """
 
 import inspect
+from dataclasses import replace
 
 import numpy as np
 
+from env_builder.metrics import GymEnvMetrics
 from jax_baselines.core.rollout import ActionSelection, RolloutEngine, RolloutSpec
 from jax_baselines.core.rollout_stats import EpisodeTracker
 
@@ -25,8 +26,10 @@ class _RecordingLog:
     def __init__(self):
         self.calls = []
 
-    def __call__(self, key, value, step):
+    def __call__(self, key, value, step=None):
         self.calls.append((key, round(float(value), 4), step))
+
+    log_metric = __call__
 
     def keyed(self, key):
         return [(c[1], c[2]) for c in self.calls if c[0] == key]
@@ -71,28 +74,6 @@ def test_tracker_windows_last_k_only():
     assert log.keyed("rollout/episode_reward")[-1] == (30.0, 4)
 
 
-def test_tracker_original_reward_only_when_present():
-    log = _RecordingLog()
-    tracker = EpisodeTracker(log, log_interval=1)
-    tracker.record(1, episode_reward=1.0, episode_length=1, timeout=0.0)
-    assert log.keyed("rollout/original_reward") == []
-
-    tracker.record(2, episode_reward=1.0, episode_length=1, timeout=0.0, original_reward=42.0)
-    assert log.keyed("rollout/original_reward") == [(42.0, 2)]
-
-
-def test_tracker_throttles_original_reward_with_other_rollout_metrics():
-    log = _RecordingLog()
-    tracker = EpisodeTracker(log, log_interval=100)
-
-    tracker.record(150, episode_reward=1.0, episode_length=1, timeout=0.0, original_reward=10.0)
-    tracker.record(160, episode_reward=1.0, episode_length=1, timeout=0.0, original_reward=42.0)
-    tracker.record(260, episode_reward=1.0, episode_length=1, timeout=0.0, original_reward=62.0)
-
-    assert log.keyed("rollout/episode_reward") == [(1.0, 150), (1.0, 260)]
-    assert log.keyed("rollout/original_reward") == [(10.0, 150), (38.0, 260)]
-
-
 def test_tracker_describe_is_empty_until_first_episode():
     log = _RecordingLog()
     tracker = EpisodeTracker(log, log_interval=100)
@@ -109,6 +90,8 @@ class _ScriptedSingleEnv:
         self.script = script  # list of (reward, terminated, truncated)
         self.infos = infos if infos is not None else [{}] * len(script)
         self.t = 0
+        self.metrics = GymEnvMetrics(1)
+        self.log = _RecordingLog()
 
     def reset(self):
         return {"unified_obs": np.zeros(1, dtype=np.float32)}, {}
@@ -117,7 +100,25 @@ class _ScriptedSingleEnv:
         reward, terminated, truncated = self.script[self.t]
         info = self.infos[self.t]
         self.t += 1
-        return {"unified_obs": np.zeros(1, dtype=np.float32)}, reward, terminated, truncated, info
+        real_reset = terminated or truncated
+        if "real_episode_end" in info:
+            real_reset = bool(info["real_episode_end"])
+        self.metrics.capture(
+            info,
+            terminated or truncated,
+            real_reset,
+            False,
+        )
+        return (
+            {"unified_obs": np.zeros(1, dtype=np.float32)},
+            reward,
+            terminated,
+            truncated,
+            info,
+        )
+
+    def log_metrics(self, logger, steps, *, namespace="rollout", active=None, flush=True):
+        self.metrics.log(logger, steps, namespace=namespace, active=active, flush=flush)
 
 
 class _ScriptedVecEnv:
@@ -126,6 +127,8 @@ class _ScriptedVecEnv:
         self.infos = infos if infos is not None else [{}] * len(script)
         self.ws = worker_size
         self.i = 0
+        self.metrics = GymEnvMetrics(worker_size)
+        self.log = _RecordingLog()
 
     def current_obs(self):
         return {"unified_obs": np.zeros((self.ws, 1), dtype=np.float32)}
@@ -137,6 +140,12 @@ class _ScriptedVecEnv:
         rewards, terminateds, truncateds = self.script[self.i]
         infos = self.infos[self.i]
         self.i += 1
+        self.metrics.capture(
+            infos,
+            terminateds | truncateds,
+            self.real_reset_mask(terminateds, truncateds, infos),
+            self.autoreset_mask(terminateds, truncateds, infos),
+        )
         return (
             {"unified_obs": np.zeros((self.ws, 1), dtype=np.float32)},
             rewards,
@@ -155,6 +164,9 @@ class _ScriptedVecEnv:
 
     def autoreset_mask(self, terminateds, truncateds, infos):
         return self.real_reset_mask(terminateds, truncateds, infos)
+
+    def log_metrics(self, logger, steps, *, namespace="rollout", active=None, flush=True):
+        self.metrics.log(logger, steps, namespace=namespace, active=active, flush=flush)
 
 
 class _NoopBuffer:
@@ -179,14 +191,13 @@ def test_rollout_engine_keeps_legacy_callback_signature():
 def _episode_recorder():
     records = []
 
-    def record(steps, *, episode_reward, episode_length, timeout, original_reward=None):
+    def record(steps, *, episode_reward, episode_length, timeout):
         records.append(
             {
                 "steps": steps,
                 "reward": round(float(episode_reward), 4),
                 "length": int(episode_length),
                 "timeout": float(timeout),
-                "original": original_reward,
             }
         )
 
@@ -196,28 +207,30 @@ def _episode_recorder():
 def _spec(env, record, **overrides):
     """Minimal RolloutSpec whose train/eval cadence never fires, isolating the
     episode-record emit."""
-    base = dict(
-        env=env,
-        replay_buffer=_NoopBuffer(),
-        learning_starts=10**9,
-        train_freq=1,
-        gradient_steps=1,
-        eval_freq=10**9,
-        worker_size=env.ws,
-        single_action=lambda obs, steps: ActionSelection(0, 0),
-        vector_action=lambda obs, steps: ActionSelection(0, 0),
-        refresh_exploration=lambda steps: None,
-        force_reset=None,
-        train=lambda steps, gs: 0.0,
-        evaluate=lambda steps: None,
-        describe=lambda eval_result: "desc",
-        bind_loss_window=lambda window: None,
-        record_rollout_episode=record,
-        checkpoint_on_episode_end=lambda *a, **k: True,
-        checkpoint_pulse=lambda *a, **k: None,
+    return replace(
+        RolloutSpec(
+            env=env,
+            logger_run=env.log,
+            replay_buffer=_NoopBuffer(),
+            learning_starts=10**9,
+            train_freq=1,
+            gradient_steps=1,
+            eval_freq=10**9,
+            worker_size=env.ws,
+            single_action=lambda obs, steps: ActionSelection(0, 0),
+            vector_action=lambda obs, steps: ActionSelection(0, 0),
+            refresh_exploration=lambda steps: None,
+            force_reset=None,
+            train=lambda steps, gs: 0.0,
+            evaluate=lambda steps: None,
+            describe=lambda eval_result: "desc",
+            bind_loss_window=lambda window: None,
+            record_rollout_episode=record,
+            checkpoint_on_episode_end=lambda *a, **k: True,
+            checkpoint_pulse=lambda *a, **k: None,
+        ),
+        **overrides,
     )
-    base.update(overrides)
-    return RolloutSpec(**base)
 
 
 def test_single_env_emits_completed_episode_records():
@@ -239,7 +252,7 @@ def test_single_env_emits_completed_episode_records():
     ]
 
 
-def test_single_env_accumulates_original_reward():
+def test_single_env_logs_adapter_original_reward():
     env = _ScriptedSingleEnv(
         [(1.0, False, False), (1.0, True, False)],
         infos=[{"original_reward": 10.0}, {"original_reward": 20.0}],
@@ -248,7 +261,7 @@ def test_single_env_accumulates_original_reward():
     RolloutEngine(_spec(env, record)).learn_single_env(range(2), log_interval=10**9)
 
     assert len(records) == 1
-    assert records[0]["original"] == 30.0
+    assert env.log.keyed("rollout/original_reward") == [(30.0, 1)]
 
 
 def test_single_env_original_reward_waits_for_real_episode_end():
@@ -262,10 +275,8 @@ def test_single_env_original_reward_waits_for_real_episode_end():
     records, record = _episode_recorder()
     RolloutEngine(_spec(env, record)).learn_single_env(range(2), log_interval=10**9)
 
-    assert [(r["reward"], r["original"]) for r in records] == [
-        (1.0, None),
-        (1.0, 30.0),
-    ]
+    assert [r["reward"] for r in records] == [1.0, 1.0]
+    assert env.log.keyed("rollout/original_reward") == [(30.0, 1)]
 
 
 def test_vectorized_env_excludes_autoreset_dummy_step():
@@ -351,7 +362,8 @@ def test_vectorized_env_accumulates_original_reward_from_dict_infos():
     records, record = _episode_recorder()
     RolloutEngine(_spec(env, record)).learn_vectorized_env(range(2), log_interval=10**9)
 
-    assert [(r["reward"], r["original"]) for r in records] == [(2.0, 40.0), (4.0, 60.0)]
+    assert [r["reward"] for r in records] == [2.0, 4.0]
+    assert env.log.keyed("rollout/original_reward") == [(50.0, 1)]
 
 
 def test_vectorized_env_respects_original_reward_presence_mask():
@@ -384,7 +396,8 @@ def test_vectorized_env_respects_original_reward_presence_mask():
     records, record = _episode_recorder()
     RolloutEngine(_spec(env, record)).learn_vectorized_env(range(2), log_interval=10**9)
 
-    assert [(r["reward"], r["original"]) for r in records] == [(2.0, 40.0), (4.0, None)]
+    assert [r["reward"] for r in records] == [2.0, 4.0]
+    assert env.log.keyed("rollout/original_reward") == [(40.0, 1)]
 
 
 def test_vectorized_env_original_reward_waits_for_zero_lives():
@@ -425,10 +438,8 @@ def test_vectorized_env_original_reward_waits_for_zero_lives():
     records, record = _episode_recorder()
     RolloutEngine(_spec(env, record)).learn_vectorized_env(range(3), log_interval=10**9)
 
-    assert [(r["reward"], r["original"]) for r in records] == [
-        (1.0, None),
-        (6.0, 530.0),
-    ]
+    assert [r["reward"] for r in records] == [1.0, 6.0]
+    assert env.log.keyed("rollout/original_reward") == [(530.0, 2)]
 
 
 def test_single_env_checkpointing_emits_after_learning_starts():
@@ -555,4 +566,5 @@ def test_vectorized_checkpointing_accumulates_original_reward_from_per_worker_in
         range(4), log_interval=10**9
     )
 
-    assert [(r["reward"], r["original"]) for r in records] == [(2.0, 30.0), (1.0, 30.0)]
+    assert [r["reward"] for r in records] == [2.0, 1.0]
+    assert env.log.keyed("rollout/original_reward") == [(30.0, 3)]
