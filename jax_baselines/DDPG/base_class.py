@@ -463,21 +463,21 @@ class Deteministic_Policy_Gradient_Family:
         return run_name
 
     def _apply_simba_normalization(self, obs, eval, steps):
-        if self.simba:
-            rms = (
-                self.checkpoint_obs_rms
-                if (
-                    eval
-                    and self.use_checkpointing
-                    and self.ckpt.enabled
-                    and self.checkpoint_obs_rms is not None
-                )
-                else self._policy_update_obs_rms()
+        if not self.simba:
+            return obs
+        rms = (
+            self.checkpoint_obs_rms
+            if (
+                eval
+                and self.use_checkpointing
+                and self.ckpt.enabled
+                and self.checkpoint_obs_rms is not None
             )
-            if (not eval) and steps != np.inf:
-                self.obs_rms.update(obs)
-            obs = rms.normalize(obs)
-        return obs
+            else self._policy_update_obs_rms()
+        )
+        if (not eval) and steps != np.inf:
+            self.obs_rms.update(obs)
+        return rms.normalize(obs)
 
     def _policy_update_obs_rms(self):
         return self.action_obs_rms if self.action_obs_rms is not None else self.obs_rms
