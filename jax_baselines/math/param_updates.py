@@ -1,19 +1,21 @@
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 import jax
 import jax.numpy as jnp
 import optax
 
 PyTree = Any
+Params = TypeVar("Params")
 
 
-def random_split_like_tree(rng_key: jax.random.PRNGKey, target: PyTree):
+def random_split_like_tree(rng_key: jax.Array, target: PyTree):
     treedef = jax.tree.structure(target)
     keys = jax.random.split(rng_key, treedef.num_leaves)
     return jax.tree.unflatten(treedef, keys)
 
 
-def tree_random_normal_like(rng_key: jax.random.PRNGKey, target: PyTree, mul=1.2):
+def tree_random_normal_like(rng_key: jax.Array, target: PyTree, mul=1.2):
     keys_tree = random_split_like_tree(rng_key, target)
     return jax.tree_util.tree_map(
         lambda t, k: jax.random.normal(k, t.shape, t.dtype) * jnp.std(t) * mul,
@@ -26,7 +28,7 @@ def scaled_by_reset(
     tensors: PyTree,
     optimizer_state: optax.GradientTransformationExtraArgs,
     optimizer: optax.GradientTransformation,
-    key: jax.random.PRNGKey,
+    key: jax.Array,
     steps: int,
     update_period: int,
     tau: float,
@@ -50,7 +52,7 @@ def scaled_by_reset_with_filter(
     tensors: PyTree,
     optimizer_state: optax.GradientTransformationExtraArgs,
     optimizer: optax.GradientTransformation,
-    key: jax.random.PRNGKey,
+    key: jax.Array,
     steps: int,
     update_period: int,
     taus: PyTree,
@@ -121,3 +123,31 @@ def project_dense_kernels(tensors: PyTree, epsilon: float = 1e-8):
         return value
 
     return jax.tree_util.tree_map_with_path(project, tensors)
+
+
+def project_unit_norm_params(params: Params) -> Params:
+    """Normalize dense kernels and affine normalization weights.
+
+    Dense kernels store input features on axis 0. Normalization layers use
+    ``scale`` and, for BatchNorm, ``bias`` in the same parameter mapping.
+    Predictor biases remain unconstrained. Pass trainable parameters only;
+    batch statistics are separate state.
+    """
+    leaves = dict(jax.tree_util.tree_flatten_with_path(params)[0])
+
+    def project(path, value):
+        if not isinstance(path[-1], jax.tree_util.DictKey):
+            raise TypeError("Unit-normalized parameters must use named dictionary leaves")
+        name = path[-1].key
+        if name == "kernel":
+            return value / jnp.maximum(jnp.linalg.norm(value, axis=0, keepdims=True), 1e-8)
+        scale_path = (*path[:-1], jax.tree_util.DictKey("scale"))
+        if name not in ("scale", "bias") or scale_path not in leaves:
+            return value
+        squared_norm = jnp.sum(jnp.square(leaves[scale_path]))
+        bias_path = (*path[:-1], jax.tree_util.DictKey("bias"))
+        if bias_path in leaves:
+            squared_norm += jnp.sum(jnp.square(leaves[bias_path]))
+        return value * jnp.sqrt(value.shape[-1]) * jax.lax.rsqrt(squared_norm + 1e-8)
+
+    return jax.tree_util.tree_map_with_path(project, params)
