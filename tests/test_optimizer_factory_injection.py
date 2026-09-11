@@ -47,6 +47,7 @@ def test_a2c_prepare_run_rebuilds_optimizer_with_linear_lr_schedule_through_fact
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
     agent.optimizer_factory = factory
     agent.learning_rate = 0.00025
+    agent.memory_device = None
     agent.lr_annealing = True
     agent.batch_size = 10
     agent.worker_size = 2

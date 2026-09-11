@@ -121,14 +121,16 @@ class IMPALA_TPPO(IMPALA_Family):
 
         if steps % self.log_interval == 0:
             log_dict = {
-                "loss/critic_loss": float(critic_loss),
-                "loss/actor_loss": float(actor_loss),
-                "loss/entropy_loss": float(entropy_loss),
-                "loss/mean_rho": float(rho),
-                "loss/mean_target": float(targets),
+                "loss/critic_loss": critic_loss,
+                "loss/actor_loss": actor_loss,
+                "loss/entropy_loss": entropy_loss,
+                "loss/mean_rho": rho,
+                "loss/mean_target": targets,
             }
-            self.logger_server.log_trainer(steps, log_dict)
-        return critic_loss, float(rho)
+            self.logger_server.log_trainer(
+                steps, {key: float(value) for key, value in jax.device_get(log_dict).items()}
+            )
+        return critic_loss, rho
 
     def preprocess(
         self,

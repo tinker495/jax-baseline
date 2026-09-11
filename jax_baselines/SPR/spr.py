@@ -198,8 +198,10 @@ class SPR(Q_Network_Family):
         return result
 
     def _aggregate_train_reports(self, reports):
+        if len(reports) == 1:
+            return reports[0]
         counts = jnp.array([report.update_count for report in reports])
-        total = jnp.sum(counts)
+        total = sum(report.update_count for report in reports)
         mean_loss = jnp.sum(jnp.array([report.loss for report in reports]) * counts) / total
         mean_target = jnp.sum(jnp.array([report.target for report in reports]) * counts) / total
         mean_rprloss = (
@@ -210,7 +212,7 @@ class SPR(Q_Network_Family):
             loss=mean_loss,
             target=mean_target,
             metrics={"loss/rprloss": mean_rprloss},
-            update_count=int(total),
+            update_count=total,
         )
 
     def _image_augmentation(self, obs, key):

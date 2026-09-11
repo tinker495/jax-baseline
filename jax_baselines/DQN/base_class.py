@@ -4,7 +4,6 @@ from typing import Literal
 import jax
 import jax.numpy as jnp
 import numpy as np
-import optax
 
 from jax_baselines.core.checkpoint import make_checkpoint_scaffold, snapshot_pytree
 from jax_baselines.core.checkpoint_state import QNetCheckpointState
@@ -218,9 +217,7 @@ class Q_Network_Family:
                 if self.reward_normalizer is not None and state.reward_rms_state is not None:
                     self.reward_normalizer.restore(state.reward_rms_state)
                 state = state.params
-            self.params = self.target_params = (
-                jax.device_put(state, self.memory_device) if self.memory_backend == "gpu" else state
-            )
+            self.params = self.target_params = jax.device_put(state, self.memory_device)
 
     def get_env_setup(self):
         (
@@ -434,7 +431,8 @@ class Q_Network_Family:
             for k, v in eval_result.items():
                 description += f"{k} : {v:8.2f}, "
 
-        description += f"loss : {np.mean(self.lossque):.3f}"
+        array_module = jnp if any(isinstance(loss, jax.Array) for loss in self.lossque) else np
+        description += f"loss : {array_module.mean(array_module.asarray(tuple(self.lossque))):.3f}"
 
         if not self.param_noise:
             description += f", epsilon : {self.update_eps:.3f}"
@@ -508,14 +506,7 @@ class Q_Network_Family:
         )
 
     def prepare_run(self, total_timesteps):
-        if self.param_noise:
-            self.exploration = optax.constant_schedule(0)
-        else:
-            self.exploration = optax.linear_schedule(
-                init_value=self.exploration_initial_eps,
-                end_value=self.exploration_final_eps,
-                transition_steps=int(self.exploration_fraction * total_timesteps),
-            )
+        self._exploration_steps = int(self.exploration_fraction * total_timesteps)
         self.update_eps = 1.0
 
     def run_training_loop(self, ctx):
@@ -536,7 +527,14 @@ class Q_Network_Family:
         return ActionSelection(env_action=actions, store_action=actions)
 
     def _refresh_exploration(self, steps):
-        self.update_eps = float(self.exploration(steps))
+        if self.param_noise:
+            self.update_eps = 0.0
+            return
+        self.update_eps = self.exploration_initial_eps
+        if self._exploration_steps > 0:
+            self.update_eps += min(max(steps / self._exploration_steps, 0.0), 1.0) * (
+                self.exploration_final_eps - self.exploration_initial_eps
+            )
 
     def _write_ckpt_residual(self, value):
         self._ckpt_update_residual = value

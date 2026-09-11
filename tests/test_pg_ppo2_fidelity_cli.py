@@ -120,6 +120,7 @@ def test_prepare_run_rebuilds_optimizer_with_linear_lr_schedule():
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
     agent.optimizer_factory = fake_optimizer_factory
     agent.learning_rate = 0.00025
+    agent.memory_device = None
     agent.lr_annealing = True
     agent.batch_size = 10
     agent.worker_size = 2

@@ -513,7 +513,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
             for k, v in eval_result.items():
                 description += f"{k} : {v:8.2f}, "
 
-        description += f"loss : {np.mean(self.lossque):.3f}"
+        array_module = jnp if any(isinstance(loss, jax.Array) for loss in self.lossque) else np
+        description += f"loss : {array_module.mean(array_module.asarray(tuple(self.lossque))):.3f}"
         description += self._rollout_pbar_suffix()
         return description
 

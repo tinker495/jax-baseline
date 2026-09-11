@@ -174,16 +174,35 @@ def _evaluate_vector_episodes(eval_env: VectorizedEvalEnv, eval_eps, act_eval_fn
         actions = act_eval_fn(eval_env.current_obs())
         eval_env.step(conv_action(actions) if conv_action is not None else actions)
         _, rewards, terminateds, truncateds, infos = eval_env.get_result()
-        rewards, terminateds, truncateds = jax.device_get((rewards, terminateds, truncateds))
+        reward_infos = {}
+        if isinstance(infos, dict):
+            reward_infos = {
+                key: infos[key] for key in ("original_reward", "_original_reward") if key in infos
+            }
+        elif isinstance(infos, (list, tuple)):
+            reward_infos = [
+                {"original_reward": info["original_reward"]}
+                if isinstance(info, dict) and "original_reward" in info
+                else {}
+                for info in infos
+            ]
+        rewards, terminateds, truncateds, real_reset, autoreset, reward_infos = jax.device_get(
+            (
+                rewards,
+                terminateds,
+                truncateds,
+                vector_real_reset_mask(eval_env, terminateds, truncateds, infos),
+                vector_autoreset_mask(eval_env, terminateds, truncateds, infos),
+                reward_infos,
+            )
+        )
         done = np.logical_or(terminateds, truncateds)
         active = ~prev_done & (counts < targets)
         rewards_sum[active] += rewards[active]
         lengths[active] += 1
-        original, present = extract_vector_original_rewards(infos, workers)
+        original, present = extract_vector_original_rewards(reward_infos, workers)
         originals[active & present] += original[active & present]
         original_present[active & present] = True
-        real_reset = np.asarray(vector_real_reset_mask(eval_env, terminateds, truncateds, infos))
-        autoreset = np.asarray(vector_autoreset_mask(eval_env, terminateds, truncateds, infos))
         finished = done & active
         emit_original = finished & real_reset & original_present
         original_rewards.extend(originals[emit_original].tolist())
@@ -252,7 +271,7 @@ def run_test_episodes(test_env, actions_eval_fn, episode, conv_action=None):
 
     total_rewards = []
     for _ in range(episode):
-        obs, info = test_env.reset()
+        obs, _ = test_env.reset()
         obs = batch_observation(obs)
         terminated = False
         truncated = False
@@ -263,7 +282,7 @@ def run_test_episodes(test_env, actions_eval_fn, episode, conv_action=None):
             step_action = conv_action(actions) if conv_action is not None else actions
             action_to_step = _normalize_action_for_step(step_action)
 
-            observation, reward, terminated, truncated, info = test_env.step(action_to_step)
+            observation, reward, terminated, truncated, _ = test_env.step(action_to_step)
             obs = batch_observation(observation)
             episode_rew += reward
             eplen += 1

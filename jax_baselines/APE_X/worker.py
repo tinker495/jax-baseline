@@ -65,7 +65,7 @@ class Ape_X_Worker(object):
                 original_score = 0
             score = 0
             obs = batch_observation(obs)
-            params = param_server.get_params()
+            params = jax.device_put(param_server.get_params())
             eplen = 0
             episode = 0
             if eps is None:
@@ -83,7 +83,7 @@ class Ape_X_Worker(object):
 
             while not stop.is_set():
                 if update.is_set():
-                    params = param_server.get_params()
+                    params = jax.device_put(param_server.get_params())
                     update.clear()
                     get_action = _get_action
 

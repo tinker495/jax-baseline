@@ -31,6 +31,7 @@ class EpochBuffer:
         worker_size=1,
         action_space=1,
         memory_backend: Literal["cpu", "gpu"] = "cpu",
+        memory_device: jax.Device | None = None,
     ):
         if epoch_size < 1 or worker_size < 1:
             raise ValueError("epoch_size and worker_size must be positive")
@@ -38,9 +39,11 @@ class EpochBuffer:
             raise ValueError("observation_space must be a non-empty dict")
         if memory_backend not in ("cpu", "gpu"):
             raise ValueError("memory_backend must be 'cpu' or 'gpu'")
+        if memory_device is not None and memory_device.platform != memory_backend:
+            raise ValueError("memory_device must match memory_backend")
         self.memory_backend = memory_backend
-        self._device: jax.Device | None = None
-        if memory_backend == "gpu":
+        self._device = memory_device
+        if memory_backend == "gpu" and self._device is None:
             try:
                 devices = jax.devices("gpu")
             except RuntimeError as error:

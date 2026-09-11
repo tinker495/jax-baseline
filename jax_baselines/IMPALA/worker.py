@@ -66,10 +66,10 @@ class Impala_Worker(object):
 
             # Eager initial fetch so `params` is always bound before first use,
             # mirroring the APE-X workers (avoids reliance on update being pre-set).
-            params = param_server.get_params()
+            params = jax.device_put(param_server.get_params())
             while not stop.is_set():
                 if update.is_set():
-                    params = param_server.get_params()
+                    params = jax.device_put(param_server.get_params())
                     update.clear()
                 for _ in range(local_size):
                     eplen += 1

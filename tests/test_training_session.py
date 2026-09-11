@@ -30,7 +30,7 @@ class FakeLoggerRun:
         return ("local_path", name)
 
 
-def test_off_policy_prepare_run_builds_callable_exploration_schedules():
+def test_off_policy_prepare_run_updates_exploration_at_environment_steps():
     qnet = Q_Network_Family.__new__(Q_Network_Family)
     qnet.param_noise = False
     qnet.exploration_fraction = 0.5
@@ -42,11 +42,16 @@ def test_off_policy_prepare_run_builds_callable_exploration_schedules():
     ddpg.exploration_fraction = 0.5
     ddpg.exploration_initial_eps = 1.0
     ddpg.exploration_final_eps = 0.1
+    ddpg.memory_backend = "cpu"
+    ddpg.noise = lambda: np.zeros((1, 1))
     ddpg.prepare_run(100)
 
-    expected = pytest.approx([1.0, 0.55, 0.1])
-    assert [float(qnet.exploration(step)) for step in (0, 25, 50)] == expected
-    assert [float(ddpg.exploration(step)) for step in (0, 25, 50)] == expected
+    observed = []
+    for step in (0, 25, 50):
+        qnet._refresh_exploration(step)
+        ddpg._apply_action_noise(np.zeros((1, 1)), step, eval=False)
+        observed.append((qnet.update_eps, ddpg.epsilon))
+    np.testing.assert_allclose(observed, [(1.0, 1.0), (0.55, 0.55), (0.1, 0.1)])
 
 
 class FakeLogger:
@@ -320,6 +325,7 @@ class FakeOnPolicyAgent(Actor_Critic_Policy_Gradient_Family):
         self.params = None
         self.obs_rms = None
         self.memory_backend = "cpu"
+        self.memory_device = None
 
     def learn_SingleEnv(self, ctx):
         self.calls.append(("single", ctx))

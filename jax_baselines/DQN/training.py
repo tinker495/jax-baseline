@@ -200,11 +200,11 @@ class QNetTrainingLifecycle:
         interval = self.agent.log_interval if log_interval is None else log_interval
         if logger_run and (steps - self.agent._last_log_step >= interval):
             self.agent._last_log_step = steps
-            for metric_name, metric_value in report.metrics.items():
-                logger_run.log_metric(metric_name, metric_value, steps)
-            for histogram_name, histogram_value in report.histograms.items():
-                logger_run.log_histogram(histogram_name, histogram_value, steps)
+            metrics = report.metrics
             if self.agent.reward_normalizer is not None:
-                logger_run.log_metric(
-                    "rollout/reward_scale", self.agent.reward_normalizer.scale, steps
-                )
+                metrics = {**metrics, "rollout/reward_scale": self.agent.reward_normalizer.scale}
+            metrics, histograms = jax.device_get((metrics, report.histograms))
+            for metric_name, metric_value in metrics.items():
+                logger_run.log_metric(metric_name, metric_value, steps)
+            for histogram_name, histogram_value in histograms.items():
+                logger_run.log_histogram(histogram_name, histogram_value, steps)

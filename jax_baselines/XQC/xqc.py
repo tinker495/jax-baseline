@@ -173,7 +173,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
             loss=loss,
             target=t_mean,
             new_priorities=new_priorities,
-            metrics={"loss/ent_coef": np.exp(self.log_ent_coef)},
+            metrics={"loss/ent_coef": jnp.exp(self.log_ent_coef)},
         )
 
     def _train_on_bulk(self, data, contexts):

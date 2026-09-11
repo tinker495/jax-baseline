@@ -8,6 +8,7 @@ from experiments.checkpoint_store import FileCheckpointStore
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.APE_X.base_class import Ape_X_Family
 from jax_baselines.APE_X.dpg_base_class import Ape_X_Deteministic_Policy_Gradient_Family
+from jax_baselines.core.checkpoint_state import ACCheckpointState
 from jax_baselines.core.checkpoint_store import NoOpCheckpointStore
 from jax_baselines.IMPALA.base_class import IMPALA_Family
 
@@ -42,7 +43,8 @@ def test_noop_checkpoint_store_does_not_write_and_cannot_restore(tmp_path):
 )
 def test_remaining_families_delegate_checkpoint_io(family, sets_target):
     class MemoryStore:
-        restored = {"weights": 2}
+        def __init__(self, restored):
+            self.restored = restored
 
         def save(self, path, state):
             self.saved = (path, state)
@@ -53,12 +55,21 @@ def test_remaining_families_delegate_checkpoint_io(family, sets_target):
 
     agent = family.__new__(family)
     agent.params = {"weights": 1}
-    agent.checkpoint_store = MemoryStore()
+    if isinstance(agent, Actor_Critic_Policy_Gradient_Family):
+        agent.obs_rms = None
+        agent.memory_backend = "cpu"
+        agent.memory_device = None
+        saved = ACCheckpointState(params=agent.params, obs_rms_state=None)
+        restored = ACCheckpointState(params={"weights": 2}, obs_rms_state=None)
+    else:
+        saved = agent.params
+        restored = {"weights": 2}
+    agent.checkpoint_store = MemoryStore(restored)
 
     agent.save_params("checkpoint")
     agent.load_params("checkpoint")
 
-    assert agent.checkpoint_store.saved == ("checkpoint", {"weights": 1})
+    assert agent.checkpoint_store.saved == ("checkpoint", saved)
     assert agent.checkpoint_store.restored_path == "checkpoint"
     assert agent.params == {"weights": 2}
     if sets_target:

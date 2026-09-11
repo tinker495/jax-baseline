@@ -95,7 +95,8 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             for k, v in eval_result.items():
                 description += f"{k} : {v:8.2f}, "
 
-        description += f"loss : {np.mean(self.lossque):.3f}"
+        array_module = jnp if any(isinstance(loss, jax.Array) for loss in self.lossque) else np
+        description += f"loss : {array_module.mean(array_module.asarray(tuple(self.lossque))):.3f}"
         description += f", epsilon : {self.epsilon:.3f}"
         description += self._rollout_pbar_suffix()
         return description
@@ -106,20 +107,17 @@ class DDPG(Deteministic_Policy_Gradient_Family):
     def _apply_action_noise(self, actions, steps, eval):
         if eval:
             return actions
-        self.epsilon = self.exploration(steps)
-        if self.memory_backend == "cpu":
-            self.epsilon = float(self.epsilon)
+        self.epsilon = self.exploration_initial_eps
+        if self._exploration_steps > 0:
+            self.epsilon += min(max(steps / self._exploration_steps, 0.0), 1.0) * (
+                self.exploration_final_eps - self.exploration_initial_eps
+            )
         return (jnp if self.memory_backend == "gpu" else np).clip(
             actions + self.noise() * self.epsilon, -1, 1
         )
 
     def prepare_run(self, total_timesteps):
-        self.exploration = optax.linear_schedule(
-            init_value=self.exploration_initial_eps,
-            end_value=self.exploration_final_eps,
-            transition_steps=int(self.exploration_fraction * total_timesteps),
-        )
-        self.exploration.value = self.exploration
+        self._exploration_steps = int(self.exploration_fraction * total_timesteps)
         self.epsilon = 1.0
 
     def test_action(self, obs):
