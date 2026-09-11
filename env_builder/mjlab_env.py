@@ -11,6 +11,7 @@ import jax.numpy as jnp
 import numpy as np
 from gymnasium import spaces
 
+from env_builder.metrics import EnvMetrics, metric_leaves
 from env_builder.observations import _to_numpy, normalize_observation
 from jax_baselines.core.env_protocols import (
     EnvInfo,
@@ -19,6 +20,7 @@ from jax_baselines.core.env_protocols import (
     SingleEnv,
     VectorizedEnv,
 )
+from jax_baselines.core.runtime_adapters import MetricLogger
 
 Array: TypeAlias = np.ndarray | jax.Array
 
@@ -114,9 +116,12 @@ class MjlabVectorizedEnv(VectorizedEnv):
         if self._pending is not None:
             raise RuntimeError("reset() called while a step is in flight")
         self._frame = None
+        self._metrics = EnvMetrics(array_converter=_to_numpy)
         observation, info = self.env.reset(seed=seed)
         self._obs = self._selected(observation)
-        return self._obs, self._snapshot(info)
+        return self._obs, self._snapshot(
+            {key: value for key, value in info.items() if key != "log"}
+        )
 
     def current_obs(self) -> Observation:
         return self._obs
@@ -130,14 +135,16 @@ class MjlabVectorizedEnv(VectorizedEnv):
             raise RuntimeError("Cannot evaluate a closed environment")
         from env_builder.mjlab_state import preserve_mjlab_state
 
-        observation, frame, pending = self._obs, self._frame, self._pending
+        observation, frame, pending, metrics = self._obs, self._frame, self._pending, self._metrics
         with preserve_mjlab_state(self.env):
             # mjlab.step has finished; _pending contains copied transition data.
             self._pending = None
+            self._metrics = EnvMetrics(array_converter=_to_numpy)
             try:
                 yield
             finally:
                 self._obs, self._frame, self._pending = observation, frame, pending
+                self._metrics = metrics
 
     def get_info(self) -> EnvInfo:
         return self.env_info
@@ -155,6 +162,7 @@ class MjlabVectorizedEnv(VectorizedEnv):
             raise ValueError(f"Expected actions with shape {expected}, got {actions.shape}")
         actions = actions.to(dtype=self._torch.float32, device=self.env.device)
         observation, reward, terminated, truncated, info = self.env.step(actions)
+        self._record_metrics(info["log"])
         if self.env.render_mode == "rgb_array":
             self._frame = np.array(self.env.render(), copy=True)
         # Snapshot terminal data before partial reset mutates simulator buffers.
@@ -163,10 +171,11 @@ class MjlabVectorizedEnv(VectorizedEnv):
         reward = self._array(reward)
         terminated = self._array(terminated).astype(bool)
         truncated = self._array(truncated).astype(bool)
-        info = self._snapshot(info)
+        info = self._snapshot({key: value for key, value in info.items() if key != "log"})
         self._obs = successor
         if done_ids.numel():
-            current, _ = self.env.reset(env_ids=done_ids)
+            current, reset_info = self.env.reset(env_ids=done_ids)
+            self._record_metrics(reset_info["log"])
             # Only replace reset rows: a partial reset may recompute noisy observations.
             current = self._selected(current)
             array_module = jnp if self.jax_arrays else np
@@ -186,6 +195,38 @@ class MjlabVectorizedEnv(VectorizedEnv):
             raise RuntimeError("get_result() called without a preceding step()")
         result, self._pending = self._pending, None
         return result
+
+    def _record_metrics(self, values: Mapping[str, Any]) -> None:
+        native: dict[Any, dict[str, Any]] = {}
+        scalars = {}
+        for name, value in metric_leaves(values).items():
+            if not isinstance(value, self._torch.Tensor):
+                scalars[name] = value
+                continue
+            if not value.numel() or value.is_complex():
+                raise ValueError(f"Environment metric {name!r} must contain real numeric values")
+            if value.device not in native:
+                native[value.device] = {}
+            native[value.device][name] = (
+                value.detach() if value.ndim == 0 else value.detach().float().mean()
+            )
+        for tensors in native.values():
+            self._metrics.add_batch(tuple(tensors), self._torch.stack(tuple(tensors.values())))
+        self._metrics.add(scalars)
+
+    def log_metrics(
+        self,
+        logger: MetricLogger,
+        steps: int | None,
+        *,
+        namespace: str = "rollout",
+        active: Any = None,
+        flush: bool = True,
+    ) -> None:
+        """Average fresh native log events, already reduced over their reset cohorts."""
+        del active
+        if flush:
+            self._metrics.log(logger, steps, namespace)
 
     def real_reset_mask(self, terminateds, truncateds, infos):
         del infos
@@ -258,6 +299,17 @@ class MjlabSingleEnv(SingleEnv):
         if self._vector._frame is not None:
             return self._vector._frame
         return self._vector.env.render()
+
+    def log_metrics(
+        self,
+        logger: MetricLogger,
+        steps: int | None,
+        *,
+        namespace: str = "rollout",
+        active: Any = None,
+        flush: bool = True,
+    ) -> None:
+        self._vector.log_metrics(logger, steps, namespace=namespace, active=active, flush=flush)
 
     def close(self) -> None:
         self._vector.close()

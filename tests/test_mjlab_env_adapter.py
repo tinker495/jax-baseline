@@ -1,6 +1,7 @@
 import builtins
 import sys
 from types import ModuleType, SimpleNamespace
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -26,11 +27,19 @@ class FakeEnv:
         self.rewards = torch.zeros(self.num_envs)
         self.terminated = torch.zeros(self.num_envs, dtype=torch.bool)
         self.truncated = self.terminated.clone()
+        self.extras = {}
         self.resets, self.closed = [], 0
 
     def reset(self, *, seed=None, env_ids=None):
         self.resets.append((seed, env_ids))
         ids = torch.arange(self.num_envs) if env_ids is None else env_ids
+        self.extras["log"] = {
+            "Episode_Reward/action": self.rewards[ids].mean(),
+            "Episode_Termination/terminated": self.terminated[ids].count_nonzero().item(),
+            "Episode_Metrics/action": self.rewards[ids].abs().mean(),
+            "Curriculum/stage": 2.0,
+            "Metrics/twist/error": 0.25,
+        }
         self.obs[ids] = 0 if seed is None else seed
         self.critic_obs[ids] = 100 if seed is None else seed + 100
         self.rewards[ids] = 0
@@ -40,7 +49,7 @@ class FakeEnv:
             "actor": {"state": self.obs},
             "critic": self.critic_obs,
             "command": self.obs + 5,
-        }, {}
+        }, self.extras
 
     def step(self, actions):
         self.obs += 1
@@ -48,12 +57,14 @@ class FakeEnv:
         self.rewards[:] = actions[:, 0]
         self.terminated[:] = actions[:, 0] < 0
         self.truncated[:] = actions[:, 0] > 1
+        self.extras["metric"] = self.rewards
+        self.extras["log"] = {"Metrics/action_mean": self.rewards.mean()}
         return (
             {"actor": {"state": self.obs}, "critic": self.critic_obs, "command": self.obs + 5},
             self.rewards,
             self.terminated,
             self.truncated,
-            {"metric": self.rewards},
+            self.extras,
         )
 
     def render(self):
@@ -122,6 +133,16 @@ def test_vector_factory_and_terminal_snapshots_survive_partial_reset(monkeypatch
     np.testing.assert_array_equal(env.current_obs()["unified_command"], [[5], [5], [13]])
     np.testing.assert_array_equal(reward, [-1, 2, 1])
     np.testing.assert_array_equal(info["metric"], reward)
+    assert "log" not in info
+    logged = {}
+
+    class Logger:
+        def log_metric(self, key: str, value: Any, step: int | None = None) -> None:
+            logged[key] = (value, step)
+
+    logger = Logger()
+    env.log_metrics(logger, 3, flush=False)
+    assert not logged
     np.testing.assert_array_equal(terminated, [True, False, False])
     np.testing.assert_array_equal(truncated, [False, True, False])
     np.testing.assert_array_equal(env.env.resets[-1][1], [0, 1])
@@ -131,6 +152,18 @@ def test_vector_factory_and_terminal_snapshots_survive_partial_reset(monkeypatch
     assert not env.autoreset_mask(terminated, truncated, {}).any()
     env.step(jnp.zeros((3, 1)) if jax_arrays else np.zeros((3, 1)))
     env.get_result()
+    env.log_metrics(logger, 6)
+    assert logged == {
+        "rollout/Metrics/action_mean": (pytest.approx(1 / 3), 6),
+        "rollout/Episode_Reward/action": (pytest.approx(0.5), 6),
+        "rollout/Episode_Metrics/action": (pytest.approx(1.5), 6),
+        "rollout/Episode_Termination/terminated": (1, 6),
+        "rollout/Curriculum/stage": (2, 6),
+        "rollout/Metrics/twist/error": (0.25, 6),
+    }
+    logged.clear()
+    env.log_metrics(logger, 7)
+    assert not logged
     np.testing.assert_array_equal(obs["actor_state"], [[8], [8], [8]])
     np.testing.assert_array_equal(reward, [-1, 2, 1])
     np.testing.assert_array_equal(info["metric"], [-1, 2, 1])
