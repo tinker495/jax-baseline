@@ -368,10 +368,11 @@ class FQF(Q_Network_Family):
             _tau_hats,
             key,
         )
+        action_params = params if self.double_q else target_params
 
         if self.double_q:
             next_q = self.get_q(
-                params,
+                action_params,
                 online_feature,
                 _tau,
                 _tau_hats,
@@ -390,12 +391,8 @@ class FQF(Q_Network_Family):
             )  # batch x actions x support
             next_vals = jnp.sum(pi_next * next_vals, axis=1)
 
-            if self.double_q:
-                feature = self.preproc(params, key, obses)
-                q_k_targets = self.get_q(params, feature, taus, tau_hats, key)
-            else:
-                feature = self.preproc(target_params, key, obses)
-                q_k_targets = self.get_q(target_params, feature, taus, tau_hats, key)
+            feature = self.preproc(action_params, key, obses)
+            q_k_targets = self.get_q(action_params, feature, taus, tau_hats, key)
             _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau, clip=True)
             munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
