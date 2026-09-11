@@ -36,7 +36,7 @@ class SPO(SurrogatePolicyGradient):
     def _loss_discrete(
         self, actor_params, critic_params, obses, actions, old_value, targets, old_prob, adv, key
     ):
-        vals = self.critic(critic_params, key, obses)
+        vals = self.critic(critic_params, actor_params, key, obses)
         vals_clip = old_value + jnp.clip(vals - old_value, -self.value_clip, self.value_clip)
         vf1 = jnp.square(vals - targets)
         vf2 = jnp.square(vals_clip - targets)
@@ -70,7 +70,7 @@ class SPO(SurrogatePolicyGradient):
     def _loss_continuous(
         self, actor_params, critic_params, obses, actions, old_value, targets, old_prob, adv, key
     ):
-        vals = self.critic(critic_params, key, obses)
+        vals = self.critic(critic_params, actor_params, key, obses)
         vals_clip = old_value + jnp.clip(vals - old_value, -self.value_clip, self.value_clip)
         vf1 = jnp.square(vals - targets)
         vf2 = jnp.square(vals_clip - targets)

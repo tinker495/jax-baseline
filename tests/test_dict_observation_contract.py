@@ -110,7 +110,7 @@ def test_crossq_critic_loss_concatenates_dict_observation_values():
         jnp.zeros((observations["unified_obs"].shape[0], 1)),
     )
 
-    def critic(params, _key, observations, _actions, _training):
+    def critic(params, _actor_params, _key, observations, _actions, _training):
         seen.update(observations)
         return (
             (

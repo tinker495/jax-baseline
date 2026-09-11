@@ -94,8 +94,12 @@ class IMPALA(IMPALA_Family):
         truncateds = jnp.stack(truncateds)
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
-        value = jax.vmap(self.critic, in_axes=(None, None, 0))(critic_params, key, obses)
-        next_value = jax.vmap(self.critic, in_axes=(None, None, 0))(critic_params, key, nxtobses)
+        value = jax.vmap(self.critic, in_axes=(None, None, None, 0))(
+            critic_params, actor_params, key, obses
+        )
+        next_value = jax.vmap(self.critic, in_axes=(None, None, None, 0))(
+            critic_params, actor_params, key, nxtobses
+        )
         pi_prob = jax.vmap(self.get_logprob, in_axes=(0, 0, None))(
             jax.vmap(self.actor, in_axes=(None, None, 0))(actor_params, key, obses),
             actions,
@@ -168,7 +172,7 @@ class IMPALA(IMPALA_Family):
         )
 
     def _loss_discrete(self, actor_params, critic_params, obses, actions, vs, adv, key):
-        vals = self.critic(critic_params, key, obses)
+        vals = self.critic(critic_params, actor_params, key, obses)
         critic_loss = jnp.mean(jnp.square(vs - vals))
 
         logit = self.actor(actor_params, key, obses)
@@ -190,7 +194,7 @@ class IMPALA(IMPALA_Family):
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
     def _loss_continuous(self, actor_params, critic_params, obses, actions, vs, adv, key):
-        vals = self.critic(critic_params, key, obses)
+        vals = self.critic(critic_params, actor_params, key, obses)
         critic_loss = jnp.mean(jnp.square(vs - vals))
 
         prob = self.actor(actor_params, key, obses)

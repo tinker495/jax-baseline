@@ -8,7 +8,12 @@ def test_xqc_builder_uses_four_layer_batchnorm_mlp():
     builder = model_builder_maker(
         {"unified_obs": [4]},
         [2],
-        {"actor_node": 16, "critic_node": 32, "hidden_n": 1, "embedding_mode": "normal"},
+        {
+            "actor_node": 16,
+            "critic_node": 32,
+            "hidden_n": 1,
+            "embedding_mode": "normal",
+        },
     )
     actor, critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
 
@@ -30,7 +35,12 @@ def test_xqc_builder_uses_four_layer_batchnorm_mlp():
     obs = {"unified_obs": jnp.zeros((2, 4), dtype=jnp.float32)}
     (mu, log_std), actor_updates = actor(policy_params, None, obs, True)
     (q1, q2), critic_updates = critic(
-        critic_params, None, obs, jnp.zeros((2, 2), dtype=jnp.float32), True
+        critic_params,
+        policy_params,
+        None,
+        obs,
+        jnp.zeros((2, 2), dtype=jnp.float32),
+        True,
     )
     assert mu.shape == log_std.shape == (2, 2)
     assert q1.shape == q2.shape == (2, 101)

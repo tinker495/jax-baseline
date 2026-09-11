@@ -410,7 +410,9 @@ class TD7(Deteministic_Policy_Gradient_Family):
             jnp.max(targets), critic_params["values"]["max_value"]
         )
         actor_feature, actor_zs = self.actor_encoder(fixed_actor_encoder_params, key, obses)
-        critic_feature, critic_zs = self.critic_encoder(fixed_critic_encoder_params, key, obses)
+        critic_feature, critic_zs = self.critic_encoder(
+            fixed_critic_encoder_params, fixed_actor_encoder_params, key, obses
+        )
         (critic_loss, priority), grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
             critic_params,
             fixed_critic_encoder_params,
@@ -527,16 +529,17 @@ class TD7(Deteministic_Policy_Gradient_Family):
         actions,
         key,
     ):
-        losses = []
-        for encoder, action_encoder, params in (
-            (self.actor_encoder, self.actor_action_encoder, actor_encoder_params),
-            (self.critic_encoder, self.critic_action_encoder, critic_encoder_params),
-        ):
-            _, next_zs = encoder(params, key, next_obses)
-            _, zs = encoder(params, key, obses)
-            pred_zs = action_encoder(params, key, zs, actions)
-            losses.append(jnp.mean(jnp.square(jax.lax.stop_gradient(next_zs) - pred_zs)))
-        return losses[0] + losses[1]
+        _, next_actor_zs = self.actor_encoder(actor_encoder_params, key, next_obses)
+        _, actor_zs = self.actor_encoder(actor_encoder_params, key, obses)
+        pred_actor_zs = self.actor_action_encoder(actor_encoder_params, key, actor_zs, actions)
+        _, next_critic_zs = self.critic_encoder(
+            critic_encoder_params, actor_encoder_params, key, next_obses
+        )
+        _, critic_zs = self.critic_encoder(critic_encoder_params, actor_encoder_params, key, obses)
+        pred_critic_zs = self.critic_action_encoder(critic_encoder_params, key, critic_zs, actions)
+        return jnp.mean(
+            jnp.square(jax.lax.stop_gradient(next_actor_zs) - pred_actor_zs)
+        ) + jnp.mean(jnp.square(jax.lax.stop_gradient(next_critic_zs) - pred_critic_zs))
 
     def _actor_loss(
         self,
@@ -587,7 +590,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             fixed_actor_encoder_target_params, key, nxtobses
         )
         critic_feature, critic_zs = self.critic_encoder(
-            fixed_critic_encoder_target_params, key, nxtobses
+            fixed_critic_encoder_target_params, fixed_actor_encoder_target_params, key, nxtobses
         )
         next_action = jnp.clip(
             self.actor(target_policy_params, key, actor_feature, actor_zs)

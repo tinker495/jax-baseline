@@ -6,6 +6,7 @@ from model_builder.haiku.dpg.ddpg_td3_blocks import Critic, GaussianActor
 from model_builder.haiku.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import (
     dummy_observation,
+    get_critic_apply_fn,
     print_haiku_model_summary,
     split_actor_critic_kwargs,
 )
@@ -22,9 +23,14 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
             )
             return GaussianActor(action_size, **actor_kwargs)(feature)
 
-        def critic_forward(observation, action):
+        def shared_forward(observation):
+            return PreProcess(
+                observation_space, embedding_mode=embedding_mode, role="actor"
+            ).shared_features(observation)
+
+        def critic_forward(observation, shared_features, action):
             feature = PreProcess(observation_space, embedding_mode=embedding_mode, role="critic")(
-                observation
+                observation, shared_features
             )
             return (
                 Critic(**critic_kwargs)(feature, action),
@@ -33,18 +39,21 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
 
         actor = hk.transform(actor_forward)
         critic = hk.transform(critic_forward)
+        shared_preproc = hk.transform(shared_forward)
+        critic_fn = get_critic_apply_fn(critic.apply, shared_preproc.apply)
         if key is None:
-            return actor.apply, critic.apply
+            return actor.apply, critic_fn
         observation = dummy_observation(observation_space)
         action = np.zeros((1, *action_size), dtype=np.float32)
         actor_key, critic_key = jax.random.split(key)
         policy_params = actor.init(actor_key, observation)
-        critic_params = critic.init(critic_key, observation, action)
+        shared_features = shared_preproc.apply(policy_params, None, observation)
+        critic_params = critic.init(critic_key, observation, shared_features, action)
         print_haiku_model_summary(
             print_model,
             (actor, observation),
-            (critic, observation, action),
+            (critic, observation, shared_features, action),
         )
-        return actor.apply, critic.apply, policy_params, critic_params
+        return actor.apply, critic_fn, policy_params, critic_params
 
     return model_builder

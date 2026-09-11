@@ -141,23 +141,26 @@ class PreProcess(nn.Module):
                 else lambda x: x
             )
             for key, st in self.states_size.items()
-            if key in self.observation_keys
+            if key in self.observation_keys and (self.role == "actor" or key.startswith("critic_"))
         }
 
     @nn.compact
-    def __call__(self, obses: dict[str, jnp.ndarray]) -> jnp.ndarray:
+    def __call__(self, obses: dict[str, jnp.ndarray], shared_features=None) -> jnp.ndarray:
+        features = {key: embed(obses[key]) for key, embed in self.embedding.items()}
+        if self.role == "critic":
+            if shared_features is None:
+                raise ValueError("Critic preprocessing requires Actor-owned unified features")
+            features.update(shared_features)
         return self.pre_postprocess(
-            jnp.concatenate(
-                [self.embedding[key](obses[key]) for key in self.observation_keys], axis=1
-            )
+            jnp.concatenate([features[key] for key in self.observation_keys], axis=1)
         )
 
-    @property
-    def output_size(self):
-        return sum(
-            pre(jnp.zeros((1, *self.states_size[key]))).shape[1]
-            for key, pre in self.embedding.items()
-        )
+    def shared_features(self, obses: dict[str, jnp.ndarray]):
+        return {
+            key: embed(obses[key])
+            for key, embed in self.embedding.items()
+            if key.startswith("unified_")
+        }
 
 
 PRNGKey = Any

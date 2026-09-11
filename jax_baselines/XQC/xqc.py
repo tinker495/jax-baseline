@@ -290,6 +290,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
             self._critic_loss, has_aux=True
         )(
             critic_params,
+            policy_params,
             obses,
             actions,
             nxtobses,
@@ -396,6 +397,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
     def _critic_loss(
         self,
         critic_params,
+        policy_params,
         obses,
         actions,
         nxtobses,
@@ -409,7 +411,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
         }
         concated_actions = jnp.concatenate([actions, next_policy])
         (logits1, logits2), variable_updates = self.critic(
-            critic_params, key, concated_obses, concated_actions, True
+            critic_params, policy_params, key, concated_obses, concated_actions, True
         )
         critic_params = {**critic_params, **variable_updates}
         logits1 = jnp.split(logits1, 2, axis=0)[0]
@@ -430,7 +432,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
 
     def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
         policy, log_prob, policy_params = self._get_pi_log_prob(policy_params, obses, key)
-        (logits1, logits2), _ = self.critic(critic_params, key, obses, policy, False)
+        (logits1, logits2), _ = self.critic(critic_params, policy_params, key, obses, policy, False)
         q1_pi = self._categorical_q(logits1)
         q2_pi = self._categorical_q(logits2)
         actor_loss = jnp.mean(ent_coef * jnp.squeeze(log_prob, axis=-1) - jnp.minimum(q1_pi, q2_pi))
@@ -454,7 +456,12 @@ class XQC(Deteministic_Policy_Gradient_Family):
         next_policy, log_prob, _ = self._get_pi_log_prob(policy_params, nxtobses, key, False)
         concated_actions = jnp.concatenate([actions, next_policy])
         (logits1, logits2), _ = self.critic(
-            target_critic_params, key, concated_obses, concated_actions, True
+            target_critic_params,
+            policy_params,
+            key,
+            concated_obses,
+            concated_actions,
+            True,
         )
         next_logits1 = jnp.split(logits1, 2, axis=0)[1]
         next_logits2 = jnp.split(logits2, 2, axis=0)[1]

@@ -1,11 +1,22 @@
 from collections.abc import Mapping, Sequence
 from typing import Literal
 
+import jax
 import numpy as np
 
 
 def dummy_observation(space):
     return {key: np.zeros((1, *shape), dtype=np.float32) for key, shape in space.items()}
+
+
+def get_critic_apply_fn(critic_apply, shared_preproc_apply):
+    def apply_fn(critic_params, actor_params, key, observations, *args):
+        shared_features = jax.lax.stop_gradient(
+            shared_preproc_apply(actor_params, key, observations)
+        )
+        return critic_apply(critic_params, key, observations, shared_features, *args)
+
+    return apply_fn
 
 
 def print_flax_model_summary(enabled, key, *models):

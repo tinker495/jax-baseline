@@ -29,9 +29,9 @@ def test_actor_critic_observation_roles_are_isolated(backend, family):
     def outputs(observations):
         policy = actor(params, key, observations)
         value = (
-            critic(critic_params, key, observations)
+            critic(critic_params, params, key, observations)
             if family == "ac"
-            else critic(critic_params, key, observations, jnp.zeros((2, 2)))
+            else critic(critic_params, params, key, observations, jnp.zeros((2, 2)))
         )
         return policy[0] if family == "ac" else policy, value
 

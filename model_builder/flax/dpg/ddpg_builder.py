@@ -7,6 +7,7 @@ from model_builder.flax.dpg.ddpg_td3_blocks import Actor, Critic
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import (
     dummy_observation,
+    get_critic_apply_fn,
     print_flax_model_summary,
     split_actor_critic_kwargs,
 )
@@ -35,6 +36,9 @@ def _make_model_builder(
             def __call__(self, x):
                 return self.act(self.preproc(x))
 
+            def shared_features(self, observation):
+                return self.preproc.shared_features(observation)
+
         class Merged_Critic(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(
@@ -44,8 +48,8 @@ def _make_model_builder(
                 if twin_critic:
                     self.crit2 = critic_cls(**critic_kwargs)
 
-            def __call__(self, x, a):
-                feature = self.preproc(x)
+            def __call__(self, x, shared_features, a):
+                feature = self.preproc(x, shared_features)
                 if twin_critic:
                     return self.crit1(feature, a), self.crit2(feature, a)
                 return self.crit1(feature, a)
@@ -53,18 +57,22 @@ def _make_model_builder(
         actor_model = Merged_Actor()
         critic_model = Merged_Critic()
         actor_fn = get_apply_fn_flax_module(actor_model)
-        critic_fn = get_apply_fn_flax_module(critic_model)
+        shared_preproc_fn = get_apply_fn_flax_module(
+            actor_model, method=actor_model.shared_features
+        )
+        critic_fn = get_critic_apply_fn(get_apply_fn_flax_module(critic_model), shared_preproc_fn)
         if key is not None:
             observation = dummy_observation(observation_space)
             action = np.zeros((1, *action_size), dtype=np.float32)
             actor_key, critic_key = jax.random.split(key)
             policy_params = actor_model.init(actor_key, observation)
-            critic_params = critic_model.init(critic_key, observation, action)
+            shared_features = shared_preproc_fn(policy_params, None, observation)
+            critic_params = critic_model.init(critic_key, observation, shared_features, action)
             print_flax_model_summary(
                 print_model,
                 key,
                 (actor_model, observation),
-                (critic_model, observation, action),
+                (critic_model, observation, shared_features, action),
             )
             return actor_fn, critic_fn, policy_params, critic_params
         return actor_fn, critic_fn

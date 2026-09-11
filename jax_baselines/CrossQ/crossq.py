@@ -355,9 +355,9 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             nxtobses,
         )
         next_policy, log_prob = self._get_pi_log_prob(policy_params, nxtobses, key)
-        concated_actions = jnp.concatenate([actions, next_policy])
+        concated_actions = jnp.concatenate([actions, jax.lax.stop_gradient(next_policy)])
         (q1, q2), variable_updates = self.critic(
-            critic_params, key, concated_obses, concated_actions, True
+            critic_params, policy_params, key, concated_obses, concated_actions, True
         )
         critic_params = {**critic_params, **variable_updates}
         q1, next_q1 = jnp.split(q1, 2, axis=0)
@@ -373,6 +373,6 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
 
     def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
         policy, log_prob = self._get_pi_log_prob(policy_params, obses, key)
-        (q1_pi, q2_pi), _ = self.critic(critic_params, key, obses, policy, False)
+        (q1_pi, q2_pi), _ = self.critic(critic_params, policy_params, key, obses, policy, False)
         actor_loss = jnp.mean(ent_coef * log_prob - jnp.minimum(q1_pi, q2_pi))
         return actor_loss, log_prob

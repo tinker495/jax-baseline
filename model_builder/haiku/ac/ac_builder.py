@@ -5,6 +5,7 @@ import jax.numpy as jnp
 from model_builder.haiku.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import (
     dummy_observation,
+    get_critic_apply_fn,
     print_haiku_model_summary,
     split_actor_critic_kwargs,
 )
@@ -62,22 +63,30 @@ def model_builder_maker(observation_space, action_size, action_type, policy_kwar
                 PreProcess(observation_space, embedding_mode=embedding_mode, role="actor")(x)
             )
         )
+        shared = hk.transform(
+            lambda x: PreProcess(
+                observation_space, embedding_mode=embedding_mode, role="actor"
+            ).shared_features(x)
+        )
         critic = hk.transform(
-            lambda x: Critic(**critic_kwargs)(
-                PreProcess(observation_space, embedding_mode=embedding_mode, role="critic")(x)
+            lambda x, shared_features: Critic(**critic_kwargs)(
+                PreProcess(observation_space, embedding_mode=embedding_mode, role="critic")(
+                    x, shared_features
+                )
             )
         )
         actor_fn = actor.apply
-        critic_fn = critic.apply
+        critic_fn = get_critic_apply_fn(critic.apply, shared.apply)
         if key is not None:
             actor_key, critic_key = jax.random.split(key)
             observation = dummy_observation(observation_space)
             actor_params = actor.init(actor_key, observation)
-            critic_params = critic.init(critic_key, observation)
+            shared_features = shared.apply(actor_params, None, observation)
+            critic_params = critic.init(critic_key, observation, shared_features)
             print_haiku_model_summary(
                 print_model,
                 (actor, observation),
-                (critic, observation),
+                (critic, observation, shared_features),
             )
             return actor_fn, critic_fn, actor_params, critic_params
         return actor_fn, critic_fn

@@ -279,7 +279,7 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
         next_actions, log_prob = sample_policy(mean, log_std, target_key)
         joint_actions = jnp.concatenate((data["actions"], next_actions))
         (target_logits1, target_logits2), target_updates = self.critic(
-            target, None, joint_obs, joint_actions, True
+            target, policy, None, joint_obs, joint_actions, True
         )
         target_probs1 = jax.nn.softmax(target_logits1[batch_size:])
         target_probs2 = jax.nn.softmax(target_logits2[batch_size:])
@@ -299,7 +299,12 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
         )
         target_probs = jax.lax.stop_gradient(target_probs)
         (critic_loss, stats), grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
-            critic["params"], critic["batch_stats"], joint_obs, joint_actions, target_probs
+            critic["params"],
+            critic["batch_stats"],
+            policy,
+            joint_obs,
+            joint_actions,
+            target_probs,
         )
         updates, critic_opt = self.optimizer.update(grad, critic_opt, critic["params"])
         critic = {
@@ -326,7 +331,12 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
         actions, log_prob = sample_policy(mean, log_std, key)
         size = actions.shape[0] // 2
         (logits1, logits2), _ = self.critic(
-            critic, None, jax.tree.map(lambda value: value[:size], joint_obs), actions[:size], False
+            critic,
+            variables,
+            None,
+            jax.tree.map(lambda value: value[:size], joint_obs),
+            actions[:size],
+            False,
         )
         minimum = jnp.minimum(
             jnp.sum(jax.nn.softmax(logits1) * self.value_support, axis=-1),
@@ -337,9 +347,9 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
             updates["batch_stats"],
         )
 
-    def _critic_loss(self, params, stats, obses, actions, target_probs):
+    def _critic_loss(self, params, stats, policy, obses, actions, target_probs):
         (logits1, logits2), updates = self.critic(
-            {"params": params, "batch_stats": stats}, None, obses, actions, True
+            {"params": params, "batch_stats": stats}, policy, None, obses, actions, True
         )
         size = target_probs.shape[0]
         loss = -jnp.mean(

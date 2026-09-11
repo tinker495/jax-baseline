@@ -9,6 +9,7 @@ from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import (
     dummy_observation,
+    get_critic_apply_fn,
     print_flax_model_summary,
     split_actor_critic_kwargs,
 )
@@ -143,14 +144,17 @@ def model_builder_maker(
             def __call__(self, observation, training: bool = False):
                 return self.act(self.preproc(observation), training)
 
+            def shared_features(self, observation):
+                return self.preproc.shared_features(observation)
+
         class Merged_Critic(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(observation_space, role="critic")
                 self.crit1 = Critic(hidden_n=hidden_n, n_atoms=n_atoms, **critic_kwargs)
                 self.crit2 = Critic(hidden_n=hidden_n, n_atoms=n_atoms, **critic_kwargs)
 
-            def __call__(self, observation, actions, training: bool = False):
-                feature = self.preproc(observation)
+            def __call__(self, observation, shared_features, actions, training: bool = False):
+                feature = self.preproc(observation, shared_features)
                 return self.crit1(feature, actions, training), self.crit2(
                     feature, actions, training
                 )
@@ -158,7 +162,13 @@ def model_builder_maker(
         actor_model = Merged_Actor()
         critic_model = Merged_Critic()
         actor_fn = get_apply_fn_flax_module(actor_model, mutable=["batch_stats"])
-        critic_fn = get_apply_fn_flax_module(critic_model, mutable=["batch_stats"])
+        shared_preproc_fn = get_apply_fn_flax_module(
+            actor_model, method=actor_model.shared_features
+        )
+        critic_fn = get_critic_apply_fn(
+            get_apply_fn_flax_module(critic_model, mutable=["batch_stats"]),
+            shared_preproc_fn,
+        )
         if key is None:
             return actor_fn, critic_fn
         observation = dummy_observation(observation_space)
@@ -166,13 +176,16 @@ def model_builder_maker(
         actor_key, critic_key = jax.random.split(key)
         policy_variables = actor_model.init(actor_key, observation, False)
         policy_variables["params"] = project_unit_norm_params(policy_variables["params"])
-        critic_variables = critic_model.init(critic_key, observation, action, False)
+        shared_features = shared_preproc_fn(policy_variables, None, observation)
+        critic_variables = critic_model.init(
+            critic_key, observation, shared_features, action, False
+        )
         critic_variables["params"] = project_unit_norm_params(critic_variables["params"])
         print_flax_model_summary(
             print_model,
             key,
             (actor_model, observation, False),
-            (critic_model, observation, action, False),
+            (critic_model, observation, shared_features, action, False),
         )
         return actor_fn, critic_fn, policy_variables, critic_variables
 

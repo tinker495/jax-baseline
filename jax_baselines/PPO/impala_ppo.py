@@ -11,7 +11,7 @@ class IMPALA_PPO(SurrogateIMPALA):
     def _loss_discrete(
         self, actor_params, critic_params, obses, actions, vs, mu_prob, pi_prob, adv, key
     ):
-        vals = self.critic(critic_params, key, obses)
+        vals = self.critic(critic_params, actor_params, key, obses)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(vals - vs)))
 
         logit = self.actor(actor_params, key, obses)
@@ -43,7 +43,7 @@ class IMPALA_PPO(SurrogateIMPALA):
     ):
         # pi_prob is accepted for a uniform scan-call signature with _loss_discrete;
         # the continuous IS ratio uses mu_prob only.
-        vals = self.critic(critic_params, key, obses)
+        vals = self.critic(critic_params, actor_params, key, obses)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(vals - vs)))
 
         prob = self.actor(actor_params, key, obses)

@@ -73,8 +73,8 @@ class TQC(SAC):
         self._train_ent_coef = jax.jit(self._train_ent_coef)
         self._bulk_scan = jax.jit(self._bulk_scan)
 
-    def _critic_loss(self, critic_params, obses, actions, targets, weights, key):
-        qnets = self.critic(critic_params, key, obses, actions)
+    def _critic_loss(self, critic_params, policy_params, obses, actions, targets, weights, key):
+        qnets = self.critic(critic_params, policy_params, key, obses, actions)
         logit_valid_tile = jnp.expand_dims(targets, axis=2)  # batch x support x 1
         huber0 = QuantileHuberLosses(
             logit_valid_tile,
@@ -97,7 +97,7 @@ class TQC(SAC):
 
     def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
         policy, log_prob = self._get_pi_log_prob(policy_params, obses, key)
-        qnets_pi = self.critic(critic_params, key, obses, policy)
+        qnets_pi = self.critic(critic_params, policy_params, key, obses, policy)
         actor_loss = jnp.mean(
             ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi, axis=1), axis=1)
         )
@@ -114,7 +114,7 @@ class TQC(SAC):
         ent_coef,
     ):
         policy, log_prob = self._get_pi_log_prob(policy_params, nxtobses, key)
-        qnets_pi = self.critic(target_critic_params, key, nxtobses, policy)
+        qnets_pi = self.critic(target_critic_params, policy_params, key, nxtobses, policy)
         if self.mixture_type == "min":
             next_q = jnp.min(jnp.stack(qnets_pi, axis=-1), axis=-1) - ent_coef * log_prob
         else:

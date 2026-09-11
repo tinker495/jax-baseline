@@ -218,7 +218,7 @@ def test_flax_ac_continuous_actor_initializes_log_std_param():
 
     obs = {"unified_obs": np.zeros((1, 3), dtype=np.float32)}
     mu, log_std = actor(actor_params, None, obs)
-    value = critic(critic_params, None, obs)
+    value = critic(critic_params, actor_params, None, obs)
 
     assert mu.shape[-1] == 1
     assert log_std.shape == (1, 1)

@@ -6,6 +6,7 @@ import numpy as np
 from model_builder.haiku.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import (
     dummy_observation,
+    get_critic_apply_fn,
     print_haiku_model_summary,
     split_actor_critic_kwargs,
 )
@@ -101,13 +102,22 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
     actor_kwargs, critic_kwargs = split_actor_critic_kwargs(policy_kwargs)
 
     def model_builder(key=None, print_model=False):
-        def encode_state(obs, role, node):
-            feature = PreProcess(observation_space, embedding_mode=embedding_mode, role=role)(obs)
+        def encode_state(obs, role, node, shared_features=None):
+            feature = PreProcess(observation_space, embedding_mode=embedding_mode, role=role)(
+                obs, shared_features
+            )
             return feature, Encoder(node=node)(feature)
 
         actor_encoder = hk.transform(lambda obs: encode_state(obs, "actor", actor_kwargs["node"]))
         critic_encoder = hk.transform(
-            lambda obs: encode_state(obs, "critic", critic_kwargs["node"])
+            lambda obs, shared_features: encode_state(
+                obs, "critic", critic_kwargs["node"], shared_features
+            )
+        )
+        shared_preproc = hk.transform(
+            lambda obs: PreProcess(
+                observation_space, embedding_mode=embedding_mode, role="actor"
+            ).shared_features(obs)
         )
         actor_action_encoder = hk.transform(
             lambda zs, actions: Action_Encoder(node=actor_kwargs["node"])(zs, actions)
@@ -124,7 +134,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         )
         functions = (
             actor_encoder.apply,
-            critic_encoder.apply,
+            get_critic_apply_fn(critic_encoder.apply, shared_preproc.apply),
             actor_action_encoder.apply,
             critic_action_encoder.apply,
             actor.apply,
@@ -136,9 +146,12 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         observation = dummy_observation(observation_space)
         action = np.zeros((1, *action_size), dtype=np.float32)
         actor_encoder_params = actor_encoder.init(keys[0], observation)
-        critic_encoder_params = critic_encoder.init(keys[1], observation)
+        shared_features = shared_preproc.apply(actor_encoder_params, None, observation)
+        critic_encoder_params = critic_encoder.init(keys[1], observation, shared_features)
         actor_feature, actor_zs = actor_encoder.apply(actor_encoder_params, None, observation)
-        critic_feature, critic_zs = critic_encoder.apply(critic_encoder_params, None, observation)
+        critic_feature, critic_zs = functions[1](
+            critic_encoder_params, actor_encoder_params, None, observation
+        )
         actor_encoder_params = hk.data_structures.merge(
             actor_encoder_params, actor_action_encoder.init(keys[2], actor_zs, action)
         )
@@ -152,7 +165,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         print_haiku_model_summary(
             print_model,
             (actor_encoder, observation),
-            (critic_encoder, observation),
+            (critic_encoder, observation, shared_features),
             (actor_action_encoder, actor_zs, action),
             (critic_action_encoder, critic_zs, action),
             (actor, actor_feature, actor_zs),

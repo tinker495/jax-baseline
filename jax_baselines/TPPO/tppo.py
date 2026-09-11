@@ -111,8 +111,12 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
     ):
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
-        value = jax.vmap(self.critic, in_axes=(None, None, 0))(critic_params, key, obses)
-        next_value = jax.vmap(self.critic, in_axes=(None, None, 0))(critic_params, key, nxtobses)
+        value = jax.vmap(self.critic, in_axes=(None, None, None, 0))(
+            critic_params, actor_params, key, obses
+        )
+        next_value = jax.vmap(self.critic, in_axes=(None, None, None, 0))(
+            critic_params, actor_params, key, nxtobses
+        )
         prob, pi_prob = jax.vmap(self.get_logprob, in_axes=(0, 0, None, None))(
             jax.vmap(self.actor, in_axes=(None, None, 0))(actor_params, key, obses),
             actions,
@@ -308,7 +312,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         adv,
         key,
     ):
-        vals = self.critic(critic_params, key, obses)
+        vals = self.critic(critic_params, actor_params, key, obses)
         vals_clip = old_value + jnp.clip(vals - old_value, -self.value_clip, self.value_clip)
         vf1 = jnp.square(vals - targets)
         vf2 = jnp.square(vals_clip - targets)
@@ -358,7 +362,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         adv,
         key,
     ):
-        vals = self.critic(critic_params, key, obses)
+        vals = self.critic(critic_params, actor_params, key, obses)
         vals_clip = old_value + jnp.clip(vals - old_value, -self.value_clip, self.value_clip)
         vf1 = jnp.square(vals - targets)
         vf2 = jnp.square(vals_clip - targets)

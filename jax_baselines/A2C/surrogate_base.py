@@ -109,8 +109,12 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
     ):
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
-        value = jax.vmap(self.critic, in_axes=(None, None, 0))(critic_params, key, obses)
-        next_value = jax.vmap(self.critic, in_axes=(None, None, 0))(critic_params, key, nxtobses)
+        value = jax.vmap(self.critic, in_axes=(None, None, None, 0))(
+            critic_params, actor_params, key, obses
+        )
+        next_value = jax.vmap(self.critic, in_axes=(None, None, None, 0))(
+            critic_params, actor_params, key, nxtobses
+        )
         pi_prob = jax.vmap(self.get_logprob, in_axes=(0, 0, None))(
             jax.vmap(self.actor, in_axes=(None, None, 0))(actor_params, key, obses),
             actions,

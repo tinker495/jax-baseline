@@ -56,8 +56,10 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
             ):
                 nxtobses = convert_normalized_obs(nxtobses)
                 next_action = actor(params["policy"], key, nxtobses)
-                next_q = critic(params["critic"], key, nxtobses, next_action)
-                q_values = critic(params["critic"], key, convert_normalized_obs(obses), actions)
+                next_q = critic(params["critic"], params["policy"], key, nxtobses, next_action)
+                q_values = critic(
+                    params["critic"], params["policy"], key, convert_normalized_obs(obses), actions
+                )
                 target = rewards + gamma * (1.0 - terminateds) * next_q
                 td_error = q_values - target
                 return jnp.squeeze(jnp.abs(td_error))
@@ -194,11 +196,11 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
         )
 
     def _loss(self, policy_params, critic_params, obses, actions, targets, weights, key):
-        vals = self.critic(critic_params, key, obses, actions)
+        vals = self.critic(critic_params, policy_params, key, obses, actions)
         error = jnp.squeeze(vals - targets)
         critic_loss = jnp.mean(jnp.square(error) * weights)
         policy = self.actor(policy_params, key, obses)
-        vals = self.critic(jax.lax.stop_gradient(critic_params), key, obses, policy)
+        vals = self.critic(jax.lax.stop_gradient(critic_params), policy_params, key, obses, policy)
         actor_loss = jnp.mean(-vals)
         total_loss = critic_loss + actor_loss
         return total_loss, (critic_loss, -actor_loss, jnp.abs(error))
@@ -213,5 +215,5 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
         key,
     ):
         next_action = self.actor(target_policy_params, key, nxtobses)
-        next_q = self.critic(target_critic_params, key, nxtobses, next_action)
+        next_q = self.critic(target_critic_params, target_policy_params, key, nxtobses, next_action)
         return (not_terminateds * next_q * self._gamma) + rewards

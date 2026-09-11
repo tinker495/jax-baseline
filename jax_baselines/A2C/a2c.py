@@ -71,8 +71,12 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
     ):
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
-        value = jax.vmap(self.critic, in_axes=(None, None, 0))(critic_params, key, obses)
-        next_value = jax.vmap(self.critic, in_axes=(None, None, 0))(critic_params, key, nxtobses)
+        value = jax.vmap(self.critic, in_axes=(None, None, None, 0))(
+            critic_params, actor_params, key, obses
+        )
+        next_value = jax.vmap(self.critic, in_axes=(None, None, None, 0))(
+            critic_params, actor_params, key, nxtobses
+        )
         targets = jax.vmap(discount_with_terminated, in_axes=(0, 0, 0, 0, None))(
             rewards, terminateds, truncateds, next_value, self.gamma
         )
@@ -106,7 +110,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         )
 
     def _loss_discrete(self, actor_params, critic_params, obses, actions, targets, adv, key):
-        vals = self.critic(critic_params, key, obses)
+        vals = self.critic(critic_params, actor_params, key, obses)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
 
         prob, log_prob = self.get_logprob(
@@ -130,7 +134,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
     def _loss_continuous(self, actor_params, critic_params, obses, actions, targets, adv, key):
-        vals = self.critic(critic_params, key, obses)
+        vals = self.critic(critic_params, actor_params, key, obses)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
 
         prob, log_prob = self.get_logprob(

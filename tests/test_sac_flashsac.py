@@ -52,7 +52,7 @@ def test_sac_actor_loss_uses_minimum_expected_q():
         jnp.zeros((feature["unified_obs"].shape[0], 1)),
         jnp.zeros((feature["unified_obs"].shape[0], 1)),
     )
-    agent.critic = lambda params, key, feature, policy: (
+    agent.critic = lambda params, policy_params, key, feature, policy: (
         jnp.array([[0.0], [10.0]]),
         jnp.array([[4.0], [2.0]]),
     )
@@ -87,7 +87,12 @@ def test_crossq_actors_have_no_batch_stats_but_critics_do():
         builder = make_builder(
             {"unified_obs": [4]},
             [2],
-            {"actor_node": 16, "critic_node": 128, "hidden_n": 1, "embedding_mode": "normal"},
+            {
+                "actor_node": 16,
+                "critic_node": 128,
+                "hidden_n": 1,
+                "embedding_mode": "normal",
+            },
         )
         actor, critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
 
@@ -96,7 +101,7 @@ def test_crossq_actors_have_no_batch_stats_but_critics_do():
 
         obs = {"unified_obs": jnp.zeros((2, 4))}
         mu, log_std = actor(policy_params, None, obs)
-        (q1, q2), updates = critic(critic_params, None, obs, jnp.zeros((2, 2)), True)
+        (q1, q2), updates = critic(critic_params, policy_params, None, obs, jnp.zeros((2, 2)), True)
 
         assert mu.shape == log_std.shape == (2, 2)
         assert q1.shape == q2.shape == (2, 1)
@@ -121,7 +126,7 @@ def test_sac_actor_and_temperature_update_on_configured_period():
         jnp.full((feature["unified_obs"].shape[0], 1), params),
         jnp.full((feature["unified_obs"].shape[0], 1), -1.0),
     )
-    agent.critic = lambda params, key, feature, actions: (
+    agent.critic = lambda params, policy_params, key, feature, actions: (
         params + actions,
         params + 2.0 * actions,
     )
@@ -194,7 +199,7 @@ def test_sac_actor_and_target_use_distinct_fresh_keys():
     agent._target = lambda policy, target_critic, rewards, nxtobses, done, key, alpha: (
         jax.random.uniform(key)
     )
-    agent._critic_loss = lambda critic, obses, actions, targets, weights, key: (
+    agent._critic_loss = lambda critic, policy, obses, actions, targets, weights, key: (
         targets + 0.0 * critic,
         jnp.zeros((1,)),
     )

@@ -148,9 +148,11 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
                     -1.0,
                     1.0,
                 )
-                q1, q2 = critic(params["critic"], key, nxtobses, next_action)
+                q1, q2 = critic(params["critic"], params["policy"], key, nxtobses, next_action)
                 next_q = jnp.minimum(q1, q2)
-                q_values1, _ = critic(params["critic"], key, convert_normalized_obs(obses), actions)
+                q_values1, _ = critic(
+                    params["critic"], params["policy"], key, convert_normalized_obs(obses), actions
+                )
                 target = rewards + gamma * (1.0 - terminateds) * next_q
                 td1_error = jnp.abs(q_values1 - target)
                 return jnp.squeeze(td1_error)
@@ -321,14 +323,16 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
         )
 
     def _loss(self, policy_params, critic_params, obses, actions, targets, weights, key, step):
-        q1, q2 = self.critic(critic_params, key, obses, actions)
+        q1, q2 = self.critic(critic_params, policy_params, key, obses, actions)
         error1 = jnp.squeeze(q1 - targets)
         error2 = jnp.squeeze(q2 - targets)
         critic_loss = jnp.mean(weights * jnp.square(error1)) + jnp.mean(
             weights * jnp.square(error2)
         )
         policy = self.actor(policy_params, key, obses)
-        vals, _ = self.critic(jax.lax.stop_gradient(critic_params), key, obses, policy)
+        vals, _ = self.critic(
+            jax.lax.stop_gradient(critic_params), policy_params, key, obses, policy
+        )
         actor_loss = jnp.mean(-vals)
         total_loss = jax.lax.select(
             step % self.policy_delay == 0, critic_loss + actor_loss, critic_loss
@@ -355,6 +359,6 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
             -1.0,
             1.0,
         )
-        q1, q2 = self.critic(target_critic_params, key, nxtobses, next_action)
+        q1, q2 = self.critic(target_critic_params, target_policy_params, key, nxtobses, next_action)
         next_q = jnp.minimum(q1, q2)
         return (not_terminateds * next_q * self._gamma) + rewards

@@ -11,6 +11,7 @@ from model_builder.flax.layers import Dense, avgl1norm
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import (
     dummy_observation,
+    get_critic_apply_fn,
     print_flax_model_summary,
     split_actor_critic_kwargs,
 )
@@ -110,13 +111,16 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 self.enc = Encoder(node=self.node, hidden_n=self.hidden_n)
                 self.act_enc = Action_Encoder(node=self.node, hidden_n=self.hidden_n)
 
-            def __call__(self, obs, actions):
-                feature, zs = self.encode_state(obs)
+            def __call__(self, obs, actions, shared_features=None):
+                feature, zs = self.encode_state(obs, shared_features)
                 return feature, zs, self.encode_action(zs, actions)
 
-            def encode_state(self, obs):
-                feature = self.preproc(obs)
+            def encode_state(self, obs, shared_features=None):
+                feature = self.preproc(obs, shared_features)
                 return feature, self.enc(feature)
+
+            def shared_features(self, obs):
+                return self.preproc.shared_features(obs)
 
             def encode_action(self, zs, actions):
                 return self.act_enc(zs, actions)
@@ -133,9 +137,15 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         critic_encoder_model = RoleEncoder("critic", critic_kwargs["node"], 3)
         policy_model = Actor(action_size=action_size, **actor_kwargs)
         critic_model = TwinCritic()
+        shared_preproc_fn = get_apply_fn_flax_module(
+            actor_encoder_model, method=actor_encoder_model.shared_features
+        )
         functions = (
             get_apply_fn_flax_module(actor_encoder_model, actor_encoder_model.encode_state),
-            get_apply_fn_flax_module(critic_encoder_model, critic_encoder_model.encode_state),
+            get_critic_apply_fn(
+                get_apply_fn_flax_module(critic_encoder_model, critic_encoder_model.encode_state),
+                shared_preproc_fn,
+            ),
             get_apply_fn_flax_module(actor_encoder_model, actor_encoder_model.encode_action),
             get_apply_fn_flax_module(critic_encoder_model, critic_encoder_model.encode_action),
             get_apply_fn_flax_module(policy_model),
@@ -147,9 +157,14 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         observation = dummy_observation(observation_space)
         action = np.zeros((1, *action_size), dtype=np.float32)
         actor_encoder_params = actor_encoder_model.init(actor_encoder_key, observation, action)
-        critic_encoder_params = critic_encoder_model.init(critic_encoder_key, observation, action)
+        shared_features = shared_preproc_fn(actor_encoder_params, None, observation)
+        critic_encoder_params = critic_encoder_model.init(
+            critic_encoder_key, observation, action, shared_features
+        )
         actor_feature, actor_zs = functions[0](actor_encoder_params, None, observation)
-        critic_feature, critic_zs = functions[1](critic_encoder_params, None, observation)
+        critic_feature, critic_zs = functions[1](
+            critic_encoder_params, actor_encoder_params, None, observation
+        )
         critic_zsa = functions[3](critic_encoder_params, None, critic_zs, action)
         policy_params = policy_model.init(actor_key, actor_feature, actor_zs)
         critic_params = critic_model.init(critic_key, critic_feature, critic_zs, critic_zsa, action)
@@ -157,7 +172,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
             print_model,
             key,
             (actor_encoder_model, observation, action),
-            (critic_encoder_model, observation, action),
+            (critic_encoder_model, observation, action, shared_features),
             (policy_model, actor_feature, actor_zs),
             (critic_model, critic_feature, critic_zs, critic_zsa, action),
         )

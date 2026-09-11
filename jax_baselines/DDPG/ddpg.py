@@ -247,7 +247,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             key,
         )
         (critic_loss, abs_error), grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
-            critic_params, obses, actions, targets, weights, key
+            critic_params, policy_params, obses, actions, targets, weights, key
         )
         updates, opt_critic_state = self.optimizer.update(
             grad, opt_critic_state, params=critic_params
@@ -300,15 +300,15 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             new_priorities,
         )
 
-    def _critic_loss(self, critic_params, obses, actions, targets, weights, key):
-        vals = self.critic(critic_params, key, obses, actions)
+    def _critic_loss(self, critic_params, policy_params, obses, actions, targets, weights, key):
+        vals = self.critic(critic_params, policy_params, key, obses, actions)
         error = jnp.squeeze(vals - targets)
         critic_loss = jnp.mean(weights * jnp.square(error))
         return critic_loss, jnp.abs(error)
 
     def _actor_loss(self, policy_params, critic_params, obses, key):
         actions = self.actor(policy_params, key, obses)
-        q = self.critic(critic_params, key, obses, actions)
+        q = self.critic(critic_params, policy_params, key, obses, actions)
         return -jnp.mean(q)
 
     def _target(
@@ -321,5 +321,5 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         key,
     ):
         next_action = self.actor(target_policy_params, key, nxtobses)
-        next_q = self.critic(target_critic_params, key, nxtobses, next_action)
+        next_q = self.critic(target_critic_params, target_policy_params, key, nxtobses, next_action)
         return (not_terminateds * next_q * self._gamma) + rewards

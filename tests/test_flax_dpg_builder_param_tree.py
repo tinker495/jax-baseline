@@ -134,7 +134,7 @@ def test_deterministic_builders_preserve_public_contract_and_param_roots(
     key = jax.random.PRNGKey(1)
     observations = {"unified_obs": jnp.zeros((1, 4), dtype=jnp.float32)}
     action = actor(policy_params, key, observations)
-    values = critic(critic_params, key, observations, action)
+    values = critic(critic_params, policy_params, key, observations, action)
     assert action.shape == (1, 2)
     if twin:
         assert tuple(value.shape for value in values) == ((1, 1), (1, 1))

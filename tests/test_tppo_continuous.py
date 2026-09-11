@@ -21,7 +21,9 @@ def _continuous_agent(cls, family):
     agent.lamda = 0.95
     agent.gae_normalize = False
     agent.gae_normalize_scope = "batch"
-    agent.critic = lambda params, key, obses: jnp.zeros((*obses["unified_obs"].shape[:-1], 1))
+    agent.critic = lambda params, actor_params, key, obses: jnp.zeros(
+        (*obses["unified_obs"].shape[:-1], 1)
+    )
     agent.actor = lambda params, key, obses: (
         jnp.zeros((*obses["unified_obs"].shape[:-1], 2)),
         jnp.zeros((1, 2)),
@@ -50,7 +52,7 @@ def test_continuous_tppo_full_train_step_handles_gaussian_minibatches(cls, famil
     agent = _continuous_agent(cls, family)
     agent.actor_params = {"bias": jnp.asarray(0.0, dtype=jnp.float32)}
     agent.critic_params = {"bias": jnp.asarray(0.0, dtype=jnp.float32)}
-    agent.critic = lambda params, key, obses: (
+    agent.critic = lambda params, actor_params, key, obses: (
         jnp.zeros((*obses["unified_obs"].shape[:-1], 1)) + params["bias"]
     )
     agent.actor = lambda params, key, obses: (
