@@ -132,7 +132,7 @@ def make_replay_buffer(need: LocalReplayNeed):
             buffer_size, observation_space, action_shape_or_n, n_step, gamma, n_frames
         )
 
-    if (
+    if n_step > 1 or (
         compress_memory
         and worker_size > 1
         and n_step == 1
@@ -161,40 +161,15 @@ def make_replay_buffer(need: LocalReplayNeed):
         )
 
     if prioritized:
-        if n_step > 1:
-            return PrioritizedNstepReplayBuffer(
-                buffer_size,
-                observation_space,
-                action_shape_or_n,
-                worker_size,
-                n_step,
-                gamma,
-                alpha,
-                compress_memory,
-                eps,
-            )
-        else:
-            return PrioritizedReplayBuffer(
-                buffer_size,
-                observation_space,
-                alpha,
-                action_shape_or_n,
-                compress_memory,
-                eps,
-            )
-    else:
-        if n_step > 1:
-            return NstepReplayBuffer(
-                buffer_size,
-                observation_space,
-                action_shape_or_n,
-                worker_size,
-                n_step,
-                gamma,
-                compress_memory,
-            )
-        else:
-            return ReplayBuffer(buffer_size, observation_space, action_shape_or_n, compress_memory)
+        return PrioritizedReplayBuffer(
+            buffer_size,
+            observation_space,
+            alpha,
+            action_shape_or_n,
+            compress_memory,
+            eps,
+        )
+    return ReplayBuffer(buffer_size, observation_space, action_shape_or_n, compress_memory)
 
 
 def make_multi_prioritized_buffer(need: SharedPrioritizedReplayNeed):
