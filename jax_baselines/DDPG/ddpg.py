@@ -55,7 +55,6 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             self.policy_kwargs,
         )
         (
-            self.preproc,
             self.actor,
             self.critic,
             self.policy_params,
@@ -85,9 +84,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         self.target_critic_params = bundle.target_critic_params
 
     def _get_actions(self, policy_params, obses, key=None) -> jnp.ndarray:
-        return self.actor(
-            policy_params, key, self.preproc(policy_params, key, convert_normalized_obs(obses))
-        )
+        return self.actor(policy_params, key, convert_normalized_obs(obses))
 
     def description(self, eval_result=None):
         description = ""
@@ -159,13 +156,16 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             self.opt_critic_state,
         )
         (
-            self.policy_params,
-            self.critic_params,
-            self.target_policy_params,
-            self.target_critic_params,
-            self.opt_policy_state,
-            self.opt_critic_state,
-        ), (losses, targets, priorities) = self._bulk_scan(carry, keys, steps, data)
+            (
+                self.policy_params,
+                self.critic_params,
+                self.target_policy_params,
+                self.target_critic_params,
+                self.opt_policy_state,
+                self.opt_critic_state,
+            ),
+            (losses, targets, priorities),
+        ) = self._bulk_scan(carry, keys, steps, data)
         return DPGTrainReport(
             loss=jnp.mean(losses),
             target=jnp.mean(targets),
@@ -301,16 +301,14 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         )
 
     def _critic_loss(self, critic_params, policy_params, obses, actions, targets, weights, key):
-        feature = self.preproc(policy_params, key, obses)
-        vals = self.critic(critic_params, key, feature, actions)
+        vals = self.critic(critic_params, policy_params, key, obses, actions)
         error = jnp.squeeze(vals - targets)
         critic_loss = jnp.mean(weights * jnp.square(error))
         return critic_loss, jnp.abs(error)
 
     def _actor_loss(self, policy_params, critic_params, obses, key):
-        feature = self.preproc(policy_params, key, obses)
-        actions = self.actor(policy_params, key, feature)
-        q = self.critic(critic_params, key, feature, actions)
+        actions = self.actor(policy_params, key, obses)
+        q = self.critic(critic_params, policy_params, key, obses, actions)
         return -jnp.mean(q)
 
     def _target(
@@ -322,7 +320,6 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         not_terminateds,
         key,
     ):
-        next_feature = self.preproc(target_policy_params, key, nxtobses)
-        next_action = self.actor(target_policy_params, key, next_feature)
-        next_q = self.critic(target_critic_params, key, next_feature, next_action)
+        next_action = self.actor(target_policy_params, key, nxtobses)
+        next_q = self.critic(target_critic_params, target_policy_params, key, nxtobses, next_action)
         return (not_terminateds * next_q * self._gamma) + rewards

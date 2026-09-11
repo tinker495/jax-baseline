@@ -10,7 +10,6 @@ import jax
 import jax.numpy as jnp
 
 from model_builder.flax.layers import SimbaV2Block, SimbaV2Embedding, SimbaV2Head
-from model_builder.utils import ActorCriticFeatures
 
 
 class Actor(nn.Module):
@@ -19,8 +18,8 @@ class Actor(nn.Module):
     hidden_n: int = 2
 
     @nn.compact
-    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
-        encoded = SimbaV2Embedding(self.node)(features["actor"])
+    def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
+        encoded = SimbaV2Embedding(self.node)(features)
         for _ in range(self.hidden_n):
             encoded = SimbaV2Block(self.node)(encoded)
         logits = SimbaV2Head(self.node, self.action_size[0])(encoded)
@@ -32,8 +31,8 @@ class Critic(nn.Module):
     hidden_n: int = 2
 
     @nn.compact
-    def __call__(self, features: ActorCriticFeatures, actions: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([features["critic"], actions], axis=1)
+    def __call__(self, features: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+        concat = jnp.concatenate([features, actions], axis=1)
         encoded = SimbaV2Embedding(self.node)(concat)
         for _ in range(self.hidden_n):
             encoded = SimbaV2Block(self.node)(encoded)

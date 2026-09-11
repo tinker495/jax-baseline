@@ -56,7 +56,6 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             self.policy_kwargs,
         )
         (
-            self.preproc,
             self.actor,
             self.critic,
             self.policy_params,
@@ -85,8 +84,8 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         self.critic_params = bundle.critic_params
         self.log_ent_coef = bundle.log_ent_coef
 
-    def _get_pi_log_prob(self, params, feature, key=None) -> jnp.ndarray:
-        mu, log_std = self.actor(params, None, feature)
+    def _get_pi_log_prob(self, params, obses, key=None) -> jnp.ndarray:
+        mu, log_std = self.actor(params, None, obses)
         std = jnp.exp(log_std)
         x_t = mu + std * jax.random.normal(key, std.shape)
         pi = jax.nn.tanh(x_t)
@@ -99,15 +98,13 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         return pi, log_prob
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        mu, log_std = self.actor(
-            params, None, self.preproc(params, None, convert_normalized_obs(obses))
-        )
+        mu, log_std = self.actor(params, None, convert_normalized_obs(obses))
         std = jnp.exp(log_std)
         pi = jax.nn.tanh(mu + std * jax.random.normal(key, std.shape))
         return pi
 
     def _get_eval_actions(self, params, obses) -> jnp.ndarray:
-        mu, _ = self.actor(params, None, self.preproc(params, None, convert_normalized_obs(obses)))
+        mu, _ = self.actor(params, None, convert_normalized_obs(obses))
         return jax.nn.tanh(mu)
 
     def _train_on_batch(self, data, context):
@@ -151,13 +148,16 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             self.log_ent_coef,
         )
         (
-            self.policy_params,
-            self.critic_params,
-            self.opt_policy_state,
-            self.opt_critic_state,
-            self.opt_ent_coef_state,
-            self.log_ent_coef,
-        ), (losses, targets, ent_coefs, priorities) = self._bulk_scan(carry, keys, steps, data)
+            (
+                self.policy_params,
+                self.critic_params,
+                self.opt_policy_state,
+                self.opt_critic_state,
+                self.opt_ent_coef_state,
+                self.log_ent_coef,
+            ),
+            (losses, targets, ent_coefs, priorities),
+        ) = self._bulk_scan(carry, keys, steps, data)
         return DPGTrainReport(
             loss=jnp.mean(losses),
             target=jnp.mean(targets),
@@ -354,16 +354,12 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             obses,
             nxtobses,
         )
-        concated_preproc = self.preproc(policy_params, key, concated_obses)
-        next_preproc = jax.tree_util.tree_map(
-            lambda feature: jnp.split(feature, 2, axis=0)[1], concated_preproc
-        )
-        next_policy, log_prob = self._get_pi_log_prob(policy_params, next_preproc, key)
-        concated_actions = jnp.concatenate([actions, next_policy])
+        next_policy, log_prob = self._get_pi_log_prob(policy_params, nxtobses, key)
+        concated_actions = jnp.concatenate([actions, jax.lax.stop_gradient(next_policy)])
         (q1, q2), variable_updates = self.critic(
-            critic_params, key, concated_preproc, concated_actions, True
+            critic_params, policy_params, key, concated_obses, concated_actions, True
         )
-        critic_params["batch_stats"] = variable_updates["batch_stats"]
+        critic_params = {**critic_params, **variable_updates}
         q1, next_q1 = jnp.split(q1, 2, axis=0)
         q2, next_q2 = jnp.split(q2, 2, axis=0)
         next_q = jnp.minimum(next_q1, next_q2) - ent_coef * log_prob
@@ -376,8 +372,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
         return critic_loss, (jnp.abs(error1), targets, critic_params)
 
     def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
-        feature = self.preproc(policy_params, key, obses)
-        policy, log_prob = self._get_pi_log_prob(policy_params, feature, key)
-        (q1_pi, q2_pi), _ = self.critic(critic_params, key, feature, policy, False)
+        policy, log_prob = self._get_pi_log_prob(policy_params, obses, key)
+        (q1_pi, q2_pi), _ = self.critic(critic_params, policy_params, key, obses, policy, False)
         actor_loss = jnp.mean(ent_coef * log_prob - jnp.minimum(q1_pi, q2_pi))
         return actor_loss, log_prob

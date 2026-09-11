@@ -30,7 +30,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 EXPECTED_ALGOS = {
-    "dpg": {"DDPG", "TD3", "SAC", "CrossQ", "XQC", "TQC", "TD7"},
+    "dpg": {"DDPG", "TD3", "SAC", "FlashSAC", "CrossQ", "XQC", "TQC", "TD7"},
     "pg": {"A2C", "PPO", "TPPO", "SPO"},
     "qnet": {"DQN", "C51", "QRDQN", "IQN", "FQF", "SPR", "BBF"},
 }
@@ -117,7 +117,7 @@ def test_dpg_simba_variants_resolve(flags: list[str]):
     from experiments.cli.dpg import DPG_RUNNER
 
     for algo, spec in DPG_RUNNER.algos.items():
-        if algo == "XQC":
+        if algo in ("XQC", "FlashSAC"):
             continue
         args = _parse(DPG_RUNNER, ["--algo", algo, "--model_lib", "flax", *flags])
         assert callable(resolve_maker(DPG_RUNNER, spec, args))
@@ -163,12 +163,12 @@ def test_dpg_xqc_respects_common_cli_settings():
     assert built["ent_coef"] == "auto_0.02"
 
 
-def test_dpg_reward_normalization_defaults_to_xqc_and_can_be_overridden():
+def test_dpg_reward_normalization_defaults_and_override():
     from experiments.cli.dpg import DPG_RUNNER
 
     for algo, spec in DPG_RUNNER.algos.items():
         built = spec.build(_parse(DPG_RUNNER, ["--algo", algo]))
-        assert built["reward_normalization"] is (algo == "XQC")
+        assert built["reward_normalization"] is (algo in ("XQC", "FlashSAC"))
 
     enabled = DPG_RUNNER.algos["DDPG"].build(
         _parse(DPG_RUNNER, ["--algo", "DDPG", "--reward_normalization"])
@@ -301,9 +301,9 @@ def test_qnet_hl_gauss_bbf_optimizer_policy_matches_historical_adamw_default():
     grads = {"w": jnp.array([0.5, -0.25], dtype=jnp.float32)}
 
     updates, _ = optimizer.update(grads, optimizer.init(params), params)
-    expected, _ = reference.update(grads, reference.init(params), params)
+    expected, _ = reference.update(grads["w"], reference.init(params["w"]), params["w"])
 
-    np.testing.assert_allclose(updates["w"], expected["w"], rtol=1e-6)
+    np.testing.assert_allclose(updates["w"], np.asarray(expected), rtol=1e-6)
 
 
 def test_qnet_bbf_haiku_is_unsupported_clean_error():
@@ -463,19 +463,22 @@ def test_dist_resolver_resolves_flax_base(family: str):
 
 @pytest.mark.parametrize("family", DIST_FAMILIES)
 def test_dist_policy_kwargs_uses_shared_normal_embedding(family: str):
-    """All distributed families share the Atari ``normal`` embedding policy.
-
-    Pins the consolidation of three byte-identical ``policy_kwargs`` helpers onto
-    ``_run.default_policy_kwargs`` so the embedding mode cannot silently drift per
-    family.
-    """
-    from experiments.cli._run import default_policy_kwargs
+    from experiments.cli._run import actor_critic_policy_kwargs, default_policy_kwargs
 
     runner = _dist_runner(family)
-    assert runner.policy_kwargs is default_policy_kwargs
-    args = _parse(runner, ["--algo", sorted(runner.algos)[0], "--node", "128", "--hidden_n", "3"])
+    if family == "apex_qnet":
+        assert runner.policy_kwargs is default_policy_kwargs
+        widths = {"node": 128}
+    else:
+        assert runner.policy_kwargs is actor_critic_policy_kwargs
+        widths = {"actor_node": 128, "critic_node": 256}
+    args = _parse(
+        runner,
+        ["--algo", min(runner.algos), "--hidden_n", "3"]
+        + [item for name, width in widths.items() for item in (f"--{name}", str(width))],
+    )
     assert runner.policy_kwargs(args) == {
-        "node": 128,
+        **widths,
         "hidden_n": 3,
         "embedding_mode": "normal",
     }

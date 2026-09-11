@@ -11,7 +11,8 @@ base:
   steps: 491520000
   eval_num: 5
   batch: 24
-  node: 512
+  actor_node: 512
+  critic_node: 512
   hidden_n: 3
   mini_batch: 24576
   epoch_num: 5

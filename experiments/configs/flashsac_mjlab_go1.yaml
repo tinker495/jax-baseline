@@ -1,5 +1,5 @@
 family: dpg
-# Sampling schedule: FlashSAC's GPU-simulator recipe, adapted to local SAC.
+# FlashSAC's IsaacLab recipe, applied to the MJLab Go1 task.
 # https://github.com/Holiday-Robot/FlashSAC/blob/87edc9061150ae9e962dd84e6544e27a1554b3ab/scripts/run_isaaclab.sh
 runtime:
   device: 0
@@ -9,28 +9,30 @@ base:
   env_device: cuda:0
   env_jax_arrays: true
   env_reuse_for_eval: true
+  model_lib: flax
   worker: 1024
   # train_freq counts transitions across all workers: two updates per vector step.
   train_freq: 1024
   gradient_steps: 2
   steps: 50000896
-  eval_num: 5
+  eval_num: 10
   learning_rate: 0.0003
+  learning_rate_end: 0.00015
+  optimizer: adam
+  memory_backend: gpu
   buffer_size: 1e7
   batch: 2048
   learning_starts: 100000
   gamma: 0.99
   n_step: 3
-  # Local observation normalization uses the SIMBA residual-network variant.
-  simba: true
-  actor_node: 512
-  critic_node: 512
+  actor_node: 128
+  critic_node: 256
   hidden_n: 2
   reward_normalization: true
   target_update_tau: 0.01
-  ent_coef: auto_0.005
+  ent_coef: auto_0.01
   sigma_target: 0.15
   actor_update_period: 2
-  optimizer: adam
+  seed: 0
 variants:
-  - {algo: TQC, enabled: true}
+  - {algo: FlashSAC, enabled: true}

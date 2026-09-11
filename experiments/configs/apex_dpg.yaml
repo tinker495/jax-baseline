@@ -13,7 +13,8 @@ base:
   gamma: 0.99
   buffer_size: 1e7
   worker: 8
-  node: 512
+  actor_node: 512
+  critic_node: 512
   hidden_n: 2
   initial_eps: 0.1
   eps_decay: 0

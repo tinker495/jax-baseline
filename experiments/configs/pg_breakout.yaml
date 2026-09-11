@@ -17,7 +17,8 @@ base:
   mini_batch: 256
   gamma: 0.99
   lamda: 0.95
-  node: 512
+  actor_node: 512
+  critic_node: 512
   hidden_n: 1
   optimizer: adam
   optimizer_eps: 0.00001

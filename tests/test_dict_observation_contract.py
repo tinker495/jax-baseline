@@ -105,25 +105,22 @@ def test_crossq_critic_loss_concatenates_dict_observation_values():
     agent._gamma = 0.99
     seen = {}
 
-    def preproc(_params, _key, observations):
-        seen.update(observations)
-        return {
-            "actor": observations["unified_obs"],
-            "critic": observations["unified_obs"],
-        }
+    agent._get_pi_log_prob = lambda _params, observations, _key: (
+        jnp.zeros((observations["unified_obs"].shape[0], 1)),
+        jnp.zeros((observations["unified_obs"].shape[0], 1)),
+    )
 
-    agent.preproc = preproc
-    agent._get_pi_log_prob = lambda _params, features, _key: (
-        jnp.zeros((features["actor"].shape[0], 1)),
-        jnp.zeros((features["actor"].shape[0], 1)),
-    )
-    agent.critic = lambda params, _key, features, _actions, _training: (
-        (
-            jnp.zeros((features["actor"].shape[0], 1)),
-            jnp.zeros((features["actor"].shape[0], 1)),
-        ),
-        {"batch_stats": params["batch_stats"]},
-    )
+    def critic(params, _actor_params, _key, observations, _actions, _training):
+        seen.update(observations)
+        return (
+            (
+                jnp.zeros((observations["unified_obs"].shape[0], 1)),
+                jnp.zeros((observations["unified_obs"].shape[0], 1)),
+            ),
+            {"batch_stats": params["batch_stats"]},
+        )
+
+    agent.critic = critic
     observations = {"unified_obs": jnp.ones((2, 3))}
     next_observations = {"unified_obs": jnp.full((2, 3), 2.0)}
 

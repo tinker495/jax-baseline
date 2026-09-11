@@ -1,5 +1,6 @@
 import time
 from collections import deque
+from collections.abc import Callable
 
 import jax
 import jax.numpy as jnp
@@ -25,8 +26,9 @@ from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
-class Ape_X_Deteministic_Policy_Gradient_Family(object):
+class Ape_X_Deteministic_Policy_Gradient_Family:
     _run_name = "APE_X_DPG"
+    actor: Callable
 
     def __init__(
         self,
@@ -90,8 +92,10 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         self.n_step_method = n_step > 1
         self.n_step = n_step
 
-        self.params = None
-        self.target_params = None
+        self.policy_params = None
+        self.critic_params = None
+        self.target_policy_params = None
+        self.target_critic_params = None
         self.optimizer_factory = require_optimizer_factory(optimizer_factory)
         self.optimizer = self._make_optimizer(self.learning_rate)
         self.model_builder = None
@@ -110,10 +114,24 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
             self.setup_model()
 
     def save_params(self, path):
-        self.checkpoint_store.save(path, self.params)
+        self.checkpoint_store.save(
+            path,
+            {
+                "policy": self.policy_params,
+                "critic": self.critic_params,
+                "target_policy": self.target_policy_params,
+                "target_critic": self.target_critic_params,
+            },
+        )
 
     def load_params(self, path):
-        self.params = self.target_params = jax.device_put(self.checkpoint_store.restore(path))
+        params = jax.device_put(self.checkpoint_store.restore(path))
+        self.policy_params = params["policy"]
+        self.critic_params = params["critic"]
+        self.target_policy_params = params["target_policy"]
+        self.target_critic_params = params["target_critic"]
+        self.opt_policy_state = self.optimizer.init(self.policy_params)
+        self.opt_critic_state = self.optimizer.init(self.critic_params)
 
     def _make_optimizer(self, learning_rate):
         return self.optimizer_factory(learning_rate)
@@ -149,11 +167,11 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
     def setup_model(self):
         pass
 
-    def _train_step(self, steps):
-        pass
+    def _invoke_train_step(self, steps, data):
+        raise NotImplementedError
 
     def _get_actions(self, params, obses, key=None):
-        return self.actor(params, key, self.preproc(params, key, convert_normalized_obs(obses)))
+        return self.actor(params, key, convert_normalized_obs(obses))
 
     def description(self):
         array_module = jnp if any(isinstance(loss, jax.Array) for loss in self.lossque) else np
@@ -168,9 +186,12 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
             data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
 
             (
-                self.params,
-                self.target_params,
-                self.opt_state,
+                self.policy_params,
+                self.critic_params,
+                self.target_policy_params,
+                self.target_critic_params,
+                self.opt_policy_state,
+                self.opt_critic_state,
                 loss,
                 t_mean,
                 new_priorities,
@@ -206,7 +227,7 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
         if run_name is None:
             run_name = self._run_name
         if self.n_step_method:
-            run_name = "{}Step_".format(self.n_step) + run_name
+            run_name = f"{self.n_step}Step_" + run_name
 
         progress_factory = progress_factory or make_progress
         pbar = progress_factory(total_trainstep, miniters=log_interval)
@@ -244,7 +265,10 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
             for u in update:
                 u.clear()
 
-            cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
+            cpu_param = jax.device_put(
+                {"policy": self.policy_params, "critic": self.critic_params},
+                jax.devices("cpu")[0],
+            )
             param_server = self.runtime.create_param_server(cpu_param)
 
             epsilons = worker_epsilons(
@@ -286,7 +310,10 @@ class Ape_X_Deteministic_Policy_Gradient_Family(object):
                 if steps % log_interval == 0:
                     pbar.set_description(self.description())
                 if steps % self.param_broadcast_freq == 0:
-                    cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
+                    cpu_param = jax.device_put(
+                        {"policy": self.policy_params, "critic": self.critic_params},
+                        jax.devices("cpu")[0],
+                    )
                     param_server.update_params(cpu_param)
                     for u in update:
                         u.set()

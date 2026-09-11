@@ -8,7 +8,7 @@ from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
 from jax_baselines.core.seeding import seed_prngs
 
 
-class Ape_X_Worker(object):
+class Ape_X_Worker:
     def __init__(self, env_builder, seed=None) -> None:
         seed_prngs(seed)
         # env_builder is the repo-local Environment Adapter callable injected by
@@ -38,7 +38,7 @@ class Ape_X_Worker(object):
             local_buffer = make_worker_local_replay_buffer(
                 worker_replay_factory, local_size, env_dict, n_s
             )
-            preproc, actor_model, critic_model = model_builder()
+            actor_model, critic_model = model_builder()
             (
                 get_abs_td_error,
                 actor,
@@ -48,21 +48,19 @@ class Ape_X_Worker(object):
                 key_seq,
             ) = actor_builder()
 
-            get_abs_td_error = jax.jit(
-                partial(get_abs_td_error, actor_model, critic_model, preproc)
-            )
-            actor = jax.jit(partial(actor, actor_model, preproc))
+            get_abs_td_error = jax.jit(partial(get_abs_td_error, actor_model, critic_model))
+            actor = jax.jit(partial(actor, actor_model))
             _get_action = partial(get_action, actor)
             get_action = random_action
 
             score = 0
             if seed is not None:
                 try:
-                    obs, info = self.env.reset(seed=seed)
+                    obs, _info = self.env.reset(seed=seed)
                 except TypeError:
-                    obs, info = self.env.reset()
+                    obs, _info = self.env.reset()
             else:
-                obs, info = self.env.reset()
+                obs, _info = self.env.reset()
             obs = batch_observation(obs)
             params = jax.device_put(param_server.get_params())
             eplen = 0
@@ -84,7 +82,7 @@ class Ape_X_Worker(object):
 
                 eplen += 1
                 actions = get_action(params, obs, noise, eps, next(key_seq))
-                next_obs, reward, terminated, truncated, info = self.env.step(actions)
+                next_obs, reward, terminated, truncated, _info = self.env.step(actions)
                 next_obs = batch_observation(next_obs)
                 local_buffer.add(obs, actions, reward, next_obs, terminated, truncated)
                 score += reward
@@ -92,7 +90,7 @@ class Ape_X_Worker(object):
 
                 if terminated or truncated:
                     local_buffer.episode_end()
-                    obs, info = self.env.reset()
+                    obs, _info = self.env.reset()
                     obs = batch_observation(obs)
                     if logger_server is not None:
                         log_dict = {
@@ -120,4 +118,3 @@ class Ape_X_Worker(object):
                 print("worker stopped")
             else:
                 stop.set()
-        return None

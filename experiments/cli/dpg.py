@@ -4,10 +4,19 @@ from env_builder.env_builder import get_env_builder
 
 # isort: on
 from experiments.cli._env import add_env_args, env_builder_kwargs
-from experiments.cli._run import AlgoSpec, FamilyRunner, run_family
-from experiments.optimizers import make_batch_scaled_optimizer_factory
+from experiments.cli._run import (
+    AlgoSpec,
+    FamilyRunner,
+    actor_critic_policy_kwargs,
+    run_family,
+)
+from experiments.optimizers import (
+    make_batch_scaled_optimizer_factory,
+    make_optimizer_factory,
+)
 from jax_baselines.CrossQ.crossq import CrossQ
 from jax_baselines.DDPG.ddpg import DDPG
+from jax_baselines.FlashSAC.flashsac import FlashSAC
 from jax_baselines.SAC.sac import SAC
 from jax_baselines.TD3.td3 import TD3
 from jax_baselines.TD7.td7 import TD7
@@ -19,6 +28,12 @@ from replay_memory.replay_factory import make_replay_buffer
 def add_args(parser):
     parser.add_argument("--experiment_name", type=str, default="DPG", help="experiment name")
     parser.add_argument("--learning_rate", type=float, default=0.0000625, help="learning rate")
+    parser.add_argument(
+        "--learning_rate_end",
+        type=float,
+        default=None,
+        help="FlashSAC cosine schedule endpoint (default: half the initial rate)",
+    )
     parser.add_argument("--model_lib", type=str, default="flax", help="model lib")
     parser.add_argument("--env", type=str, default="Pendulum-v1", help="environment")
     add_env_args(parser)
@@ -59,7 +74,8 @@ def add_args(parser):
     parser.add_argument("--n_support", type=int, default=25, help="n_support for QRDQN,IQN,FQF")
     parser.add_argument("--mixture", type=str, default="truncated", help="mixture type")
     parser.add_argument("--quantile_drop", type=float, default=0.1, help="quantile_drop ratio")
-    parser.add_argument("--node", type=int, default=256, help="network node number")
+    parser.add_argument("--actor_node", type=int, default=None, help="actor hidden width")
+    parser.add_argument("--critic_node", type=int, default=None, help="critic hidden width")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
     parser.add_argument("--action_noise", type=float, default=0.1, help="action_noise")
     parser.add_argument("--optimizer", type=str, default="adopt", help="optimaizer")
@@ -98,12 +114,7 @@ def build_env(args):
         args.env,
         **env_builder_kwargs(args),
     )
-    policy_kwargs = {
-        "node": args.node,
-        "hidden_n": args.hidden_n,
-        "embedding_mode": "normal",
-    }
-    return env_builder, policy_kwargs
+    return env_builder, actor_critic_policy_kwargs(args)
 
 
 def _variant(args):
@@ -141,8 +152,20 @@ def _common(a):
         "replay_factory": make_replay_buffer,
         "use_checkpointing": a.use_checkpointing,
         "reward_normalization": (
-            a.algo == "XQC" if a.reward_normalization is None else a.reward_normalization
+            a.algo in ("XQC", "FlashSAC")
+            if a.reward_normalization is None
+            else a.reward_normalization
         ),
+    }
+
+
+def _sac(a):
+    return {
+        **_common(a),
+        "target_network_update_tau": a.target_update_tau,
+        "ent_coef": a.ent_coef if a.ent_coef is not None else "auto_0.01",
+        "sigma_target": a.sigma_target,
+        "actor_update_period": a.actor_update_period,
     }
 
 
@@ -161,15 +184,17 @@ ALGOS = {
             "action_noise": a.action_noise,
         },
     ),
-    "SAC": AlgoSpec(
-        SAC,
-        "sac",
+    "SAC": AlgoSpec(SAC, "sac", _sac),
+    "FlashSAC": AlgoSpec(
+        FlashSAC,
+        "flashsac",
         lambda a: {
-            **_common(a),
-            "target_network_update_tau": a.target_update_tau,
-            "ent_coef": a.ent_coef if a.ent_coef is not None else "auto_0.01",
-            "sigma_target": a.sigma_target,
-            "actor_update_period": a.actor_update_period,
+            **_sac(a),
+            "learning_rate_end": (
+                a.learning_rate / 2 if a.learning_rate_end is None else a.learning_rate_end
+            ),
+            "lr_transition_steps": max(1, int(a.steps) // a.train_freq * a.gradient_steps),
+            "optimizer_factory": make_optimizer_factory(a.optimizer, eps=1e-8),
         },
     ),
     "CrossQ": AlgoSpec(

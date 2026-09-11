@@ -1,5 +1,5 @@
 from collections.abc import Callable, Mapping, Sequence
-from typing import Any
+from typing import Any, Literal
 
 import flax
 import flax.linen as nn
@@ -13,7 +13,7 @@ from flax.linen.normalization import _canonicalize_axes, _compute_stats, _normal
 from jax import lax
 from jax.nn import initializers
 
-from model_builder.utils import ActorCriticFeatures, observation_role_keys
+from model_builder.utils import observation_role_keys
 
 
 class ResBlock(nn.Module):
@@ -130,11 +130,10 @@ class PreProcess(nn.Module):
     flatten: bool = True
     pre_postprocess: Callable = lambda x: x  # Identity function
     multiple: int = 1
-    paired: bool = False
+    role: Literal["actor", "critic"] = "actor"
 
     def setup(self):
-        self.role_keys = observation_role_keys(self.states_size, self.paired)
-        selected = {key for keys in self.role_keys.values() for key in keys}
+        self.observation_keys = observation_role_keys(self.states_size, self.role)
         self.embedding = {
             key: (
                 visual_embedding(self.embedding_mode, self.flatten, multiple=self.multiple)
@@ -142,34 +141,26 @@ class PreProcess(nn.Module):
                 else lambda x: x
             )
             for key, st in self.states_size.items()
-            if key in selected
+            if key in self.observation_keys and (self.role == "actor" or key.startswith("critic_"))
         }
 
     @nn.compact
-    def __call__(self, obses: dict[str, jnp.ndarray]) -> jnp.ndarray:
+    def __call__(self, obses: dict[str, jnp.ndarray], shared_features=None) -> jnp.ndarray:
+        features = {key: embed(obses[key]) for key, embed in self.embedding.items()}
+        if self.role == "critic":
+            if shared_features is None:
+                raise ValueError("Critic preprocessing requires Actor-owned unified features")
+            features.update(shared_features)
         return self.pre_postprocess(
-            jnp.concatenate(
-                [self.embedding[key](obses[key]) for key in self.role_keys["actor"]], axis=1
-            )
+            jnp.concatenate([features[key] for key in self.observation_keys], axis=1)
         )
 
-    def actor_critic(self, obses: dict[str, jnp.ndarray]) -> ActorCriticFeatures:
-        embedded = {key: pre(obses[key]) for key, pre in self.embedding.items()}
-        return ActorCriticFeatures(
-            actor=self.pre_postprocess(
-                jnp.concatenate([embedded[key] for key in self.role_keys["actor"]], axis=1)
-            ),
-            critic=self.pre_postprocess(
-                jnp.concatenate([embedded[key] for key in self.role_keys["critic"]], axis=1)
-            ),
-        )
-
-    @property
-    def output_size(self):
-        return sum(
-            pre(jnp.zeros((1, *self.states_size[key]))).shape[1]
-            for key, pre in self.embedding.items()
-        )
+    def shared_features(self, obses: dict[str, jnp.ndarray]):
+        return {
+            key: embed(obses[key])
+            for key, embed in self.embedding.items()
+            if key.startswith("unified_")
+        }
 
 
 PRNGKey = Any

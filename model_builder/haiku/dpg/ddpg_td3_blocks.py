@@ -19,7 +19,6 @@ import jax
 import jax.numpy as jnp
 
 from model_builder.haiku.layers import LOG_STD_MEAN, LOG_STD_SCALE
-from model_builder.utils import ActorCriticFeatures
 
 
 class Actor(hk.Module):
@@ -30,7 +29,7 @@ class Actor(hk.Module):
         self.hidden_n = hidden_n
         self.layer = hk.Linear
 
-    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
+    def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
         return hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [
@@ -40,7 +39,7 @@ class Actor(hk.Module):
                 ),
                 jax.nn.tanh,
             ]
-        )(features["actor"])
+        )(features)
 
 
 class GaussianActor(hk.Module):
@@ -51,7 +50,7 @@ class GaussianActor(hk.Module):
         self.hidden_n = hidden_n
         self.layer = hk.Linear
 
-    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
+    def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
         linear = hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [
@@ -60,7 +59,7 @@ class GaussianActor(hk.Module):
                     w_init=hk.initializers.RandomUniform(-0.03, 0.03),
                 )
             ]
-        )(features["actor"])
+        )(features)
         mu, log_std = jnp.split(linear, 2, axis=-1)
         return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(log_std / LOG_STD_SCALE)
 
@@ -72,8 +71,8 @@ class Critic(hk.Module):
         self.hidden_n = hidden_n
         self.layer = hk.Linear
 
-    def __call__(self, features: ActorCriticFeatures, actions: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([features["critic"], actions], axis=1)
+    def __call__(self, features: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+        concat = jnp.concatenate([features, actions], axis=1)
         return hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]

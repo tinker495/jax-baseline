@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from jax_baselines.core.checkpoint_state import ACCheckpointState
 from jax_baselines.core.checkpoint_store import (
     CheckpointStore,
     checkpoint_store_or_default,
@@ -84,8 +85,8 @@ class IMPALA_Family:
         self.cut_max = 1.0
         self.log_dir = log_dir
 
-        self.params = None
-        self.target_params = None
+        self.actor_params = None
+        self.critic_params = None
         self.optimizer_factory = require_optimizer_factory(optimizer_factory)
         self.optimizer = self._make_optimizer(self.learning_rate)
         self.model_builder = None
@@ -100,10 +101,17 @@ class IMPALA_Family:
             self.setup_model()
 
     def save_params(self, path):
-        self.checkpoint_store.save(path, self.params)
+        self.checkpoint_store.save(
+            path,
+            ACCheckpointState(actor_params=self.actor_params, critic_params=self.critic_params),
+        )
 
     def load_params(self, path):
-        self.params = self.target_params = jax.device_put(self.checkpoint_store.restore(path))
+        state = self.checkpoint_store.restore(path)
+        if not isinstance(state, ACCheckpointState):
+            raise TypeError("Expected ACCheckpointState with separate actor and critic parameters")
+        self.actor_params = jax.device_put(state.actor_params)
+        self.critic_params = jax.device_put(state.critic_params)
 
     def _make_optimizer(self, learning_rate):
         return self.optimizer_factory(learning_rate)
@@ -191,14 +199,12 @@ class IMPALA_Family:
         def builder():
             if action_type == "discrete":
 
-                def actor(actor_model, preproc, params, obses, key=None):
-                    prob = actor_model(
-                        params, key, preproc(params, key, convert_normalized_obs(obses))
-                    )
+                def actor(actor_model, actor_params, obses, key=None):
+                    prob = actor_model(actor_params, key, convert_normalized_obs(obses))
                     return jax.nn.softmax(prob)
 
-                def get_action_prob(actor, params, obses):
-                    prob = np.asarray(actor(params, obses))
+                def get_action_prob(actor, actor_params, obses):
+                    prob = np.asarray(actor(actor_params, obses))
                     action = np.random.choice(action_size[0], p=prob[0])
                     return action, np.log(prob[0][action])
 
@@ -207,14 +213,12 @@ class IMPALA_Family:
 
             elif action_type == "continuous":
 
-                def actor(actor_model, preproc, params, obses, key=None):
-                    mean, log_std = actor_model(
-                        params, key, preproc(params, key, convert_normalized_obs(obses))
-                    )
+                def actor(actor_model, actor_params, obses, key=None):
+                    mean, log_std = actor_model(actor_params, key, convert_normalized_obs(obses))
                     return mean, log_std
 
-                def get_action_prob(actor, params, obses):
-                    mean, log_std = jax.device_get(actor(params, obses))
+                def get_action_prob(actor, actor_params, obses):
+                    mean, log_std = jax.device_get(actor(actor_params, obses))
                     std = np.exp(log_std)
                     action = np.random.normal(mean, std)
                     return action, -(
@@ -292,7 +296,7 @@ class IMPALA_Family:
             for u in update:
                 u.set()
 
-            cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
+            cpu_param = jax.device_put(self.actor_params, jax.devices("cpu")[0])
             param_server = self.runtime.create_param_server(cpu_param)
 
             worker_replay_factory = require_replay_factory(
@@ -331,7 +335,7 @@ class IMPALA_Family:
                     pbar.set_description(self.description())
 
                 if steps % self.update_freq == 0:
-                    cpu_param = jax.device_put(self.params, jax.devices("cpu")[0])
+                    cpu_param = jax.device_put(self.actor_params, jax.devices("cpu")[0])
                     param_server.update_params(cpu_param)
                     for u in update:
                         u.set()

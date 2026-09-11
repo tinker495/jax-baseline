@@ -12,7 +12,8 @@ base:
   batch: 256
   target_update_tau: 1e-3
   learning_starts: 50000
-  node: 512
+  actor_node: 512
+  critic_node: 512
   hidden_n: 2
   optimizer: adam
 variants:

@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from copy import deepcopy
 from itertools import repeat
 
@@ -23,15 +24,16 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
         )
         self.actor_builder = self.get_actor_builder()
 
-        self.preproc, self.actor, self.critic, self.params = self.model_builder(
+        self.actor, self.critic, self.policy_params, self.critic_params = self.model_builder(
             next(self.key_seq), print_model=True
         )
-        self.target_params = deepcopy(self.params)
+        self.target_policy_params = deepcopy(self.policy_params)
+        self.target_critic_params = deepcopy(self.critic_params)
 
-        self.opt_state = self.optimizer.init(self.params)
-
-        self._get_actions = jax.jit(self._get_actions)
-        self._train_step = jax.jit(self._train_step)
+        self.opt_policy_state = self.optimizer.init(self.policy_params)
+        self.opt_critic_state = self.optimizer.init(self.critic_params)
+        self._get_actions: Callable = jax.jit(self._get_actions)
+        self._compiled_train_step: Callable = jax.jit(self._train_step)
 
     def get_actor_builder(self):
         gamma = self._gamma
@@ -44,7 +46,6 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
             def get_abs_td_error(
                 actor,
                 critic,
-                preproc,
                 params,
                 obses,
                 actions,
@@ -53,17 +54,18 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
                 terminateds,
                 key,
             ):
-                next_feature = preproc(params, key, convert_normalized_obs(nxtobses))
-                next_action = actor(params, key, next_feature)
-                next_q = critic(params, key, next_feature, next_action)
-                feature = preproc(params, key, convert_normalized_obs(obses))
-                q_values = critic(params, key, feature, actions)
+                nxtobses = convert_normalized_obs(nxtobses)
+                next_action = actor(params["policy"], key, nxtobses)
+                next_q = critic(params["critic"], params["policy"], key, nxtobses, next_action)
+                q_values = critic(
+                    params["critic"], params["policy"], key, convert_normalized_obs(obses), actions
+                )
                 target = rewards + gamma * (1.0 - terminateds) * next_q
                 td_error = q_values - target
                 return jnp.squeeze(jnp.abs(td_error))
 
-            def actor(actor, preproc, params, obses, key):
-                return actor(params, key, preproc(params, key, convert_normalized_obs(obses)))
+            def actor(actor, params, obses, key):
+                return actor(params["policy"], key, convert_normalized_obs(obses))
 
             def get_action(actor, params, obs, noise, epsilon, key):
                 actions = np.clip(np.asarray(actor(params, obs, key)) + noise() * epsilon, -1, 1)[0]
@@ -77,13 +79,25 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
         return builder
 
     def _invoke_train_step(self, steps, data):
-        return self._train_step(self.params, self.target_params, self.opt_state, None, **data)
+        return self._compiled_train_step(
+            self.policy_params,
+            self.critic_params,
+            self.target_policy_params,
+            self.target_critic_params,
+            self.opt_policy_state,
+            self.opt_critic_state,
+            next(self.key_seq),
+            **data,
+        )
 
     def _train_step(
         self,
-        params,
-        target_params,
-        opt_state,
+        policy_params,
+        critic_params,
+        target_policy_params,
+        target_critic_params,
+        opt_policy_state,
+        opt_critic_state,
         key,
         obses,
         actions,
@@ -102,23 +116,57 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
         rewards_batch = rewards[batch_idxes]
         nxtobses_batch = jax.tree.map(lambda value: value[batch_idxes], nxtobses)
         not_terminateds_batch = not_terminateds[batch_idxes]
-        weights_batch = weights[batch_idxes]
+        weights_batch = jnp.broadcast_to(jnp.asarray(weights), (self.batch_size,))[batch_idxes]
 
         def f(carry, data):
-            params, opt_state, key = carry
+            policy_params, critic_params, opt_policy_state, opt_critic_state, key = carry
             obses, actions, rewards, nxtobses, not_terminateds, weights = data
             key, *subkeys = jax.random.split(key, 3)
-            targets = self._target(target_params, rewards, nxtobses, not_terminateds, subkeys[0])
-            (total_loss, (critic_loss, actor_loss, abs_error)), grad = jax.value_and_grad(
-                self._loss, has_aux=True
-            )(params, obses, actions, targets, weights, subkeys[1])
-            updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-            params = optax.apply_updates(params, updates)
-            return (params, opt_state, key), (total_loss, critic_loss, actor_loss, abs_error)
+            targets = self._target(
+                target_policy_params,
+                target_critic_params,
+                rewards,
+                nxtobses,
+                not_terminateds,
+                subkeys[0],
+            )
+            (_, (critic_loss, actor_loss, abs_error)), (actor_grad, critic_grad) = (
+                jax.value_and_grad(self._loss, argnums=(0, 1), has_aux=True)(
+                    policy_params,
+                    critic_params,
+                    obses,
+                    actions,
+                    targets,
+                    weights,
+                    subkeys[1],
+                )
+            )
+            actor_updates, opt_policy_state = self.optimizer.update(
+                actor_grad, opt_policy_state, params=policy_params
+            )
+            critic_updates, opt_critic_state = self.optimizer.update(
+                critic_grad, opt_critic_state, params=critic_params
+            )
+            return (
+                optax.apply_updates(policy_params, actor_updates),
+                optax.apply_updates(critic_params, critic_updates),
+                opt_policy_state,
+                opt_critic_state,
+                key,
+            ), (critic_loss, actor_loss, abs_error)
 
-        (params, opt_state, key), (total_loss, critic_loss, actor_loss, abs_error) = jax.lax.scan(
+        (
+            (
+                policy_params,
+                critic_params,
+                opt_policy_state,
+                opt_critic_state,
+                key,
+            ),
+            (critic_loss, actor_loss, abs_error),
+        ) = jax.lax.scan(
             f,
-            (params, opt_state, key),
+            (policy_params, critic_params, opt_policy_state, opt_critic_state, key),
             (
                 obses_batch,
                 actions_batch,
@@ -128,30 +176,44 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
                 weights_batch,
             ),
         )
-        target_params = soft_update(params, target_params, self.target_network_update_tau)
+        target_policy_params = soft_update(
+            policy_params, target_policy_params, self.target_network_update_tau
+        )
+        target_critic_params = soft_update(
+            critic_params, target_critic_params, self.target_network_update_tau
+        )
         new_priorities = jnp.reshape(abs_error, (-1,))
         return (
-            params,
-            target_params,
-            opt_state,
+            policy_params,
+            critic_params,
+            target_policy_params,
+            target_critic_params,
+            opt_policy_state,
+            opt_critic_state,
             jnp.mean(critic_loss),
             -jnp.mean(actor_loss),
             new_priorities,
         )
 
-    def _loss(self, params, obses, actions, targets, weights, key):
-        feature = self.preproc(params, key, obses)
-        vals = self.critic(params, key, feature, actions)
+    def _loss(self, policy_params, critic_params, obses, actions, targets, weights, key):
+        vals = self.critic(critic_params, policy_params, key, obses, actions)
         error = jnp.squeeze(vals - targets)
         critic_loss = jnp.mean(jnp.square(error) * weights)
-        policy = self.actor(params, key, feature)
-        vals = self.critic(jax.lax.stop_gradient(params), key, feature, policy)
+        policy = self.actor(policy_params, key, obses)
+        vals = self.critic(jax.lax.stop_gradient(critic_params), policy_params, key, obses, policy)
         actor_loss = jnp.mean(-vals)
         total_loss = critic_loss + actor_loss
         return total_loss, (critic_loss, -actor_loss, jnp.abs(error))
 
-    def _target(self, target_params, rewards, nxtobses, not_terminateds, key):
-        next_feature = self.preproc(target_params, key, nxtobses)
-        next_action = self.actor(target_params, key, next_feature)
-        next_q = self.critic(target_params, key, next_feature, next_action)
+    def _target(
+        self,
+        target_policy_params,
+        target_critic_params,
+        rewards,
+        nxtobses,
+        not_terminateds,
+        key,
+    ):
+        next_action = self.actor(target_policy_params, key, nxtobses)
+        next_q = self.critic(target_critic_params, target_policy_params, key, nxtobses, next_action)
         return (not_terminateds * next_q * self._gamma) + rewards

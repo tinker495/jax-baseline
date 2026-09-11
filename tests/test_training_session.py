@@ -318,11 +318,9 @@ class FakeOnPolicyAgent(Actor_Critic_Policy_Gradient_Family):
             {"unified_obs": np.array([1.0, 2.0])}
         )
         self.conv_action = "conv-action"
-        # Mirror the real base __init__ defaults (base_class.py:68,70) so the
-        # hardened prepare_run (direct attribute access) keeps its no-op
-        # semantics: lr_annealing off and params unset.
         self.lr_annealing = False
-        self.params = None
+        self.actor_params = None
+        self.critic_params = None
         self.obs_rms = None
         self.memory_backend = "cpu"
         self.memory_device = None
@@ -444,17 +442,17 @@ class _EmptyBuffer:
     [
         (
             A2C,
-            ("params", "opt-state", 1, 2, 3, 4),
+            ("actor-params", "critic-params", "actor-opt-state", "critic-opt-state", 1, 2, 3, 4),
             ["critic_loss", "actor_loss", "entropy_loss", "mean_target"],
         ),
         (
             SurrogatePolicyGradient,
-            ("params", "opt-state", 1, 2, 3, 4),
+            ("actor-params", "critic-params", "actor-opt-state", "critic-opt-state", 1, 2, 3, 4),
             ["critic_loss", "actor_loss", "entropy_loss", "mean_target"],
         ),
         (
             TPPO,
-            ("params", "opt-state", 1, 2, 3, 4, 5),
+            ("actor-params", "critic-params", "actor-opt-state", "critic-opt-state", 1, 2, 3, 4, 5),
             [
                 "critic_loss",
                 "actor_loss",
@@ -468,8 +466,10 @@ class _EmptyBuffer:
 def test_on_policy_train_logger_is_explicit_and_not_retained(algorithm, train_result, metric_names):
     agent = algorithm.__new__(algorithm)
     agent.buffer = _EmptyBuffer()
-    agent.params = "old-params"
-    agent.opt_state = "old-opt-state"
+    agent.actor_params = "old-actor-params"
+    agent.critic_params = "old-critic-params"
+    agent.actor_opt_state = "old-actor-opt-state"
+    agent.critic_opt_state = "old-critic-opt-state"
     agent.key_seq = iter(["key-1", "key-2"])
     agent._train_step = lambda *args, **kwargs: train_result
     logger_run = _MetricLoggerRun()

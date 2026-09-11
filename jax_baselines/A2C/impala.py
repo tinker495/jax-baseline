@@ -16,10 +16,11 @@ class IMPALA(IMPALA_Family):
         )
         self.actor_builder = self.get_actor_builder()
 
-        self.preproc, self.actor, self.critic, self.params = self.model_builder(
+        self.actor, self.critic, self.actor_params, self.critic_params = self.model_builder(
             next(self.key_seq), print_model=True
         )
-        self.opt_state = self.optimizer.init(self.params)
+        self.actor_opt_state = self.optimizer.init(self.actor_params)
+        self.critic_opt_state = self.optimizer.init(self.critic_params)
 
         self._train_step = jax.jit(self._train_step)
         self.preprocess = jax.jit(self.preprocess)
@@ -33,16 +34,20 @@ class IMPALA(IMPALA_Family):
         data = self.buffer.sample()
 
         (
-            self.params,
-            self.opt_state,
+            self.actor_params,
+            self.critic_params,
+            self.actor_opt_state,
+            self.critic_opt_state,
             critic_loss,
             actor_loss,
             entropy_loss,
             rho,
             targets,
         ) = self._train_step(
-            self.params,
-            self.opt_state,
+            self.actor_params,
+            self.critic_params,
+            self.actor_opt_state,
+            self.critic_opt_state,
             next(self.key_seq),
             data[0],
             data[1],
@@ -68,7 +73,8 @@ class IMPALA(IMPALA_Family):
 
     def preprocess(
         self,
-        params,
+        actor_params,
+        critic_params,
         key,
         obses,
         actions,
@@ -88,15 +94,14 @@ class IMPALA(IMPALA_Family):
         truncateds = jnp.stack(truncateds)
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
-        feature = jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, obses)
-        value = jax.vmap(self.critic, in_axes=(None, None, 0))(params, key, feature)
-        next_value = jax.vmap(self.critic, in_axes=(None, None, 0))(
-            params,
-            key,
-            jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, nxtobses),
+        value = jax.vmap(self.critic, in_axes=(None, None, None, 0))(
+            critic_params, actor_params, key, obses
+        )
+        next_value = jax.vmap(self.critic, in_axes=(None, None, None, 0))(
+            critic_params, actor_params, key, nxtobses
         )
         pi_prob = jax.vmap(self.get_logprob, in_axes=(0, 0, None))(
-            jax.vmap(self.actor, in_axes=(None, None, 0))(params, key, feature),
+            jax.vmap(self.actor, in_axes=(None, None, 0))(actor_params, key, obses),
             actions,
             key,
         )
@@ -112,8 +117,10 @@ class IMPALA(IMPALA_Family):
 
     def _train_step(
         self,
-        params,
-        opt_state,
+        actor_params,
+        critic_params,
+        actor_opt_state,
+        critic_opt_state,
         key,
         obses,
         actions,
@@ -124,7 +131,8 @@ class IMPALA(IMPALA_Family):
         truncateds,
     ):
         obses, actions, vs, rho, adv = self.preprocess(
-            params,
+            actor_params,
+            critic_params,
             key,
             obses,
             actions,
@@ -134,14 +142,28 @@ class IMPALA(IMPALA_Family):
             terminateds,
             truncateds,
         )
-        (_total_loss, (critic_loss, actor_loss, entropy_loss),), grad = jax.value_and_grad(
-            self._loss, has_aux=True
-        )(params, obses, actions, vs, adv, key)
-        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-        params = optax.apply_updates(params, updates)
+        (
+            (
+                _total_loss,
+                (critic_loss, actor_loss, entropy_loss),
+            ),
+            (actor_grad, critic_grad),
+        ) = jax.value_and_grad(self._loss, argnums=(0, 1), has_aux=True)(
+            actor_params, critic_params, obses, actions, vs, adv, key
+        )
+        actor_updates, actor_opt_state = self.optimizer.update(
+            actor_grad, actor_opt_state, params=actor_params
+        )
+        critic_updates, critic_opt_state = self.optimizer.update(
+            critic_grad, critic_opt_state, params=critic_params
+        )
+        actor_params = optax.apply_updates(actor_params, actor_updates)
+        critic_params = optax.apply_updates(critic_params, critic_updates)
         return (
-            params,
-            opt_state,
+            actor_params,
+            critic_params,
+            actor_opt_state,
+            critic_opt_state,
             critic_loss,
             actor_loss,
             entropy_loss,
@@ -149,12 +171,11 @@ class IMPALA(IMPALA_Family):
             jnp.mean(vs),
         )
 
-    def _loss_discrete(self, params, obses, actions, vs, adv, key):
-        feature = self.preproc(params, key, obses)
-        vals = self.critic(params, key, feature)
+    def _loss_discrete(self, actor_params, critic_params, obses, actions, vs, adv, key):
+        vals = self.critic(critic_params, actor_params, key, obses)
         critic_loss = jnp.mean(jnp.square(vs - vals))
 
-        logit = self.actor(params, key, feature)
+        logit = self.actor(actor_params, key, obses)
         prob, log_prob = self.get_logprob(logit, actions, key, out_prob=True)
         entropy_h = -jnp.sum(prob * jnp.log(jnp.maximum(prob, 1e-8)), axis=-1, keepdims=True)
         if self.use_entropy_adv_shaping:
@@ -172,12 +193,11 @@ class IMPALA(IMPALA_Family):
             total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
-    def _loss_continuous(self, params, obses, actions, vs, adv, key):
-        feature = self.preproc(params, key, obses)
-        vals = self.critic(params, key, feature)
+    def _loss_continuous(self, actor_params, critic_params, obses, actions, vs, adv, key):
+        vals = self.critic(critic_params, actor_params, key, obses)
         critic_loss = jnp.mean(jnp.square(vs - vals))
 
-        prob = self.actor(params, key, feature)
+        prob = self.actor(actor_params, key, obses)
         prob, log_prob = self.get_logprob(prob, actions, key, out_prob=True)
         mu, log_std = prob
         # Paper's Gaussian entropy: H = sum(log(sigma)) + 0.5*d*(1+log(2*pi))
