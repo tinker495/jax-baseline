@@ -35,6 +35,11 @@ def metric_leaves(values: Mapping[str, Any]) -> dict[str, Any]:
     return leaves
 
 
+@jax.jit
+def _pack_jax_metrics(values: tuple[jax.Array, ...]) -> jax.Array:
+    return jnp.stack([value.mean() for value in values])
+
+
 class EnvMetrics:
     """Keep bounded sums on the producing device; transfer only when logging."""
 
@@ -48,13 +53,21 @@ class EnvMetrics:
         if not leaves:
             return
         array_module = jnp if any(isinstance(v, jax.Array) for v in leaves.values()) else np
-        scalars = []
+        arrays = []
         for key, value in leaves.items():
             array = array_module.asarray(value)
             if array.dtype.kind not in "biuf" or not array.size:
                 raise ValueError(f"Environment metric {key!r} must contain real numeric values")
-            scalars.append(array.mean())
-        self.add_batch(tuple(leaves), array_module.stack(scalars), weight)
+            arrays.append(array)
+        self.add_batch(
+            tuple(leaves),
+            (
+                _pack_jax_metrics(tuple(arrays))
+                if array_module is jnp
+                else np.stack([array.mean() for array in arrays])
+            ),
+            weight,
+        )
 
     def add_batch(self, names: tuple[str, ...], values: Any, weight: int = 1) -> None:
         """Accept a packed native metric vector without per-term device operations."""
