@@ -130,26 +130,18 @@ class IMPALA_Family:
     def get_logprob_discrete(self, prob, action, key, out_prob=False):
         prob = jnp.clip(jax.nn.softmax(prob), 1e-5, 1.0)
         action = action.astype(jnp.int32)
-        if out_prob:
-            return prob, jnp.log(jnp.take_along_axis(prob, action, axis=1))
-        else:
-            return jnp.log(jnp.take_along_axis(prob, action, axis=1))
+        log_prob = jnp.log(jnp.take_along_axis(prob, action, axis=1))
+        return (prob, log_prob) if out_prob else log_prob
 
     def get_logprob_continuous(self, prob, action, key, out_prob=False):
         mu, log_std = prob
         std = jnp.exp(log_std)
-        if out_prob:
-            return prob, -(
-                0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True)
-                + jnp.sum(log_std, axis=-1, keepdims=True)
-                + 0.5 * jnp.log(2 * jnp.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
-            )
-        else:
-            return -(
-                0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True)
-                + jnp.sum(log_std, axis=-1, keepdims=True)
-                + 0.5 * jnp.log(2 * jnp.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
-            )
+        log_prob = -(
+            0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True)
+            + jnp.sum(log_std, axis=-1, keepdims=True)
+            + 0.5 * jnp.log(2 * jnp.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
+        )
+        return (prob, log_prob) if out_prob else log_prob
 
     def _compute_vtrace(
         self, pi_prob, mu_log_prob, rewards, terminateds, truncateds, value, next_value
