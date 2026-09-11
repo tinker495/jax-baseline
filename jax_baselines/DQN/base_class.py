@@ -233,8 +233,8 @@ class Q_Network_Family:
             env_info = self.env.get_info()
             if "autoreset_steps" in env_info:
                 self.autoreset_steps = env_info["autoreset_steps"]
-                if not isinstance(self.autoreset_steps, bool):
-                    raise TypeError("Environment autoreset_steps must be a bool")
+        if not isinstance(self.autoreset_steps, bool):
+            raise TypeError("Environment autoreset_steps must be a bool")
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
         print("worker_size : ", self.worker_size)
