@@ -47,12 +47,11 @@ FAMILY_SCRIPTS = {
 def _build_args(merged):
     argv = []
     for key, value in merged.items():
-        flag = f"--{key}"
-        if isinstance(value, bool):
-            if value:
-                argv.append(flag)
+        if value is False:
             continue
-        argv.extend([flag, str(value)])
+        argv.append(f"--{key}")
+        if value is not True:
+            argv.append(str(value))
     return argv
 
 
