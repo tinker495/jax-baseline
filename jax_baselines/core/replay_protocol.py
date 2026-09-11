@@ -10,6 +10,28 @@ from typing import Any, Literal, Protocol
 
 import jax
 
+from jax_baselines.core.env_protocols import Observation
+
+
+def select_replay_device(observations: Observation, *, required: bool) -> jax.Device | None:
+    """Follow a single GPU observation device, or require an available GPU."""
+    devices: set[jax.Device] = set()
+    for value in observations.values():
+        if not isinstance(value, jax.Array):
+            devices.clear()
+            break
+        devices.update(value.devices())
+    if len(devices) == 1:
+        device = devices.pop()
+        if device.platform == "gpu":
+            return device
+    if not required:
+        return None
+    try:
+        return jax.devices("gpu")[0]
+    except (RuntimeError, IndexError) as error:
+        raise ValueError("memory_backend='gpu' requires a JAX GPU device") from error
+
 
 @dataclass(frozen=True)
 class PriorityNeed:

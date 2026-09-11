@@ -33,6 +33,12 @@ def add_args(parser):
     parser.add_argument("--target_update", type=int, default=2000, help="target update intervals")
     parser.add_argument("--batch", type=int, default=64, help="batch size")
     parser.add_argument("--buffer_size", type=float, default=200000, help="buffer_size")
+    parser.add_argument(
+        "--memory_backend",
+        choices=("auto", "cpu", "gpu"),
+        default="auto",
+        help="replay storage device; auto follows environment observations",
+    )
     parser.add_argument("--double", action="store_true")
     parser.add_argument("--dueling", action="store_true")
     parser.add_argument("--per", action="store_true")
@@ -111,6 +117,7 @@ def _common(a):
         "learning_rate": a.learning_rate,
         "batch_size": a.batch,
         "buffer_size": int(a.buffer_size),
+        "memory_backend": a.memory_backend,
         "target_network_update_freq": a.target_update,
         "prioritized_replay": a.per,
         "double_q": a.double,
@@ -191,6 +198,7 @@ ALGOS = {
             "learning_rate": a.learning_rate,
             "batch_size": a.batch,
             "buffer_size": int(a.buffer_size),
+            "memory_backend": a.memory_backend,
             "off_policy_fix": a.off_policy_fix,
             "scaled_by_reset": a.scaled_by_reset,
             "munchausen": a.munchausen,
@@ -219,6 +227,7 @@ ALGOS = {
             "learning_rate": a.learning_rate,
             "batch_size": a.batch,
             "buffer_size": int(a.buffer_size),
+            "memory_backend": a.memory_backend,
             "exploration_final_eps": a.final_eps,
             "param_noise": a.noisynet,
             "off_policy_fix": a.off_policy_fix,

@@ -84,6 +84,7 @@ def test_q_network_constructor_uses_injected_optimizer_factory(monkeypatch):
         optimizer_factory=factory,
         learning_rate=0.125,
         _init_setup_model=False,
+        memory_backend="cpu",
     )
 
     assert agent.optimizer is optimizer

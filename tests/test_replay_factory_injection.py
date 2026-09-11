@@ -52,6 +52,9 @@ class FakeWorkerReplayFactory:
 
 def test_q_network_family_uses_injected_replay_factory():
     agent = Q_Network_Family.__new__(Q_Network_Family)
+    agent.memory_backend = "cpu"
+    agent.memory_device = None
+    agent.seed = 42
     fake_buffer = object()
     factory = FakeLocalReplayFactory(fake_buffer)
     agent.replay_factory = factory
@@ -79,6 +82,7 @@ def test_q_network_family_uses_injected_replay_factory():
             gamma=0.9,
             priority=PriorityNeed(alpha=0.7, eps=0.01),
             compress_observations=True,
+            seed=42,
         )
     ]
 
@@ -292,6 +296,9 @@ def test_spr_uses_injected_transition_replay_factory():
     from jax_baselines.SPR.spr import SPR
 
     agent = SPR.__new__(SPR)
+    agent.memory_backend = "cpu"
+    agent.memory_device = None
+    agent.seed = 42
     fake_buffer = object()
     factory = FakeLocalReplayFactory(fake_buffer)
     agent.replay_factory = factory
@@ -321,6 +328,7 @@ def test_spr_uses_injected_transition_replay_factory():
             priority=PriorityNeed(alpha=0.6, eps=0.01),
             compress_observations=False,
             prediction_depth=5,
+            seed=42,
         )
     ]
 

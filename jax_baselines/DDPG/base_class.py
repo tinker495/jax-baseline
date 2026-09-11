@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from copy import deepcopy
 from typing import Literal
 
@@ -19,6 +20,7 @@ from jax_baselines.core.replay_protocol import (
     PriorityNeed,
     ReplayBufferFactory,
     require_replay_factory,
+    select_replay_device,
 )
 from jax_baselines.core.rollout import (
     ActionSelection,
@@ -40,7 +42,7 @@ class Deteministic_Policy_Gradient_Family:
 
     def __init__(
         self,
-        env_builder: callable,
+        env_builder: Callable,
         model_builder_maker,
         num_workers=1,
         eval_eps=20,
@@ -129,15 +131,7 @@ class Deteministic_Policy_Gradient_Family:
                 initial_obs = self._initial_reset[0]
             else:
                 initial_obs = self.env.current_obs()
-            if all(isinstance(value, jax.Array) for value in initial_obs.values()):
-                devices = set().union(*(value.devices() for value in initial_obs.values()))
-                if len(devices) == 1 and next(iter(devices)).platform == "gpu":
-                    self.memory_device = next(iter(devices))
-            if memory_backend == "gpu" and self.memory_device is None:
-                try:
-                    self.memory_device = jax.devices("gpu")[0]
-                except RuntimeError as error:
-                    raise ValueError("memory_backend='gpu' requires a JAX GPU device") from error
+            self.memory_device = select_replay_device(initial_obs, required=memory_backend == "gpu")
             if self.memory_device is not None:
                 self.memory_backend = "gpu"
         print("memory backend : ", self.memory_backend)

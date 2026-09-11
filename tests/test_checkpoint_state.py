@@ -256,6 +256,8 @@ def test_qnet_reward_normalizer_statistics_round_trip_without_partial_returns():
     with tempfile.TemporaryDirectory() as d:
         src.save_params(d)
         dst = Q_Network_Family.__new__(Q_Network_Family)
+        dst.memory_backend = "cpu"
+        dst.memory_device = None
         dst.checkpoint_store = FileCheckpointStore()
         dst.reward_normalizer = RewardNormalizer(worker_size=3, gamma=0.99)
         dst.load_params(d)
@@ -275,6 +277,8 @@ def test_qnet_legacy_checkpoint_clears_partial_discounted_returns():
     with tempfile.TemporaryDirectory() as d:
         src.save_params(d)
         dst = Q_Network_Family.__new__(Q_Network_Family)
+        dst.memory_backend = "cpu"
+        dst.memory_device = None
         dst.checkpoint_store = FileCheckpointStore()
         dst.reward_normalizer = RewardNormalizer(worker_size=2, gamma=0.99)
         dst.reward_normalizer.record(

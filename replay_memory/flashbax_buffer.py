@@ -7,7 +7,7 @@ import jax
 import jax.numpy as jnp
 from flashbax.buffers import prioritised_trajectory_buffer, sum_tree, trajectory_buffer
 
-from jax_baselines.core.replay_protocol import LocalReplayNeed
+from jax_baselines.core.replay_protocol import LocalReplayNeed, SelfPredictionReplayNeed
 
 
 class FlashbaxReplayBuffer:
@@ -31,7 +31,10 @@ class FlashbaxReplayBuffer:
             self.device = need.device
         self.max_size = need.buffer_size
         self.worker_size = need.worker_size
-        self.n_step = need.n_step
+        self.prediction_depth = (
+            need.prediction_depth if isinstance(need, SelfPredictionReplayNeed) else None
+        )
+        self.n_step = need.n_step if self.prediction_depth is None else 1
         self.gamma = need.gamma
         self.priority = need.priority
         self.observation_space = need.observation_space
@@ -76,6 +79,9 @@ class FlashbaxReplayBuffer:
                 },
                 "terminateds": jnp.zeros((1,), dtype=jnp.float32),
             }
+            if self.prediction_depth is not None:
+                example["sequence_index"] = jnp.zeros((), dtype=jnp.int32)
+                example["episode_ends"] = jnp.zeros((), dtype=bool)
             self.state = jax.jit(self.buffer.init)(example)
             self._pending = (
                 jax.tree.map(
@@ -151,6 +157,12 @@ class FlashbaxReplayBuffer:
         )
 
     def _add(self, state, pending, batch, truncated, active):
+        if self.prediction_depth is not None:
+            batch = {
+                **batch,
+                "sequence_index": state.current_index.reshape((1,)),
+                "episode_ends": batch["terminateds"].reshape(-1).astype(bool) | truncated,
+            }
         if self.n_step == 1:
             return self._append(state, batch, active), pending
         staged, lengths = pending
@@ -246,22 +258,61 @@ class FlashbaxReplayBuffer:
         key, sample_key = jax.random.split(key)
         if self.priority is None:
             sample = trajectory_buffer.sample(state, sample_key, batch_size, 1, 1)
-            return key, jax.tree.map(lambda value: value[:, 0], sample.experience)
+            batch = jax.tree.map(lambda value: value[:, 0], sample.experience)
+            if self.prediction_depth is not None:
+                batch = self._sample_sequence(state, batch)
+            return key, batch
         sample = prioritised_trajectory_buffer.prioritised_sample(
             state, sample_key, batch_size, 1, 1
         )
         batch = jax.tree.map(lambda value: value[:, 0], sample.experience)
-        # ponytail: O(capacity) minimum preserves cpprb's global IS normalization;
-        # use a min tree if prioritized replay profiling makes this significant.
-        leaves = state.sum_tree_state.nodes[2**state.sum_tree_state.tree_depth - 1 :][
-            : self.max_size
-        ]
-        minimum = jnp.min(jnp.where(leaves > 0, leaves, jnp.inf))
         sampled_priorities = sum_tree.get_batch(state.sum_tree_state, sample.indices)
+        if self.prediction_depth is not None:
+            batch = self._sample_sequence(state, batch)
+            minimum = jnp.min(sampled_priorities)
+        else:
+            # ponytail: O(capacity) minimum preserves cpprb's global IS normalization;
+            # use a min tree if prioritized replay profiling makes this significant.
+            leaves = state.sum_tree_state.nodes[2**state.sum_tree_state.tree_depth - 1 :][
+                : self.max_size
+            ]
+            minimum = jnp.min(jnp.where(leaves > 0, leaves, jnp.inf))
         return key, {
             **batch,
             "weights": (minimum / sampled_priorities) ** beta,
             "indexes": sample.indices,
+        }
+
+    def _sample_sequence(self, state, starts):
+        assert self.prediction_depth is not None
+        offsets = jnp.arange(self.prediction_depth)
+        indexes = (starts["sequence_index"][:, None] + offsets) % self.max_size
+        episode_ends = state.experience["episode_ends"][0, indexes]
+        available = jnp.where(
+            state.is_full,
+            (state.current_index - starts["sequence_index"] - 1) % self.max_size + 1,
+            state.current_index - starts["sequence_index"],
+        )
+        filled = (offsets < available[:, None]) & (
+            jnp.cumsum(episode_ends, axis=1) - episode_ends == 0
+        )
+        # Repeat the final valid transition for padding; never expose a reset or
+        # overwritten row as a future observation, including truncation bootstrap.
+        indexes = (
+            starts["sequence_index"][:, None]
+            + jnp.minimum(offsets, jnp.sum(filled, axis=1)[:, None] - 1)
+        ) % self.max_size
+        batch = jax.tree.map(lambda value: value[0, indexes], state.experience)
+        return {
+            "obses": jax.tree.map(
+                lambda obs, next_obs: jnp.concatenate((obs[:, :1], next_obs), axis=1),
+                batch["obses"],
+                batch["nxtobses"],
+            ),
+            "actions": batch["actions"],
+            "rewards": batch["rewards"][..., 0],
+            "terminateds": batch["terminateds"][..., 0].astype(bool),
+            "filled": filled,
         }
 
     def update_priorities(self, indexes, priorities):
