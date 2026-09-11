@@ -8,11 +8,20 @@ experiment runners inject concrete implementations from ``experiments``.
 from __future__ import annotations
 
 import os
-from typing import Any, Iterable, Iterator, Optional, Protocol, runtime_checkable
+from collections.abc import Iterable, Iterator
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
-class LoggerRun(Protocol):
+class MetricLogger(Protocol):
+    """Scalar sink shared by environment adapters and experiment loggers."""
+
+    def log_metric(self, key: str, value: Any, step: int | None = None) -> None:
+        ...
+
+
+@runtime_checkable
+class LoggerRun(MetricLogger, Protocol):
     """The stable contract the Algorithm Core logs through inside a run.
 
     Every backend implements the whole surface. ``log_histogram`` and
@@ -24,10 +33,7 @@ class LoggerRun(Protocol):
     def log_param(self, hparam_dict: dict) -> None:
         ...
 
-    def log_metric(self, key: str, value: Any, step: Optional[int] = None) -> None:
-        ...
-
-    def log_histogram(self, key: str, value: Any, step: Optional[int] = None) -> None:
+    def log_histogram(self, key: str, value: Any, step: int | None = None) -> None:
         ...
 
     def declare_multiline_layout(self, eps: Iterable[float]) -> None:
@@ -48,10 +54,10 @@ class NoOpLoggerRun:
     def log_param(self, hparam_dict: dict) -> None:
         return None
 
-    def log_metric(self, key: str, value: Any, step: Optional[int] = None) -> None:
+    def log_metric(self, key: str, value: Any, step: int | None = None) -> None:
         return None
 
-    def log_histogram(self, key: str, value: Any, step: Optional[int] = None) -> None:
+    def log_histogram(self, key: str, value: Any, step: int | None = None) -> None:
         return None
 
     def declare_multiline_layout(self, eps: Iterable[Any]) -> None:
@@ -64,7 +70,7 @@ class NoOpLoggerRun:
 class NoOpLogger:
     """Protocol-safe logger used when no experiment adapter is injected."""
 
-    def __init__(self, run_name: str, experiment_name: str, local_dir: str, agent: Optional[Any]):
+    def __init__(self, run_name: str, experiment_name: str, local_dir: str, agent: Any | None):
         self.run = NoOpLoggerRun(local_dir)
 
     def log_hparams(self, agent_or_hparams: Any) -> None:
