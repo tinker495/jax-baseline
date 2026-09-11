@@ -6,13 +6,29 @@ cpprb-backed implementations directly.
 """
 
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
+
+import jax
 
 
 @dataclass(frozen=True)
 class PriorityNeed:
     alpha: float
     eps: float
+
+
+class ReplayWriter(Protocol):
+    def add(
+        self,
+        obs_t,
+        action,
+        reward,
+        nxtobs_t,
+        terminated,
+        truncated=False,
+        store_mask=None,
+    ) -> None:
+        ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -26,6 +42,9 @@ class LocalReplayNeed:
     priority: PriorityNeed | None = None
     compress_observations: bool = False
     n_frames: int = 4
+    memory_backend: Literal["cpu", "gpu"] = "cpu"
+    device: jax.Device | None = None
+    seed: int = 0
 
 
 @dataclass(frozen=True, kw_only=True)

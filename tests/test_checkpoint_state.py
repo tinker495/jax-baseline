@@ -150,6 +150,8 @@ def test_checkpoint_round_trip(cls):
     with tempfile.TemporaryDirectory() as d:
         src.save_params(d)
         dst = cls.__new__(cls)
+        dst.memory_backend = "cpu"
+        dst.memory_device = None
         dst.checkpoint_store = FileCheckpointStore()
         dst.simba = False
         dst.reward_normalizer = None
@@ -194,6 +196,8 @@ def test_simba_obs_rms_round_trip():
     with tempfile.TemporaryDirectory() as d:
         src.save_params(d)
         dst = DDPG.__new__(DDPG)
+        dst.memory_backend = "cpu"
+        dst.memory_device = None
         dst.checkpoint_store = FileCheckpointStore()
         dst.simba = True
         dst.reward_normalizer = None
@@ -227,6 +231,8 @@ def test_dpg_reward_normalizer_statistics_round_trip_without_partial_returns():
     with tempfile.TemporaryDirectory() as d:
         src.save_params(d)
         dst = DDPG.__new__(DDPG)
+        dst.memory_backend = "cpu"
+        dst.memory_device = None
         dst.checkpoint_store = FileCheckpointStore()
         dst.ckpt = _scaffold()
         dst.simba = False
@@ -296,6 +302,8 @@ def test_dpg_checkpoint_without_reward_stats_clears_partial_discounted_returns()
     with tempfile.TemporaryDirectory() as d:
         src.save_params(d)
         dst = DDPG.__new__(DDPG)
+        dst.memory_backend = "cpu"
+        dst.memory_device = None
         dst.checkpoint_store = FileCheckpointStore()
         dst.ckpt = _scaffold()
         dst.simba = False

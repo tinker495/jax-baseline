@@ -48,7 +48,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
             raise ValueError("actor_update_period must be greater than 0")
 
         self._ent_coef = ent_coef
-        self.ent_coef_learning_rate = 1e-4
+        self.ent_coef_learning_rate = 3e-4
         self.actor_update_period = actor_update_period
 
         super().__init__(env_builder, model_builder_maker, **kwargs)

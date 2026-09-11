@@ -70,6 +70,19 @@ def make_replay_buffer(need: LocalReplayNeed):
     - For n_step only -> NstepReplayBuffer
     - Otherwise -> ReplayBuffer
     """
+    if need.memory_backend not in ("cpu", "gpu"):
+        raise ValueError("Replay memory_backend must be resolved to 'cpu' or 'gpu'")
+    if need.memory_backend == "gpu":
+        if isinstance(need, SelfPredictionReplayNeed):
+            raise ValueError("GPU replay does not support self-prediction sequences")
+        if need.compress_observations:
+            raise ValueError("GPU replay does not support frame-stack compression")
+        if need.device is not None and need.device.platform != "gpu":
+            raise ValueError("GPU replay requires a GPU storage device")
+        from replay_memory.flashbax_buffer import FlashbaxReplayBuffer
+
+        return FlashbaxReplayBuffer(need)
+
     buffer_size = need.buffer_size
     observation_space = need.observation_space
     action_shape_or_n = need.action_shape_or_n

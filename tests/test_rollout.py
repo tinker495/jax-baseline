@@ -939,6 +939,7 @@ class _ShapeCheckingEvalEnv:
 
 def _dpg_action_agent():
     agent = Deteministic_Policy_Gradient_Family.__new__(Deteministic_Policy_Gradient_Family)
+    agent.memory_backend = "cpu"
     agent.simba = True
     agent.use_checkpointing = True
     agent.ckpt = type("Ckpt", (), {"enabled": True})()
@@ -978,6 +979,7 @@ def test_dpg_eval_actions_use_checkpoint_normalizer():
 
 def test_dpg_eval_skips_random_warmup_and_uses_policy_action():
     agent = Deteministic_Policy_Gradient_Family.__new__(Deteministic_Policy_Gradient_Family)
+    agent.memory_backend = "cpu"
     agent.simba = False
     agent.learning_starts = 100
     agent.worker_size = 32
@@ -995,6 +997,7 @@ def test_dpg_eval_skips_random_warmup_and_uses_policy_action():
 
 def test_td3_test_action_uses_eval_action_shape_with_many_workers():
     agent = TD3.__new__(TD3)
+    agent.memory_backend = "cpu"
     agent.simba = False
     agent.learning_starts = 0
     agent.worker_size = 32

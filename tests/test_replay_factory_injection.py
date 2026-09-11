@@ -85,6 +85,9 @@ def test_q_network_family_uses_injected_replay_factory():
 
 def test_dpg_family_uses_injected_replay_factory():
     agent = Deteministic_Policy_Gradient_Family.__new__(Deteministic_Policy_Gradient_Family)
+    agent.memory_backend = "cpu"
+    agent.memory_device = None
+    agent.seed = 42
     fake_buffer = object()
     factory = FakeLocalReplayFactory(fake_buffer)
     agent.replay_factory = factory
@@ -111,6 +114,7 @@ def test_dpg_family_uses_injected_replay_factory():
             n_step=2,
             gamma=0.95,
             priority=None,
+            seed=42,
         )
     ]
 

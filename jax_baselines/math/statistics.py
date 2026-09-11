@@ -193,6 +193,30 @@ class RunningMeanStd:
         return instance
 
 
+@jax.jit(static_argnames=("gamma",))
+def _record_device_returns(returns, means, variances, count, rewards, dones, active, gamma):
+    returns = jnp.where(active, gamma * returns + rewards, returns)
+    batch_count = jnp.sum(active)
+    batch_mean = jnp.sum(jnp.where(active, returns, 0)) / jnp.maximum(batch_count, 1)
+    batch_var = jnp.sum(jnp.where(active, jnp.square(returns - batch_mean), 0)) / jnp.maximum(
+        batch_count, 1
+    )
+    total = count + batch_count
+    delta = batch_mean - means["return"]
+    mean = means["return"] + delta * batch_count / total
+    variance = (
+        variances["return"] * count
+        + batch_var * batch_count
+        + jnp.square(delta) * count * batch_count / total
+    ) / total
+    return jnp.where(active & dones, 0, returns), {"return": mean}, {"return": variance}, total
+
+
+@jax.jit
+def _normalize_device_rewards(rewards, variance):
+    return rewards / jnp.sqrt(variance + 1e-8)
+
+
 class RewardNormalizer:
     """Scales rewards by the running std of the discounted return (Engstrom et al. 2020).
 
@@ -202,17 +226,19 @@ class RewardNormalizer:
     ``std(G)``), effectively bounding Q-values for fixed-support critics (XQC).
     """
 
-    def __init__(self, worker_size: int, gamma: float):
+    def __init__(self, worker_size: int, gamma: float, *, on_device: bool = False):
         self.gamma = float(gamma)
-        self.rms = RunningMeanStd(shapes={"return": ()}, dtype=np.float64)
-        self.discounted_returns = np.zeros(int(worker_size), dtype=np.float64)
+        self.rms = RunningMeanStd(shapes={"return": ()}, dtype=np.float64, on_device=on_device)
+        self.discounted_returns = (jnp if on_device else np).zeros(
+            int(worker_size), dtype=self.rms.dtype
+        )
+        self._all_active = (jnp if on_device else np).ones(int(worker_size), dtype=bool)
 
     def record(self, rewards, dones, active=None):
-        rewards = np.atleast_1d(np.asarray(rewards, dtype=np.float64))
-        dones = np.atleast_1d(np.asarray(dones, dtype=bool))
-        active = (
-            np.ones(rewards.shape, dtype=bool) if active is None else np.asarray(active, dtype=bool)
-        )
+        array_module = jnp if self.rms.on_device else np
+        rewards = array_module.atleast_1d(array_module.asarray(rewards, dtype=self.rms.dtype))
+        dones = array_module.atleast_1d(array_module.asarray(dones, dtype=bool))
+        active = self._all_active if active is None else array_module.asarray(active, dtype=bool)
         expected_shape = self.discounted_returns.shape
         if rewards.shape != expected_shape or dones.shape != expected_shape:
             raise ValueError(
@@ -224,6 +250,23 @@ class RewardNormalizer:
                 "active must match the configured worker shape "
                 f"{expected_shape}, got {active.shape}"
             )
+        if self.rms.on_device:
+            (
+                self.discounted_returns,
+                self.rms.means,
+                self.rms.vars,
+                self.rms.count,
+            ) = _record_device_returns(
+                self.discounted_returns,
+                self.rms.means,
+                self.rms.vars,
+                self.rms.count,
+                rewards,
+                dones,
+                active,
+                self.gamma,
+            )
+            return
         if not np.any(active):
             return
 
@@ -236,9 +279,13 @@ class RewardNormalizer:
     @property
     def scale(self):
         """Current reward divisor: std of the recorded discounted returns."""
+        if self.rms.on_device:
+            return jnp.sqrt(self.rms.vars["return"] + 1e-8)
         return float(np.sqrt(self.rms.vars["return"] + 1e-8))
 
     def normalize(self, rewards):
+        if self.rms.on_device:
+            return _normalize_device_rewards(rewards, self.rms.vars["return"])
         rewards = np.asarray(rewards)
         dtype = np.result_type(rewards.dtype, np.float32)
         return (rewards / self.scale).astype(dtype, copy=False)
@@ -247,8 +294,11 @@ class RewardNormalizer:
         return self.rms.to_state()
 
     def reset(self):
-        self.discounted_returns.fill(0.0)
+        if self.rms.on_device:
+            self.discounted_returns = jnp.zeros_like(self.discounted_returns)
+        else:
+            self.discounted_returns = np.zeros(self.discounted_returns.shape, dtype=self.rms.dtype)
 
     def restore(self, state):
-        self.rms = RunningMeanStd.from_state(state)
+        self.rms = RunningMeanStd.from_state(state, on_device=self.rms.on_device)
         self.reset()

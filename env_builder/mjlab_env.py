@@ -56,7 +56,7 @@ class MjlabVectorizedEnv(VectorizedEnv):
         self.observation_space: ObservationSpace = {
             key: list(value.shape[1:]) for key, value in self._obs.items()
         }
-        self.env_info = {
+        self.env_info: EnvInfo = {
             "observation_space": self.observation_space,
             "action_size": list(shape),
             "action_type": "continuous",
@@ -64,6 +64,7 @@ class MjlabVectorizedEnv(VectorizedEnv):
             "env_id": env_id,
             "worker_num": self.worker_num,
             "core_env_type": "VectorizedEnv",
+            "autoreset_steps": False,
         }
 
     def _array(self, value) -> Array:

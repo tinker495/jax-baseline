@@ -30,6 +30,7 @@ def test_action_sampling_and_mode_are_explicitly_separate():
 
 def test_dpg_eval_path_uses_sac_mode_without_sampling():
     agent = object.__new__(SAC)
+    agent.memory_backend = "cpu"
     agent.simba = False
     agent.learning_starts = 100
     agent.use_checkpointing = False

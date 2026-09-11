@@ -8,9 +8,12 @@ in `jax_baselines.core.rollout`.
 
 from dataclasses import dataclass, field
 
+import jax
+
 from jax_baselines.core.bulk_training import (
     bulk_chunk_schedule,
     bulk_train_hook,
+    flatten_priority_values,
     host_priority_values,
     make_train_contexts,
     normalize_bulk_weights,
@@ -136,8 +139,13 @@ class DPGTrainingLifecycle:
 
     def _update_priorities(self, data, report):
         if self.agent.prioritized_replay:
-            indexes = host_priority_values(data["indexes"])
-            priorities = host_priority_values(report.new_priorities)
+            convert = (
+                flatten_priority_values
+                if isinstance(data["indexes"], jax.Array)
+                else host_priority_values
+            )
+            indexes = convert(data["indexes"])
+            priorities = convert(report.new_priorities)
             self.agent.replay_buffer.update_priorities(indexes, priorities)
 
     def _log_report(self, report, steps, logger_run, log_interval):
