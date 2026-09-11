@@ -52,11 +52,12 @@ class IMPALA_Family:
         worker_replay_factory: WorkerReplayBufferFactory | None = None,
         checkpoint_store: CheckpointStore | None = None,
     ):
-        if use_entropy_adv_shaping:
-            if not np.isfinite(ent_coef) or ent_coef < 0:
-                raise ValueError("entropy shaping requires finite ent_coef >= 0")
-            if not np.isfinite(entropy_adv_shaping_kappa) or entropy_adv_shaping_kappa <= 1:
-                raise ValueError("entropy shaping requires finite entropy_adv_shaping_kappa > 1")
+        if use_entropy_adv_shaping and (not np.isfinite(ent_coef) or ent_coef < 0):
+            raise ValueError("entropy shaping requires finite ent_coef >= 0")
+        if use_entropy_adv_shaping and (
+            not np.isfinite(entropy_adv_shaping_kappa) or entropy_adv_shaping_kappa <= 1
+        ):
+            raise ValueError("entropy shaping requires finite entropy_adv_shaping_kappa > 1")
         self.workers = workers
         self.model_builder_maker = model_builder_maker
         self.worker_replay_factory = worker_replay_factory

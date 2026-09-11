@@ -88,11 +88,12 @@ class Actor_Critic_Policy_Gradient_Family:
     ):
         if memory_backend not in ("auto", "cpu", "gpu"):
             raise ValueError("memory_backend must be 'auto', 'cpu', or 'gpu'")
-        if use_entropy_adv_shaping:
-            if not np.isfinite(ent_coef) or ent_coef < 0:
-                raise ValueError("entropy shaping requires finite ent_coef >= 0")
-            if not np.isfinite(entropy_adv_shaping_kappa) or entropy_adv_shaping_kappa <= 1:
-                raise ValueError("entropy shaping requires finite entropy_adv_shaping_kappa > 1")
+        if use_entropy_adv_shaping and (not np.isfinite(ent_coef) or ent_coef < 0):
+            raise ValueError("entropy shaping requires finite ent_coef >= 0")
+        if use_entropy_adv_shaping and (
+            not np.isfinite(entropy_adv_shaping_kappa) or entropy_adv_shaping_kappa <= 1
+        ):
+            raise ValueError("entropy shaping requires finite entropy_adv_shaping_kappa > 1")
         self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
         self.num_workers = num_workers
