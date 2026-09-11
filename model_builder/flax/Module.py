@@ -256,34 +256,33 @@ class BatchReNorm(Module):
             "batch_stats", "var", lambda s: jnp.ones(s, jnp.float32), feature_shape
         )
 
+        initializing = self.is_initializing()
         if use_running_average:
             mean, var = ra_mean.value, ra_var.value
-            custom_mean = mean
-            custom_var = var
         else:
             mean, var = _compute_stats(
                 x,
                 reduction_axes,
                 dtype=self.dtype,
-                axis_name=self.axis_name if not self.is_initializing() else None,
+                axis_name=self.axis_name if not initializing else None,
                 axis_index_groups=self.axis_index_groups,
                 use_fast_variance=self.use_fast_variance,
             )
-            custom_mean = mean
-            custom_var = var
-            if not self.is_initializing():
-                # The code below is implemented following the Batch Renormalization paper
-                std = jnp.sqrt(var + self.epsilon)
-                ra_std = jnp.sqrt(ra_var.value + self.epsilon)
-                r = jnp.clip(std / ra_std, 1 / self.r_max, self.r_max)
-                r = lax.stop_gradient(r)
-                d = jnp.clip((mean - ra_mean.value) / ra_std, -self.d_max, self.d_max)
-                d = lax.stop_gradient(d)
-                custom_mean = mean - (std * d / r)
-                custom_var = (var + self.epsilon) / (r * r) - self.epsilon
+        custom_mean = mean
+        custom_var = var
+        if not use_running_average and not initializing:
+            # The code below is implemented following the Batch Renormalization paper
+            std = jnp.sqrt(var + self.epsilon)
+            ra_std = jnp.sqrt(ra_var.value + self.epsilon)
+            r = jnp.clip(std / ra_std, 1 / self.r_max, self.r_max)
+            r = lax.stop_gradient(r)
+            d = jnp.clip((mean - ra_mean.value) / ra_std, -self.d_max, self.d_max)
+            d = lax.stop_gradient(d)
+            custom_mean = mean - (std * d / r)
+            custom_var = (var + self.epsilon) / (r * r) - self.epsilon
 
-                ra_mean.value = self.momentum * ra_mean.value + (1 - self.momentum) * mean
-                ra_var.value = self.momentum * ra_var.value + (1 - self.momentum) * var
+            ra_mean.value = self.momentum * ra_mean.value + (1 - self.momentum) * mean
+            ra_var.value = self.momentum * ra_var.value + (1 - self.momentum) * var
 
         return _normalize(
             self,
