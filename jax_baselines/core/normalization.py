@@ -4,6 +4,8 @@ Rollouts record samples; learners and evaluation apply frozen statistics.
 Network-internal normalization belongs to the model construction adapter.
 """
 
+import math
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -294,3 +296,86 @@ class RewardNormalizer:
     def restore(self, state):
         self.rms = RunningMeanStd.from_state(state, on_device=self.rms.on_device)
         self.reset()
+
+
+@jax.jit
+def _record_flashsac_returns(
+    returns, mean, variance, count, maximum, rewards, dones, active, gamma
+):
+    returns = jnp.where(active, gamma * (1 - dones) * returns + rewards, returns)
+    size = jnp.sum(active)
+    batch_mean = jnp.sum(jnp.where(active, returns, 0)) / jnp.maximum(size, 1)
+    batch_var = jnp.sum(jnp.where(active, (returns - batch_mean) ** 2, 0)) / jnp.maximum(size, 1)
+    total = count + size
+    ratio = size / jnp.maximum(total, 1)
+    delta = batch_mean - mean
+    # The reference adds epsilon to the old variance weight on every update.
+    next_var = (
+        variance * (count + 1e-4) + batch_var * size + delta**2 * count * ratio
+    ) / jnp.maximum(total, 1)
+    return (
+        returns,
+        jnp.where(size > 0, mean + delta * ratio, mean),
+        jnp.where(size > 0, next_var, variance),
+        total,
+        jnp.maximum(maximum, jnp.max(jnp.where(active, jnp.abs(returns), 0))),
+    )
+
+
+class FlashSACRewardNormalizer(RewardNormalizer):
+    def __init__(self, worker_size: int, gamma: float, normalized_G_max: float = 5.0):
+        if worker_size < 1 or not 0 <= gamma <= 1:
+            raise ValueError("worker_size must be positive and gamma must be in [0, 1]")
+        if not math.isfinite(normalized_G_max) or normalized_G_max <= 0:
+            raise ValueError("normalized_G_max must be finite and positive")
+        super().__init__(worker_size, gamma, on_device=True)
+        self.rms = RunningMeanStd(epsilon=0, shapes={"return": ()}, on_device=True)
+        self.normalized_G_max = normalized_G_max
+        self.max_abs_return = jnp.asarray(0.0, dtype=jnp.float32)
+
+    def record(self, rewards, dones, active=None):
+        rewards = jnp.atleast_1d(jnp.asarray(rewards, dtype=jnp.float32))
+        dones = jnp.atleast_1d(jnp.asarray(dones, dtype=bool))
+        active = self._all_active if active is None else jnp.asarray(active, dtype=bool)
+        if any(value.shape != self.discounted_returns.shape for value in (rewards, dones, active)):
+            raise ValueError("rewards, dones and active must match the configured worker shape")
+        (
+            self.discounted_returns,
+            self.rms.means["return"],
+            self.rms.vars["return"],
+            self.rms.count,
+            self.max_abs_return,
+        ) = _record_flashsac_returns(
+            self.discounted_returns,
+            self.rms.means["return"],
+            self.rms.vars["return"],
+            self.rms.count,
+            self.max_abs_return,
+            rewards,
+            dones,
+            active,
+            self.gamma,
+        )
+
+    @property
+    def scale(self):
+        return jnp.maximum(
+            jnp.sqrt(self.rms.vars["return"] + 1e-8),
+            self.max_abs_return / self.normalized_G_max,
+        )
+
+    def normalize(self, rewards):
+        return jnp.asarray(rewards, dtype=jnp.float32) / self.scale
+
+    def to_state(self):
+        return {
+            **super().to_state(),
+            "max_abs_return": np.asarray(jax.device_get(self.max_abs_return)),
+        }
+
+    def restore(self, state):
+        maximum = np.asarray(state["max_abs_return"])
+        if maximum.shape != () or not np.isfinite(maximum) or maximum < 0:
+            raise ValueError("max_abs_return must be a finite nonnegative scalar")
+        super().restore(state)
+        self.max_abs_return = jnp.asarray(maximum, dtype=jnp.float32)

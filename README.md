@@ -87,6 +87,7 @@ python -m pip install -e '.[all]'
 | TD7[^TD7]       | :white_check_mark:(LAP[^LaP]) | :x:                        | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
 | CrossQ[^CrossQ] | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
 | XQC[^XQC]       | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :x:                | :x:                  |
+| FlashSAC[^FlashSAC] | :x:                       | :heavy_check_mark:         | :x:                | :x:                | :x:                  |
 | BRO[^BRO]:x:    | :x:                           | :x:                        | :x:                | :x:                | :x:                  |
 
 ## Performance Compariton
@@ -169,6 +170,8 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 [^TD3]: [TD3](https://arxiv.org/abs/1802.09477)
 
 [^SAC]: [SAC](https://arxiv.org/abs/1812.05905)
+
+[^FlashSAC]: [FlashSAC](https://github.com/Holiday-Robot/FlashSAC/tree/87edc9061150ae9e962dd84e6544e27a1554b3ab)
 
 [^DAC]: [DAC](https://arxiv.org/abs/2310.19527)
 
