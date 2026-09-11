@@ -43,6 +43,8 @@ def _frame_compress_applicable(observation_space, worker_size, n_step, n_frames)
 
 
 def _validate_self_prediction_replay_need(need: SelfPredictionReplayNeed) -> None:
+    if need.prediction_depth < 1:
+        raise ValueError("SelfPredictionReplayNeed prediction_depth must be positive")
     unsupported = []
     if need.compress_observations:
         unsupported.append("compress_observations=True")
@@ -72,9 +74,9 @@ def make_replay_buffer(need: LocalReplayNeed):
     """
     if need.memory_backend not in ("cpu", "gpu"):
         raise ValueError("Replay memory_backend must be resolved to 'cpu' or 'gpu'")
+    if isinstance(need, SelfPredictionReplayNeed):
+        _validate_self_prediction_replay_need(need)
     if need.memory_backend == "gpu":
-        if isinstance(need, SelfPredictionReplayNeed):
-            raise ValueError("GPU replay does not support self-prediction sequences")
         if need.compress_observations:
             raise ValueError("GPU replay does not support frame-stack compression")
         if need.device is not None and need.device.platform != "gpu":
@@ -96,7 +98,6 @@ def make_replay_buffer(need: LocalReplayNeed):
     n_frames = need.n_frames
 
     if isinstance(need, SelfPredictionReplayNeed):
-        _validate_self_prediction_replay_need(need)
         if prioritized:
             return PrioritizedTransitionReplayBuffer(
                 buffer_size,

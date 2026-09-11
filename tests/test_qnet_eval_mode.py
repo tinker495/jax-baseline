@@ -41,6 +41,7 @@ class _ActorStub:
         self.key_seq = iter(range(1000))
         self.action_size = [3]
         self.worker_size = 1
+        self.memory_backend = "cpu"
         self.used_params = []
 
     def get_behavior_params(self):

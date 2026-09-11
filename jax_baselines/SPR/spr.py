@@ -1,3 +1,6 @@
+from collections.abc import Callable
+from typing import Any
+
 import dm_pix as pix
 import jax
 import jax.numpy as jnp
@@ -35,7 +38,7 @@ class SPR(Q_Network_Family):
 
     def __init__(
         self,
-        env_builder: callable,
+        env_builder: Callable,
         model_builder_maker,
         off_policy_fix=False,
         spr_weight=5.0,
@@ -57,7 +60,7 @@ class SPR(Q_Network_Family):
         self.categorial_min = float(categorial_min)
 
         # Set SPR-specific defaults
-        spr_kwargs = {
+        spr_kwargs: dict[str, Any] = {
             "exploration_fraction": 0,
             "exploration_final_eps": 0,
             "exploration_initial_eps": 0,
@@ -93,6 +96,9 @@ class SPR(Q_Network_Family):
                 priority=priority,
                 compress_observations=self.compress_memory,
                 prediction_depth=max(self.prediction_depth, self.n_step),
+                memory_backend=self.memory_backend,
+                device=self.memory_device,
+                seed=self.seed,
             )
         )
 
