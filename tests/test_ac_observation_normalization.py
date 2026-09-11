@@ -5,7 +5,10 @@ import pytest
 
 from experiments.checkpoint_store import FileCheckpointStore
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
-from jax_baselines.math.statistics import RunningMeanStd
+from jax_baselines.core.normalization import (
+    RunningMeanStd,
+    normalize_empirical_observation,
+)
 
 
 def _agent(enabled=True):
@@ -46,7 +49,9 @@ def test_normalization_preserves_feature_roles_and_freezes_statistics():
         "critic_obs": np.array([[300]], dtype=np.float32),
     }
 
-    normalized = agent.normalize_observation(obs)
+    normalized = normalize_empirical_observation(
+        obs, agent.obs_rms, on_device=agent.memory_backend == "gpu"
+    )
 
     np.testing.assert_allclose(normalized["actor_obs"], [[1 / 1.01, 2 / 2.01]])
     np.testing.assert_allclose(normalized["critic_obs"], [[100 / 100.01]])

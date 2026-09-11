@@ -15,6 +15,7 @@ from jax_baselines.core.checkpoint_store import (
 )
 from jax_baselines.core.env_info import get_local_env_info
 from jax_baselines.core.eval import evaluate_policy, record_and_test
+from jax_baselines.core.normalization import RewardNormalizer, RunningMeanStd
 from jax_baselines.core.replay_protocol import (
     LocalReplayNeed,
     PriorityNeed,
@@ -31,7 +32,6 @@ from jax_baselines.core.rollout_stats import EpisodeTracker
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.training_session import TrainingSession, off_policy_loop
 from jax_baselines.DDPG.training import DPGTrainingLifecycle, DPGTrainReport
-from jax_baselines.math.statistics import RewardNormalizer, RunningMeanStd
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 

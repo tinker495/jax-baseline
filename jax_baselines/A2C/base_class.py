@@ -29,12 +29,15 @@ from jax_baselines.core.eval import (
     extract_vector_original_rewards,
     record_and_test,
 )
+from jax_baselines.core.normalization import (
+    RunningMeanStd,
+    normalize_empirical_observation,
+)
 from jax_baselines.core.replay_protocol import select_replay_device
 from jax_baselines.core.rollout_stats import EpisodeTracker, device_episode_step
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.training_session import TrainingSession
 from jax_baselines.math.jax_utils import convert_normalized_obs
-from jax_baselines.math.statistics import RunningMeanStd
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
@@ -46,13 +49,6 @@ def _sample_continuous(mu, std, key):
 @jax.jit
 def _sample_discrete(prob, key):
     return jax.random.categorical(key, jnp.log(prob), axis=-1)[:, None]
-
-
-@jax.jit
-def _normalize_observation(obs, means, variances):
-    return {
-        key: (value - means[key]) / (jnp.sqrt(variances[key]) + 0.01) for key, value in obs.items()
-    }
 
 
 class Actor_Critic_Policy_Gradient_Family:
@@ -184,23 +180,6 @@ class Actor_Critic_Policy_Gradient_Family:
         self.params = jax.device_put(state.params, self.memory_device)
         self.obs_rms = obs_rms
         self.obs_normalization = obs_rms is not None
-
-    def normalize_observation(self, obs):
-        """Prepare model inputs using frozen, per-key empirical observation statistics."""
-        if self.memory_backend == "cpu":
-            if self.obs_rms is None:
-                return {key: np.asarray(value) for key, value in obs.items()}
-            return {
-                key: np.asarray(
-                    (np.asarray(value) - self.obs_rms.means[key])
-                    / (np.sqrt(self.obs_rms.vars[key]) + 0.01),
-                    dtype=np.float32,
-                )
-                for key, value in obs.items()
-            }
-        if self.obs_rms is None:
-            return obs
-        return _normalize_observation(obs, self.obs_rms.means, self.obs_rms.vars)
 
     def get_memory_setup(self):
         self.buffer = EpochBuffer(
@@ -412,7 +391,9 @@ class Actor_Critic_Policy_Gradient_Family:
     def learn_SingleEnv(self, ctx):
         obs, info = self.env.reset() if self._initial_reset is None else self._initial_reset
         self._initial_reset = None
-        obs = self.normalize_observation(batch_observation(obs))
+        obs = normalize_empirical_observation(
+            batch_observation(obs), self.obs_rms, on_device=self.memory_backend == "gpu"
+        )
         self.lossque = deque(maxlen=10)
         self.rollout_tracker = EpisodeTracker(ctx.logger_run.log_metric, ctx.log_interval)
         eval_result = None
@@ -434,7 +415,9 @@ class Actor_Critic_Policy_Gradient_Family:
             else:
                 action_observation = next_obs
             # Timeout bootstraps must not incorporate the next episode's reset sample.
-            next_obs = self.normalize_observation(next_obs)
+            next_obs = normalize_empirical_observation(
+                next_obs, self.obs_rms, on_device=self.memory_backend == "gpu"
+            )
             if self.obs_rms is not None:
                 self.obs_rms.update(action_observation)
             self.buffer.add(
@@ -450,7 +433,9 @@ class Actor_Critic_Policy_Gradient_Family:
             if step_original is not None:
                 have_original = True
                 original += float(step_original)
-            obs = self.normalize_observation(action_observation)
+            obs = normalize_empirical_observation(
+                action_observation, self.obs_rms, on_device=self.memory_backend == "gpu"
+            )
 
             if terminated or truncated:
                 emit_original = have_original and real_episode_end
@@ -515,7 +500,9 @@ class Actor_Critic_Policy_Gradient_Family:
         # the next send until train_step finishes so the new rollout cannot start
         # with an action sampled from the previous policy. Pair each step with its
         # successor so the final iteration does not leave an env result pending.
-        obs = self.normalize_observation(raw_obs)
+        obs = normalize_empirical_observation(
+            raw_obs, self.obs_rms, on_device=self.memory_backend == "gpu"
+        )
         actions = self.actions(obs)
         end = object()
         first = True
@@ -532,10 +519,14 @@ class Actor_Critic_Policy_Gradient_Family:
             ) = self.env.get_result()
             action_observation = self.env.current_obs()
             # Autoreset observations belong to the next action, not this successor.
-            next_obses = self.normalize_observation(next_obses)
+            next_obses = normalize_empirical_observation(
+                next_obses, self.obs_rms, on_device=self.memory_backend == "gpu"
+            )
             if self.obs_rms is not None:
                 self.obs_rms.update(action_observation)
-            action_observation = self.normalize_observation(action_observation)
+            action_observation = normalize_empirical_observation(
+                action_observation, self.obs_rms, on_device=self.memory_backend == "gpu"
+            )
 
             train_due = (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0
             if not train_due and next_step is not end:
@@ -649,7 +640,12 @@ class Actor_Critic_Policy_Gradient_Family:
         return evaluate_policy(
             self.eval_env,
             self.eval_eps,
-            lambda obs: self.actions(self.normalize_observation(obs), eval=True),
+            lambda obs: self.actions(
+                normalize_empirical_observation(
+                    obs, self.obs_rms, on_device=self.memory_backend == "gpu"
+                ),
+                eval=True,
+            ),
             logger_run=ctx.logger_run,
             steps=steps,
             conv_action=self.conv_action if self.action_type == "continuous" else None,
@@ -664,7 +660,12 @@ class Actor_Critic_Policy_Gradient_Family:
         return record_test_fn(
             self.env_builder,
             logger_run,
-            lambda obs: self.actions(self.normalize_observation(obs), eval=True),
+            lambda obs: self.actions(
+                normalize_empirical_observation(
+                    obs, self.obs_rms, on_device=self.memory_backend == "gpu"
+                ),
+                eval=True,
+            ),
             episode,
             conv_action=self.conv_action,
         )
