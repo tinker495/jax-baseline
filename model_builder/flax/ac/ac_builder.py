@@ -7,24 +7,24 @@ from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import (
-    ActorCriticFeatures,
     dummy_observation,
     print_flax_model_summary,
+    split_actor_critic_kwargs,
 )
 
 
 class Actor(nn.Module):
-    action_size: int
+    action_size: list[int]
     action_type: str
     node: int
     hidden_n: int
-    layer: nn.Module = Dense
+    layer: type[nn.Module] = Dense
 
     @nn.compact
-    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
+    def __call__(self, features: jnp.ndarray) -> jnp.ndarray | tuple[jnp.ndarray, jnp.ndarray]:
         mlp = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-        )(features["actor"])
+        )(features)
         if self.action_type == "discrete":
             action_probs = self.layer(
                 self.action_size[0], kernel_init=clip_factorized_uniform(0.01)
@@ -38,57 +38,53 @@ class Actor(nn.Module):
                 2,
             )
             return mu, log_std
+        raise ValueError(f"Unsupported action type: {self.action_type}")
 
 
 class Critic(nn.Module):
     node: int
     hidden_n: int
-    layer: nn.Module = Dense
+    layer: type[nn.Module] = Dense
 
     @nn.compact
-    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
+    def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
         net = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [self.layer(1, kernel_init=clip_factorized_uniform(0.01))]
-        )(features["critic"])
+        )(features)
         return net
 
 
 def model_builder_maker(observation_space, action_size, action_type, policy_kwargs):
     policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
+    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(policy_kwargs)
 
     def _model_builder(key=None, print_model=False):
-        class Merged(nn.Module):
-            def setup(self):
-                self.preproc = PreProcess(
-                    observation_space, embedding_mode=embedding_mode, paired=True
-                )
-                self.act = Actor(action_size, action_type, **policy_kwargs)
-                self.cri = Critic(**policy_kwargs)
-
+        class ActorModel(nn.Module):
+            @nn.compact
             def __call__(self, x):
-                x = self.preproc.actor_critic(x)
-                return self.act(x), self.cri(x)
+                return Actor(action_size, action_type, **actor_kwargs)(
+                    PreProcess(observation_space, embedding_mode=embedding_mode, role="actor")(x)
+                )
 
-            def preprocess(self, x):
-                return self.preproc.actor_critic(x)
+        class CriticModel(nn.Module):
+            @nn.compact
+            def __call__(self, x):
+                return Critic(**critic_kwargs)(
+                    PreProcess(observation_space, embedding_mode=embedding_mode, role="critic")(x)
+                )
 
-            def actor(self, x):
-                return self.act(x)
-
-            def critic(self, x):
-                return self.cri(x)
-
-        model = Merged()
-        preproc_fn = get_apply_fn_flax_module(model, model.preprocess)
-        actor_fn = get_apply_fn_flax_module(model, model.actor)
-        critic_fn = get_apply_fn_flax_module(model, model.critic)
+        actor = ActorModel()
+        critic = CriticModel()
+        actor_fn = get_apply_fn_flax_module(actor)
+        critic_fn = get_apply_fn_flax_module(critic)
         if key is not None:
+            actor_key, critic_key = jax.random.split(key)
             observation = dummy_observation(observation_space)
-            params = model.init(key, observation)
-            print_flax_model_summary(print_model, key, (model, observation))
-            return preproc_fn, actor_fn, critic_fn, params
-        else:
-            return preproc_fn, actor_fn, critic_fn
+            actor_params = actor.init(actor_key, observation)
+            critic_params = critic.init(critic_key, observation)
+            print_flax_model_summary(print_model, key, (actor, observation), (critic, observation))
+            return actor_fn, critic_fn, actor_params, critic_params
+        return actor_fn, critic_fn
 
     return _model_builder

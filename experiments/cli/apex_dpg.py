@@ -6,7 +6,7 @@ from env_builder.env_builder import get_env_builder
 from experiments.cli._run import (
     AlgoSpec,
     DistributedFamilyRunner,
-    default_policy_kwargs,
+    actor_critic_policy_kwargs,
     run_distributed_family,
 )
 from experiments.optimizers import make_batch_scaled_optimizer_factory
@@ -41,7 +41,8 @@ def add_args(parser):
         "--logdir", type=str, default=default_logdir("apex_dpg"), help="log file dir"
     )
     parser.add_argument("--seed", type=int, default=42, help="random seed")
-    parser.add_argument("--node", type=int, default=256, help="network node number")
+    parser.add_argument("--actor_node", type=int, default=None, help="actor hidden width")
+    parser.add_argument("--critic_node", type=int, default=None, help="critic hidden width")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
     parser.add_argument("--optimizer", type=str, default="adopt", help="optimaizer")
     parser.add_argument("--gradient_steps", type=int, default=1, help="gradient_steps")
@@ -89,7 +90,7 @@ ALGOS = {
 APEX_DPG_RUNNER = DistributedFamilyRunner(
     add_args=add_args,
     make_workers=make_workers,
-    policy_kwargs=default_policy_kwargs,
+    policy_kwargs=actor_critic_policy_kwargs,
     algos=ALGOS,
     maker_pkg="model_builder.{lib}.dpg",
     variant=lambda _args: "",

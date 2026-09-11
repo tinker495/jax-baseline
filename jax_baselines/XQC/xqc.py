@@ -83,7 +83,6 @@ class XQC(Deteministic_Policy_Gradient_Family):
             self.policy_kwargs,
         )
         (
-            self.preproc,
             self.actor,
             self.critic,
             self.policy_params,
@@ -117,8 +116,8 @@ class XQC(Deteministic_Policy_Gradient_Family):
         self.target_critic_params = getattr(bundle, "target_critic_params", bundle.critic_params)
         self.log_ent_coef = bundle.log_ent_coef
 
-    def _get_pi_log_prob(self, params, feature, key=None, training: bool = True) -> jnp.ndarray:
-        (mu, log_std), updates = self.actor(params, None, feature, training)
+    def _get_pi_log_prob(self, params, obses, key=None, training: bool = True) -> jnp.ndarray:
+        (mu, log_std), updates = self.actor(params, None, obses, training)
         params["batch_stats"] = updates["batch_stats"]
         std = jnp.exp(log_std)
         x_t = mu + std * jax.random.normal(key, std.shape)
@@ -132,17 +131,13 @@ class XQC(Deteministic_Policy_Gradient_Family):
         return pi, log_prob, params
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        (mu, log_std), _ = self.actor(
-            params, None, self.preproc(params, None, convert_normalized_obs(obses)), False
-        )
+        (mu, log_std), _ = self.actor(params, None, convert_normalized_obs(obses), False)
         std = jnp.exp(log_std)
         pi = jax.nn.tanh(mu + std * jax.random.normal(key, std.shape))
         return pi
 
     def _get_eval_actions(self, params, obses) -> jnp.ndarray:
-        (mu, _), _ = self.actor(
-            params, None, self.preproc(params, None, convert_normalized_obs(obses)), False
-        )
+        (mu, _), _ = self.actor(params, None, convert_normalized_obs(obses), False)
         return jax.nn.tanh(mu)
 
     def _train_on_batch(self, data, context):
@@ -295,7 +290,6 @@ class XQC(Deteministic_Policy_Gradient_Family):
             self._critic_loss, has_aux=True
         )(
             critic_params,
-            policy_params,
             obses,
             actions,
             nxtobses,
@@ -402,7 +396,6 @@ class XQC(Deteministic_Policy_Gradient_Family):
     def _critic_loss(
         self,
         critic_params,
-        policy_params,
         obses,
         actions,
         nxtobses,
@@ -414,12 +407,11 @@ class XQC(Deteministic_Policy_Gradient_Family):
         concated_obses = {
             name: jnp.concatenate([obs, nxtobses[name]]) for name, obs in obses.items()
         }
-        concated_preproc = self.preproc(policy_params, key, concated_obses)
         concated_actions = jnp.concatenate([actions, next_policy])
         (logits1, logits2), variable_updates = self.critic(
-            critic_params, key, concated_preproc, concated_actions, True
+            critic_params, key, concated_obses, concated_actions, True
         )
-        critic_params["batch_stats"] = variable_updates["batch_stats"]
+        critic_params = {**critic_params, **variable_updates}
         logits1 = jnp.split(logits1, 2, axis=0)[0]
         logits2 = jnp.split(logits2, 2, axis=0)[0]
         cross_entropy1 = -jnp.sum(
@@ -437,9 +429,8 @@ class XQC(Deteministic_Policy_Gradient_Family):
         return jnp.sum(jax.nn.softmax(logits, axis=-1) * self.value_support, axis=-1)
 
     def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
-        feature = self.preproc(policy_params, key, obses)
-        policy, log_prob, policy_params = self._get_pi_log_prob(policy_params, feature, key)
-        (logits1, logits2), _ = self.critic(critic_params, key, feature, policy, False)
+        policy, log_prob, policy_params = self._get_pi_log_prob(policy_params, obses, key)
+        (logits1, logits2), _ = self.critic(critic_params, key, obses, policy, False)
         q1_pi = self._categorical_q(logits1)
         q2_pi = self._categorical_q(logits2)
         actor_loss = jnp.mean(ent_coef * jnp.squeeze(log_prob, axis=-1) - jnp.minimum(q1_pi, q2_pi))
@@ -460,14 +451,10 @@ class XQC(Deteministic_Policy_Gradient_Family):
         concated_obses = {
             name: jnp.concatenate([obs, nxtobses[name]]) for name, obs in obses.items()
         }
-        concated_preproc = self.preproc(policy_params, key, concated_obses)
-        next_preproc = jax.tree_util.tree_map(
-            lambda feature: jnp.split(feature, 2, axis=0)[1], concated_preproc
-        )
-        next_policy, log_prob, _ = self._get_pi_log_prob(policy_params, next_preproc, key, False)
+        next_policy, log_prob, _ = self._get_pi_log_prob(policy_params, nxtobses, key, False)
         concated_actions = jnp.concatenate([actions, next_policy])
         (logits1, logits2), _ = self.critic(
-            target_critic_params, key, concated_preproc, concated_actions, True
+            target_critic_params, key, concated_obses, concated_actions, True
         )
         next_logits1 = jnp.split(logits1, 2, axis=0)[1]
         next_logits2 = jnp.split(logits2, 2, axis=0)[1]

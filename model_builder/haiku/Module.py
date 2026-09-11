@@ -2,7 +2,7 @@ import haiku as hk
 import jax
 import jax.numpy as jnp
 
-from model_builder.utils import ActorCriticFeatures, observation_role_keys
+from model_builder.utils import observation_role_keys
 
 
 def pop_embedding_mode(policy_kwargs: dict | None, default: str = "normal") -> tuple[dict, str]:
@@ -56,24 +56,16 @@ def visual_embedding(mode="normal"):
 
 
 class PreProcess(hk.Module):
-    def __init__(self, state_size, embedding_mode="normal", paired=False):
+    def __init__(self, state_size, embedding_mode="normal", *, role="actor"):
         super().__init__()
-        self.role_keys = observation_role_keys(state_size, paired)
-        selected = {key for keys in self.role_keys.values() for key in keys}
+        self.observation_keys = observation_role_keys(state_size, role)
         self.embedding = {
             key: visual_embedding(embedding_mode) if len(st) == 3 else lambda x: x
             for key, st in state_size.items()
-            if key in selected
+            if key in self.observation_keys
         }
 
     def __call__(self, obses: dict[str, jnp.ndarray]) -> jnp.ndarray:
         return jnp.concatenate(
-            [self.embedding[key](obses[key]) for key in self.role_keys["actor"]], axis=1
-        )
-
-    def actor_critic(self, obses: dict[str, jnp.ndarray]) -> ActorCriticFeatures:
-        embedded = {key: pre(obses[key]) for key, pre in self.embedding.items()}
-        return ActorCriticFeatures(
-            actor=jnp.concatenate([embedded[key] for key in self.role_keys["actor"]], axis=1),
-            critic=jnp.concatenate([embedded[key] for key in self.role_keys["critic"]], axis=1),
+            [self.embedding[key](obses[key]) for key in self.observation_keys], axis=1
         )

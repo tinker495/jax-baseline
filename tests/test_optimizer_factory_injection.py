@@ -53,8 +53,10 @@ def test_a2c_prepare_run_rebuilds_optimizer_with_linear_lr_schedule_through_fact
     agent.worker_size = 2
     agent.minibatch_size = 5
     agent.epoch_num = 3
-    agent.params = {"w": 1.0}
-    agent.opt_state = {"state": "old"}
+    agent.actor_params = {"w": 1.0}
+    agent.critic_params = {"w": 2.0}
+    agent.actor_opt_state = {"state": "old"}
+    agent.critic_opt_state = {"state": "old"}
 
     agent.prepare_run(100)
 
@@ -65,7 +67,9 @@ def test_a2c_prepare_run_rebuilds_optimizer_with_linear_lr_schedule_through_fact
     assert float(schedule(30)) == pytest.approx(0.000125)
     assert float(schedule(60)) == pytest.approx(0.0)
     assert calls[1] == {"init_params": {"w": 1.0}}
-    assert agent.opt_state == {"state": "reset"}
+    assert calls[2] == {"init_params": {"w": 2.0}}
+    assert agent.actor_opt_state == {"state": "reset"}
+    assert agent.critic_opt_state == {"state": "reset"}
 
 
 def test_q_network_constructor_uses_injected_optimizer_factory(monkeypatch):

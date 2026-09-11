@@ -24,7 +24,8 @@ def _agent(enabled=True):
         if enabled
         else None
     )
-    agent.params = np.float32(2.0)
+    agent.actor_params = np.float32(2.0)
+    agent.critic_params = np.float32(3.0)
     agent._get_actions = lambda params, obs: (
         params * obs["unified_obs"],
         np.ones_like(obs["unified_obs"]),

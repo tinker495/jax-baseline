@@ -463,19 +463,22 @@ def test_dist_resolver_resolves_flax_base(family: str):
 
 @pytest.mark.parametrize("family", DIST_FAMILIES)
 def test_dist_policy_kwargs_uses_shared_normal_embedding(family: str):
-    """All distributed families share the Atari ``normal`` embedding policy.
-
-    Pins the consolidation of three byte-identical ``policy_kwargs`` helpers onto
-    ``_run.default_policy_kwargs`` so the embedding mode cannot silently drift per
-    family.
-    """
-    from experiments.cli._run import default_policy_kwargs
+    from experiments.cli._run import actor_critic_policy_kwargs, default_policy_kwargs
 
     runner = _dist_runner(family)
-    assert runner.policy_kwargs is default_policy_kwargs
-    args = _parse(runner, ["--algo", min(runner.algos), "--node", "128", "--hidden_n", "3"])
+    if family == "apex_qnet":
+        assert runner.policy_kwargs is default_policy_kwargs
+        widths = {"node": 128}
+    else:
+        assert runner.policy_kwargs is actor_critic_policy_kwargs
+        widths = {"actor_node": 128, "critic_node": 256}
+    args = _parse(
+        runner,
+        ["--algo", min(runner.algos), "--hidden_n", "3"]
+        + [item for name, width in widths.items() for item in (f"--{name}", str(width))],
+    )
     assert runner.policy_kwargs(args) == {
-        "node": 128,
+        **widths,
         "hidden_n": 3,
         "embedding_mode": "normal",
     }

@@ -18,10 +18,11 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             self.observation_space, self.action_size, self.action_type, self.policy_kwargs
         )
 
-        self.preproc, self.actor, self.critic, self.params = self.model_builder(
+        self.actor, self.critic, self.actor_params, self.critic_params = self.model_builder(
             next(self.key_seq), print_model=True
         )
-        self.opt_state = self.optimizer.init(self.params)
+        self.actor_opt_state = self.optimizer.init(self.actor_params)
+        self.critic_opt_state = self.optimizer.init(self.critic_params)
         self._get_actions = jax.jit(self._get_actions)
         self._train_step = jax.jit(self._train_step)
 
@@ -29,13 +30,22 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         data = self.buffer.get_buffer()
 
         (
-            self.params,
-            self.opt_state,
+            self.actor_params,
+            self.critic_params,
+            self.actor_opt_state,
+            self.critic_opt_state,
             critic_loss,
             actor_loss,
             entropy_loss,
             targets,
-        ) = self._train_step(self.params, self.opt_state, None, **data)
+        ) = self._train_step(
+            self.actor_params,
+            self.critic_params,
+            self.actor_opt_state,
+            self.critic_opt_state,
+            None,
+            **data,
+        )
 
         if logger_run:
             logger_run.log_metric("loss/critic_loss", critic_loss, steps)
@@ -47,8 +57,10 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
 
     def _train_step(
         self,
-        params,
-        opt_state,
+        actor_params,
+        critic_params,
+        actor_opt_state,
+        critic_opt_state,
         key,
         obses,
         actions,
@@ -59,16 +71,8 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
     ):
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
-        value = jax.vmap(self.critic, in_axes=(None, None, 0))(
-            params,
-            key,
-            jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, obses),
-        )
-        next_value = jax.vmap(self.critic, in_axes=(None, None, 0))(
-            params,
-            key,
-            jax.vmap(self.preproc, in_axes=(None, None, 0))(params, key, nxtobses),
-        )
+        value = jax.vmap(self.critic, in_axes=(None, None, 0))(critic_params, key, obses)
+        next_value = jax.vmap(self.critic, in_axes=(None, None, 0))(critic_params, key, nxtobses)
         targets = jax.vmap(discount_with_terminated, in_axes=(0, 0, 0, 0, None))(
             rewards, terminateds, truncateds, next_value, self.gamma
         )
@@ -77,20 +81,36 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         value = jnp.vstack(value)
         targets = jnp.vstack(targets)
         adv = targets - value
-        (_total_loss, (critic_loss, actor_loss, entropy_loss)), grad = jax.value_and_grad(
-            self._loss, has_aux=True
-        )(params, obses, actions, targets, adv, key)
-        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-        params = optax.apply_updates(params, updates)
-        return params, opt_state, critic_loss, actor_loss, entropy_loss, jnp.mean(targets)
+        (_total_loss, (critic_loss, actor_loss, entropy_loss)), (actor_grad, critic_grad) = (
+            jax.value_and_grad(self._loss, argnums=(0, 1), has_aux=True)(
+                actor_params, critic_params, obses, actions, targets, adv, key
+            )
+        )
+        actor_updates, actor_opt_state = self.optimizer.update(
+            actor_grad, actor_opt_state, params=actor_params
+        )
+        critic_updates, critic_opt_state = self.optimizer.update(
+            critic_grad, critic_opt_state, params=critic_params
+        )
+        actor_params = optax.apply_updates(actor_params, actor_updates)
+        critic_params = optax.apply_updates(critic_params, critic_updates)
+        return (
+            actor_params,
+            critic_params,
+            actor_opt_state,
+            critic_opt_state,
+            critic_loss,
+            actor_loss,
+            entropy_loss,
+            jnp.mean(targets),
+        )
 
-    def _loss_discrete(self, params, obses, actions, targets, adv, key):
-        feature = self.preproc(params, key, obses)
-        vals = self.critic(params, key, feature)
+    def _loss_discrete(self, actor_params, critic_params, obses, actions, targets, adv, key):
+        vals = self.critic(critic_params, key, obses)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
 
         prob, log_prob = self.get_logprob(
-            self.actor(params, key, feature), actions, key, out_prob=True
+            self.actor(actor_params, key, obses), actions, key, out_prob=True
         )
         # Paper's entropy: H = -sum(p * log(p)) >= 0
         entropy_h = -jnp.sum(prob * jnp.log(jnp.maximum(prob, 1e-8)), axis=-1, keepdims=True)
@@ -109,13 +129,12 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
         return total_loss, (critic_loss, actor_loss, entropy_loss)
 
-    def _loss_continuous(self, params, obses, actions, targets, adv, key):
-        feature = self.preproc(params, key, obses)
-        vals = self.critic(params, key, feature)
+    def _loss_continuous(self, actor_params, critic_params, obses, actions, targets, adv, key):
+        vals = self.critic(critic_params, key, obses)
         critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
 
         prob, log_prob = self.get_logprob(
-            self.actor(params, key, feature), actions, key, out_prob=True
+            self.actor(actor_params, key, obses), actions, key, out_prob=True
         )
         mu, log_std = prob
         # Paper's Gaussian entropy: H = sum(log(sigma)) + 0.5*d*(1+log(2*pi))

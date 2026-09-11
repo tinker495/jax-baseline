@@ -66,7 +66,14 @@ def _make_agent(monkeypatch, module_name, class_name, kind, *, ready, stop_on_ru
     worker = Mock()
     worker.run.side_effect = lambda *a, **kw: (stop.set() if stop_on_run else None) or "job"
     agent.workers = [worker]
-    agent.params = {"weight": 1}
+    if kind == "impala":
+        agent.actor_params = {"weight": 1}
+        agent.critic_params = {"weight": 2}
+    elif kind == "apex_dpg":
+        agent.policy_params = {"weight": 1}
+        agent.critic_params = {"weight": 2}
+    else:
+        agent.params = {"weight": 1}
     agent.model_builder = object()
     agent.actor_builder = object()
     agent.worker_replay_factory = lambda *_args, **_kwargs: object()

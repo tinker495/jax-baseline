@@ -11,7 +11,6 @@ import jax.numpy as jnp
 
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import LOG_STD_MEAN, LOG_STD_SCALE, Dense
-from model_builder.utils import ActorCriticFeatures
 
 
 class Actor(nn.Module):
@@ -21,18 +20,16 @@ class Actor(nn.Module):
     layer: nn.Module = Dense
 
     @nn.compact
-    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
+    def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
         linear = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-        )(features["actor"])
+        )(features)
         mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(linear)
         log_std = self.layer(
             self.action_size[0],
             kernel_init=clip_factorized_uniform(3),
             bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
-        )(
-            linear
-        )  # initialize std with high values
+        )(linear)  # initialize std with high values
         return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(log_std / LOG_STD_SCALE)
 
 
@@ -42,8 +39,8 @@ class Critic(nn.Module):
     layer: nn.Module = Dense
 
     @nn.compact
-    def __call__(self, features: ActorCriticFeatures, actions: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([features["critic"], actions], axis=1)
+    def __call__(self, features: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+        concat = jnp.concatenate([features, actions], axis=1)
         q_net = nn.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [self.layer(1, kernel_init=clip_factorized_uniform(3))]

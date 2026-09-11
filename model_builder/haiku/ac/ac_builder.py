@@ -4,9 +4,9 @@ import jax.numpy as jnp
 
 from model_builder.haiku.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import (
-    ActorCriticFeatures,
     dummy_observation,
     print_haiku_model_summary,
+    split_actor_critic_kwargs,
 )
 
 
@@ -19,10 +19,10 @@ class Actor(hk.Module):
         self.hidden_n = hidden_n
         self.layer = hk.Linear
 
-    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
+    def __call__(self, features: jnp.ndarray) -> jnp.ndarray | tuple[jnp.ndarray, jnp.ndarray]:
         mlp = hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-        )(features["actor"])
+        )(features)
         if self.action_type == "discrete":
             return self.layer(
                 self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
@@ -35,6 +35,7 @@ class Actor(hk.Module):
                 "log_std", [1, self.action_size[0]], jnp.float32, init=jnp.zeros
             )
             return mu, log_std
+        raise ValueError(f"Unsupported action type: {self.action_type}")
 
 
 class Critic(hk.Module):
@@ -44,43 +45,41 @@ class Critic(hk.Module):
         self.hidden_n = hidden_n
         self.layer = hk.Linear
 
-    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
+    def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
         return hk.Sequential(
             [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
             + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
-        )(features["critic"])
+        )(features)
 
 
 def model_builder_maker(observation_space, action_size, action_type, policy_kwargs):
     policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
+    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(policy_kwargs)
 
     def _model_builder(key=None, print_model=False):
-        preproc = hk.transform(
-            lambda x: PreProcess(
-                observation_space, embedding_mode=embedding_mode, paired=True
-            ).actor_critic(x)
+        actor = hk.transform(
+            lambda x: Actor(action_size, action_type, **actor_kwargs)(
+                PreProcess(observation_space, embedding_mode=embedding_mode, role="actor")(x)
+            )
         )
-        actor = hk.transform(lambda x: Actor(action_size, action_type, **policy_kwargs)(x))
-        critic = hk.transform(lambda x: Critic(**policy_kwargs)(x))
-        preproc_fn = preproc.apply
+        critic = hk.transform(
+            lambda x: Critic(**critic_kwargs)(
+                PreProcess(observation_space, embedding_mode=embedding_mode, role="critic")(x)
+            )
+        )
         actor_fn = actor.apply
         critic_fn = critic.apply
         if key is not None:
-            key1, key2, key3, key4 = jax.random.split(key, num=4)
+            actor_key, critic_key = jax.random.split(key)
             observation = dummy_observation(observation_space)
-            pre_param = preproc.init(key1, observation)
-            feature = preproc.apply(pre_param, key2, observation)
-            actor_param = actor.init(key3, feature)
-            critic_param = critic.init(key4, feature)
-
-            params = hk.data_structures.merge(pre_param, actor_param, critic_param)
+            actor_params = actor.init(actor_key, observation)
+            critic_params = critic.init(critic_key, observation)
             print_haiku_model_summary(
                 print_model,
-                (preproc, observation),
-                (actor, feature),
-                (critic, feature),
+                (actor, observation),
+                (critic, observation),
             )
-            return preproc_fn, actor_fn, critic_fn, params
-        return preproc_fn, actor_fn, critic_fn
+            return actor_fn, critic_fn, actor_params, critic_params
+        return actor_fn, critic_fn
 
     return _model_builder

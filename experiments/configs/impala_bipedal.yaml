@@ -9,7 +9,8 @@ base:
   gamma: 0.995
   worker: 8
   ent_coef: 1e-3
-  node: 512
+  actor_node: 512
+  critic_node: 512
   hidden_n: 2
   sample_size: 8
   update_freq: 100

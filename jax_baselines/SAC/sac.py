@@ -64,7 +64,6 @@ class SAC(Deteministic_Policy_Gradient_Family):
             self.policy_kwargs,
         )
         (
-            self.preproc,
             self.actor,
             self.critic,
             self.policy_params,
@@ -96,8 +95,8 @@ class SAC(Deteministic_Policy_Gradient_Family):
         self.target_critic_params = bundle.target_critic_params
         self.log_ent_coef = bundle.log_ent_coef
 
-    def _get_pi_log_prob(self, params, feature, key=None) -> jnp.ndarray:
-        mu, log_std = self.actor(params, None, feature)
+    def _get_pi_log_prob(self, params, obses, key=None) -> jnp.ndarray:
+        mu, log_std = self.actor(params, None, obses)
         std = jnp.exp(log_std)
         x_t = mu + std * jax.random.normal(key, std.shape)
         pi = jax.nn.tanh(x_t)
@@ -110,13 +109,11 @@ class SAC(Deteministic_Policy_Gradient_Family):
         return pi, log_prob
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        mu, log_std = self.actor(
-            params, None, self.preproc(params, None, convert_normalized_obs(obses))
-        )
+        mu, log_std = self.actor(params, None, convert_normalized_obs(obses))
         return sample_action(mu, log_std, key)
 
     def _get_eval_actions(self, params, obses) -> jnp.ndarray:
-        mu, _ = self.actor(params, None, self.preproc(params, None, convert_normalized_obs(obses)))
+        mu, _ = self.actor(params, None, convert_normalized_obs(obses))
         return mode_action(mu)
 
     def _train_on_batch(self, data, context):
@@ -163,14 +160,17 @@ class SAC(Deteministic_Policy_Gradient_Family):
             self.log_ent_coef,
         )
         (
-            self.policy_params,
-            self.critic_params,
-            self.target_critic_params,
-            self.opt_policy_state,
-            self.opt_critic_state,
-            self.opt_ent_coef_state,
-            self.log_ent_coef,
-        ), (losses, targets, ent_coefs, priorities) = self._bulk_scan(carry, keys, steps, data)
+            (
+                self.policy_params,
+                self.critic_params,
+                self.target_critic_params,
+                self.opt_policy_state,
+                self.opt_critic_state,
+                self.opt_ent_coef_state,
+                self.log_ent_coef,
+            ),
+            (losses, targets, ent_coefs, priorities),
+        ) = self._bulk_scan(carry, keys, steps, data)
         return DPGTrainReport(
             loss=jnp.mean(losses),
             target=jnp.mean(targets),
@@ -261,7 +261,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
         )
 
         (critic_loss, abs_error), grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
-            critic_params, policy_params, obses, actions, targets, weights, key2
+            critic_params, obses, actions, targets, weights, key2
         )
         updates, opt_critic_state = self.optimizer.update(
             grad, opt_critic_state, params=critic_params
@@ -341,9 +341,8 @@ class SAC(Deteministic_Policy_Gradient_Family):
             new_priorities,
         )
 
-    def _critic_loss(self, critic_params, policy_params, obses, actions, targets, weights, key):
-        feature = self.preproc(policy_params, key, obses)
-        q1, q2 = self.critic(critic_params, key, feature, actions)
+    def _critic_loss(self, critic_params, obses, actions, targets, weights, key):
+        q1, q2 = self.critic(critic_params, key, obses, actions)
         error1 = jnp.squeeze(q1 - targets)
         error2 = jnp.squeeze(q2 - targets)
         critic_loss = jnp.mean(weights * jnp.square(error1)) + jnp.mean(
@@ -352,9 +351,8 @@ class SAC(Deteministic_Policy_Gradient_Family):
         return critic_loss, jnp.abs(error1)
 
     def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
-        feature = self.preproc(policy_params, key, obses)
-        policy, log_prob = self._get_pi_log_prob(policy_params, feature, key)
-        q1_pi, q2_pi = self.critic(critic_params, key, feature, policy)
+        policy, log_prob = self._get_pi_log_prob(policy_params, obses, key)
+        q1_pi, q2_pi = self.critic(critic_params, key, obses, policy)
         actor_loss = jnp.mean(ent_coef * log_prob - jnp.minimum(q1_pi, q2_pi))
         return actor_loss, log_prob
 
@@ -368,8 +366,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
         key,
         ent_coef,
     ):
-        next_feature = self.preproc(policy_params, key, nxtobses)
-        policy, log_prob = self._get_pi_log_prob(policy_params, next_feature, key)
-        q1_pi, q2_pi = self.critic(target_critic_params, key, next_feature, policy)
+        policy, log_prob = self._get_pi_log_prob(policy_params, nxtobses, key)
+        q1_pi, q2_pi = self.critic(target_critic_params, key, nxtobses, policy)
         next_q = jnp.minimum(q1_pi, q2_pi) - ent_coef * log_prob
         return (not_terminateds * next_q * self._gamma) + rewards

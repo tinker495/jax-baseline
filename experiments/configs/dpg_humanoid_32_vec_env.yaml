@@ -17,7 +17,8 @@ base:
   batch: 256
   target_update_tau: 5e-3
   learning_starts: 50000
-  node: 256
+  actor_node: 256
+  critic_node: 256
   hidden_n: 2
   optimizer: adam
 variants:
@@ -30,5 +31,5 @@ variants:
   - {algo: TQC}
   - {algo: TQC, simba: true}
   - {algo: TQC, simbav2: true}
-  - {algo: CrossQ}
-  - {algo: XQC}
+  - {algo: CrossQ, critic_node: 2048}
+  - {algo: XQC, critic_node: 512}

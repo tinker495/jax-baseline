@@ -49,7 +49,6 @@ class TD3(Deteministic_Policy_Gradient_Family):
             self.policy_kwargs,
         )
         (
-            self.preproc,
             self.actor,
             self.critic,
             self.policy_params,
@@ -79,9 +78,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
         self.target_critic_params = bundle.target_critic_params
 
     def _get_actions(self, policy_params, obses, key=None) -> jnp.ndarray:
-        return self.actor(
-            policy_params, key, self.preproc(policy_params, key, convert_normalized_obs(obses))
-        )
+        return self.actor(policy_params, key, convert_normalized_obs(obses))
 
     def _policy_action_from_state(self, state, obs, eval, steps):
         return self._get_actions(state["policy"], obs, None)
@@ -139,13 +136,16 @@ class TD3(Deteministic_Policy_Gradient_Family):
             self.opt_critic_state,
         )
         (
-            self.policy_params,
-            self.critic_params,
-            self.target_policy_params,
-            self.target_critic_params,
-            self.opt_policy_state,
-            self.opt_critic_state,
-        ), (losses, targets, priorities) = self._bulk_scan(carry, keys, steps, data)
+            (
+                self.policy_params,
+                self.critic_params,
+                self.target_policy_params,
+                self.target_critic_params,
+                self.opt_policy_state,
+                self.opt_critic_state,
+            ),
+            (losses, targets, priorities),
+        ) = self._bulk_scan(carry, keys, steps, data)
         return DPGTrainReport(
             loss=jnp.mean(losses),
             target=jnp.mean(targets),
@@ -226,7 +226,7 @@ class TD3(Deteministic_Policy_Gradient_Family):
             key,
         )
         (critic_loss, abs_error), grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
-            critic_params, policy_params, obses, actions, targets, weights, key
+            critic_params, obses, actions, targets, weights, key
         )
         updates, opt_critic_state = self.optimizer.update(
             grad, opt_critic_state, params=critic_params
@@ -316,9 +316,8 @@ class TD3(Deteministic_Policy_Gradient_Family):
             new_priorities,
         )
 
-    def _critic_loss(self, critic_params, policy_params, obses, actions, targets, weights, key):
-        feature = self.preproc(policy_params, key, obses)
-        q1, q2 = self.critic(critic_params, key, feature, actions)
+    def _critic_loss(self, critic_params, obses, actions, targets, weights, key):
+        q1, q2 = self.critic(critic_params, key, obses, actions)
         error1 = jnp.squeeze(q1 - targets)
         error2 = jnp.squeeze(q2 - targets)
         critic_loss = jnp.mean(weights * jnp.square(error1)) + jnp.mean(
@@ -327,9 +326,8 @@ class TD3(Deteministic_Policy_Gradient_Family):
         return critic_loss, jnp.abs(error1)
 
     def _actor_loss(self, policy_params, critic_params, obses, key):
-        feature = self.preproc(policy_params, key, obses)
-        actions = self.actor(policy_params, key, feature)
-        q1, _ = self.critic(critic_params, key, feature, actions)
+        actions = self.actor(policy_params, key, obses)
+        q1, _ = self.critic(critic_params, key, obses, actions)
         return -jnp.mean(q1)
 
     def _target(
@@ -341,9 +339,8 @@ class TD3(Deteministic_Policy_Gradient_Family):
         not_terminateds,
         key,
     ):
-        next_feature = self.preproc(target_policy_params, key, nxtobses)
         next_action = jnp.clip(
-            self.actor(target_policy_params, key, next_feature)
+            self.actor(target_policy_params, key, nxtobses)
             + jnp.clip(
                 self.target_action_noise
                 * jax.random.normal(key, (self.batch_size, self.action_size[0])),
@@ -353,6 +350,6 @@ class TD3(Deteministic_Policy_Gradient_Family):
             -1.0,
             1.0,
         )
-        q1, q2 = self.critic(target_critic_params, key, next_feature, next_action)
+        q1, q2 = self.critic(target_critic_params, key, nxtobses, next_action)
         next_q = jnp.minimum(q1, q2)
         return (not_terminateds * next_q * self._gamma) + rewards

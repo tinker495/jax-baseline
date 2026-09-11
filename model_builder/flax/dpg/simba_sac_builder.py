@@ -8,9 +8,9 @@ from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import LOG_STD_MEAN, LOG_STD_SCALE, Dense, ResidualBlock
 from model_builder.flax.Module import PreProcess, pop_embedding_mode
 from model_builder.utils import (
-    ActorCriticFeatures,
     dummy_observation,
     print_flax_model_summary,
+    split_actor_critic_kwargs,
 )
 
 
@@ -20,14 +20,14 @@ class Actor(nn.Module):
     hidden_n: int = 2
 
     @nn.compact
-    def __call__(self, features: ActorCriticFeatures) -> jnp.ndarray:
+    def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
         linear = nn.Sequential(
             [Dense(self.node)]
             + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
             + [
                 nn.LayerNorm(),
             ]
-        )(features["actor"])
+        )(features)
         mu = Dense(
             self.action_size[0],
             kernel_init=clip_factorized_uniform(3),
@@ -36,9 +36,7 @@ class Actor(nn.Module):
             self.action_size[0],
             kernel_init=clip_factorized_uniform(3),
             bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
-        )(
-            linear
-        )  # initialize std with high values
+        )(linear)  # initialize std with high values
         return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(log_std / LOG_STD_SCALE)
 
 
@@ -47,8 +45,8 @@ class Critic(nn.Module):
     hidden_n: int = 2
 
     @nn.compact
-    def __call__(self, features: ActorCriticFeatures, actions: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([features["critic"], actions], axis=1)
+    def __call__(self, features: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
+        concat = jnp.concatenate([features, actions], axis=1)
         q_net = nn.Sequential(
             [Dense(self.node)]
             + [ResidualBlock(self.node) for _ in range(self.hidden_n)]
@@ -59,54 +57,48 @@ class Critic(nn.Module):
 
 def model_builder_maker(observation_space, action_size, policy_kwargs):
     policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
+    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(policy_kwargs)
 
     def model_builder(key=None, print_model=False):
         class Merged_Actor(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(
-                    observation_space, embedding_mode=embedding_mode, paired=True
+                    observation_space, embedding_mode=embedding_mode, role="actor"
                 )
-                self.act = Actor(action_size, **policy_kwargs)
+                self.act = Actor(action_size, **actor_kwargs)
 
-            def __call__(self, x):
-                feature = self.preprocess(x)
-                mu, log_std = self.actor(feature)
-                return mu, log_std
-
-            def preprocess(self, x):
-                x = self.preproc.actor_critic(x)
-                return x
-
-            def actor(self, x):
-                return self.act(x)
+            def __call__(self, observation):
+                return self.act(self.preproc(observation))
 
         class Merged_Critic(nn.Module):
             def setup(self):
-                self.crit1 = Critic(**policy_kwargs)
-                self.crit2 = Critic(**policy_kwargs)
+                self.preproc = PreProcess(
+                    observation_space, embedding_mode=embedding_mode, role="critic"
+                )
+                self.crit1 = Critic(**critic_kwargs)
+                self.crit2 = Critic(**critic_kwargs)
 
-            def __call__(self, x, a):
-                return (self.crit1(x, a), self.crit2(x, a))
+            def __call__(self, observation, action):
+                feature = self.preproc(observation)
+                return self.crit1(feature, action), self.crit2(feature, action)
 
-        model_actor = Merged_Actor()
-        preproc_fn = get_apply_fn_flax_module(model_actor, model_actor.preprocess)
-        actor_fn = get_apply_fn_flax_module(model_actor, model_actor.actor)
-        model_critic = Merged_Critic()
-        critic_fn = get_apply_fn_flax_module(model_critic)
-        if key is not None:
-            observation = dummy_observation(observation_space)
-            action = np.zeros((1, *action_size), dtype=np.float32)
-            policy_params = model_actor.init(key, observation)
-            feature = preproc_fn(policy_params, key, observation)
-            critic_params = model_critic.init(key, feature, action)
-            print_flax_model_summary(
-                print_model,
-                key,
-                (model_actor, observation),
-                (model_critic, feature, action),
-            )
-            return preproc_fn, actor_fn, critic_fn, policy_params, critic_params
-        else:
-            return preproc_fn, actor_fn, critic_fn
+        actor_model = Merged_Actor()
+        critic_model = Merged_Critic()
+        actor_fn = get_apply_fn_flax_module(actor_model)
+        critic_fn = get_apply_fn_flax_module(critic_model)
+        if key is None:
+            return actor_fn, critic_fn
+        observation = dummy_observation(observation_space)
+        action = np.zeros((1, *action_size), dtype=np.float32)
+        actor_key, critic_key = jax.random.split(key)
+        policy_params = actor_model.init(actor_key, observation)
+        critic_params = critic_model.init(critic_key, observation, action)
+        print_flax_model_summary(
+            print_model,
+            key,
+            (actor_model, observation),
+            (critic_model, observation, action),
+        )
+        return actor_fn, critic_fn, policy_params, critic_params
 
     return model_builder

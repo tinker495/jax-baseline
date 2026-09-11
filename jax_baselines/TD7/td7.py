@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
 
@@ -16,11 +17,14 @@ from jax_baselines.math.param_updates import hard_update, scaled_by_reset
 
 @struct.dataclass
 class TD7CheckpointParams:
-    encoder_params: Any
+    actor_encoder_params: Any
+    critic_encoder_params: Any
     policy_params: Any
     critic_params: Any
-    fixed_encoder_params: Any
-    fixed_encoder_target_params: Any
+    fixed_actor_encoder_params: Any
+    fixed_critic_encoder_params: Any
+    fixed_actor_encoder_target_params: Any
+    fixed_critic_encoder_target_params: Any
     target_policy_params: Any
     target_critic_params: Any
 
@@ -31,7 +35,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
     def __init__(
         self,
-        env_builder: callable,
+        env_builder: Callable,
         model_builder_maker,
         target_action_noise_mul=2.0,
         action_noise=0.1,
@@ -65,17 +69,21 @@ class TD7(Deteministic_Policy_Gradient_Family):
             self.policy_kwargs,
         )
         (
-            self.preproc,
-            self.encoder,
-            self.action_encoder,
+            self.actor_encoder,
+            self.critic_encoder,
+            self.actor_action_encoder,
+            self.critic_action_encoder,
             self.actor,
             self.critic,
-            self.encoder_params,
+            self.actor_encoder_params,
+            self.critic_encoder_params,
             self.policy_params,
             self.critic_params,
         ) = model_builder(next(self.key_seq), print_model=True)
-        self.fixed_encoder_params = deepcopy(self.encoder_params)
-        self.fixed_encoder_target_params = deepcopy(self.encoder_params)
+        self.fixed_actor_encoder_params = deepcopy(self.actor_encoder_params)
+        self.fixed_critic_encoder_params = deepcopy(self.critic_encoder_params)
+        self.fixed_actor_encoder_target_params = deepcopy(self.actor_encoder_params)
+        self.fixed_critic_encoder_target_params = deepcopy(self.critic_encoder_params)
         self.target_policy_params = deepcopy(self.policy_params)
         self.target_critic_params = deepcopy(self.critic_params)
 
@@ -88,41 +96,47 @@ class TD7(Deteministic_Policy_Gradient_Family):
             "max_value": jnp.array([0], dtype=jnp.float32),
         }
 
-        self.encoder_opt_state = self.optimizer.init(self.encoder_params)
+        self.actor_encoder_opt_state = self.optimizer.init(self.actor_encoder_params)
+        self.critic_encoder_opt_state = self.optimizer.init(self.critic_encoder_params)
         self.opt_policy_state = self.optimizer.init(self.policy_params)
         self.opt_critic_state = self.optimizer.init(self.critic_params)
-        self._get_actions = jax.jit(self._get_actions)
-        self._train_step = jax.jit(self._train_step)
-        self._bulk_scan = jax.jit(self._bulk_scan)
+        self._compiled_get_actions: Callable = jax.jit(self._get_actions)
+        self._compiled_train_step: Callable = jax.jit(self._train_step)
+        self._compiled_bulk_scan: Callable = jax.jit(self._bulk_scan)
 
     def checkpoint_params(self):
         return TD7CheckpointParams(
-            encoder_params=self.encoder_params,
+            actor_encoder_params=self.actor_encoder_params,
+            critic_encoder_params=self.critic_encoder_params,
             policy_params=self.policy_params,
             critic_params=self.critic_params,
-            fixed_encoder_params=self.fixed_encoder_params,
-            fixed_encoder_target_params=self.fixed_encoder_target_params,
+            fixed_actor_encoder_params=self.fixed_actor_encoder_params,
+            fixed_critic_encoder_params=self.fixed_critic_encoder_params,
+            fixed_actor_encoder_target_params=self.fixed_actor_encoder_target_params,
+            fixed_critic_encoder_target_params=self.fixed_critic_encoder_target_params,
             target_policy_params=self.target_policy_params,
             target_critic_params=self.target_critic_params,
         )
 
     def load_checkpoint_params(self, bundle):
-        self.encoder_params = bundle.encoder_params
+        self.actor_encoder_params = bundle.actor_encoder_params
+        self.critic_encoder_params = bundle.critic_encoder_params
         self.policy_params = bundle.policy_params
         self.critic_params = bundle.critic_params
-        self.fixed_encoder_params = bundle.fixed_encoder_params
-        self.fixed_encoder_target_params = bundle.fixed_encoder_target_params
+        self.fixed_actor_encoder_params = bundle.fixed_actor_encoder_params
+        self.fixed_critic_encoder_params = bundle.fixed_critic_encoder_params
+        self.fixed_actor_encoder_target_params = bundle.fixed_actor_encoder_target_params
+        self.fixed_critic_encoder_target_params = bundle.fixed_critic_encoder_target_params
         self.target_policy_params = bundle.target_policy_params
         self.target_critic_params = bundle.target_critic_params
 
-    def _get_actions(self, encoder_params, policy_params, obses, key=None) -> jnp.ndarray:
-        feature = self.preproc(encoder_params, key, convert_normalized_obs(obses))
-        zs = self.encoder(encoder_params, key, feature)
+    def _get_actions(self, actor_encoder_params, policy_params, obses, key=None):
+        feature, zs = self.actor_encoder(actor_encoder_params, key, convert_normalized_obs(obses))
         return self.actor(policy_params, key, feature, zs)
 
     def get_behavior_state(self):
         return {
-            "encoder": self.fixed_encoder_params,
+            "actor_encoder": self.fixed_actor_encoder_params,
             "policy": self.policy_params,
         }
 
@@ -132,7 +146,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         return self.get_behavior_state()
 
     def _policy_action_from_state(self, state, obs, eval, steps):
-        return self._get_actions(state["encoder"], state["policy"], obs, None)
+        return self._compiled_get_actions(state["actor_encoder"], state["policy"], obs, None)
 
     def _apply_action_noise(self, actions, steps, eval):
         if eval:
@@ -153,29 +167,37 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
     def _train_on_batch(self, data, context):
         (
-            self.encoder_params,
+            self.actor_encoder_params,
+            self.critic_encoder_params,
             self.policy_params,
             self.critic_params,
-            self.fixed_encoder_params,
-            self.fixed_encoder_target_params,
+            self.fixed_actor_encoder_params,
+            self.fixed_critic_encoder_params,
+            self.fixed_actor_encoder_target_params,
+            self.fixed_critic_encoder_target_params,
             self.target_policy_params,
             self.target_critic_params,
-            self.encoder_opt_state,
+            self.actor_encoder_opt_state,
+            self.critic_encoder_opt_state,
             self.opt_policy_state,
             self.opt_critic_state,
             repr_loss,
             loss,
             t_mean,
             new_priorities,
-        ) = self._train_step(
-            self.encoder_params,
+        ) = self._compiled_train_step(
+            self.actor_encoder_params,
+            self.critic_encoder_params,
             self.policy_params,
             self.critic_params,
-            self.fixed_encoder_params,
-            self.fixed_encoder_target_params,
+            self.fixed_actor_encoder_params,
+            self.fixed_critic_encoder_params,
+            self.fixed_actor_encoder_target_params,
+            self.fixed_critic_encoder_target_params,
             self.target_policy_params,
             self.target_critic_params,
-            self.encoder_opt_state,
+            self.actor_encoder_opt_state,
+            self.critic_encoder_opt_state,
             self.opt_policy_state,
             self.opt_critic_state,
             next(self.key_seq),
@@ -193,29 +215,40 @@ class TD7(Deteministic_Policy_Gradient_Family):
         steps = jnp.asarray([context.train_steps_count for context in contexts])
         keys = jax.random.split(next(self.key_seq), len(contexts))
         carry = (
-            self.encoder_params,
+            self.actor_encoder_params,
+            self.critic_encoder_params,
             self.policy_params,
             self.critic_params,
-            self.fixed_encoder_params,
-            self.fixed_encoder_target_params,
+            self.fixed_actor_encoder_params,
+            self.fixed_critic_encoder_params,
+            self.fixed_actor_encoder_target_params,
+            self.fixed_critic_encoder_target_params,
             self.target_policy_params,
             self.target_critic_params,
-            self.encoder_opt_state,
+            self.actor_encoder_opt_state,
+            self.critic_encoder_opt_state,
             self.opt_policy_state,
             self.opt_critic_state,
         )
         (
-            self.encoder_params,
-            self.policy_params,
-            self.critic_params,
-            self.fixed_encoder_params,
-            self.fixed_encoder_target_params,
-            self.target_policy_params,
-            self.target_critic_params,
-            self.encoder_opt_state,
-            self.opt_policy_state,
-            self.opt_critic_state,
-        ), (repr_losses, losses, targets, priorities) = self._bulk_scan(carry, keys, steps, data)
+            (
+                self.actor_encoder_params,
+                self.critic_encoder_params,
+                self.policy_params,
+                self.critic_params,
+                self.fixed_actor_encoder_params,
+                self.fixed_critic_encoder_params,
+                self.fixed_actor_encoder_target_params,
+                self.fixed_critic_encoder_target_params,
+                self.target_policy_params,
+                self.target_critic_params,
+                self.actor_encoder_opt_state,
+                self.critic_encoder_opt_state,
+                self.opt_policy_state,
+                self.opt_critic_state,
+            ),
+            (repr_losses, losses, targets, priorities),
+        ) = self._compiled_bulk_scan(carry, keys, steps, data)
         return DPGTrainReport(
             loss=jnp.mean(losses),
             target=jnp.mean(targets),
@@ -227,27 +260,35 @@ class TD7(Deteministic_Policy_Gradient_Family):
     def _bulk_scan(self, carry, keys, steps, data):
         def train_one(carry, xs):
             (
-                encoder_params,
+                actor_encoder_params,
+                critic_encoder_params,
                 policy_params,
                 critic_params,
-                fixed_encoder_params,
-                fixed_encoder_target_params,
+                fixed_actor_encoder_params,
+                fixed_critic_encoder_params,
+                fixed_actor_encoder_target_params,
+                fixed_critic_encoder_target_params,
                 target_policy_params,
                 target_critic_params,
-                encoder_opt_state,
+                actor_encoder_opt_state,
+                critic_encoder_opt_state,
                 opt_policy_state,
                 opt_critic_state,
             ) = carry
             key, step, batch = xs
             (
-                encoder_params,
+                actor_encoder_params,
+                critic_encoder_params,
                 policy_params,
                 critic_params,
-                fixed_encoder_params,
-                fixed_encoder_target_params,
+                fixed_actor_encoder_params,
+                fixed_critic_encoder_params,
+                fixed_actor_encoder_target_params,
+                fixed_critic_encoder_target_params,
                 target_policy_params,
                 target_critic_params,
-                encoder_opt_state,
+                actor_encoder_opt_state,
+                critic_encoder_opt_state,
                 opt_policy_state,
                 opt_critic_state,
                 repr_loss,
@@ -255,14 +296,18 @@ class TD7(Deteministic_Policy_Gradient_Family):
                 t_mean,
                 priorities,
             ) = self._train_step(
-                encoder_params,
+                actor_encoder_params,
+                critic_encoder_params,
                 policy_params,
                 critic_params,
-                fixed_encoder_params,
-                fixed_encoder_target_params,
+                fixed_actor_encoder_params,
+                fixed_critic_encoder_params,
+                fixed_actor_encoder_target_params,
+                fixed_critic_encoder_target_params,
                 target_policy_params,
                 target_critic_params,
-                encoder_opt_state,
+                actor_encoder_opt_state,
+                critic_encoder_opt_state,
                 opt_policy_state,
                 opt_critic_state,
                 key,
@@ -270,14 +315,18 @@ class TD7(Deteministic_Policy_Gradient_Family):
                 **batch,
             )
             return (
-                encoder_params,
+                actor_encoder_params,
+                critic_encoder_params,
                 policy_params,
                 critic_params,
-                fixed_encoder_params,
-                fixed_encoder_target_params,
+                fixed_actor_encoder_params,
+                fixed_critic_encoder_params,
+                fixed_actor_encoder_target_params,
+                fixed_critic_encoder_target_params,
                 target_policy_params,
                 target_critic_params,
-                encoder_opt_state,
+                actor_encoder_opt_state,
+                critic_encoder_opt_state,
                 opt_policy_state,
                 opt_critic_state,
             ), (repr_loss, loss, t_mean, priorities)
@@ -306,14 +355,18 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
     def _train_step(
         self,
-        encoder_params,
+        actor_encoder_params,
+        critic_encoder_params,
         policy_params,
         critic_params,
-        fixed_encoder_params,
-        fixed_encoder_target_params,
+        fixed_actor_encoder_params,
+        fixed_critic_encoder_params,
+        fixed_actor_encoder_target_params,
+        fixed_critic_encoder_target_params,
         target_policy_params,
         target_critic_params,
-        encoder_opt_state,
+        actor_encoder_opt_state,
+        critic_encoder_opt_state,
         opt_policy_state,
         opt_critic_state,
         key,
@@ -328,23 +381,26 @@ class TD7(Deteministic_Policy_Gradient_Family):
     ):
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
-        not_terminateds = 1.0 - terminateds
-
-        repr_loss, grad = jax.value_and_grad(self._encoder_loss)(
-            encoder_params, obses, nxtobses, actions, key
+        repr_loss, (actor_encoder_grad, critic_encoder_grad) = jax.value_and_grad(
+            self._encoder_loss, argnums=(0, 1)
+        )(actor_encoder_params, critic_encoder_params, obses, nxtobses, actions, key)
+        updates, actor_encoder_opt_state = self.optimizer.update(
+            actor_encoder_grad, actor_encoder_opt_state, params=actor_encoder_params
         )
-        updates, encoder_opt_state = self.optimizer.update(
-            grad, encoder_opt_state, params=encoder_params
+        actor_encoder_params = optax.apply_updates(actor_encoder_params, updates)
+        updates, critic_encoder_opt_state = self.optimizer.update(
+            critic_encoder_grad, critic_encoder_opt_state, params=critic_encoder_params
         )
-        encoder_params = optax.apply_updates(encoder_params, updates)
+        critic_encoder_params = optax.apply_updates(critic_encoder_params, updates)
 
         targets = self._target(
-            fixed_encoder_target_params,
+            fixed_actor_encoder_target_params,
+            fixed_critic_encoder_target_params,
             target_policy_params,
             target_critic_params,
             rewards,
             nxtobses,
-            not_terminateds,
+            1.0 - terminateds,
             key,
         )
         critic_params["values"]["min_value"] = jnp.minimum(
@@ -353,48 +409,74 @@ class TD7(Deteministic_Policy_Gradient_Family):
         critic_params["values"]["max_value"] = jnp.maximum(
             jnp.max(targets), critic_params["values"]["max_value"]
         )
-
-        feature, zs = self.feature_and_zs(fixed_encoder_params, obses, key)
-
+        actor_feature, actor_zs = self.actor_encoder(fixed_actor_encoder_params, key, obses)
+        critic_feature, critic_zs = self.critic_encoder(fixed_critic_encoder_params, key, obses)
         (critic_loss, priority), grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
-            critic_params, fixed_encoder_params, feature, zs, actions, targets, key
+            critic_params,
+            fixed_critic_encoder_params,
+            critic_feature,
+            critic_zs,
+            actions,
+            targets,
+            key,
         )
         updates, opt_critic_state = self.optimizer.update(
             grad, opt_critic_state, params=critic_params
         )
         critic_params = optax.apply_updates(critic_params, updates)
 
-        def _opt_actor(policy_params, opt_policy_state, key):
+        def update_actor(state):
+            policy_params, opt_policy_state = state
             grad = jax.grad(self._actor_loss)(
-                policy_params, critic_params, fixed_encoder_params, feature, zs, key
+                policy_params,
+                critic_params,
+                fixed_critic_encoder_params,
+                actor_feature,
+                actor_zs,
+                critic_feature,
+                critic_zs,
+                key,
             )
             updates, opt_policy_state = self.optimizer.update(
                 grad, opt_policy_state, params=policy_params
             )
-            policy_params = optax.apply_updates(policy_params, updates)
-            return policy_params, opt_policy_state, key
+            return optax.apply_updates(policy_params, updates), opt_policy_state
 
-        policy_params, opt_policy_state, key = jax.lax.cond(
+        policy_params, opt_policy_state = jax.lax.cond(
             step % self.policy_delay == 0,
-            lambda x: _opt_actor(*x),
-            lambda x: x,
-            (policy_params, opt_policy_state, key),
+            update_actor,
+            lambda state: state,
+            (policy_params, opt_policy_state),
         )
-
         target_policy_params = hard_update(
             policy_params, target_policy_params, step, self.target_network_update_freq
         )
         target_critic_params = hard_update(
             critic_params, target_critic_params, step, self.target_network_update_freq
         )
-        fixed_encoder_target_params = hard_update(
-            fixed_encoder_params,
-            fixed_encoder_target_params,
+        fixed_actor_encoder_target_params = hard_update(
+            fixed_actor_encoder_params,
+            fixed_actor_encoder_target_params,
             step,
             self.target_network_update_freq,
         )
-        fixed_encoder_params = hard_update(
-            encoder_params, fixed_encoder_params, step, self.target_network_update_freq
+        fixed_critic_encoder_target_params = hard_update(
+            fixed_critic_encoder_params,
+            fixed_critic_encoder_target_params,
+            step,
+            self.target_network_update_freq,
+        )
+        fixed_actor_encoder_params = hard_update(
+            actor_encoder_params,
+            fixed_actor_encoder_params,
+            step,
+            self.target_network_update_freq,
+        )
+        fixed_critic_encoder_params = hard_update(
+            critic_encoder_params,
+            fixed_critic_encoder_params,
+            step,
+            self.target_network_update_freq,
         )
         if self.scaled_by_reset:
             policy_params, opt_policy_state = scaled_by_reset(
@@ -404,7 +486,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
                 key,
                 step,
                 self.reset_freq,
-                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
+                0.1,
             )
             critic_params, opt_critic_state = scaled_by_reset(
                 critic_params,
@@ -413,17 +495,21 @@ class TD7(Deteministic_Policy_Gradient_Family):
                 key,
                 step,
                 self.reset_freq,
-                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
+                0.1,
             )
         return (
-            encoder_params,
+            actor_encoder_params,
+            critic_encoder_params,
             policy_params,
             critic_params,
-            fixed_encoder_params,
-            fixed_encoder_target_params,
+            fixed_actor_encoder_params,
+            fixed_critic_encoder_params,
+            fixed_actor_encoder_target_params,
+            fixed_critic_encoder_target_params,
             target_policy_params,
             target_critic_params,
-            encoder_opt_state,
+            actor_encoder_opt_state,
+            critic_encoder_opt_state,
             opt_policy_state,
             opt_critic_state,
             repr_loss,
@@ -432,40 +518,64 @@ class TD7(Deteministic_Policy_Gradient_Family):
             priority,
         )
 
-    def feature_and_zs(self, encoder_params, obses, key):
-        feature = self.preproc(encoder_params, key, convert_normalized_obs(obses))
-        zs = self.encoder(encoder_params, key, feature)
-        return feature, zs
+    def _encoder_loss(
+        self,
+        actor_encoder_params,
+        critic_encoder_params,
+        obses,
+        next_obses,
+        actions,
+        key,
+    ):
+        losses = []
+        for encoder, action_encoder, params in (
+            (self.actor_encoder, self.actor_action_encoder, actor_encoder_params),
+            (self.critic_encoder, self.critic_action_encoder, critic_encoder_params),
+        ):
+            _, next_zs = encoder(params, key, next_obses)
+            _, zs = encoder(params, key, obses)
+            pred_zs = action_encoder(params, key, zs, actions)
+            losses.append(jnp.mean(jnp.square(jax.lax.stop_gradient(next_zs) - pred_zs)))
+        return losses[0] + losses[1]
 
-    def _encoder_loss(self, encoder_params, obses, next_obses, actions, key):
-        next_zs = jax.lax.stop_gradient(
-            self.encoder(encoder_params, key, self.preproc(encoder_params, key, next_obses))
-        )
-        zs = self.encoder(encoder_params, key, self.preproc(encoder_params, key, obses))
-        pred_zs = self.action_encoder(encoder_params, key, zs, actions)
-        loss = jnp.mean(jnp.square(next_zs - pred_zs))
-        return loss
-
-    def _actor_loss(self, policy_params, critic_params, fixed_encoder_params, feature, zs, key):
-        actions = self.actor(policy_params, key, feature, zs)
-        zsa = self.action_encoder(fixed_encoder_params, key, zs, actions)
-        q1, q2 = self.critic(critic_params, key, feature, zs, zsa, actions)
+    def _actor_loss(
+        self,
+        policy_params,
+        critic_params,
+        fixed_critic_encoder_params,
+        actor_feature,
+        actor_zs,
+        critic_feature,
+        critic_zs,
+        key,
+    ):
+        actions = self.actor(policy_params, key, actor_feature, actor_zs)
+        zsa = self.critic_action_encoder(fixed_critic_encoder_params, key, critic_zs, actions)
+        q1, q2 = self.critic(critic_params, key, critic_feature, critic_zs, zsa, actions)
         return -jnp.mean(jnp.minimum(q1, q2))
 
-    def _critic_loss(self, critic_params, fixed_encoder_params, feature, zs, actions, targets, key):
-        zsa = self.action_encoder(fixed_encoder_params, key, zs, actions)
-
+    def _critic_loss(
+        self,
+        critic_params,
+        fixed_critic_encoder_params,
+        feature,
+        zs,
+        actions,
+        targets,
+        key,
+    ):
+        zsa = self.critic_action_encoder(fixed_critic_encoder_params, key, zs, actions)
         q1, q2 = self.critic(critic_params, key, feature, zs, zsa, actions)
         error1 = jnp.squeeze(q1 - targets)
         error2 = jnp.squeeze(q2 - targets)
         critic_loss = jnp.mean(hubberloss(error1, 1.0)) + jnp.mean(hubberloss(error2, 1.0))
-
         priority = jnp.maximum(jnp.maximum(jnp.abs(error1), jnp.abs(error2)), 1.0)
         return critic_loss, priority
 
     def _target(
         self,
-        fixed_encoder_target_params,
+        fixed_actor_encoder_target_params,
+        fixed_critic_encoder_target_params,
         target_policy_params,
         target_critic_params,
         rewards,
@@ -473,11 +583,14 @@ class TD7(Deteministic_Policy_Gradient_Family):
         not_terminateds,
         key,
     ):
-        next_feature = self.preproc(fixed_encoder_target_params, key, nxtobses)
-        fixed_target_zs = self.encoder(fixed_encoder_target_params, key, next_feature)
-
+        actor_feature, actor_zs = self.actor_encoder(
+            fixed_actor_encoder_target_params, key, nxtobses
+        )
+        critic_feature, critic_zs = self.critic_encoder(
+            fixed_critic_encoder_target_params, key, nxtobses
+        )
         next_action = jnp.clip(
-            self.actor(target_policy_params, key, next_feature, fixed_target_zs)
+            self.actor(target_policy_params, key, actor_feature, actor_zs)
             + jnp.clip(
                 self.target_action_noise
                 * jax.random.normal(key, (self.batch_size, self.action_size[0])),
@@ -487,17 +600,15 @@ class TD7(Deteministic_Policy_Gradient_Family):
             -1.0,
             1.0,
         )
-
-        fixed_target_zsa = self.action_encoder(
-            fixed_encoder_target_params, key, fixed_target_zs, next_action
+        critic_zsa = self.critic_action_encoder(
+            fixed_critic_encoder_target_params, key, critic_zs, next_action
         )
-
         q1, q2 = self.critic(
             target_critic_params,
             key,
-            next_feature,
-            fixed_target_zs,
-            fixed_target_zsa,
+            critic_feature,
+            critic_zs,
+            critic_zsa,
             next_action,
         )
         next_q = jnp.clip(

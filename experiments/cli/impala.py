@@ -6,7 +6,7 @@ from env_builder.env_builder import get_env_builder
 from experiments.cli._run import (
     AlgoSpec,
     DistributedFamilyRunner,
-    default_policy_kwargs,
+    actor_critic_policy_kwargs,
     run_distributed_family,
 )
 from experiments.optimizers import make_batch_scaled_optimizer_factory
@@ -35,7 +35,8 @@ def add_args(parser):
     parser.add_argument("--steps", type=float, default=1e5, help="step size")
     parser.add_argument("--logdir", type=str, default=default_logdir("impala"), help="log file dir")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
-    parser.add_argument("--node", type=int, default=256, help="network node number")
+    parser.add_argument("--actor_node", type=int, default=None, help="actor hidden width")
+    parser.add_argument("--critic_node", type=int, default=None, help="critic hidden width")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
     parser.add_argument("--optimizer", type=str, default="rmsprop", help="optimaizer")
     parser.add_argument("--ent_coef", type=float, default=0.1, help="entropy coefficient")
@@ -80,7 +81,7 @@ ALGOS = {
 IMPALA_RUNNER = DistributedFamilyRunner(
     add_args=add_args,
     make_workers=make_workers,
-    policy_kwargs=default_policy_kwargs,
+    policy_kwargs=actor_critic_policy_kwargs,
     algos=ALGOS,
     maker_pkg="model_builder.{lib}.ac",
     variant=lambda _args: "",

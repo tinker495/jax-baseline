@@ -126,8 +126,10 @@ def test_prepare_run_rebuilds_optimizer_with_linear_lr_schedule():
     agent.worker_size = 2
     agent.minibatch_size = 5
     agent.epoch_num = 3
-    agent.params = {"w": 1.0}
-    agent.opt_state = {"state": "old"}
+    agent.actor_params = {"w": 1.0}
+    agent.critic_params = {"w": 2.0}
+    agent.actor_opt_state = {"state": "old"}
+    agent.critic_opt_state = {"state": "old"}
 
     agent.prepare_run(100)
 
@@ -138,7 +140,9 @@ def test_prepare_run_rebuilds_optimizer_with_linear_lr_schedule():
     assert float(schedule(30)) == pytest.approx(0.000125)
     assert float(schedule(60)) == pytest.approx(0.0)
     assert calls[1] == {"init_params": {"w": 1.0}}
-    assert agent.opt_state == {"state": "reset"}
+    assert calls[2] == {"init_params": {"w": 2.0}}
+    assert agent.actor_opt_state == {"state": "reset"}
+    assert agent.critic_opt_state == {"state": "reset"}
 
 
 def test_prepare_run_skips_lr_annealing_until_params_exist():
@@ -146,7 +150,7 @@ def test_prepare_run_skips_lr_annealing_until_params_exist():
     agent = Actor_Critic_Policy_Gradient_Family.__new__(Actor_Critic_Policy_Gradient_Family)
     agent.optimizer_factory = lambda *args, **kwargs: calls.append((args, kwargs))
     agent.lr_annealing = True
-    agent.params = None
+    agent.actor_params = None
 
     agent.prepare_run(100)
 

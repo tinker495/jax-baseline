@@ -33,7 +33,7 @@ from model_builder.flax.dpg.td3_builder import (
     model_builder_maker as td3_model_builder_maker,
 )
 
-_POLICY_KWARGS = {"node": 16, "hidden_n": 2, "embedding_mode": "normal"}
+_POLICY_KWARGS = {"actor_node": 16, "critic_node": 16, "hidden_n": 2, "embedding_mode": "normal"}
 _OBSERVATION_SPACE = {"unified_obs": [4]}
 _ACTION_SIZE = [2]
 _BATCH_SIZE = 8
@@ -52,7 +52,7 @@ def _batch():
 def _make_ddpg():
     agent = DDPG.__new__(DDPG)
     builder = ddpg_model_builder_maker(_OBSERVATION_SPACE, _ACTION_SIZE, dict(_POLICY_KWARGS))
-    agent.preproc, agent.actor, agent.critic, agent.policy_params, agent.critic_params = builder(
+    agent.actor, agent.critic, agent.policy_params, agent.critic_params = builder(
         jax.random.PRNGKey(0)
     )
     agent.optimizer = optax.adam(1e-3)
@@ -71,7 +71,7 @@ def _make_ddpg():
 def _make_td3():
     agent = TD3.__new__(TD3)
     builder = td3_model_builder_maker(_OBSERVATION_SPACE, _ACTION_SIZE, dict(_POLICY_KWARGS))
-    agent.preproc, agent.actor, agent.critic, agent.policy_params, agent.critic_params = builder(
+    agent.actor, agent.critic, agent.policy_params, agent.critic_params = builder(
         jax.random.PRNGKey(0)
     )
     agent.optimizer = optax.adam(1e-3)

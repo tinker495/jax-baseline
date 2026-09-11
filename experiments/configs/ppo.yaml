@@ -16,7 +16,8 @@ base:
   gamma: 0.995
   lamda: 0.95
   ent_coef: 1e-3
-  node: 512
+  actor_node: 512
+  critic_node: 512
   hidden_n: 1
   optimizer: rmsprop
 variants:

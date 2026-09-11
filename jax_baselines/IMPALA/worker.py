@@ -8,7 +8,7 @@ from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
 from jax_baselines.core.seeding import seed_prngs
 
 
-class Impala_Worker(object):
+class Impala_Worker:
     def __init__(self, env_builder, seed=None) -> None:
         seed_prngs(seed)
         # env_builder is the repo-local Environment Adapter callable injected by
@@ -33,14 +33,14 @@ class Impala_Worker(object):
     ):
         try:
             seed_prngs(seed)
-            queue, env_dict, actor_num = buffer_info
+            queue, env_dict, _actor_num = buffer_info
             local_buffer = make_worker_local_replay_buffer(
                 worker_replay_factory, local_size, env_dict, None
             )
-            preproc, actor_model, _ = model_builder()
+            actor_model, _ = model_builder()
             actor, get_action_prob, convert_action = actor_builder()
 
-            actor = jax.jit(partial(actor, actor_model, preproc))
+            actor = jax.jit(partial(actor, actor_model))
             get_action_prob = partial(get_action_prob, actor)
 
             if seed is not None:
@@ -50,8 +50,8 @@ class Impala_Worker(object):
                     obs, info = self.env.reset()
             else:
                 obs, info = self.env.reset()
-            have_original_reward = "original_reward" in info.keys()
-            have_lives = "lives" in info.keys()
+            have_original_reward = "original_reward" in info
+            have_lives = "lives" in info
             if have_original_reward:
                 original_score = 0
             score = 0
@@ -64,16 +64,16 @@ class Impala_Worker(object):
             len_label = "rollout/episode_length"
             to_label = "rollout/timeout_rate"
 
-            # Eager initial fetch so `params` is always bound before first use,
+            # Eager initial fetch so actor parameters are always bound before first use,
             # mirroring the APE-X workers (avoids reliance on update being pre-set).
-            params = jax.device_put(param_server.get_params())
+            actor_params = jax.device_put(param_server.get_params())
             while not stop.is_set():
                 if update.is_set():
-                    params = jax.device_put(param_server.get_params())
+                    actor_params = jax.device_put(param_server.get_params())
                     update.clear()
                 for _ in range(local_size):
                     eplen += 1
-                    actions, log_prob = get_action_prob(params, obs)
+                    actions, log_prob = get_action_prob(actor_params, obs)
                     next_obs, reward, terminated, truncated, info = self.env.step(
                         convert_action(actions)
                     )
@@ -114,4 +114,3 @@ class Impala_Worker(object):
                 print("worker stopped")
             else:
                 stop.set()
-        return None

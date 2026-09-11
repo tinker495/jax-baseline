@@ -48,11 +48,14 @@ ALGO_FIELDS = {
     CrossQ: ["policy_params", "critic_params", "log_ent_coef"],
     XQC: ["policy_params", "critic_params", "target_critic_params", "log_ent_coef"],
     TD7: [
-        "encoder_params",
+        "actor_encoder_params",
+        "critic_encoder_params",
         "policy_params",
         "critic_params",
-        "fixed_encoder_params",
-        "fixed_encoder_target_params",
+        "fixed_actor_encoder_params",
+        "fixed_critic_encoder_params",
+        "fixed_actor_encoder_target_params",
+        "fixed_critic_encoder_target_params",
         "target_policy_params",
         "target_critic_params",
     ],
@@ -119,7 +122,7 @@ def test_family_checkpoint_snapshots_use_pytree_snapshot():
 
     dpg = DDPG.__new__(DDPG)
     dpg.simba = False
-    eval_state = {"encoder": None, "policy": {"w": jnp.asarray([3.0])}}
+    eval_state = {"actor_encoder": None, "policy": {"w": jnp.asarray([3.0])}}
     dpg.get_eval_state = lambda: eval_state
 
     DDPG._checkpoint_update_snapshot(dpg)
@@ -139,7 +142,7 @@ def test_checkpoint_round_trip(cls):
     src.ckpt = _scaffold()
     src.train_steps_count = 11
     src._ckpt_update_residual = 2.5
-    src.eval_snapshot = {"encoder": _tree(7.0), "policy": _tree(8.0)}
+    src.eval_snapshot = {"actor_encoder": _tree(7.0), "policy": _tree(8.0)}
     for i, name in enumerate(fields):
         setattr(src, name, _field_value(name, i))
     # Make the schedule state non-default so the spine must carry it.

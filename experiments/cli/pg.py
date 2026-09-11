@@ -4,7 +4,12 @@ from env_builder.env_builder import get_env_builder
 
 # isort: on
 from experiments.cli._env import add_env_args, env_builder_kwargs
-from experiments.cli._run import AlgoSpec, FamilyRunner, run_family
+from experiments.cli._run import (
+    AlgoSpec,
+    FamilyRunner,
+    actor_critic_policy_kwargs,
+    run_family,
+)
 from experiments.optimizers import make_optimizer_factory
 from jax_baselines.A2C.a2c import A2C
 from jax_baselines.PPO.ppo import PPO
@@ -39,7 +44,8 @@ def add_args(parser):
     )
     parser.add_argument("--logdir", type=str, default=default_logdir("pg"), help="log file dir")
     parser.add_argument("--seed", type=int, default=0, help="random seed")
-    parser.add_argument("--node", type=int, default=256, help="network node number")
+    parser.add_argument("--actor_node", type=int, default=None, help="actor hidden width")
+    parser.add_argument("--critic_node", type=int, default=None, help="critic hidden width")
     parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
     parser.add_argument("--optimizer", type=str, default="adamw", help="optimaizer")
     parser.add_argument(
@@ -92,12 +98,7 @@ def build_env(args):
         args.env,
         **env_builder_kwargs(args),
     )
-    policy_kwargs = {
-        "node": args.node,
-        "hidden_n": args.hidden_n,
-        "embedding_mode": "normal",
-    }
-    return env_builder, policy_kwargs
+    return env_builder, actor_critic_policy_kwargs(args)
 
 
 def _common(a):

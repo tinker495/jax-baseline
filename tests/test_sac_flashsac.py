@@ -35,13 +35,9 @@ def test_dpg_eval_path_uses_sac_mode_without_sampling():
     agent.learning_starts = 100
     agent.use_checkpointing = False
     agent.policy_params = None
-    agent.preproc = lambda params, key, obs: {
-        "actor": obs["unified_obs"],
-        "critic": obs["unified_obs"],
-    }
     agent.actor = lambda params, key, feature: (
-        feature["actor"],
-        jnp.full_like(feature["actor"], 10.0),
+        feature["unified_obs"],
+        jnp.full_like(feature["unified_obs"], 10.0),
     )
 
     obs = {"unified_obs": jnp.array([[0.25, -0.5]])}
@@ -52,10 +48,9 @@ def test_dpg_eval_path_uses_sac_mode_without_sampling():
 
 def test_sac_actor_loss_uses_minimum_expected_q():
     agent = object.__new__(SAC)
-    agent.preproc = lambda params, key, obs: obs
     agent._get_pi_log_prob = lambda params, feature, key: (
-        jnp.zeros((feature["actor"].shape[0], 1)),
-        jnp.zeros((feature["actor"].shape[0], 1)),
+        jnp.zeros((feature["unified_obs"].shape[0], 1)),
+        jnp.zeros((feature["unified_obs"].shape[0], 1)),
     )
     agent.critic = lambda params, key, feature, policy: (
         jnp.array([[0.0], [10.0]]),
@@ -66,7 +61,7 @@ def test_sac_actor_loss_uses_minimum_expected_q():
         agent,
         None,
         None,
-        {"actor": jnp.ones((2, 1)), "critic": jnp.ones((2, 1))},
+        {"unified_obs": jnp.ones((2, 1))},
         None,
         0.01,
     )
@@ -79,13 +74,9 @@ def test_other_stochastic_dpg_algorithms_also_use_mode_for_evaluation(cls):
     obs = {"unified_obs": jnp.array([[0.25, -0.5]])}
 
     agent = object.__new__(cls)
-    agent.preproc = lambda params, key, value: {
-        "actor": value["unified_obs"],
-        "critic": value["unified_obs"],
-    }
     agent.actor = lambda params, key, feature: (
-        feature["actor"],
-        jnp.full_like(feature["actor"], 10.0),
+        feature["unified_obs"],
+        jnp.full_like(feature["unified_obs"], 10.0),
     )
 
     np.testing.assert_allclose(agent._get_eval_actions(None, obs), jnp.tanh(obs["unified_obs"]))
@@ -96,16 +87,16 @@ def test_crossq_actors_have_no_batch_stats_but_critics_do():
         builder = make_builder(
             {"unified_obs": [4]},
             [2],
-            {"node": 16, "hidden_n": 1, "embedding_mode": "normal"},
+            {"actor_node": 16, "critic_node": 128, "hidden_n": 1, "embedding_mode": "normal"},
         )
-        preproc, actor, critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
+        actor, critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
 
         assert "batch_stats" not in policy_params
         assert "batch_stats" in critic_params
 
-        feature = preproc(policy_params, None, {"unified_obs": jnp.zeros((2, 4))})
-        mu, log_std = actor(policy_params, None, feature)
-        (q1, q2), updates = critic(critic_params, None, feature, jnp.zeros((2, 2)), True)
+        obs = {"unified_obs": jnp.zeros((2, 4))}
+        mu, log_std = actor(policy_params, None, obs)
+        (q1, q2), updates = critic(critic_params, None, obs, jnp.zeros((2, 2)), True)
 
         assert mu.shape == log_std.shape == (2, 2)
         assert q1.shape == q2.shape == (2, 1)
@@ -126,13 +117,9 @@ def test_flashsac_entropy_target_and_defaults():
 
 def test_sac_actor_and_temperature_update_on_configured_period():
     agent = object.__new__(SAC)
-    agent.preproc = lambda params, key, obs: {
-        "actor": obs["unified_obs"],
-        "critic": obs["unified_obs"],
-    }
     agent.actor = lambda params, key, feature: (
-        jnp.full((feature["actor"].shape[0], 1), params),
-        jnp.full((feature["actor"].shape[0], 1), -1.0),
+        jnp.full((feature["unified_obs"].shape[0], 1), params),
+        jnp.full((feature["unified_obs"].shape[0], 1), -1.0),
     )
     agent.critic = lambda params, key, feature, actions: (
         params + actions,
@@ -207,7 +194,7 @@ def test_sac_actor_and_target_use_distinct_fresh_keys():
     agent._target = lambda policy, target_critic, rewards, nxtobses, done, key, alpha: (
         jax.random.uniform(key)
     )
-    agent._critic_loss = lambda critic, policy, obses, actions, targets, weights, key: (
+    agent._critic_loss = lambda critic, obses, actions, targets, weights, key: (
         targets + 0.0 * critic,
         jnp.zeros((1,)),
     )

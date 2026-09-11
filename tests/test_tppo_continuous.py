@@ -21,13 +21,9 @@ def _continuous_agent(cls, family):
     agent.lamda = 0.95
     agent.gae_normalize = False
     agent.gae_normalize_scope = "batch"
-    agent.preproc = lambda params, key, obses: {
-        "actor": obses["unified_obs"],
-        "critic": obses["unified_obs"],
-    }
-    agent.critic = lambda params, key, feature: jnp.zeros((*feature["critic"].shape[:-1], 1))
-    agent.actor = lambda params, key, feature: (
-        jnp.zeros((*feature["actor"].shape[:-1], 2)),
+    agent.critic = lambda params, key, obses: jnp.zeros((*obses["unified_obs"].shape[:-1], 1))
+    agent.actor = lambda params, key, obses: (
+        jnp.zeros((*obses["unified_obs"].shape[:-1], 2)),
         jnp.zeros((1, 2)),
     )
     agent.get_logprob = MethodType(family.get_logprob_continuous, agent)
@@ -52,16 +48,18 @@ def _rollout(worker_count=2, timesteps=3):
 )
 def test_continuous_tppo_full_train_step_handles_gaussian_minibatches(cls, family, kind):
     agent = _continuous_agent(cls, family)
-    agent.params = {"bias": jnp.asarray(0.0, dtype=jnp.float32)}
-    agent.critic = lambda params, key, feature: (
-        jnp.zeros((*feature["critic"].shape[:-1], 1)) + params["bias"]
+    agent.actor_params = {"bias": jnp.asarray(0.0, dtype=jnp.float32)}
+    agent.critic_params = {"bias": jnp.asarray(0.0, dtype=jnp.float32)}
+    agent.critic = lambda params, key, obses: (
+        jnp.zeros((*obses["unified_obs"].shape[:-1], 1)) + params["bias"]
     )
-    agent.actor = lambda params, key, feature: (
-        jnp.zeros((*feature["actor"].shape[:-1], 2)) + params["bias"],
+    agent.actor = lambda params, key, obses: (
+        jnp.zeros((*obses["unified_obs"].shape[:-1], 2)) + params["bias"],
         jnp.zeros((1, 2)),
     )
     agent.optimizer = optax.sgd(1e-3)
-    agent.opt_state = agent.optimizer.init(agent.params)
+    agent.actor_opt_state = agent.optimizer.init(agent.actor_params)
+    agent.critic_opt_state = agent.optimizer.init(agent.critic_params)
     agent.val_coef = 0.2
     agent.ent_coef = 0.01
     agent.use_entropy_adv_shaping = False
@@ -81,8 +79,10 @@ def test_continuous_tppo_full_train_step_handles_gaussian_minibatches(cls, famil
         agent.value_clip = 0.3
         result = TPPO._train_step(
             agent,
-            agent.params,
-            agent.opt_state,
+            agent.actor_params,
+            agent.critic_params,
+            agent.actor_opt_state,
+            agent.critic_opt_state,
             jax.random.PRNGKey(0),
             obses,
             actions,
@@ -97,8 +97,10 @@ def test_continuous_tppo_full_train_step_handles_gaussian_minibatches(cls, famil
         agent.cut_max = 1.0
         result = IMPALA_TPPO._train_step(
             agent,
-            agent.params,
-            agent.opt_state,
+            agent.actor_params,
+            agent.critic_params,
+            agent.actor_opt_state,
+            agent.critic_opt_state,
             jax.random.PRNGKey(0),
             obses,
             actions,
@@ -110,4 +112,5 @@ def test_continuous_tppo_full_train_step_handles_gaussian_minibatches(cls, famil
         )
 
     assert jnp.isfinite(result[0]["bias"])
-    assert all(bool(jnp.all(jnp.isfinite(value))) for value in result[2:])
+    assert jnp.isfinite(result[1]["bias"])
+    assert all(bool(jnp.all(jnp.isfinite(value))) for value in result[4:])

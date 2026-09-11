@@ -31,7 +31,8 @@ from flax import struct
 class ACCheckpointState:
     """Actor-critic parameters and the observation statistics used for inference."""
 
-    params: Any
+    actor_params: Any
+    critic_params: Any
     obs_rms_state: dict | None = None
 
 

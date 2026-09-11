@@ -165,7 +165,7 @@ def test_apex_dpg_constructors_initialize_model_setup_dependencies(monkeypatch, 
 
     def _model_builder_maker(*_args, **_kwargs):
         def _builder(*_builder_args, **_builder_kwargs):
-            return "preproc", "actor", "critic", {"params": 1}
+            return "actor", "critic", {"policy": 1}, {"critic": 1}
 
         return _builder
 
@@ -212,14 +212,13 @@ def test_flax_ac_continuous_actor_initializes_log_std_param():
         {"unified_obs": [3]},
         [1],
         "continuous",
-        {"node": 8, "hidden_n": 1, "embedding_mode": "normal"},
+        {"actor_node": 8, "critic_node": 8, "hidden_n": 1, "embedding_mode": "normal"},
     )
-    preproc, actor, critic, params = builder(jax.random.PRNGKey(0))
+    actor, critic, actor_params, critic_params = builder(jax.random.PRNGKey(0))
 
     obs = {"unified_obs": np.zeros((1, 3), dtype=np.float32)}
-    feature = preproc(params, None, obs)
-    mu, log_std = actor(params, None, feature)
-    value = critic(params, None, feature)
+    mu, log_std = actor(actor_params, None, obs)
+    value = critic(critic_params, None, obs)
 
     assert mu.shape[-1] == 1
     assert log_std.shape == (1, 1)
