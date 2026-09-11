@@ -11,7 +11,7 @@ class SurrogateIMPALA(IMPALA_Family):
 
     Both share identical model setup, V-trace preprocessing, and the
     minibatch/epoch optimization loop; they differ only in the per-sample actor
-    loss supplied through ``_loss_discrete``/``_loss_continuous``. Subclasses
+    loss supplied through ``_actor_loss_discrete``/``_actor_loss_continuous``. Subclasses
     keep those plus their own ``learn``.
     """
 
@@ -87,10 +87,10 @@ class SurrogateIMPALA(IMPALA_Family):
 
         self._train_step = jax.jit(self._train_step)
         self.preprocess = jax.jit(self.preprocess)
-        self._loss = (
-            jax.jit(self._loss_discrete)
+        self._actor_loss = (
+            jax.jit(self._actor_loss_discrete)
             if self.action_type == "discrete"
-            else jax.jit(self._loss_continuous)
+            else jax.jit(self._actor_loss_continuous)
         )
 
     def train_step(self, steps):
@@ -234,14 +234,11 @@ class SurrogateIMPALA(IMPALA_Family):
                 actor_params, critic_params, actor_opt_state, critic_opt_state, key = updates
                 obs, act, vs, mu_prob, pi_prob, adv = input
                 use_key, key = jax.random.split(key)
-                (
-                    (
-                        _total_loss,
-                        (critic_loss, actor_loss, entropy_loss),
-                    ),
-                    (actor_grad, critic_grad),
-                ) = jax.value_and_grad(self._loss, argnums=(0, 1), has_aux=True)(
-                    actor_params, critic_params, obs, act, vs, mu_prob, pi_prob, adv, use_key
+                (_, (actor_loss, entropy_loss)), actor_grad = jax.value_and_grad(
+                    self._actor_loss, has_aux=True
+                )(actor_params, obs, act, mu_prob, pi_prob, adv, use_key)
+                (_, critic_loss), critic_grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
+                    critic_params, actor_params, obs, vs, use_key
                 )
                 actor_updates, actor_opt_state = self.optimizer.update(
                     actor_grad, actor_opt_state, params=actor_params

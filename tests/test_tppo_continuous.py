@@ -69,7 +69,7 @@ def test_continuous_tppo_full_train_step_handles_gaussian_minibatches(cls, famil
     agent.kl_range = 0.05
     agent.minibatch_size = 2
     agent.epoch_num = 1
-    agent._loss = MethodType(cls._loss_continuous, agent)
+    agent._actor_loss = MethodType(cls._actor_loss_continuous, agent)
     obses, actions, scalars = _rollout(timesteps=2)
 
     if kind == "local":

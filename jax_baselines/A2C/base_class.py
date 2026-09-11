@@ -216,12 +216,12 @@ class Actor_Critic_Policy_Gradient_Family:
         if self.action_type == "discrete":
             self._get_actions = self._get_actions_discrete
             self.get_logprob = self.get_logprob_discrete
-            self._loss = self._loss_discrete
+            self._actor_loss = self._actor_loss_discrete
             self.actions = self.action_discrete
         elif self.action_type == "continuous":
             self._get_actions = self._get_actions_continuous
             self.get_logprob = self.get_logprob_continuous
-            self._loss = self._loss_continuous
+            self._actor_loss = self._actor_loss_continuous
             self.actions = self.action_continuous
 
     def setup_model(self):
@@ -290,11 +290,11 @@ class Actor_Critic_Policy_Gradient_Family:
         )
         return (prob, log_prob) if out_prob else log_prob
 
-    def _loss_continuous(self):
-        pass
+    def _actor_loss_continuous(self):
+        raise NotImplementedError
 
-    def _loss_discrete(self):
-        pass
+    def _actor_loss_discrete(self):
+        raise NotImplementedError
 
     def description(self, eval_result=None):
         description = ""

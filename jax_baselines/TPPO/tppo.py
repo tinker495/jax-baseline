@@ -196,23 +196,19 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
                 if self.gae_normalize and self.gae_normalize_scope == "minibatch":
                     adv = normalize_advantage(adv)
                 use_key, key = jax.random.split(key)
-                (
-                    (
-                        _total_loss,
-                        (c_loss, a_loss, entropy_loss, kl),
-                    ),
-                    (actor_grad, critic_grad),
-                ) = jax.value_and_grad(self._loss, argnums=(0, 1), has_aux=True)(
+                (_, (a_loss, entropy_loss, kl)), actor_grad = jax.value_and_grad(
+                    self._actor_loss, has_aux=True
+                )(
                     actor_params,
-                    critic_params,
                     obs,
                     act,
-                    old_value,
-                    target,
                     old_prob,
                     old_act_prob,
                     adv,
                     use_key,
+                )
+                (_, c_loss), critic_grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
+                    critic_params, actor_params, obs, old_value, target, use_key
                 )
                 actor_updates, actor_opt_state = self.optimizer.update(
                     actor_grad, actor_opt_state, params=actor_params
@@ -299,25 +295,24 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             jnp.mean(targets),
         )
 
-    def _loss_discrete(
+    def _critic_loss(self, critic_params, actor_params, obses, old_value, targets, key):
+        values = self.critic(critic_params, actor_params, key, obses)
+        clipped_values = old_value + jnp.clip(values - old_value, -self.value_clip, self.value_clip)
+        critic_loss = jnp.mean(
+            jnp.maximum(jnp.square(values - targets), jnp.square(clipped_values - targets))
+        )
+        return self.val_coef * critic_loss, critic_loss
+
+    def _actor_loss_discrete(
         self,
         actor_params,
-        critic_params,
         obses,
         actions,
-        old_value,
-        targets,
         old_prob,
         old_act_prob,
         adv,
         key,
     ):
-        vals = self.critic(critic_params, actor_params, key, obses)
-        vals_clip = old_value + jnp.clip(vals - old_value, -self.value_clip, self.value_clip)
-        vf1 = jnp.square(vals - targets)
-        vf2 = jnp.square(vals_clip - targets)
-        critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
-
         prob, log_prob = self.get_logprob(
             self.actor(actor_params, key, obses), actions, key, out_prob=True
         )
@@ -344,30 +339,21 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         )
         entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
-            total_loss = self.val_coef * critic_loss + actor_loss
+            actor_objective = actor_loss
         else:
-            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
-        return total_loss, (critic_loss, actor_loss, entropy_loss, jnp.mean(kl))
+            actor_objective = actor_loss + self.ent_coef * entropy_loss
+        return actor_objective, (actor_loss, entropy_loss, jnp.mean(kl))
 
-    def _loss_continuous(
+    def _actor_loss_continuous(
         self,
         actor_params,
-        critic_params,
         obses,
         actions,
-        old_value,
-        targets,
         old_prob,
         old_act_prob,
         adv,
         key,
     ):
-        vals = self.critic(critic_params, actor_params, key, obses)
-        vals_clip = old_value + jnp.clip(vals - old_value, -self.value_clip, self.value_clip)
-        vf1 = jnp.square(vals - targets)
-        vf2 = jnp.square(vals_clip - targets)
-        critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
-
         prob, log_prob = self.get_logprob(
             self.actor(actor_params, key, obses), actions, key, out_prob=True
         )
@@ -403,7 +389,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         )
         entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
-            total_loss = self.val_coef * critic_loss + actor_loss
+            actor_objective = actor_loss
         else:
-            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
-        return total_loss, (critic_loss, actor_loss, entropy_loss, jnp.mean(kl))
+            actor_objective = actor_loss + self.ent_coef * entropy_loss
+        return actor_objective, (actor_loss, entropy_loss, jnp.mean(kl))

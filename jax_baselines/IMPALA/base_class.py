@@ -1,5 +1,7 @@
 import time
 from collections import deque
+from collections.abc import Callable
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -24,6 +26,7 @@ from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 class IMPALA_Family:
+    critic: Callable[..., Any]
     _run_name = "IMPALA"
     _learn_log_interval = 1000
 
@@ -115,6 +118,11 @@ class IMPALA_Family:
 
     def _make_optimizer(self, learning_rate):
         return self.optimizer_factory(learning_rate)
+
+    def _critic_loss(self, critic_params, actor_params, obses, targets, key):
+        values = self.critic(critic_params, actor_params, key, obses)
+        critic_loss = jnp.mean(jnp.square(targets - values))
+        return self.val_coef * critic_loss, critic_loss
 
     def get_env_setup(self):
         (

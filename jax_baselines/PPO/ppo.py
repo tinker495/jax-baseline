@@ -7,15 +7,7 @@ from jax_baselines.A2C.surrogate_base import SurrogatePolicyGradient
 class PPO(SurrogatePolicyGradient):
     _run_name = "PPO"
 
-    def _loss_discrete(
-        self, actor_params, critic_params, obses, actions, old_value, targets, old_prob, adv, key
-    ):
-        vals = self.critic(critic_params, actor_params, key, obses)
-        vals_clip = old_value + jnp.clip(vals - old_value, -self.value_clip, self.value_clip)
-        vf1 = jnp.square(vals - targets)
-        vf2 = jnp.square(vals_clip - targets)
-        critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
-
+    def _actor_loss_discrete(self, actor_params, obses, actions, old_prob, adv, key):
         prob, log_prob = self.get_logprob(
             self.actor(actor_params, key, obses), actions, key, out_prob=True
         )
@@ -35,20 +27,12 @@ class PPO(SurrogatePolicyGradient):
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
         entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
-            total_loss = self.val_coef * critic_loss + actor_loss
+            actor_objective = actor_loss
         else:
-            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
-        return total_loss, (critic_loss, actor_loss, entropy_loss)
+            actor_objective = actor_loss + self.ent_coef * entropy_loss
+        return actor_objective, (actor_loss, entropy_loss)
 
-    def _loss_continuous(
-        self, actor_params, critic_params, obses, actions, old_value, targets, old_prob, adv, key
-    ):
-        vals = self.critic(critic_params, actor_params, key, obses)
-        vals_clip = old_value + jnp.clip(vals - old_value, -self.value_clip, self.value_clip)
-        vf1 = jnp.square(jnp.squeeze(vals - targets))
-        vf2 = jnp.square(jnp.squeeze(vals_clip - targets))
-        critic_loss = jnp.mean(jnp.maximum(vf1, vf2))
-
+    def _actor_loss_continuous(self, actor_params, obses, actions, old_prob, adv, key):
         prob, log_prob = self.get_logprob(
             self.actor(actor_params, key, obses), actions, key, out_prob=True
         )
@@ -73,7 +57,7 @@ class PPO(SurrogatePolicyGradient):
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
         entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
-            total_loss = self.val_coef * critic_loss + actor_loss
+            actor_objective = actor_loss
         else:
-            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
-        return total_loss, (critic_loss, actor_loss, entropy_loss)
+            actor_objective = actor_loss + self.ent_coef * entropy_loss
+        return actor_objective, (actor_loss, entropy_loss)

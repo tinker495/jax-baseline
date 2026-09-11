@@ -85,10 +85,11 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         value = jnp.vstack(value)
         targets = jnp.vstack(targets)
         adv = targets - value
-        (_total_loss, (critic_loss, actor_loss, entropy_loss)), (actor_grad, critic_grad) = (
-            jax.value_and_grad(self._loss, argnums=(0, 1), has_aux=True)(
-                actor_params, critic_params, obses, actions, targets, adv, key
-            )
+        (_, (actor_loss, entropy_loss)), actor_grad = jax.value_and_grad(
+            self._actor_loss, has_aux=True
+        )(actor_params, obses, actions, adv, key)
+        (_, critic_loss), critic_grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
+            critic_params, actor_params, obses, targets, key
         )
         actor_updates, actor_opt_state = self.optimizer.update(
             actor_grad, actor_opt_state, params=actor_params
@@ -109,10 +110,12 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             jnp.mean(targets),
         )
 
-    def _loss_discrete(self, actor_params, critic_params, obses, actions, targets, adv, key):
-        vals = self.critic(critic_params, actor_params, key, obses)
-        critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
+    def _critic_loss(self, critic_params, actor_params, obses, targets, key):
+        values = self.critic(critic_params, actor_params, key, obses)
+        critic_loss = jnp.mean(jnp.square(targets - values))
+        return self.val_coef * critic_loss, critic_loss
 
+    def _actor_loss_discrete(self, actor_params, obses, actions, adv, key):
         prob, log_prob = self.get_logprob(
             self.actor(actor_params, key, obses), actions, key, out_prob=True
         )
@@ -128,15 +131,12 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
         entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
-            total_loss = self.val_coef * critic_loss + actor_loss
+            actor_objective = actor_loss
         else:
-            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
-        return total_loss, (critic_loss, actor_loss, entropy_loss)
+            actor_objective = actor_loss + self.ent_coef * entropy_loss
+        return actor_objective, (actor_loss, entropy_loss)
 
-    def _loss_continuous(self, actor_params, critic_params, obses, actions, targets, adv, key):
-        vals = self.critic(critic_params, actor_params, key, obses)
-        critic_loss = jnp.mean(jnp.square(jnp.squeeze(targets - vals)))
-
+    def _actor_loss_continuous(self, actor_params, obses, actions, adv, key):
         prob, log_prob = self.get_logprob(
             self.actor(actor_params, key, obses), actions, key, out_prob=True
         )
@@ -157,7 +157,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         actor_loss = -jnp.mean(log_prob * jax.lax.stop_gradient(adv))
         entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
-            total_loss = self.val_coef * critic_loss + actor_loss
+            actor_objective = actor_loss
         else:
-            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
-        return total_loss, (critic_loss, actor_loss, entropy_loss)
+            actor_objective = actor_loss + self.ent_coef * entropy_loss
+        return actor_objective, (actor_loss, entropy_loss)
