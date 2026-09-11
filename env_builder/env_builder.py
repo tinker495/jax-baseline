@@ -93,12 +93,12 @@ def _single_env_info(env, env_id: str) -> EnvInfo:
 
 
 def _prepared_env_info(env, env_id: str) -> EnvInfo:
-    if isinstance(env, VectorizedEnv):
-        env_info = env.env_info
-        if env_info is None:
-            raise ValueError("Vectorized env must expose env_info")
-        return env_info
-    return _single_env_info(env, env_id)
+    if not isinstance(env, VectorizedEnv):
+        return _single_env_info(env, env_id)
+    env_info = env.env_info
+    if env_info is None:
+        raise ValueError("Vectorized env must expose env_info")
+    return env_info
 
 
 _ENV_BACKENDS = ("gymnasium", "envpool", "mjlab")
@@ -150,21 +150,21 @@ def get_env_builder(
                 jax_arrays=jax_arrays,
                 reuse_for_eval=reuse_for_eval and render_mode is None,
             )
-        if worker > 1:
-            # Vectorized backend is an explicit choice: gymnasium AsyncVectorEnv
-            # (default, portable) or EnvPool (faster, only for envs it ships).
-            if env_backend == "envpool":
-                if not _is_envpool_supported(env_name):
-                    raise ValueError(
-                        f"env_backend='envpool' requested but EnvPool has no spec for "
-                        f"{env_name!r}; use env_backend='gymnasium' or a supported env id."
-                    )
-                return EnvPoolVectorizedEnv(
-                    env_name,
-                    worker_num=worker,
-                    seed=seed,
-                    observation_key=observation_key,
+        # Vectorized backend is an explicit choice: gymnasium AsyncVectorEnv
+        # (default, portable) or EnvPool (faster, only for envs it ships).
+        if worker > 1 and env_backend == "envpool":
+            if not _is_envpool_supported(env_name):
+                raise ValueError(
+                    f"env_backend='envpool' requested but EnvPool has no spec for "
+                    f"{env_name!r}; use env_backend='gymnasium' or a supported env id."
                 )
+            return EnvPoolVectorizedEnv(
+                env_name,
+                worker_num=worker,
+                seed=seed,
+                observation_key=observation_key,
+            )
+        if worker > 1:
             return GymVectorizedEnv(
                 env_name,
                 worker_num=worker,
@@ -172,32 +172,31 @@ def get_env_builder(
                 observation_key=observation_key,
                 reuse_for_eval=reuse_for_eval and render_mode is None,
             )
+        from env_builder.atari_wrappers import get_env_type, make_wrap_atari
+
+        env_type, _ = get_env_type(env_name)
+        if env_type == "atari_env":
+            env = make_wrap_atari(env_name, clip_rewards=True)
         else:
-            from env_builder.atari_wrappers import get_env_type, make_wrap_atari
+            env = gym.make(env_name, render_mode=render_mode)
+        env = gym.wrappers.TransformObservation(
+            env,
+            lambda observation: normalize_observation(observation, observation_key),
+            spaces.Dict(flatten_observation_space(env.observation_space, observation_key)),
+        )
+        env = _normalize_action_space(env)
+        if reuse_for_eval and render_mode is None:
+            from env_builder.gym_state import GymStateWrapper
 
-            env_type, _ = get_env_type(env_name)
-            if env_type == "atari_env":
-                env = make_wrap_atari(env_name, clip_rewards=True)
-            else:
-                env = gym.make(env_name, render_mode=render_mode)
-            env = gym.wrappers.TransformObservation(
-                env,
-                lambda observation: normalize_observation(observation, observation_key),
-                spaces.Dict(flatten_observation_space(env.observation_space, observation_key)),
-            )
-            env = _normalize_action_space(env)
-            if reuse_for_eval and render_mode is None:
-                from env_builder.gym_state import GymStateWrapper
-
-                try:
-                    env = GymStateWrapper(env)
-                except (TypeError, ValueError):
-                    env.close()
-                    raise
-                if seed is None:
-                    env.reset()
-            seed_env(env, seed)
-            return env
+            try:
+                env = GymStateWrapper(env)
+            except (TypeError, ValueError):
+                env.close()
+                raise
+            if seed is None:
+                env.reset()
+        seed_env(env, seed)
+        return env
 
     def prepare_envs(num_workers=1, seed=None):
         eval_seed = None if seed is None else seed + 1
