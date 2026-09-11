@@ -107,7 +107,11 @@ def build_env(args):
 
 
 def _variant(args):
-    return "simbav2_" if args.simbav2 else "simba_" if args.simba else ""
+    if args.simbav2:
+        return "simbav2_"
+    if args.simba:
+        return "simba_"
+    return ""
 
 
 def _simba(args):
