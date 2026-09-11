@@ -204,29 +204,20 @@ class APE_X_DQN(Ape_X_Family):
         key,
     ):
         next_q = self.get_q(target_params, nxtobses, key)
+        action_params = params if self.double_q else target_params
+        next_action_q = self.get_q(action_params, nxtobses, key) if self.double_q else next_q
 
         if self.munchausen:
-            if self.double_q:
-                next_sub_q, tau_log_pi_next = q_log_pi(
-                    self.get_q(params, nxtobses, key), self.munchausen_entropy_tau
-                )
-            else:
-                next_sub_q, tau_log_pi_next = q_log_pi(next_q, self.munchausen_entropy_tau)
+            next_sub_q, tau_log_pi_next = q_log_pi(next_action_q, self.munchausen_entropy_tau)
             pi_next = jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau)
             next_vals = jnp.sum(pi_next * (next_q - tau_log_pi_next), axis=1, keepdims=True)
 
-            if self.double_q:
-                q_k_targets = self.get_q(params, obses, key)
-            else:
-                q_k_targets = self.get_q(target_params, obses, key)
+            q_k_targets = self.get_q(action_params, obses, key)
             _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau, clip=True)
             munchausen_addon = jnp.take_along_axis(tau_log_pi, actions, axis=1)
 
             rewards = rewards + self.munchausen_alpha * munchausen_addon
         else:
-            if self.double_q:
-                next_actions = jnp.argmax(self.get_q(params, nxtobses, key), axis=1, keepdims=True)
-            else:
-                next_actions = jnp.argmax(next_q, axis=1, keepdims=True)
+            next_actions = jnp.argmax(next_action_q, axis=1, keepdims=True)
             next_vals = jnp.take_along_axis(next_q, next_actions, axis=1)
         return (not_terminateds * next_vals * self._gamma) + rewards

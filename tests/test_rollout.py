@@ -271,9 +271,16 @@ def test_rollout_reward_normalization_flag_controls_transition_recording(enabled
     assert transitions == expected
 
 
-@pytest.mark.parametrize("vectorized", [False, True])
-@pytest.mark.parametrize("checkpointing", [False, True])
-def test_every_rollout_path_records_reward_normalization_transitions(vectorized, checkpointing):
+@pytest.mark.parametrize(
+    ("vectorized", "learn"),
+    [
+        (False, RolloutEngine.learn_single_env),
+        (False, RolloutEngine.learn_single_env_checkpointing),
+        (True, RolloutEngine.learn_vectorized_env),
+        (True, RolloutEngine.learn_vectorized_env_checkpointing),
+    ],
+)
+def test_every_rollout_path_records_reward_normalization_transitions(vectorized, learn):
     rec = []
     if vectorized:
         env = FakeVecEnv(
@@ -293,17 +300,7 @@ def test_every_rollout_path_records_reward_normalization_transitions(vectorized,
     transitions = []
     runner.spec.reward_normalization = True
     runner.spec.record_transition = lambda *args: transitions.append(args)
-    method = (
-        runner.learn_vectorized_env_checkpointing
-        if vectorized and checkpointing
-        else runner.learn_vectorized_env
-        if vectorized
-        else runner.learn_single_env_checkpointing
-        if checkpointing
-        else runner.learn_single_env
-    )
-
-    method(FakePbar([0]))
+    learn(runner, FakePbar([0]))
 
     assert len(transitions) == 1
 

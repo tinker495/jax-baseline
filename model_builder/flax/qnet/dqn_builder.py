@@ -33,22 +33,15 @@ class Model(nn.Module):
                 + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.01))]
             )(feature)
             return q_net
-        else:
-            v = nn.Sequential(
-                [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [self.layer(1, kernel_init=clip_factorized_uniform(0.01))]
-            )(feature)
-            a = nn.Sequential(
-                [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.01))]
-            )(feature)
-            return v + a - jnp.mean(a, axis=1, keepdims=True)
+        v = nn.Sequential(
+            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            + [self.layer(1, kernel_init=clip_factorized_uniform(0.01))]
+        )(feature)
+        a = nn.Sequential(
+            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(0.01))]
+        )(feature)
+        return v + a - jnp.mean(a, axis=1, keepdims=True)
 
 
 def model_builder_maker(observation_space, action_space, dueling_model, param_noise, policy_kwargs):
@@ -80,7 +73,6 @@ def model_builder_maker(observation_space, action_space, dueling_model, param_no
             params = model.init(key, observation)
             print_flax_model_summary(print_model, key, (model, observation))
             return preproc_fn, model_fn, params
-        else:
-            return preproc_fn, model_fn
+        return preproc_fn, model_fn
 
     return model_builder

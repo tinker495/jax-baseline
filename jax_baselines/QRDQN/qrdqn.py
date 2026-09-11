@@ -202,13 +202,13 @@ class QRDQN(Q_Network_Family):
         key,
     ):
         next_q = self.get_q(target_params, nxtobses, key)
+        action_params = params if self.double_q else target_params
+        next_action_q = self.get_q(action_params, nxtobses, key) if self.double_q else next_q
 
         if self.munchausen:
-            if self.double_q:
-                next_q_mean = jnp.mean(self.get_q(params, nxtobses, key), axis=2)
-            else:
-                next_q_mean = jnp.mean(next_q, axis=2)
-            next_sub_q, tau_log_pi_next = q_log_pi(next_q_mean, self.munchausen_entropy_tau)
+            next_sub_q, tau_log_pi_next = q_log_pi(
+                jnp.mean(next_action_q, axis=2), self.munchausen_entropy_tau
+            )
             pi_next = jnp.expand_dims(
                 jax.nn.softmax(next_sub_q / self.munchausen_entropy_tau), axis=2
             )  # batch x actions x 1
@@ -217,25 +217,15 @@ class QRDQN(Q_Network_Family):
             )  # batch x actions x support
             next_vals = jnp.sum(pi_next * next_vals, axis=1)
 
-            if self.double_q:
-                q_k_targets = jnp.mean(self.get_q(params, obses, key), axis=2)
-            else:
-                q_k_targets = jnp.mean(self.get_q(target_params, obses, key), axis=2)
+            q_k_targets = jnp.mean(self.get_q(action_params, obses, key), axis=2)
             _, tau_log_pi = q_log_pi(q_k_targets, self.munchausen_entropy_tau, clip=True)
             munchausen_addon = jnp.take_along_axis(tau_log_pi, jnp.squeeze(actions, axis=2), axis=1)
 
             rewards = rewards + self.munchausen_alpha * munchausen_addon
         else:
-            if self.double_q:
-                next_actions = jnp.argmax(
-                    jnp.mean(self.get_q(params, nxtobses, key), axis=2, keepdims=True),
-                    axis=1,
-                    keepdims=True,
-                )
-            else:
-                next_actions = jnp.argmax(
-                    jnp.mean(next_q, axis=2, keepdims=True), axis=1, keepdims=True
-                )
+            next_actions = jnp.argmax(
+                jnp.mean(next_action_q, axis=2, keepdims=True), axis=1, keepdims=True
+            )
             next_vals = jnp.squeeze(
                 jnp.take_along_axis(next_q, next_actions, axis=1)
             )  # batch x support

@@ -138,22 +138,24 @@ class DPGTrainingLifecycle:
             data["rewards"] = self.agent.reward_normalizer.normalize(data["rewards"])
 
     def _update_priorities(self, data, report):
-        if self.agent.prioritized_replay:
-            convert = (
-                flatten_priority_values
-                if isinstance(data["indexes"], jax.Array)
-                else host_priority_values
-            )
-            indexes = convert(data["indexes"])
-            priorities = convert(report.new_priorities)
-            self.agent.replay_buffer.update_priorities(indexes, priorities)
+        if not self.agent.prioritized_replay:
+            return
+        convert = (
+            flatten_priority_values
+            if isinstance(data["indexes"], jax.Array)
+            else host_priority_values
+        )
+        indexes = convert(data["indexes"])
+        priorities = convert(report.new_priorities)
+        self.agent.replay_buffer.update_priorities(indexes, priorities)
 
     def _log_report(self, report, steps, logger_run, log_interval):
         interval = self.agent.log_interval if log_interval is None else log_interval
-        if logger_run and (steps - self.agent._last_log_step >= interval):
-            self.agent._last_log_step = steps
-            metrics = report.metrics
-            if self.agent.reward_normalizer is not None:
-                metrics = {**metrics, "rollout/reward_scale": self.agent.reward_normalizer.scale}
-            for metric_name, metric_value in jax.device_get(metrics).items():
-                logger_run.log_metric(metric_name, metric_value, steps)
+        if not (logger_run and steps - self.agent._last_log_step >= interval):
+            return
+        self.agent._last_log_step = steps
+        metrics = report.metrics
+        if self.agent.reward_normalizer is not None:
+            metrics = {**metrics, "rollout/reward_scale": self.agent.reward_normalizer.scale}
+        for metric_name, metric_value in jax.device_get(metrics).items():
+            logger_run.log_metric(metric_name, metric_value, steps)

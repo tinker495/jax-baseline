@@ -88,11 +88,12 @@ class Actor_Critic_Policy_Gradient_Family:
     ):
         if memory_backend not in ("auto", "cpu", "gpu"):
             raise ValueError("memory_backend must be 'auto', 'cpu', or 'gpu'")
-        if use_entropy_adv_shaping:
-            if not np.isfinite(ent_coef) or ent_coef < 0:
-                raise ValueError("entropy shaping requires finite ent_coef >= 0")
-            if not np.isfinite(entropy_adv_shaping_kappa) or entropy_adv_shaping_kappa <= 1:
-                raise ValueError("entropy shaping requires finite entropy_adv_shaping_kappa > 1")
+        if use_entropy_adv_shaping and (not np.isfinite(ent_coef) or ent_coef < 0):
+            raise ValueError("entropy shaping requires finite ent_coef >= 0")
+        if use_entropy_adv_shaping and (
+            not np.isfinite(entropy_adv_shaping_kappa) or entropy_adv_shaping_kappa <= 1
+        ):
+            raise ValueError("entropy shaping requires finite entropy_adv_shaping_kappa > 1")
         self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
         self.num_workers = num_workers
@@ -296,26 +297,18 @@ class Actor_Critic_Policy_Gradient_Family:
         prob = jnp.clip(prob, 1e-8, 1.0)
         prob = prob / jnp.sum(prob, axis=-1, keepdims=True)
         action = action.astype(jnp.int32)
-        if out_prob:
-            return prob, jnp.log(jnp.take_along_axis(prob, action, axis=1))
-        else:
-            return jnp.log(jnp.take_along_axis(prob, action, axis=1))
+        log_prob = jnp.log(jnp.take_along_axis(prob, action, axis=1))
+        return (prob, log_prob) if out_prob else log_prob
 
     def get_logprob_continuous(self, prob, action, key, out_prob=False):
         mu, log_std = prob
         std = jnp.exp(log_std)
-        if out_prob:
-            return prob, -(
-                0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True)
-                + jnp.sum(log_std, axis=-1, keepdims=True)
-                + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
-            )
-        else:
-            return -(
-                0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True)
-                + jnp.sum(log_std, axis=-1, keepdims=True)
-                + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
-            )
+        log_prob = -(
+            0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True)
+            + jnp.sum(log_std, axis=-1, keepdims=True)
+            + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
+        )
+        return (prob, log_prob) if out_prob else log_prob
 
     def _loss_continuous(self):
         pass
@@ -512,7 +505,7 @@ class Actor_Critic_Policy_Gradient_Family:
         # terminal so it contributes a zero-value target and never bridges the
         # two episodes in the return. prev_done chains off the *real* env dones,
         # and the same mask keeps the dummy out of the rollout episode stats.
-        prev_done = None
+        prev_done = np.zeros(self.worker_size, dtype=bool)
         convert_action = self.conv_action if self.action_type == "continuous" else None
 
         def send(actions):
@@ -598,7 +591,7 @@ class Actor_Critic_Policy_Gradient_Family:
                 done = np.logical_or(terminateds, truncateds)
                 real_reset = vector_real_reset_mask(self.env, terminateds, truncateds, infos)
                 autoreset = vector_autoreset_mask(self.env, terminateds, truncateds, infos)
-                active = np.ones(self.worker_size, dtype=bool) if prev_done is None else ~prev_done
+                active = ~prev_done
                 scores[active] += rewards[active]
                 eplens[active] += 1
                 step_original, step_original_present = extract_vector_original_rewards(
@@ -608,7 +601,7 @@ class Actor_Critic_Policy_Gradient_Family:
                 originals[active_original] += step_original[active_original]
                 original_present[active_original] = True
 
-                if prev_done is not None and prev_done.any():
+                if prev_done.any():
                     # Flag the dummy step terminal AND zero its reward so it is fully
                     # inert (zero-value target, no episode bridge), independent of
                     # whatever the env reports on the discarded autoreset step.

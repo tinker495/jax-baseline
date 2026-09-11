@@ -227,22 +227,24 @@ class NstepReplayBuffer(ReplayBuffer):
             self.obsdict, self.nextobsdict, env_nextobsdict, action_space, n_step, gamma
         )
 
-        if worker_size > 1:
-            self.buffer = self._create_central_buffer(size, central_env_dict, comp_kw)
-            # ponytail: row isolation preserves immediate sampling;
-            # per-worker central buffers if compression ratio matters.
-            self._isolate_multiworker_steps = bool(comp_kw)
-            if n_step == 1:
-                self.add = self.multiworker_single_step_add
-            else:
-                self._local_capacity = n_step + 1
-                self.local_buffers = [
-                    cpprb.ReplayBuffer(self._local_capacity, env_dict=local_env_dict, Nstep=n_s)
-                    for _ in range(worker_size)
-                ]
-                self.add = self.multiworker_add
-        else:
+        if worker_size <= 1:
             self.buffer = self._create_central_buffer(size, central_env_dict, comp_kw, n_s=n_s)
+            return
+
+        self.buffer = self._create_central_buffer(size, central_env_dict, comp_kw)
+        # ponytail: row isolation preserves immediate sampling;
+        # per-worker central buffers if compression ratio matters.
+        self._isolate_multiworker_steps = bool(comp_kw)
+        if n_step == 1:
+            self.add = self.multiworker_single_step_add
+            return
+
+        self._local_capacity = n_step + 1
+        self.local_buffers = [
+            cpprb.ReplayBuffer(self._local_capacity, env_dict=local_env_dict, Nstep=n_s)
+            for _ in range(worker_size)
+        ]
+        self.add = self.multiworker_add
 
     def _create_central_buffer(self, size, env_dict, comp_kw, n_s=None):
         if n_s is not None:

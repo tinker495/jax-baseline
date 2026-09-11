@@ -48,23 +48,22 @@ class Model(nn.Module):
                     + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))]
                 )(mul_embedding)
                 return q_net
-            else:
-                v = nn.Sequential(
-                    [
-                        self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                        for i in range(2 * self.hidden_n)
-                    ]
-                    + [self.layer(1, kernel_init=clip_factorized_uniform(3))]
-                )(mul_embedding)
-                a = nn.Sequential(
-                    [
-                        self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                        for i in range(2 * self.hidden_n)
-                    ]
-                    + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))]
-                )(mul_embedding)
-                q = v + a - jnp.mean(a, axis=1, keepdims=True)
-                return q
+            v = nn.Sequential(
+                [
+                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
+                    for i in range(2 * self.hidden_n)
+                ]
+                + [self.layer(1, kernel_init=clip_factorized_uniform(3))]
+            )(mul_embedding)
+            a = nn.Sequential(
+                [
+                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
+                    for i in range(2 * self.hidden_n)
+                ]
+                + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))]
+            )(mul_embedding)
+            q = v + a - jnp.mean(a, axis=1, keepdims=True)
+            return q
 
         out = jax.vmap(qnet, in_axes=(None, 2), out_axes=2)(
             feature, costau
@@ -104,7 +103,6 @@ def model_builder_maker(observation_space, action_space, dueling_model, param_no
             params = model.init(key, observation, tau)
             print_flax_model_summary(print_model, key, (model, observation, tau))
             return preproc_fn, model_fn, params
-        else:
-            return preproc_fn, model_fn
+        return preproc_fn, model_fn
 
     return model_builder

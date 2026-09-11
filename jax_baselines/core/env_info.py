@@ -155,20 +155,17 @@ def get_worker_env_info(workers, worker_info, include_action_type=False):
     Returns:
         observation_space, action_size, env_type [, action_type]
     """
-    if isinstance(workers, list):
-        env_dict = worker_info(workers[0])
-        env_info = _require_env_info(env_dict)
-        observation_space = env_info["observation_space"]
-        action_size = env_info["action_size"]
-        action_type = env_info["action_type"]
-        env_type = _validate_core_env_type(env_info)
-
-        if include_action_type:
-            return observation_space, action_size, env_type, action_type
-        else:
-            return observation_space, action_size, env_type
-    else:
+    if not isinstance(workers, list):
         raise ValueError("Invalid workers type")
+    env_info = _require_env_info(worker_info(workers[0]))
+    observation_space = env_info["observation_space"]
+    action_size = env_info["action_size"]
+    action_type = env_info["action_type"]
+    env_type = _validate_core_env_type(env_info)
+
+    if include_action_type:
+        return observation_space, action_size, env_type, action_type
+    return observation_space, action_size, env_type
 
 
 def infer_action_meta(action_type):

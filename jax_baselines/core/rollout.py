@@ -447,17 +447,16 @@ class RolloutEngine:
                     if advance and not ckpt_success:
                         monitor_failed = True
                     emit_original = original_present[idx] and real_reset[idx]
-                    if active[idx]:
-                        spec.record_rollout_episode(
-                            steps,
-                            episode_reward=float(scores[idx]),
-                            episode_length=int(eplens[idx]),
-                            timeout=float(truncateds[idx]),
-                            original_reward=(float(originals[idx]) if emit_original else None),
-                        )
+                    spec.record_rollout_episode(
+                        steps,
+                        episode_reward=float(scores[idx]),
+                        episode_length=int(eplens[idx]),
+                        timeout=float(truncateds[idx]),
+                        original_reward=(float(originals[idx]) if emit_original else None),
+                    )
                     scores[idx] = 0.0
                     eplens[idx] = 0
-                    if active[idx] and emit_original:
+                    if emit_original:
                         originals[idx] = 0.0
                         original_present[idx] = False
 

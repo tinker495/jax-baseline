@@ -22,37 +22,6 @@ def extract_original_reward(info):
     return None
 
 
-def _extract_vector_info_values(infos, worker_size, key, dtype):
-    values = np.zeros(worker_size, dtype=np.float64)
-    present = np.zeros(worker_size, dtype=bool)
-
-    if isinstance(infos, dict):
-        if key not in infos:
-            return values, present
-        raw = np.asarray(infos[key], dtype=dtype)
-        if raw.shape == ():
-            raw = np.full(worker_size, raw.item(), dtype=dtype)
-        else:
-            raw = raw.reshape(-1)
-        count = min(worker_size, raw.shape[0])
-        values[:count] = raw[:count]
-        mask = infos.get(f"_{key}")
-        if mask is None:
-            present[:count] = True
-        else:
-            present[:count] = np.asarray(mask, dtype=bool).reshape(-1)[:count]
-        return values, present
-
-    if isinstance(infos, (list, tuple)):
-        for idx, info in enumerate(infos[:worker_size]):
-            if isinstance(info, dict) and key in info:
-                values[idx] = info[key]
-                present[idx] = True
-        return values, present
-
-    return values, present
-
-
 def extract_vector_original_rewards(infos, worker_size):
     """Return per-worker original rewards and a presence mask from vector infos.
 
@@ -60,7 +29,29 @@ def extract_vector_original_rewards(infos, worker_size):
     expose one info dict per worker. Supporting both shapes keeps rollout
     logging independent from the vector backend.
     """
-    return _extract_vector_info_values(infos, worker_size, "original_reward", np.float64)
+    values = np.zeros(worker_size, dtype=np.float64)
+    present = np.zeros(worker_size, dtype=bool)
+    if isinstance(infos, (list, tuple)):
+        for idx, info in enumerate(infos[:worker_size]):
+            if not isinstance(info, dict) or "original_reward" not in info:
+                continue
+            values[idx] = info["original_reward"]
+            present[idx] = True
+        return values, present
+    if not isinstance(infos, dict) or "original_reward" not in infos:
+        return values, present
+    raw = np.asarray(infos["original_reward"], dtype=np.float64)
+    if raw.shape == ():
+        raw = np.full(worker_size, raw.item(), dtype=np.float64)
+    else:
+        raw = raw.reshape(-1)
+    count = min(worker_size, raw.shape[0])
+    values[:count] = raw[:count]
+    if "_original_reward" not in infos or infos["_original_reward"] is None:
+        present[:count] = True
+        return values, present
+    present[:count] = np.asarray(infos["_original_reward"], dtype=bool).reshape(-1)[:count]
+    return values, present
 
 
 def log_measurement(

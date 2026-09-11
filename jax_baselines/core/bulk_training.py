@@ -48,20 +48,22 @@ def bulk_chunk_plan(gradient_steps, buckets):
         scalar_counts[steps] = scalar_counts[steps - 1] + 1
 
         for bucket in buckets:
-            if bucket <= steps:
-                candidate_calls = calls[steps - bucket] + 1
-                candidate_scalars = scalar_counts[steps - bucket]
-                if _is_better_chunk_plan(
-                    candidate_calls,
-                    candidate_scalars,
-                    bucket,
-                    calls[steps],
-                    scalar_counts[steps],
-                    first_chunks[steps],
-                ):
-                    calls[steps] = candidate_calls
-                    scalar_counts[steps] = candidate_scalars
-                    first_chunks[steps] = bucket
+            if bucket > steps:
+                continue
+            candidate_calls = calls[steps - bucket] + 1
+            candidate_scalars = scalar_counts[steps - bucket]
+            if not _is_better_chunk_plan(
+                candidate_calls,
+                candidate_scalars,
+                bucket,
+                calls[steps],
+                scalar_counts[steps],
+                first_chunks[steps],
+            ):
+                continue
+            calls[steps] = candidate_calls
+            scalar_counts[steps] = candidate_scalars
+            first_chunks[steps] = bucket
 
     chunks = []
     remaining = gradient_steps

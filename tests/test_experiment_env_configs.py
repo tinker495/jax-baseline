@@ -17,7 +17,7 @@ def test_simulator_extra_is_optional_and_old_stacks_are_removed():
 
 @pytest.mark.parametrize(
     ("filename", "family", "algorithms"),
-    [("pg_mjlab_go1.yaml", "pg", ["PPO", "SPO"]), ("dpg_mjlab_go1.yaml", "dpg", ["SAC"])],
+    [("pg_mjlab_go1.yaml", "pg", ["PPO", "SPO"]), ("dpg_mjlab_go1.yaml", "dpg", ["TQC"])],
 )
 def test_adapter_configs_preserve_actor_and_critic_observations(filename, family, algorithms):
     path = Path("experiments/configs") / filename

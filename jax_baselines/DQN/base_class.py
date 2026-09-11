@@ -233,8 +233,8 @@ class Q_Network_Family:
             env_info = self.env.get_info()
             if "autoreset_steps" in env_info:
                 self.autoreset_steps = env_info["autoreset_steps"]
-                if not isinstance(self.autoreset_steps, bool):
-                    raise TypeError("Environment autoreset_steps must be a bool")
+        if not isinstance(self.autoreset_steps, bool):
+            raise TypeError("Environment autoreset_steps must be a bool")
         print("observation size : ", self.observation_space)
         print("action size : ", self.action_size)
         print("worker_size : ", self.worker_size)
@@ -462,18 +462,17 @@ class Q_Network_Family:
             and self.n_step_method
             and self.prioritized_replay
         ):
-            run_name = f"Rainbow({self.n_step} step)_" + run_name
-        else:
-            if self.param_noise:
-                run_name = "Noisy_" + run_name
-            if self.dueling_model:
-                run_name = "Dueling_" + run_name
-            if self.double_q:
-                run_name = "Double_" + run_name
-            if self.n_step_method:
-                run_name = f"{self.n_step}Step_" + run_name
-            if self.prioritized_replay:
-                run_name = run_name + "+PER"
+            return f"Rainbow({self.n_step} step)_" + run_name
+        if self.param_noise:
+            run_name = "Noisy_" + run_name
+        if self.dueling_model:
+            run_name = "Dueling_" + run_name
+        if self.double_q:
+            run_name = "Double_" + run_name
+        if self.n_step_method:
+            run_name = f"{self.n_step}Step_" + run_name
+        if self.prioritized_replay:
+            run_name = run_name + "+PER"
         return run_name
 
     def learn(
