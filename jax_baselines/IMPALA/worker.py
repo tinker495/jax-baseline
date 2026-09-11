@@ -99,14 +99,9 @@ class Impala_Worker(object):
                                 len_label: eplen,
                                 to_label: float(truncated),
                             }
-                            if have_original_reward:
-                                if have_lives:
-                                    if info["lives"] == 0:
-                                        log_dict[original_rw_label] = original_score
-                                        original_score = 0
-                                else:
-                                    log_dict[original_rw_label] = original_score
-                                    original_score = 0
+                            if have_original_reward and (not have_lives or info["lives"] == 0):
+                                log_dict[original_rw_label] = original_score
+                                original_score = 0
                             logger_server.log_worker(log_dict, episode)
                         score = 0
                         eplen = 0
