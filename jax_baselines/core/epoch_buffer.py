@@ -19,7 +19,7 @@ class EpochBatch(TypedDict):
 
 
 @jax.jit
-def _stack_transitions(transitions: list[EpochBatch]) -> EpochBatch:
+def stack_transitions(transitions: tuple[EpochBatch, ...]) -> EpochBatch:
     return jax.tree.map(lambda *values: jnp.stack(values, axis=1), *transitions)
 
 
@@ -116,9 +116,16 @@ class EpochBuffer:
             )
         self._transitions.append(transition)
 
-    def get_buffer(self) -> EpochBatch:
+    def snapshot(self) -> tuple[EpochBatch, ...]:
         if not self._transitions:
             raise ValueError("Cannot consume an empty EpochBuffer")
+        return tuple(self._transitions)
+
+    def clear(self) -> None:
+        self._transitions.clear()
+
+    def get_buffer(self) -> EpochBatch:
+        rollout = self.snapshot()
         if self.memory_backend == "cpu":
             transitions: EpochBatch = {
                 "obses": {
@@ -135,6 +142,6 @@ class EpochBuffer:
                 "truncateds": np.stack([row["truncateds"] for row in self._transitions], axis=1),
             }
         else:
-            transitions = _stack_transitions(self._transitions)
-        self._transitions.clear()
+            transitions = stack_transitions(rollout)
+        self.clear()
         return transitions

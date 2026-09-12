@@ -20,7 +20,7 @@ from jax_baselines.core.env_protocols import (
     log_environment_metrics,
     vector_autoreset_mask,
 )
-from jax_baselines.core.epoch_buffer import EpochBuffer
+from jax_baselines.core.epoch_buffer import EpochBatch, EpochBuffer, stack_transitions
 from jax_baselines.core.eval import (
     _normalize_action_for_step,
     evaluate_policy,
@@ -52,6 +52,8 @@ class Actor_Critic_Policy_Gradient_Family:
     _run_name = "A2C"
     actor: Callable
     _get_actions: Callable
+    _train_step: Callable
+    _train_rollout: Callable
     logger: AbstractContextManager
 
     def __init__(
@@ -225,8 +227,37 @@ class Actor_Critic_Policy_Gradient_Family:
     def setup_model(self):
         pass
 
-    def _train_step(self, steps):
-        pass
+    def _train_epoch(self, key):
+        args = (
+            self.actor_params,
+            self.critic_params,
+            self.actor_opt_state,
+            self.critic_opt_state,
+            key,
+        )
+        if self.memory_backend == "cpu":
+            return self._train_step(*args, **self.buffer.get_buffer())
+        result = self._train_rollout(*args, self.buffer.snapshot())
+        self.buffer.clear()
+        return result
+
+    def _train_rollout_step(
+        self,
+        actor_params,
+        critic_params,
+        actor_opt_state,
+        critic_opt_state,
+        key,
+        transitions: tuple[EpochBatch, ...],
+    ):
+        return self._train_step(
+            actor_params,
+            critic_params,
+            actor_opt_state,
+            critic_opt_state,
+            key,
+            **stack_transitions(transitions),
+        )
 
     def train_step(self, steps, logger_run=None):
         raise NotImplementedError

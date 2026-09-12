@@ -27,6 +27,7 @@ from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.APE_X.dpg_worker import Ape_X_Worker as ApeXDPGWorker
 from jax_baselines.APE_X.worker import Ape_X_Worker as ApeXQWorker
 from jax_baselines.core.env_info import infer_action_meta
+from jax_baselines.core.rollout_stats import TrainingProgress
 from jax_baselines.IMPALA.base_class import IMPALA_Family
 from jax_baselines.IMPALA.worker import Impala_Worker
 from jax_baselines.math.returns import discount_with_terminated, get_gaes, get_vtrace
@@ -165,7 +166,7 @@ def _vtrace(rewards, rhos, c_ts, terminateds, truncateds, values, next_values):
 def test_vtrace_terminal_stops_bootstrap():
     # On-policy ratios (rho=1, c=0.95). Terminal at idx2 must zero the bootstrap
     # so vs[2] is just its own reward, not r + gamma*next_value.
-    on_policy = dict(rhos=[1, 1, 1, 1], c_ts=[0.95, 0.95, 0.95, 0.95])
+    on_policy = {"rhos": [1, 1, 1, 1], "c_ts": [0.95, 0.95, 0.95, 0.95]}
     vs = _vtrace(
         [1, 1, 1, 1],
         terminateds=[0, 0, 1, 0],
@@ -180,7 +181,7 @@ def test_vtrace_terminal_stops_bootstrap():
 def test_vtrace_truncation_keeps_bootstrap():
     # Truncation (term=0) still bootstraps from next_value at idx2, unlike a
     # terminal -- pins the term/trunc asymmetry the V-trace correction relies on.
-    on_policy = dict(rhos=[1, 1, 1, 1], c_ts=[0.95, 0.95, 0.95, 0.95])
+    on_policy = {"rhos": [1, 1, 1, 1], "c_ts": [0.95, 0.95, 0.95, 0.95]}
     vs = _vtrace(
         [1, 1, 1, 1],
         terminateds=[0, 0, 0, 0],
@@ -342,6 +343,7 @@ class _Ctx:
         self.eval_freq = 10_000
         self.log_interval = 10_000
         self.logger_run = _NullLogger()
+        self.progress = TrainingProgress()
 
 
 def test_a2c_vectorized_flags_autoreset_dummy_step_as_terminal():

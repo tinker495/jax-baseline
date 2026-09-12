@@ -65,10 +65,9 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
         self._get_actions = jax.jit(self._get_actions)
         self._preprocess = jax.jit(self._preprocess)
         self._train_step = jax.jit(self._train_step)
+        self._train_rollout = jax.jit(self._train_rollout_step)
 
     def train_step(self, steps, logger_run=None):
-        data = self.buffer.get_buffer()
-
         (
             self.actor_params,
             self.critic_params,
@@ -78,14 +77,7 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
             actor_loss,
             entropy_loss,
             targets,
-        ) = self._train_step(
-            self.actor_params,
-            self.critic_params,
-            self.actor_opt_state,
-            self.critic_opt_state,
-            next(self.key_seq),
-            **data,
-        )
+        ) = self._train_epoch(next(self.key_seq))
 
         if logger_run:
             logger_run.log_metric("loss/critic_loss", critic_loss, steps)
