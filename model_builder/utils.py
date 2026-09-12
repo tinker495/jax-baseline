@@ -4,6 +4,29 @@ from typing import Literal
 import jax
 import numpy as np
 
+from model_builder.model_config import (
+    DEFAULT_MLP,
+    EMBEDDING_MODES,
+    MLPConfig,
+    ModelConfig,
+    resolve_model_config,
+)
+
+
+def qnet_model_kwargs(
+    policy_kwargs: dict | None,
+    *,
+    default: MLPConfig = DEFAULT_MLP,
+    allowed_embeddings: tuple[str, ...] = EMBEDDING_MODES,
+) -> dict:
+    options = {} if policy_kwargs is None else dict(policy_kwargs)
+    if {"node", "hidden_n", "embedding_mode"} & options.keys():
+        raise ValueError("Use model JSON to configure the Q-network layers and embedding_mode")
+    options["network"] = resolve_model_config(
+        options.pop("model", None), default, allowed_embeddings=allowed_embeddings
+    )
+    return options
+
 
 def dummy_observation(space):
     return {key: np.zeros((1, *shape), dtype=np.float32) for key, shape in space.items()}
@@ -54,15 +77,27 @@ def observation_role_keys(
 
 
 def split_actor_critic_kwargs(
-    policy_kwargs: dict | None, *, actor_node: int = 256, critic_node: int = 256
+    policy_kwargs: dict | None,
+    *,
+    actor_default: ModelConfig = DEFAULT_MLP,
+    critic_default: ModelConfig = DEFAULT_MLP,
+    allowed_types: tuple[str, ...] | None = None,
+    allowed_embeddings: tuple[str, ...] = EMBEDDING_MODES,
 ) -> tuple[dict, dict]:
-    """Resolve independent network widths at the model-builder boundary."""
+    """Resolve independent actor/critic descriptions at the builder boundary."""
     options = {} if policy_kwargs is None else dict(policy_kwargs)
-    if "node" in options:
-        raise ValueError("Use actor_node and critic_node to configure actor-critic networks")
-    actor_node = options.pop("actor_node", actor_node)
-    critic_node = options.pop("critic_node", critic_node)
-    for name, value in (("actor_node", actor_node), ("critic_node", critic_node)):
-        if type(value) is not int or value < 1:
-            raise ValueError(f"{name} must be a positive integer")
-    return {**options, "node": actor_node}, {**options, "node": critic_node}
+    if set(options) & {"node", "actor_node", "critic_node", "hidden_n", "embedding_mode"}:
+        raise ValueError("Use actor_model and critic_model JSON descriptions for network settings")
+    actor = resolve_model_config(
+        options.pop("actor_model", None),
+        actor_default,
+        allowed_types=allowed_types,
+        allowed_embeddings=allowed_embeddings,
+    )
+    critic = resolve_model_config(
+        options.pop("critic_model", None),
+        critic_default,
+        allowed_types=allowed_types,
+        allowed_embeddings=allowed_embeddings,
+    )
+    return {**options, "network": actor}, {**options, "network": critic}

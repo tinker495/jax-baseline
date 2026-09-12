@@ -887,9 +887,9 @@ def test_dpg_single_action_single_indexes_continuous_action():
     assert list(sel.store_action) == [0.5]
 
 
-def test_dpg_snapshot_action_normalizer_deepcopies_obs_rms_when_simba():
+def test_dpg_snapshot_action_normalizer_deepcopies_obs_rms_when_obs_rms_norm():
     agent = Deteministic_Policy_Gradient_Family.__new__(Deteministic_Policy_Gradient_Family)
-    agent.simba = True
+    agent.obs_rms_norm = True
     agent.obs_rms = {"mean": 1.0}
 
     agent._snapshot_action_normalizer()
@@ -898,9 +898,9 @@ def test_dpg_snapshot_action_normalizer_deepcopies_obs_rms_when_simba():
     assert agent.action_obs_rms is not agent.obs_rms
 
 
-def test_dpg_snapshot_action_normalizer_noop_without_simba():
+def test_dpg_snapshot_action_normalizer_noop_without_obs_rms_norm():
     agent = Deteministic_Policy_Gradient_Family.__new__(Deteministic_Policy_Gradient_Family)
-    agent.simba = False
+    agent.obs_rms_norm = False
 
     agent._snapshot_action_normalizer()
 
@@ -941,7 +941,7 @@ class _ShapeCheckingEvalEnv:
 def _dpg_action_agent():
     agent = Deteministic_Policy_Gradient_Family.__new__(Deteministic_Policy_Gradient_Family)
     agent.memory_backend = "cpu"
-    agent.simba = True
+    agent.obs_rms_norm = True
     agent.use_checkpointing = True
     agent.ckpt = type("Ckpt", (), {"enabled": True})()
     agent.obs_rms = _OffsetNormalizer(100)
@@ -981,7 +981,7 @@ def test_dpg_eval_actions_use_checkpoint_normalizer():
 def test_dpg_eval_skips_random_warmup_and_uses_policy_action():
     agent = Deteministic_Policy_Gradient_Family.__new__(Deteministic_Policy_Gradient_Family)
     agent.memory_backend = "cpu"
-    agent.simba = False
+    agent.obs_rms_norm = False
     agent.learning_starts = 100
     agent.worker_size = 32
     agent.action_size = (17,)
@@ -999,7 +999,7 @@ def test_dpg_eval_skips_random_warmup_and_uses_policy_action():
 def test_td3_test_action_uses_eval_action_shape_with_many_workers():
     agent = TD3.__new__(TD3)
     agent.memory_backend = "cpu"
-    agent.simba = False
+    agent.obs_rms_norm = False
     agent.learning_starts = 0
     agent.worker_size = 32
     agent.action_size = (17,)

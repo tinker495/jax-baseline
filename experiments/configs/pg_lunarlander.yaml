@@ -17,9 +17,8 @@ base:
   mini_batch: 256
   gamma: 0.995
   lamda: 0.95
-  actor_node: 128
-  critic_node: 128
-  hidden_n: 2
+  actor_model: models/mlp_128x2_relu.json
+  critic_model: models/mlp_128x2_relu.json
   optimizer: rmsprop
 variants:
   - {algo: A2C, learning_rate: 0.001, ent_coef: 1e-6}

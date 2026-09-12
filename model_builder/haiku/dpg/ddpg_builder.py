@@ -3,7 +3,7 @@ import jax
 import numpy as np
 
 from model_builder.haiku.dpg.ddpg_td3_blocks import Actor, Critic
-from model_builder.haiku.Module import PreProcess, pop_embedding_mode
+from model_builder.haiku.Module import PreProcess
 from model_builder.utils import (
     dummy_observation,
     get_critic_apply_fn,
@@ -13,25 +13,32 @@ from model_builder.utils import (
 
 
 def model_builder_maker(observation_space, action_size, policy_kwargs):
-    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
-    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(policy_kwargs)
+    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(
+        policy_kwargs, allowed_embeddings=("normal",)
+    )
 
     def model_builder(key=None, print_model=False):
         def actor_forward(observation):
-            feature = PreProcess(observation_space, embedding_mode=embedding_mode, role="actor")(
-                observation
-            )
+            feature = PreProcess(
+                observation_space,
+                embedding_mode=actor_kwargs["network"].embedding_mode,
+                role="actor",
+            )(observation)
             return Actor(action_size, **actor_kwargs)(feature)
 
         def shared_forward(observation):
             return PreProcess(
-                observation_space, embedding_mode=embedding_mode, role="actor"
+                observation_space,
+                embedding_mode=actor_kwargs["network"].embedding_mode,
+                role="actor",
             ).shared_features(observation)
 
         def critic_forward(observation, shared_features, action):
-            feature = PreProcess(observation_space, embedding_mode=embedding_mode, role="critic")(
-                observation, shared_features
-            )
+            feature = PreProcess(
+                observation_space,
+                embedding_mode=critic_kwargs["network"].embedding_mode,
+                role="critic",
+            )(observation, shared_features)
             return Critic(**critic_kwargs)(feature, action)
 
         actor = hk.transform(actor_forward)

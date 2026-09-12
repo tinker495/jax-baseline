@@ -16,8 +16,7 @@ base:
   buffer_size: 1e6
   compress_memory: true
   exploration_fraction: 0.2
-  node: 512
-  hidden_n: 1
+  model: models/mlp_512x1_relu.json
   optimizer: adam
   target_update: 1000
   double: true

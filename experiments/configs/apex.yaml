@@ -12,8 +12,7 @@ base:
   gamma: 0.99
   buffer_size: 5e5
   worker: 32
-  node: 512
-  hidden_n: 0
+  model: models/mlp_linear.json
   optimizer: rmsprop
 variants:
   - algo: QRDQN

@@ -77,18 +77,18 @@ python -m pip install -e '.[all]'
 
 #### DPG bases
 
-| **Name**        | `Per`[^PER]                   | `N-step`[^NSTEP][^RAINBOW] | `Ape-X`[^APEX]     | `Simba`[^SIMBA]    | `Simba-v2`[^SIMBAv2] |
-| --------------- | ----------------------------- | -------------------------- | ------------------ | ------------------ | -------------------- |
-| DDPG[^DDPG]     | :heavy_check_mark:            | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:   |
-| TD3[^TD3]       | :heavy_check_mark:            | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:   |
-| SAC[^SAC]       | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
-| DAC[^DAC]:x:    | :x:                           | :x:                        | :x:                | :x:                | :x:                  |
-| TQC[^TQC]       | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
-| TD7[^TD7]       | :white_check_mark:(LAP[^LaP]) | :x:                        | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
-| CrossQ[^CrossQ] | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
-| XQC[^XQC]       | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :x:                | :x:                  |
-| FlashSAC[^FlashSAC] | :x:                       | :heavy_check_mark:         | :x:                | :x:                | :x:                  |
-| BRO[^BRO]:x:    | :x:                           | :x:                        | :x:                | :x:                | :x:                  |
+| **Name**            | `Per`[^PER]                   | `N-step`[^NSTEP][^RAINBOW] | `Ape-X`[^APEX]     | `Simba`[^SIMBA]    | `Simba-v2`[^SIMBAv2] |
+| ------------------- | ----------------------------- | -------------------------- | ------------------ | ------------------ | -------------------- |
+| DDPG[^DDPG]         | :heavy_check_mark:            | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:   |
+| TD3[^TD3]           | :heavy_check_mark:            | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:   |
+| SAC[^SAC]           | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
+| DAC[^DAC]:x:        | :x:                           | :x:                        | :x:                | :x:                | :x:                  |
+| TQC[^TQC]           | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
+| TD7[^TD7]           | :white_check_mark:(LAP[^LaP]) | :x:                        | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
+| CrossQ[^CrossQ]     | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
+| XQC[^XQC]           | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :x:                | :x:                  |
+| FlashSAC[^FlashSAC] | :x:                           | :heavy_check_mark:         | :x:                | :x:                | :x:                  |
+| BRO[^BRO]:x:        | :x:                           | :x:                        | :x:                | :x:                | :x:                  |
 
 ## Performance Compariton
 
@@ -106,8 +106,9 @@ To run Q-Net on Atari (DQN, or C51/QRDQN/IQN/FQF):
 
 ```
 uv run qnet --algo DQN --env BreakoutNoFrameskip-v4 --learning_rate 0.0002 \
-		--steps 5e5 --batch 32 --train_freq 1 --target_update 1000 --node 512 \
-		--hidden_n 1 --final_eps 0.01 --learning_starts 20000 --gamma 0.995 --clip_rewards
+		--steps 5e5 --batch 32 --train_freq 1 --target_update 1000 \
+		--model experiments/configs/models/mlp_512x1_relu.json \
+		--final_eps 0.01 --learning_starts 20000 --gamma 0.995 --clip_rewards
 ```
 
 500K steps can be run in just 15 minutes on Atari Breakout (540 steps/sec).
@@ -171,8 +172,6 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 
 [^SAC]: [SAC](https://arxiv.org/abs/1812.05905)
 
-[^FlashSAC]: [FlashSAC](https://github.com/Holiday-Robot/FlashSAC/tree/87edc9061150ae9e962dd84e6544e27a1554b3ab)
-
 [^DAC]: [DAC](https://arxiv.org/abs/2310.19527)
 
 [^TQC]: [TQC](https://arxiv.org/abs/2005.04269)
@@ -184,5 +183,7 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 [^CrossQ]: [CrossQ](https://arxiv.org/abs/1902.05605)
 
 [^XQC]: [XQC](https://arxiv.org/pdf/2509.25174)
+
+[^FlashSAC]: [FlashSAC](https://github.com/Holiday-Robot/FlashSAC/tree/87edc9061150ae9e962dd84e6544e27a1554b3ab)
 
 [^BRO]: [BRO](https://arxiv.org/abs/2405.16158)

@@ -633,8 +633,8 @@ class TD7(Deteministic_Policy_Gradient_Family):
         return description
 
     def run_name_update(self, run_name):
-        if self.simba:
-            run_name = "Simba_" + run_name
+        if self.obs_rms_norm:
+            run_name = "ObsRMS_" + run_name
         if self.n_step_method:
             run_name = f"{self.n_step}Step_" + run_name
         return run_name

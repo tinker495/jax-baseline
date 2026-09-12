@@ -1,4 +1,4 @@
-from typing import Callable
+from collections.abc import Callable
 
 import flax.linen as nn
 import jax
@@ -6,6 +6,7 @@ import jax.numpy as jnp
 from flax.linen.dtypes import promote_dtype
 
 from model_builder.flax.initializers import clip_factorized_uniform
+from model_builder.model_config import ACTIVATIONS, MLPConfig, ModelConfig
 
 SIGMA_INIT = 0.5
 
@@ -144,9 +145,9 @@ class HypersphericalDense(nn.Module):
     kappa_scale: float = 1.0
     kernel_init: Callable = nn.initializers.orthogonal()
     bias_init: Callable = nn.initializers.zeros
-    dtype: any = None
-    param_dtype: any = jnp.float32
-    precision: any = None
+    dtype: jax.typing.DTypeLike | None = None
+    param_dtype: jax.typing.DTypeLike = jnp.float32
+    precision: jax.lax.PrecisionLike = None
 
     @nn.compact
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
@@ -255,6 +256,7 @@ class SimbaV2Block(nn.Module):
     alpha_scale: float = 1.0
     kernel_init: Callable = nn.initializers.orthogonal()
     eps: float = 1e-6
+    activation: Callable = nn.relu
 
     @nn.compact
     def __call__(self, inputs: jnp.ndarray) -> jnp.ndarray:
@@ -270,7 +272,7 @@ class SimbaV2Block(nn.Module):
             init=self.scaler_init,
             scale=self.scaler_scale,
         )(x)
-        x = nn.relu(x)
+        x = self.activation(x)
         x = HypersphericalDense(
             self.hidden_dim,
             use_bias=False,
@@ -319,3 +321,28 @@ class SimbaV2Head(nn.Module):
             kappa_scale=self.kappa_scale,
         )(x)
         return x
+
+
+def network_body(
+    features: jnp.ndarray, network: ModelConfig, layer: type[nn.Module] = Dense
+) -> jnp.ndarray:
+    """Build a configured body inside the caller's compact scope."""
+    if isinstance(network, MLPConfig):
+        for hidden in network.layers:
+            features = ACTIVATIONS[hidden.activation](layer(hidden.units)(features))
+        return features
+    if network.kind == "simba":
+        features = layer(network.width)(features)
+        for _ in range(network.blocks):
+            features = ResidualBlock(network.width, activation=ACTIVATIONS[network.activation])(
+                features
+            )
+        return nn.LayerNorm()(features)
+    if network.kind == "simbav2":
+        features = SimbaV2Embedding(network.width)(features)
+        for _ in range(network.blocks):
+            features = SimbaV2Block(network.width, activation=ACTIVATIONS[network.activation])(
+                features
+            )
+        return features
+    raise ValueError(f"Unsupported network body: {network.kind!r}")

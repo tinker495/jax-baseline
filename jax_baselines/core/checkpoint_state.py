@@ -57,9 +57,10 @@ class CheckpointState:
         controller_state: ``CheckpointController.to_state()`` schedule snapshot.
         eval_snapshot: The ``{"encoder", "policy"}`` behaviour-state captured for
             eval-consistent action selection; ``None`` until the first snapshot.
-        obs_rms_state / action_obs_rms_state / checkpoint_obs_rms_state: simba
+        obs_rms_state / action_obs_rms_state / checkpoint_obs_rms_state: optional RMS
             observation-normalizer states (``RunningMeanStd.to_state()``); ``None``
-            when simba is disabled or the normalizer has not been snapshotted.
+            when observation RMS normalization is disabled or the normalizer has
+            not been snapshotted.
         reward_rms_state: Discounted-return statistics used to normalize rewards;
             the worker-local partial returns are intentionally not serialized.
     """

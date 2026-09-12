@@ -22,17 +22,27 @@ Argument encoding:
 CLI overrides:
   ``--set KEY=VALUE`` (repeatable) overrides an arg for every variant, applied on
   top of base/variant. Useful to cap memory per machine, e.g. --set buffer_size=1e5.
+
+Network files:
+  ``model`` (Q-Net), ``actor_model`` and ``critic_model`` are JSON paths relative
+  to the YAML file, including paths supplied through ``--set``. ``--dry-run``
+  validates and prints their definitions. ``--export-models DIR`` writes the
+  normalized definitions and uses those files in the generated commands.
 """
 
 import argparse
+import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
+from pathlib import Path
 
 import yaml
 
 from experiments.cli._common import load_runtime_env
+from model_builder.model_config import load_model_config, model_config_dict
 
 FAMILY_SCRIPTS = {
     "qnet": "qnet",
@@ -42,6 +52,7 @@ FAMILY_SCRIPTS = {
     "apex_qnet": "apex-qnet",
     "apex_dpg": "apex-dpg",
 }
+MODEL_ARGUMENTS = ("model", "actor_model", "critic_model")
 
 
 def _build_args(merged):
@@ -55,8 +66,10 @@ def _build_args(merged):
     return argv
 
 
-def _iter_commands(config, cli_overrides=None):
+def _iter_commands(config, cli_overrides=None, *, config_dir: Path | None = None):
     cli_overrides = cli_overrides or {}
+    if config_dir is None:
+        config_dir = Path.cwd()
     family = config["family"]
     if family not in FAMILY_SCRIPTS:
         raise ValueError(f"unknown family '{family}', expected one of {sorted(FAMILY_SCRIPTS)}")
@@ -69,7 +82,14 @@ def _iter_commands(config, cli_overrides=None):
         if not variant.get("enabled", True):
             continue
         variant_args = {k: v for k, v in variant.items() if k != "enabled"}
-        command = [script, *_build_args({**base, **variant_args, **cli_overrides})]
+        merged = {**base, **variant_args, **cli_overrides}
+        for name in MODEL_ARGUMENTS:
+            if name not in merged:
+                continue
+            if not isinstance(merged[name], str) or not merged[name]:
+                raise ValueError(f"{name} must be a nonempty JSON file path")
+            merged[name] = str((config_dir / merged[name]).resolve())
+        command = [script, *_build_args(merged)]
         if xvfb:
             command = ["xvfb-run", "-a", *command]
         yield command
@@ -84,7 +104,15 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Run a YAML-defined experiment sweep.")
     parser.add_argument("config", help="path to a sweep YAML file")
     parser.add_argument(
-        "--dry-run", action="store_true", help="print commands without running them"
+        "--dry-run",
+        action="store_true",
+        help="validate model JSON and print commands without running them",
+    )
+    parser.add_argument(
+        "--export-models",
+        type=Path,
+        metavar="DIR",
+        help="write normalized model JSON per variant and use the exported files",
     )
     parser.add_argument(
         "--set",
@@ -103,7 +131,7 @@ def main(argv=None):
         key, value = item.split("=", 1)
         cli_overrides[key] = yaml.safe_load(value)
 
-    with open(args.config) as handle:
+    with Path(args.config).open() as handle:
         config = yaml.safe_load(handle)
 
     runtime = config.get("runtime") or {}
@@ -111,14 +139,34 @@ def main(argv=None):
     if "device" in runtime:
         env["CUDA_VISIBLE_DEVICES"] = str(runtime["device"])
 
-    commands = list(_iter_commands(config, cli_overrides))
+    commands = list(_iter_commands(config, cli_overrides, config_dir=Path(args.config).parent))
+    model_definitions = [
+        {
+            name: model_config_dict(load_model_config(command[command.index(f"--{name}") + 1]))
+            for name in MODEL_ARGUMENTS
+            if f"--{name}" in command
+        }
+        for command in commands
+    ]
+    export_dir = args.export_models.resolve() if args.export_models is not None else None
+    if export_dir is not None:
+        export_dir.mkdir(parents=True, exist_ok=True)
     failures = []
-    for index, command in enumerate(commands, start=1):
-        printable = " ".join(command)
+    for index, (command, models) in enumerate(
+        zip(commands, model_definitions, strict=True), start=1
+    ):
+        if export_dir is not None:
+            for name, definition in models.items():
+                destination = export_dir / f"{index:03d}-{name}.json"
+                destination.write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8")
+                command[command.index(f"--{name}") + 1] = str(destination)
+        printable = shlex.join(command)
         print(f"[{index}/{len(commands)}] {printable}", flush=True)
         if args.dry_run:
+            if models:
+                print(json.dumps(models, indent=2), flush=True)
             continue
-        result = subprocess.run(command, env=env)
+        result = subprocess.run(command, env=env, check=False)
         if result.returncode != 0:
             failures.append((index, printable, result.returncode))
 

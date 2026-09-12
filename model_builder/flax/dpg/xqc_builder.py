@@ -4,7 +4,8 @@ import jax.numpy as jnp
 import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
-from model_builder.flax.Module import PreProcess, pop_embedding_mode
+from model_builder.flax.Module import PreProcess
+from model_builder.model_config import ACTIVATIONS, LayerConfig, MLPConfig
 from model_builder.utils import (
     dummy_observation,
     get_critic_apply_fn,
@@ -15,24 +16,23 @@ from model_builder.utils import (
 
 class Actor(nn.Module):
     action_size: tuple
-    node: int = 256
-    hidden_n: int = 4
+    network: MLPConfig = MLPConfig((LayerConfig(256),) * 4)
 
     def normalize(self, feature, training):
         return nn.BatchNorm(use_running_average=not training, momentum=0.99, epsilon=0.001)(feature)
 
     @nn.compact
-    def __call__(self, features: jnp.ndarray, training: bool = True) -> jnp.ndarray:
+    def __call__(self, features: jnp.ndarray, training: bool = True) -> tuple[jax.Array, jax.Array]:
         feature = features
         feature = self.normalize(feature, training)
-        for _ in range(self.hidden_n):
+        for layer in self.network.layers:
             feature = nn.Dense(
-                self.node,
+                layer.units,
                 use_bias=False,
                 kernel_init=nn.initializers.orthogonal(jnp.sqrt(2.0)),
             )(feature)
             feature = self.normalize(feature, training)
-            feature = jax.nn.relu(feature)
+            feature = ACTIVATIONS[layer.activation](feature)
         mu = nn.Dense(
             self.action_size[0],
             kernel_init=nn.initializers.orthogonal(jnp.sqrt(2.0)),
@@ -45,8 +45,7 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-    node: int = 512
-    hidden_n: int = 4
+    network: MLPConfig = MLPConfig((LayerConfig(512),) * 4)
     n_atoms: int = 101
 
     def normalize(self, feature, training):
@@ -59,14 +58,14 @@ class Critic(nn.Module):
         feature = features
         concat = jnp.concatenate([feature, actions], axis=1)
         feature = self.normalize(concat, training)
-        for _ in range(self.hidden_n):
+        for layer in self.network.layers:
             feature = nn.Dense(
-                self.node,
+                layer.units,
                 use_bias=False,
                 kernel_init=nn.initializers.orthogonal(jnp.sqrt(2.0)),
             )(feature)
             feature = self.normalize(feature, training)
-            feature = jax.nn.relu(feature)
+            feature = ACTIVATIONS[layer.activation](feature)
         return nn.Dense(
             self.n_atoms,
             kernel_init=nn.initializers.orthogonal(jnp.sqrt(2.0)),
@@ -74,15 +73,19 @@ class Critic(nn.Module):
 
 
 def model_builder_maker(observation_space, action_size, policy_kwargs):
-    policy_kwargs = {**({} if policy_kwargs is None else policy_kwargs), "hidden_n": 4}
-    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
-    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(policy_kwargs, critic_node=512)
+    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(
+        policy_kwargs,
+        actor_default=MLPConfig((LayerConfig(256),) * 4),
+        critic_default=MLPConfig((LayerConfig(512),) * 4),
+    )
 
     def model_builder(key=None, print_model=False):
         class Merged_Actor(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(
-                    observation_space, embedding_mode=embedding_mode, role="actor"
+                    observation_space,
+                    embedding_mode=actor_kwargs["network"].embedding_mode,
+                    role="actor",
                 )
                 self.act = Actor(action_size, **actor_kwargs)
 
@@ -95,7 +98,9 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         class Merged_Critic(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(
-                    observation_space, embedding_mode=embedding_mode, role="critic"
+                    observation_space,
+                    embedding_mode=critic_kwargs["network"].embedding_mode,
+                    role="critic",
                 )
                 self.crit1 = Critic(**critic_kwargs)
                 self.crit2 = Critic(**critic_kwargs)

@@ -8,7 +8,7 @@ Pinned behaviors:
   kwarg would raise ``TypeError`` at construction — this is a real check).
 - ``resolve_maker`` resolves every flax builder and raises ``SystemExit`` for
   unsupported combos (CrossQ+haiku, BBF+haiku).
-- dpg: simba/simbav2 variants, the TD7 isolation invariant, flag renames.
+- dpg: independent observation normalization, the TD7 isolation invariant, flag renames.
 - qnet: ``--hl_gauss`` selects the HL_GAUSS_* class via ``AlgoSpec.resolve_cls``.
 - ``run_family`` wires env/maker/policy_kwargs into the agent and calls
   ``learn()`` + ``test()`` without constructing any real env or JAX model.
@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import json
 from argparse import ArgumentParser
 
 import jax.numpy as jnp
@@ -111,16 +112,15 @@ def test_resolver_resolves_flax_base(family: str):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("flags", [["--simba"], ["--simbav2"]])
-def test_dpg_simba_variants_resolve(flags: list[str]):
+@pytest.mark.parametrize("enabled", [False, True])
+def test_dpg_observation_normalization_does_not_select_builder(enabled: bool):
     from experiments.cli._run import resolve_maker
     from experiments.cli.dpg import DPG_RUNNER
+    from model_builder.flax.dpg.td3_builder import model_builder_maker
 
-    for algo, spec in DPG_RUNNER.algos.items():
-        if algo in ("XQC", "FlashSAC"):
-            continue
-        args = _parse(DPG_RUNNER, ["--algo", algo, "--model_lib", "flax", *flags])
-        assert callable(resolve_maker(DPG_RUNNER, spec, args))
+    args = _parse(DPG_RUNNER, ["--algo", "TD3", *(["--obs_rms_norm"] if enabled else [])])
+    assert resolve_maker(DPG_RUNNER, DPG_RUNNER.algos["TD3"], args) is model_builder_maker
+    assert DPG_RUNNER.algos["TD3"].build(args)["obs_rms_norm"] is enabled
 
 
 def test_dpg_xqc_algorithm_resolves_its_builder():
@@ -197,7 +197,7 @@ def test_dpg_build_threads_renamed_args():
     assert built["mixture_type"] == "wang"
     assert built["batch_size"] == 64
     assert built["prioritized_replay"] is True
-    assert built["simba"] is False
+    assert built["obs_rms_norm"] is False
 
 
 def test_dpg_td7_build_omits_forced_internal_defaults():
@@ -462,26 +462,31 @@ def test_dist_resolver_resolves_flax_base(family: str):
 
 
 @pytest.mark.parametrize("family", DIST_FAMILIES)
-def test_dist_policy_kwargs_uses_shared_normal_embedding(family: str):
+def test_dist_policy_kwargs_loads_each_model_json(family: str, tmp_path):
     from experiments.cli._run import actor_critic_policy_kwargs, default_policy_kwargs
+    from model_builder.model_config import LayerConfig, MLPConfig, model_config_dict
 
     runner = _dist_runner(family)
     if family == "apex_qnet":
         assert runner.policy_kwargs is default_policy_kwargs
-        widths = {"node": 128}
+        models = {
+            "model": MLPConfig((LayerConfig(128), LayerConfig(64, "tanh")), embedding_mode="resnet")
+        }
     else:
         assert runner.policy_kwargs is actor_critic_policy_kwargs
-        widths = {"actor_node": 128, "critic_node": 256}
-    args = _parse(
-        runner,
-        ["--algo", min(runner.algos), "--hidden_n", "3"]
-        + [item for name, width in widths.items() for item in (f"--{name}", str(width))],
-    )
-    assert runner.policy_kwargs(args) == {
-        **widths,
-        "hidden_n": 3,
-        "embedding_mode": "normal",
-    }
+        models = {
+            "actor_model": MLPConfig(
+                (LayerConfig(128), LayerConfig(64, "tanh")), embedding_mode="resnet"
+            ),
+            "critic_model": MLPConfig((LayerConfig(256, "silu"),)),
+        }
+    argv = ["--algo", min(runner.algos)]
+    assert runner.policy_kwargs(_parse(runner, argv)) == {}
+    for name, model in models.items():
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(model_config_dict(model)), encoding="utf-8")
+        argv.extend((f"--{name}", str(path)))
+    assert runner.policy_kwargs(_parse(runner, argv)) == models
 
 
 def test_run_distributed_family_wires_agent(monkeypatch):

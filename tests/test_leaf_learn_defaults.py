@@ -232,8 +232,8 @@ def test_quantile_run_names_keep_leaf_suffix_before_family_decoration(cls, attrs
 @pytest.mark.parametrize(
     "mixture_type,expected",
     (
-        ("truncated", "3Step_Simba_TQC(25)_truncated(4)+PER"),
-        ("min", "3Step_Simba_TQC(25)_min+PER"),
+        ("truncated", "3Step_ObsRMS_TQC(25)_truncated(4)+PER"),
+        ("min", "3Step_ObsRMS_TQC(25)_min+PER"),
     ),
 )
 def test_tqc_run_name_keeps_quantile_suffix_before_family_decoration(mixture_type, expected):
@@ -241,8 +241,7 @@ def test_tqc_run_name_keeps_quantile_suffix_before_family_decoration(mixture_typ
     agent.n_support = 25
     agent.mixture_type = mixture_type
     agent.quantile_drop = 4
-    agent.simba_v2 = False
-    agent.simba = True
+    agent.obs_rms_norm = True
     agent.n_step_method = True
     agent.n_step = 3
     agent.prioritized_replay = True

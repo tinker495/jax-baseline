@@ -10,6 +10,7 @@ from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.math.param_updates import project_dense_kernels
 from jax_baselines.XQC.xqc import XQC
 from model_builder.flax.dpg.xqc_builder import model_builder_maker
+from model_builder.model_config import LayerConfig, MLPConfig
 
 
 def test_project_dense_kernels_normalizes_only_dense_weights():
@@ -58,7 +59,12 @@ def test_xqc_categorical_q_uses_fixed_support_expectation():
 def test_xqc_categorical_train_step_updates_online_and_target_critics():
     agent = XQC.__new__(XQC)
     builder = model_builder_maker(
-        {"unified_obs": [4]}, [2], {"actor_node": 16, "critic_node": 32, "embedding_mode": "normal"}
+        {"unified_obs": [4]},
+        [2],
+        {
+            "actor_model": MLPConfig((LayerConfig(16),) * 4),
+            "critic_model": MLPConfig((LayerConfig(32),) * 4),
+        },
     )
     (
         agent.actor,

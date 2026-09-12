@@ -32,8 +32,12 @@ from model_builder.flax.dpg.ddpg_builder import (
 from model_builder.flax.dpg.td3_builder import (
     model_builder_maker as td3_model_builder_maker,
 )
+from model_builder.model_config import LayerConfig, MLPConfig
 
-_POLICY_KWARGS = {"actor_node": 16, "critic_node": 16, "hidden_n": 2, "embedding_mode": "normal"}
+_POLICY_KWARGS = {
+    "actor_model": MLPConfig((LayerConfig(16),) * 2),
+    "critic_model": MLPConfig((LayerConfig(16),) * 2),
+}
 _OBSERVATION_SPACE = {"unified_obs": [4]}
 _ACTION_SIZE = [2]
 _BATCH_SIZE = 8

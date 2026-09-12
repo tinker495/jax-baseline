@@ -19,19 +19,23 @@ import jax
 import jax.numpy as jnp
 
 from model_builder.haiku.layers import LOG_STD_MEAN, LOG_STD_SCALE
+from model_builder.model_config import ACTIVATIONS, DEFAULT_MLP, MLPConfig
 
 
 class Actor(hk.Module):
-    def __init__(self, action_size, node=256, hidden_n=2):
+    def __init__(self, action_size, network: MLPConfig = DEFAULT_MLP):
         super().__init__()
         self.action_size = action_size
-        self.node = node
-        self.hidden_n = hidden_n
+        self.network = network
         self.layer = hk.Linear
 
     def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
         return hk.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            [
+                operation
+                for layer in self.network.layers
+                for operation in (self.layer(layer.units), ACTIVATIONS[layer.activation])
+            ]
             + [
                 self.layer(
                     self.action_size[0],
@@ -43,16 +47,19 @@ class Actor(hk.Module):
 
 
 class GaussianActor(hk.Module):
-    def __init__(self, action_size, node=256, hidden_n=2):
+    def __init__(self, action_size, network: MLPConfig = DEFAULT_MLP):
         super().__init__(name="actor")
         self.action_size = action_size
-        self.node = node
-        self.hidden_n = hidden_n
+        self.network = network
         self.layer = hk.Linear
 
-    def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, features: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
         linear = hk.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            [
+                operation
+                for layer in self.network.layers
+                for operation in (self.layer(layer.units), ACTIVATIONS[layer.activation])
+            ]
             + [
                 self.layer(
                     self.action_size[0] * 2,
@@ -65,15 +72,18 @@ class GaussianActor(hk.Module):
 
 
 class Critic(hk.Module):
-    def __init__(self, node=256, hidden_n=2):
+    def __init__(self, network: MLPConfig = DEFAULT_MLP):
         super().__init__()
-        self.node = node
-        self.hidden_n = hidden_n
+        self.network = network
         self.layer = hk.Linear
 
     def __call__(self, features: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
         concat = jnp.concatenate([features, actions], axis=1)
         return hk.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            [
+                operation
+                for layer in self.network.layers
+                for operation in (self.layer(layer.units), ACTIVATIONS[layer.activation])
+            ]
             + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
         )(concat)

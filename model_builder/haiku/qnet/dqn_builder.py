@@ -3,16 +3,20 @@ import jax
 import jax.numpy as jnp
 
 from model_builder.haiku.layers import NoisyLinear
-from model_builder.haiku.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import dummy_observation, print_haiku_model_summary
+from model_builder.haiku.Module import PreProcess
+from model_builder.model_config import ACTIVATIONS, MLPConfig
+from model_builder.utils import (
+    dummy_observation,
+    print_haiku_model_summary,
+    qnet_model_kwargs,
+)
 
 
 class Model(hk.Module):
-    def __init__(self, action_size, node=256, hidden_n=2, noisy=False, dueling=False):
+    def __init__(self, action_size, network: MLPConfig, noisy=False, dueling=False):
         super().__init__()
         self.action_size = action_size
-        self.node = node
-        self.hidden_n = hidden_n
+        self.network = network
         self.dueling = dueling
         if not noisy:
             self.layer = hk.Linear
@@ -23,8 +27,9 @@ class Model(hk.Module):
         if not self.dueling:
             return hk.Sequential(
                 [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
+                    layer
+                    for config in self.network.layers
+                    for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
                 ]
                 + [
                     self.layer(
@@ -33,22 +38,32 @@ class Model(hk.Module):
                 ]
             )(feature)
         v = hk.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            [
+                layer
+                for config in self.network.layers
+                for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
+            ]
             + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
         )(feature)
         a = hk.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            [
+                layer
+                for config in self.network.layers
+                for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
+            ]
             + [self.layer(self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
         )(feature)
         return v + a - jnp.mean(a, axis=1, keepdims=True)
 
 
 def model_builder_maker(observation_space, action_space, dueling_model, param_noise, policy_kwargs):
-    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
+    policy_kwargs = qnet_model_kwargs(policy_kwargs, allowed_embeddings=("normal",))
 
     def _model_builder(key=None, print_model=False):
         preproc = hk.transform(
-            lambda x: PreProcess(observation_space, embedding_mode=embedding_mode)(x)
+            lambda x: PreProcess(
+                observation_space, embedding_mode=policy_kwargs["network"].embedding_mode
+            )(x)
         )
         model = hk.transform(
             lambda x: Model(

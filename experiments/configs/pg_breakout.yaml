@@ -17,9 +17,8 @@ base:
   mini_batch: 256
   gamma: 0.99
   lamda: 0.95
-  actor_node: 512
-  critic_node: 512
-  hidden_n: 1
+  actor_model: models/mlp_512x1_relu.json
+  critic_model: models/mlp_512x1_relu.json
   optimizer: adam
   optimizer_eps: 0.00001
   max_grad_norm: 0.5

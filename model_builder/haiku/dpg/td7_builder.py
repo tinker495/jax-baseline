@@ -3,7 +3,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from model_builder.haiku.Module import PreProcess, pop_embedding_mode
+from model_builder.haiku.Module import PreProcess
+from model_builder.model_config import ACTIVATIONS, DEFAULT_MLP, LayerConfig, MLPConfig
 from model_builder.utils import (
     dummy_observation,
     get_critic_apply_fn,
@@ -17,52 +18,57 @@ def avgl1norm(x, epsilon=1e-6):
 
 
 class Encoder(hk.Module):
-    def __init__(self, node=256, hidden_n=3):
+    def __init__(self, width: int = 256):
         super().__init__()
-        self.node = node
-        self.hidden_n = hidden_n
-        self.layer = hk.Linear
+        self.width = width
 
     def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
-        encoder = hk.Sequential(
-            [
-                self.layer(self.node) if i % 2 == 0 else jax.nn.elu
-                for i in range(2 * self.hidden_n - 1)
-            ]
-        )(features)
-        return avgl1norm(encoder)
+        return avgl1norm(
+            hk.Sequential(
+                [
+                    hk.Linear(self.width),
+                    jax.nn.elu,
+                    hk.Linear(self.width),
+                    jax.nn.elu,
+                    hk.Linear(self.width),
+                ]
+            )(features)
+        )
 
 
 class Action_Encoder(hk.Module):
-    def __init__(self, node=256, hidden_n=3):
+    def __init__(self, width: int = 256):
         super().__init__()
-        self.node = node
-        self.hidden_n = hidden_n
-        self.layer = hk.Linear
+        self.width = width
 
     def __call__(self, zs: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([zs, action], axis=1)
         return hk.Sequential(
             [
-                self.layer(self.node) if i % 2 == 0 else jax.nn.elu
-                for i in range(2 * self.hidden_n - 1)
+                hk.Linear(self.width),
+                jax.nn.elu,
+                hk.Linear(self.width),
+                jax.nn.elu,
+                hk.Linear(self.width),
             ]
-        )(concat)
+        )(jnp.concatenate([zs, action], axis=1))
 
 
 class Actor(hk.Module):
-    def __init__(self, action_size, node=256, hidden_n=2):
+    def __init__(self, action_size, network: MLPConfig = DEFAULT_MLP):
         super().__init__()
         self.action_size = action_size
-        self.node = node
-        self.hidden_n = hidden_n
+        self.network = network
         self.layer = hk.Linear
 
     def __call__(self, features: jnp.ndarray, zs: jnp.ndarray) -> jnp.ndarray:
-        a0 = avgl1norm(self.layer(self.node)(features))
+        a0 = avgl1norm(self.layer(self.network.layers[0].units)(features))
         embed_concat = jnp.concatenate([a0, zs], axis=1)
         return hk.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            [
+                stage
+                for layer in self.network.layers
+                for stage in (self.layer(layer.units), ACTIVATIONS[layer.activation])
+            ]
             + [
                 self.layer(
                     self.action_size[0],
@@ -74,10 +80,9 @@ class Actor(hk.Module):
 
 
 class Critic(hk.Module):
-    def __init__(self, node=256, hidden_n=2):
+    def __init__(self, network: MLPConfig | None = None):
         super().__init__()
-        self.node = node
-        self.hidden_n = hidden_n
+        self.network = MLPConfig((LayerConfig(256, "elu"),) * 2) if network is None else network
         self.layer = hk.Linear
 
     def __call__(
@@ -89,41 +94,58 @@ class Critic(hk.Module):
     ) -> jnp.ndarray:
         concat = jnp.concatenate([features, actions], axis=1)
         embedding = jnp.concatenate([zs, zsa], axis=1)
-        q0 = avgl1norm(self.layer(self.node)(concat))
+        q0 = avgl1norm(self.layer(self.network.layers[0].units)(concat))
         embed_concat = jnp.concatenate([q0, embedding], axis=1)
         return hk.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.elu for i in range(2 * self.hidden_n)]
+            [
+                stage
+                for layer in self.network.layers
+                for stage in (self.layer(layer.units), ACTIVATIONS[layer.activation])
+            ]
             + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
         )(embed_concat)
 
 
 def model_builder_maker(observation_space, action_size, policy_kwargs):
-    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
-    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(policy_kwargs)
+    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(
+        policy_kwargs,
+        critic_default=MLPConfig((LayerConfig(256, "elu"),) * 2),
+        allowed_embeddings=("normal",),
+    )
+    if not actor_kwargs["network"].layers or not critic_kwargs["network"].layers:
+        raise ValueError("TD7 actor_model and critic_model require at least one hidden layer")
 
     def model_builder(key=None, print_model=False):
-        def encode_state(obs, role, node, shared_features=None):
-            feature = PreProcess(observation_space, embedding_mode=embedding_mode, role=role)(
-                obs, shared_features
-            )
-            return feature, Encoder(node=node)(feature)
+        def encode_state(obs, role, network: MLPConfig, shared_features=None):
+            feature = PreProcess(
+                observation_space, embedding_mode=network.embedding_mode, role=role
+            )(obs, shared_features)
+            return feature, Encoder(width=network.layers[0].units)(feature)
 
-        actor_encoder = hk.transform(lambda obs: encode_state(obs, "actor", actor_kwargs["node"]))
+        actor_encoder = hk.transform(
+            lambda obs: encode_state(obs, "actor", actor_kwargs["network"])
+        )
         critic_encoder = hk.transform(
             lambda obs, shared_features: encode_state(
-                obs, "critic", critic_kwargs["node"], shared_features
+                obs, "critic", critic_kwargs["network"], shared_features
             )
         )
         shared_preproc = hk.transform(
             lambda obs: PreProcess(
-                observation_space, embedding_mode=embedding_mode, role="actor"
+                observation_space,
+                embedding_mode=actor_kwargs["network"].embedding_mode,
+                role="actor",
             ).shared_features(obs)
         )
         actor_action_encoder = hk.transform(
-            lambda zs, actions: Action_Encoder(node=actor_kwargs["node"])(zs, actions)
+            lambda zs, actions: Action_Encoder(width=actor_kwargs["network"].layers[0].units)(
+                zs, actions
+            )
         )
         critic_action_encoder = hk.transform(
-            lambda zs, actions: Action_Encoder(node=critic_kwargs["node"])(zs, actions)
+            lambda zs, actions: Action_Encoder(width=critic_kwargs["network"].layers[0].units)(
+                zs, actions
+            )
         )
         actor = hk.transform(lambda feature, zs: Actor(action_size, **actor_kwargs)(feature, zs))
         critic = hk.transform(

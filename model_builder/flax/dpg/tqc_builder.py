@@ -6,8 +6,9 @@ import numpy as np
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.dpg.gaussian_blocks import Actor
 from model_builder.flax.initializers import clip_factorized_uniform
-from model_builder.flax.layers import Dense
-from model_builder.flax.Module import PreProcess, pop_embedding_mode
+from model_builder.flax.layers import Dense, SimbaV2Head, network_body
+from model_builder.flax.Module import PreProcess
+from model_builder.model_config import DEFAULT_MLP, ModelConfig, ResidualConfig
 from model_builder.utils import (
     dummy_observation,
     get_critic_apply_fn,
@@ -17,35 +18,34 @@ from model_builder.utils import (
 
 
 class Critic(nn.Module):
-    node: int = 256
-    hidden_n: int = 2
+    network: ModelConfig = DEFAULT_MLP
     support_n: int = 25
-    layer: nn.Module = Dense
+    layer: type[nn.Module] = Dense
 
     @nn.compact
     def __call__(self, features: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([features, actions], axis=1)
-        q_net = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [
-                self.layer(
-                    self.support_n,
-                    kernel_init=clip_factorized_uniform(3 / self.support_n),
-                )
-            ]
-        )(concat)
-        return q_net
+        features = network_body(
+            jnp.concatenate([features, actions], axis=1), self.network, self.layer
+        )
+        if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
+            return SimbaV2Head(self.network.width, self.support_n)(features)
+        return self.layer(self.support_n, kernel_init=clip_factorized_uniform(3 / self.support_n))(
+            features
+        )
 
 
 def model_builder_maker(observation_space, action_size, support_n, policy_kwargs):
-    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
-    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(policy_kwargs)
+    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(
+        policy_kwargs, allowed_types=("mlp", "simba", "simbav2")
+    )
 
     def model_builder(key=None, print_model=False):
         class Merged_Actor(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(
-                    observation_space, embedding_mode=embedding_mode, role="actor"
+                    observation_space,
+                    embedding_mode=actor_kwargs["network"].embedding_mode,
+                    role="actor",
                 )
                 self.act = Actor(action_size, **actor_kwargs)
 
@@ -58,7 +58,9 @@ def model_builder_maker(observation_space, action_size, support_n, policy_kwargs
         class Merged_Critic(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(
-                    observation_space, embedding_mode=embedding_mode, role="critic"
+                    observation_space,
+                    embedding_mode=critic_kwargs["network"].embedding_mode,
+                    role="critic",
                 )
                 self.crit1 = Critic(support_n=support_n, **critic_kwargs)
                 self.crit2 = Critic(support_n=support_n, **critic_kwargs)

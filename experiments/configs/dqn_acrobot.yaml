@@ -17,8 +17,7 @@ base:
   buffer_size: 1e5
   exploration_fraction: 0.2
   use_checkpointing: true
-  node: 512
-  hidden_n: 1
+  model: models/mlp_512x1_relu.json
   optimizer: adamw
   target_update: 100
 variants:

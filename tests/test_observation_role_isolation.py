@@ -7,6 +7,8 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from model_builder.model_config import LayerConfig, MLPConfig, ResidualConfig
+
 
 @pytest.mark.parametrize("backend", ["flax", "haiku"])
 @pytest.mark.parametrize("family", ["ac", "dpg"])
@@ -15,7 +17,10 @@ def test_actor_critic_observation_roles_are_isolated(backend, family):
         f"model_builder.{backend}.{family}.{'ac' if family == 'ac' else 'ddpg'}_builder"
     )
     space = {"actor_sensor": [2], "critic_privileged": [3], "unified_command": [1]}
-    kwargs = {"actor_node": 16, "critic_node": 32, "hidden_n": 1}
+    kwargs = {
+        "actor_model": MLPConfig((LayerConfig(16),) * 1),
+        "critic_model": MLPConfig((LayerConfig(32),) * 1),
+    }
     key = jax.random.PRNGKey(3)
     if family == "ac":
         actor, critic, params, critic_params = module.model_builder_maker(
@@ -49,13 +54,26 @@ def test_actor_critic_observation_roles_are_isolated(backend, family):
     assert not np.allclose(shared_actor, policy)
 
 
-@pytest.mark.parametrize("backend", ["flax", "haiku"])
-def test_td7_encoder_and_actor_ignore_privileged_observations(backend):
+@pytest.mark.parametrize(
+    "backend, actor_model, critic_model",
+    [
+        ("flax", MLPConfig((LayerConfig(16),)), MLPConfig((LayerConfig(32),))),
+        ("flax", ResidualConfig("simba", 16), ResidualConfig("simba", 32)),
+        ("flax", ResidualConfig("simbav2", 16), ResidualConfig("simbav2", 32)),
+        ("haiku", MLPConfig((LayerConfig(16),)), MLPConfig((LayerConfig(32),))),
+    ],
+)
+def test_td7_encoder_and_actor_ignore_privileged_observations(backend, actor_model, critic_model):
     module = importlib.import_module(f"model_builder.{backend}.dpg.td7_builder")
     space = {"actor_sensor": [2], "critic_privileged": [3], "unified_command": [1]}
     key = jax.random.PRNGKey(3)
     built = module.model_builder_maker(
-        space, (2,), {"actor_node": 16, "critic_node": 32, "hidden_n": 1}
+        space,
+        (2,),
+        {
+            "actor_model": actor_model,
+            "critic_model": critic_model,
+        },
     )(key)
     encoder, _, _, _, actor, _ = built[:6]
     encoder_params, _, policy_params, _ = built[6:]

@@ -121,7 +121,7 @@ def test_family_checkpoint_snapshots_use_pytree_snapshot():
     np.testing.assert_array_equal(qnet.checkpoint_params["policy"]["b"], [2.0])
 
     dpg = DDPG.__new__(DDPG)
-    dpg.simba = False
+    dpg.obs_rms_norm = False
     eval_state = {"actor_encoder": None, "policy": {"w": jnp.asarray([3.0])}}
     dpg.get_eval_state = lambda: eval_state
 
@@ -137,7 +137,7 @@ def test_checkpoint_round_trip(cls):
 
     src = cls.__new__(cls)
     src.checkpoint_store = FileCheckpointStore()
-    src.simba = False
+    src.obs_rms_norm = False
     src.reward_normalizer = None
     src.ckpt = _scaffold()
     src.train_steps_count = 11
@@ -156,7 +156,7 @@ def test_checkpoint_round_trip(cls):
         dst.memory_backend = "cpu"
         dst.memory_device = None
         dst.checkpoint_store = FileCheckpointStore()
-        dst.simba = False
+        dst.obs_rms_norm = False
         dst.reward_normalizer = None
         dst.ckpt = _scaffold()
         dst.load_params(d)
@@ -178,7 +178,7 @@ def test_checkpoint_round_trip(cls):
     assert not hasattr(dst, "target_params")
 
 
-def test_simba_obs_rms_round_trip():
+def test_observation_rms_round_trip():
     fields = ALGO_FIELDS[DDPG]
 
     src = DDPG.__new__(DDPG)
@@ -189,7 +189,7 @@ def test_simba_obs_rms_round_trip():
     src.eval_snapshot = None
     for i, name in enumerate(fields):
         setattr(src, name, _field_value(name, i))
-    src.simba = True
+    src.obs_rms_norm = True
     src.reward_normalizer = None
     src.obs_rms = RunningMeanStd(shapes={"unified_obs": (2,)}, dtype=np.float64)
     src.obs_rms.update({"unified_obs": np.ones((4, 2), np.float64)})
@@ -202,7 +202,7 @@ def test_simba_obs_rms_round_trip():
         dst.memory_backend = "cpu"
         dst.memory_device = None
         dst.checkpoint_store = FileCheckpointStore()
-        dst.simba = True
+        dst.obs_rms_norm = True
         dst.reward_normalizer = None
         dst.ckpt = _scaffold()
         dst.load_params(d)
@@ -222,7 +222,7 @@ def test_dpg_reward_normalizer_statistics_round_trip_without_partial_returns():
     src.train_steps_count = 3
     src._ckpt_update_residual = 0.0
     src.eval_snapshot = None
-    src.simba = False
+    src.obs_rms_norm = False
     src.reward_normalizer = RewardNormalizer(worker_size=2, gamma=0.9)
     src.reward_normalizer.record(
         rewards=np.array([1.0, 3.0]),
@@ -238,7 +238,7 @@ def test_dpg_reward_normalizer_statistics_round_trip_without_partial_returns():
         dst.memory_device = None
         dst.checkpoint_store = FileCheckpointStore()
         dst.ckpt = _scaffold()
-        dst.simba = False
+        dst.obs_rms_norm = False
         dst.reward_normalizer = RewardNormalizer(worker_size=3, gamma=0.9)
         dst.load_params(d)
 
@@ -301,7 +301,7 @@ def test_dpg_checkpoint_without_reward_stats_clears_partial_discounted_returns()
     src.train_steps_count = 3
     src._ckpt_update_residual = 0.0
     src.eval_snapshot = None
-    src.simba = False
+    src.obs_rms_norm = False
     src.reward_normalizer = None
     for i, name in enumerate(fields):
         setattr(src, name, _field_value(name, i))
@@ -313,7 +313,7 @@ def test_dpg_checkpoint_without_reward_stats_clears_partial_discounted_returns()
         dst.memory_device = None
         dst.checkpoint_store = FileCheckpointStore()
         dst.ckpt = _scaffold()
-        dst.simba = False
+        dst.obs_rms_norm = False
         dst.reward_normalizer = RewardNormalizer(worker_size=2, gamma=0.99)
         dst.reward_normalizer.record(
             rewards=np.array([2.0, 4.0]),

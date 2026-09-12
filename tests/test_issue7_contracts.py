@@ -207,12 +207,16 @@ def test_apex_c51_worker_priority_uses_n_step_gamma():
 
 def test_flax_ac_continuous_actor_initializes_log_std_param():
     from model_builder.flax.ac.ac_builder import model_builder_maker
+    from model_builder.model_config import LayerConfig, MLPConfig
 
     builder = model_builder_maker(
         {"unified_obs": [3]},
         [1],
         "continuous",
-        {"actor_node": 8, "critic_node": 8, "hidden_n": 1, "embedding_mode": "normal"},
+        {
+            "actor_model": MLPConfig((LayerConfig(8),)),
+            "critic_model": MLPConfig((LayerConfig(8),)),
+        },
     )
     actor, critic, actor_params, critic_params = builder(jax.random.PRNGKey(0))
 

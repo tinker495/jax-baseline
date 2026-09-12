@@ -11,6 +11,5 @@ def model_builder_maker(
         param_noise,
         categorial_bar_n,
         policy_kwargs,
-        embedding_default="normal",
         preproc_multiple=1,
     )

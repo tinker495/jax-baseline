@@ -130,7 +130,7 @@ class DPGTrainingLifecycle:
         return reshape_bulk_batch(data, chunk_size, self.agent.batch_size)
 
     def _normalize_batch(self, data):
-        if self.agent.simba:
+        if self.agent.obs_rms_norm:
             obs_rms = self.agent._policy_update_obs_rms()
             data["obses"] = obs_rms.normalize(data["obses"])
             data["nxtobses"] = obs_rms.normalize(data["nxtobses"])

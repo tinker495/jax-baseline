@@ -41,9 +41,8 @@ def add_args(parser):
         "--logdir", type=str, default=default_logdir("apex_dpg"), help="log file dir"
     )
     parser.add_argument("--seed", type=int, default=42, help="random seed")
-    parser.add_argument("--actor_node", type=int, default=None, help="actor hidden width")
-    parser.add_argument("--critic_node", type=int, default=None, help="critic hidden width")
-    parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
+    parser.add_argument("--actor_model", type=str, help="actor network JSON file")
+    parser.add_argument("--critic_model", type=str, help="critic network JSON file")
     parser.add_argument("--optimizer", type=str, default="adopt", help="optimaizer")
     parser.add_argument("--gradient_steps", type=int, default=1, help="gradient_steps")
     parser.add_argument("--learning_starts", type=int, default=5000, help="learning start")
@@ -93,7 +92,6 @@ APEX_DPG_RUNNER = DistributedFamilyRunner(
     policy_kwargs=actor_critic_policy_kwargs,
     algos=ALGOS,
     maker_pkg="model_builder.{lib}.dpg",
-    variant=lambda _args: "",
     ray_cpu_headroom=2,
 )
 

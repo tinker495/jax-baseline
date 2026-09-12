@@ -61,8 +61,7 @@ class Deteministic_Policy_Gradient_Family:
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-3,
         scaled_by_reset=False,
-        simba=False,
-        simba_v2=False,
+        obs_rms_norm: bool = False,
         log_interval=200,
         log_dir=None,
         _init_setup_model=True,
@@ -113,8 +112,7 @@ class Deteministic_Policy_Gradient_Family:
         self.n_step = n_step
         self.scaled_by_reset = scaled_by_reset
         self.reset_freq = 500000
-        self.simba = simba or simba_v2
-        self.simba_v2 = simba_v2
+        self.obs_rms_norm = obs_rms_norm
         self.optimizer_factory = require_optimizer_factory(optimizer_factory)
         self.optimizer = self._make_optimizer(self.learning_rate)
         self.replay_factory = replay_factory
@@ -152,7 +150,7 @@ class Deteministic_Policy_Gradient_Family:
                 self.setup_model()
 
         self.eval_snapshot = None
-        if self.simba:
+        if self.obs_rms_norm:
             with jax.default_device(self.memory_device):
                 self.obs_rms = RunningMeanStd(
                     shapes=self.observation_space,
@@ -222,15 +220,15 @@ class Deteministic_Policy_Gradient_Family:
             ckpt_residual=np.asarray(self._ckpt_update_residual, dtype=np.float32),
             controller_state=self.ckpt.to_state(),
             eval_snapshot=self.eval_snapshot,
-            obs_rms_state=self.obs_rms.to_state() if self.simba else None,
+            obs_rms_state=self.obs_rms.to_state() if self.obs_rms_norm else None,
             action_obs_rms_state=(
                 self.action_obs_rms.to_state()
-                if (self.simba and self.action_obs_rms is not None)
+                if (self.obs_rms_norm and self.action_obs_rms is not None)
                 else None
             ),
             checkpoint_obs_rms_state=(
                 self.checkpoint_obs_rms.to_state()
-                if (self.simba and self.checkpoint_obs_rms is not None)
+                if (self.obs_rms_norm and self.checkpoint_obs_rms is not None)
                 else None
             ),
             reward_rms_state=(
@@ -246,7 +244,7 @@ class Deteministic_Policy_Gradient_Family:
         self.eval_snapshot = jax.device_put(state.eval_snapshot, self.memory_device)
 
         with jax.default_device(self.memory_device):
-            if self.simba:
+            if self.obs_rms_norm:
                 if state.obs_rms_state is not None:
                     self.obs_rms = RunningMeanStd.from_state(
                         state.obs_rms_state, on_device=self.memory_backend == "gpu"
@@ -400,7 +398,7 @@ class Deteministic_Policy_Gradient_Family:
         return self.get_behavior_state()
 
     def actions(self, obs, steps, eval=False):
-        obs = self._apply_simba_normalization(obs, eval, steps)
+        obs = self._normalize_action_observation(obs, eval, steps)
         if not eval and steps <= self.learning_starts:
             return self._random_warmup_actions(eval=eval)
         state = self._select_action_state(eval, steps)
@@ -452,18 +450,16 @@ class Deteministic_Policy_Gradient_Family:
         return f", {fragment}" if fragment else ""
 
     def run_name_update(self, run_name):
-        if self.simba_v2:
-            run_name = "SimbaV2_" + run_name
-        elif self.simba:
-            run_name = "Simba_" + run_name
+        if self.obs_rms_norm:
+            run_name = "ObsRMS_" + run_name
         if self.n_step_method:
             run_name = f"{self.n_step}Step_" + run_name
         if self.prioritized_replay:
             run_name = run_name + "+PER"
         return run_name
 
-    def _apply_simba_normalization(self, obs, eval, steps):
-        if not self.simba:
+    def _normalize_action_observation(self, obs, eval, steps):
+        if not self.obs_rms_norm:
             return obs
         rms = (
             self.checkpoint_obs_rms
@@ -526,7 +522,7 @@ class Deteministic_Policy_Gradient_Family:
         return ActionSelection(env_action=actions, store_action=actions)
 
     def _snapshot_action_normalizer(self):
-        if self.simba:
+        if self.obs_rms_norm:
             self.action_obs_rms = deepcopy(self.obs_rms)
 
     def _write_ckpt_residual(self, value):
@@ -618,6 +614,6 @@ class Deteministic_Policy_Gradient_Family:
         """
         self.eval_snapshot = snapshot_pytree(self.get_eval_state())
 
-        # If using SIMBA normalization, snapshot obs_rms for eval-time consistency.
-        if self.simba:
+        # If using observation RMS normalization, snapshot obs_rms for eval-time consistency.
+        if self.obs_rms_norm:
             self.checkpoint_obs_rms = deepcopy(self._policy_update_obs_rms())

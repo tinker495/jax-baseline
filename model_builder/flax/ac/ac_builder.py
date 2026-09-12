@@ -5,7 +5,8 @@ import jax.numpy as jnp
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense
-from model_builder.flax.Module import PreProcess, pop_embedding_mode
+from model_builder.flax.Module import PreProcess
+from model_builder.model_config import ACTIVATIONS, MLPConfig
 from model_builder.utils import (
     dummy_observation,
     get_critic_apply_fn,
@@ -17,14 +18,17 @@ from model_builder.utils import (
 class Actor(nn.Module):
     action_size: list[int]
     action_type: str
-    node: int
-    hidden_n: int
+    network: MLPConfig = MLPConfig()
     layer: type[nn.Module] = Dense
 
     @nn.compact
     def __call__(self, features: jnp.ndarray) -> jnp.ndarray | tuple[jnp.ndarray, jnp.ndarray]:
         mlp = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            [
+                operation
+                for layer in self.network.layers
+                for operation in (self.layer(layer.units), ACTIVATIONS[layer.activation])
+            ]
         )(features)
         if self.action_type == "discrete":
             action_probs = self.layer(
@@ -43,21 +47,23 @@ class Actor(nn.Module):
 
 
 class Critic(nn.Module):
-    node: int
-    hidden_n: int
+    network: MLPConfig = MLPConfig()
     layer: type[nn.Module] = Dense
 
     @nn.compact
     def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
         net = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            [
+                operation
+                for layer in self.network.layers
+                for operation in (self.layer(layer.units), ACTIVATIONS[layer.activation])
+            ]
             + [self.layer(1, kernel_init=clip_factorized_uniform(0.01))]
         )(features)
         return net
 
 
 def model_builder_maker(observation_space, action_size, action_type, policy_kwargs):
-    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
     actor_kwargs, critic_kwargs = split_actor_critic_kwargs(policy_kwargs)
 
     def _model_builder(key=None, print_model=False):
@@ -65,7 +71,7 @@ def model_builder_maker(observation_space, action_size, action_type, policy_kwar
             def setup(self):
                 self.preproc = PreProcess(
                     observation_space,
-                    embedding_mode=embedding_mode,
+                    embedding_mode=actor_kwargs["network"].embedding_mode,
                     role="actor",
                     name="PreProcess_0",
                 )
@@ -81,9 +87,11 @@ def model_builder_maker(observation_space, action_size, action_type, policy_kwar
             @nn.compact
             def __call__(self, x, shared_features):
                 return Critic(**critic_kwargs)(
-                    PreProcess(observation_space, embedding_mode=embedding_mode, role="critic")(
-                        x, shared_features
-                    )
+                    PreProcess(
+                        observation_space,
+                        embedding_mode=critic_kwargs["network"].embedding_mode,
+                        role="critic",
+                    )(x, shared_features)
                 )
 
         actor = ActorModel()

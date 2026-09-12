@@ -5,9 +5,13 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.layers import Dense
-from model_builder.flax.Module import PreProcess, pop_embedding_mode
+from model_builder.flax.Module import PreProcess
 from model_builder.flax.qnet.iqn_builder import Model
-from model_builder.utils import dummy_observation, print_flax_model_summary
+from model_builder.utils import (
+    dummy_observation,
+    print_flax_model_summary,
+    qnet_model_kwargs,
+)
 
 
 class FractionProposal(nn.Module):
@@ -16,7 +20,7 @@ class FractionProposal(nn.Module):
     hidden_n: int = 1
 
     @nn.compact
-    def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
+    def __call__(self, feature: jnp.ndarray) -> tuple[jax.Array, jax.Array, jax.Array]:
         batch = feature.shape[0]
         log_probs = jax.nn.log_softmax(
             nn.Sequential(
@@ -44,13 +48,15 @@ class FractionProposal(nn.Module):
 def model_builder_maker(
     observation_space, action_space, dueling_model, param_noise, n_support, policy_kwargs
 ):
-    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
+    policy_kwargs = qnet_model_kwargs(policy_kwargs)
 
     def model_builder(key=None, print_model=False):
         class Merged(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(
-                    observation_space, embedding_mode=embedding_mode, pre_postprocess=nn.Dense(512)
+                    observation_space,
+                    embedding_mode=policy_kwargs["network"].embedding_mode,
+                    pre_postprocess=nn.Dense(512),
                 )
                 self.qnet = Model(
                     action_space, dueling=dueling_model, noisy=param_noise, **policy_kwargs

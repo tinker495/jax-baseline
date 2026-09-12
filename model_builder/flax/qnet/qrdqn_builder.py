@@ -1,18 +1,23 @@
+from collections.abc import Sequence
+
 import flax.linen as nn
-import jax
 import jax.numpy as jnp
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense, NoisyDense
-from model_builder.flax.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import dummy_observation, print_flax_model_summary
+from model_builder.flax.Module import PreProcess
+from model_builder.model_config import ACTIVATIONS, MLPConfig
+from model_builder.utils import (
+    dummy_observation,
+    print_flax_model_summary,
+    qnet_model_kwargs,
+)
 
 
 class Model(nn.Module):
-    action_size: int
-    node: int
-    hidden_n: int
+    action_size: Sequence[int]
+    network: MLPConfig
     noisy: bool
     dueling: bool
     support_n: int
@@ -28,8 +33,9 @@ class Model(nn.Module):
         if not self.dueling:
             q_net = nn.Sequential(
                 [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
+                    layer
+                    for config in self.network.layers
+                    for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
                 ]
                 + [
                     self.layer(
@@ -41,7 +47,11 @@ class Model(nn.Module):
             )(feature)
             return q_net
         v = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            [
+                layer
+                for config in self.network.layers
+                for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
+            ]
             + [
                 self.layer(
                     self.support_n,
@@ -51,7 +61,11 @@ class Model(nn.Module):
             ]
         )(feature)
         a = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
+            [
+                layer
+                for config in self.network.layers
+                for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
+            ]
             + [
                 self.layer(
                     self.action_size[0] * self.support_n,
@@ -67,12 +81,14 @@ class Model(nn.Module):
 def model_builder_maker(
     observation_space, action_space, dueling_model, param_noise, support_n, policy_kwargs
 ):
-    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
+    policy_kwargs = qnet_model_kwargs(policy_kwargs)
 
     def model_builder(key=None, print_model=False):
         class Merged(nn.Module):
             def setup(self):
-                self.preproc = PreProcess(observation_space, embedding_mode=embedding_mode)
+                self.preproc = PreProcess(
+                    observation_space, embedding_mode=policy_kwargs["network"].embedding_mode
+                )
                 self.qnet = Model(
                     action_space,
                     dueling=dueling_model,

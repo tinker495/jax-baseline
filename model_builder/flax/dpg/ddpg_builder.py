@@ -4,7 +4,7 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.dpg.ddpg_td3_blocks import Actor, Critic
-from model_builder.flax.Module import PreProcess, pop_embedding_mode
+from model_builder.flax.Module import PreProcess
 from model_builder.utils import (
     dummy_observation,
     get_critic_apply_fn,
@@ -13,25 +13,20 @@ from model_builder.utils import (
 )
 
 
-def _make_model_builder(
-    observation_space,
-    action_size,
-    policy_kwargs,
-    *,
-    actor_cls,
-    critic_cls,
-    twin_critic,
-):
-    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
-    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(policy_kwargs)
+def _make_model_builder(observation_space, action_size, policy_kwargs, *, twin_critic):
+    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(
+        policy_kwargs, allowed_types=("mlp", "simba", "simbav2")
+    )
 
     def model_builder(key=None, print_model=False):
         class Merged_Actor(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(
-                    observation_space, embedding_mode=embedding_mode, role="actor"
+                    observation_space,
+                    embedding_mode=actor_kwargs["network"].embedding_mode,
+                    role="actor",
                 )
-                self.act = actor_cls(action_size, **actor_kwargs)
+                self.act = Actor(action_size, **actor_kwargs)
 
             def __call__(self, x):
                 return self.act(self.preproc(x))
@@ -42,11 +37,13 @@ def _make_model_builder(
         class Merged_Critic(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(
-                    observation_space, embedding_mode=embedding_mode, role="critic"
+                    observation_space,
+                    embedding_mode=critic_kwargs["network"].embedding_mode,
+                    role="critic",
                 )
-                self.crit1 = critic_cls(**critic_kwargs)
+                self.crit1 = Critic(**critic_kwargs)
                 if twin_critic:
-                    self.crit2 = critic_cls(**critic_kwargs)
+                    self.crit2 = Critic(**critic_kwargs)
 
             def __call__(self, x, shared_features, a):
                 feature = self.preproc(x, shared_features)
@@ -85,7 +82,5 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         observation_space,
         action_size,
         policy_kwargs,
-        actor_cls=Actor,
-        critic_cls=Critic,
         twin_critic=False,
     )

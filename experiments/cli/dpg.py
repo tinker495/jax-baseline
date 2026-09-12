@@ -59,9 +59,11 @@ def add_args(parser):
         help="n step setting when n > 1 is n step td method",
     )
     parser.add_argument("--scaled_by_reset", action="store_true")
-    simba_group = parser.add_mutually_exclusive_group()
-    simba_group.add_argument("--simba", action="store_true")
-    simba_group.add_argument("--simbav2", action="store_true")
+    parser.add_argument(
+        "--obs_rms_norm",
+        action="store_true",
+        help="normalize observations with running per-feature mean and standard deviation",
+    )
     parser.add_argument("--steps", type=float, default=1e6, help="step size")
     parser.add_argument(
         "--eval_num",
@@ -74,9 +76,8 @@ def add_args(parser):
     parser.add_argument("--n_support", type=int, default=25, help="n_support for QRDQN,IQN,FQF")
     parser.add_argument("--mixture", type=str, default="truncated", help="mixture type")
     parser.add_argument("--quantile_drop", type=float, default=0.1, help="quantile_drop ratio")
-    parser.add_argument("--actor_node", type=int, default=None, help="actor hidden width")
-    parser.add_argument("--critic_node", type=int, default=None, help="critic hidden width")
-    parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
+    parser.add_argument("--actor_model", type=str, help="actor network JSON file")
+    parser.add_argument("--critic_model", type=str, help="critic network JSON file")
     parser.add_argument("--action_noise", type=float, default=0.1, help="action_noise")
     parser.add_argument("--optimizer", type=str, default="adopt", help="optimaizer")
     parser.add_argument("--gradient_steps", type=int, default=1, help="gradient_steps")
@@ -110,23 +111,12 @@ def add_args(parser):
 
 
 def build_env(args):
+    policy_kwargs = actor_critic_policy_kwargs(args)
     env_builder, _ = get_env_builder(
         args.env,
         **env_builder_kwargs(args),
     )
-    return env_builder, actor_critic_policy_kwargs(args)
-
-
-def _variant(args):
-    if args.simbav2:
-        return "simbav2_"
-    if args.simba:
-        return "simba_"
-    return ""
-
-
-def _simba(args):
-    return args.simba or args.simbav2
+    return env_builder, policy_kwargs
 
 
 def _common(a):
@@ -140,8 +130,7 @@ def _common(a):
         "learning_starts": a.learning_starts,
         "prioritized_replay": a.per,
         "scaled_by_reset": a.scaled_by_reset,
-        "simba": _simba(a),
-        "simba_v2": a.simbav2,
+        "obs_rms_norm": a.obs_rms_norm,
         "n_step": a.n_step,
         "train_freq": a.train_freq,
         "seed": a.seed,
@@ -249,8 +238,7 @@ ALGOS = {
             "action_noise": a.action_noise,
             "train_freq": a.train_freq,
             "scaled_by_reset": a.scaled_by_reset,
-            "simba": _simba(a),
-            "simba_v2": a.simbav2,
+            "obs_rms_norm": a.obs_rms_norm,
             "seed": a.seed,
             "gradient_steps": a.gradient_steps,
             "max_bulk_updates_per_pulse": a.max_bulk_updates_per_pulse,
@@ -270,7 +258,6 @@ DPG_RUNNER = FamilyRunner(
     build_env=build_env,
     algos=ALGOS,
     maker_pkg="model_builder.{lib}.dpg",
-    variant=_variant,
 )
 
 
