@@ -12,7 +12,14 @@ from jax_baselines.math.distributional import (
     distributional_td_target,
 )
 from jax_baselines.math.jax_utils import convert_normalized_obs
+from jax_baselines.math.metrics import (
+    array_metrics,
+    categorical_metrics,
+    replay_metrics,
+    td_metrics,
+)
 from jax_baselines.math.param_updates import hard_update
+from jax_baselines.optim import optimizer_metrics
 
 
 class HL_GAUSS_C51(Q_Network_Family):
@@ -58,7 +65,7 @@ class HL_GAUSS_C51(Q_Network_Family):
 
         # Use common JIT compilation
         self._compile_common_functions()
-        self._bulk_scan = jax.jit(self._bulk_scan)
+        self._compiled_bulk_scan = jax.jit(self._bulk_scan)
 
     def get_q(self, params, obses, key=None) -> jnp.ndarray:
         return self.model(params, key, self.preproc(params, key, obses))
@@ -89,7 +96,7 @@ class HL_GAUSS_C51(Q_Network_Family):
         nxtobses = convert_normalized_obs(nxtobses)
         actions = jnp.expand_dims(actions.astype(jnp.int32), axis=2)
         not_terminateds = 1.0 - terminateds
-        target_distribution = self._target(
+        target_distribution, metrics = self._target(
             params,
             target_params,
             obses,
@@ -99,30 +106,46 @@ class HL_GAUSS_C51(Q_Network_Family):
             not_terminateds,
             key,
         )
-        (loss, centropy), grad = jax.value_and_grad(self._loss, has_aux=True)(
+        (loss, (centropy, distribution)), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params, obses, actions, target_distribution, weights, key
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+        q_values = self.hl_gauss.to_scalar(distribution[:, None, :])[:, 0]
+        target_values = self.hl_gauss.to_scalar(target_distribution[:, None, :])[:, 0]
+        metrics.update(
+            {
+                **array_metrics(q_values, "loss/q"),
+                **array_metrics(target_values, "loss/target"),
+                **td_metrics(q_values, target_values),
+                **categorical_metrics(
+                    distribution,
+                    target_distribution,
+                    (self.hl_gauss.support[:-1] + self.hl_gauss.support[1:]) / 2,
+                ),
+                **optimizer_metrics(opt_state, "q"),
+                "loss/unweighted_loss": jnp.mean(centropy),
+            }
+        )
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = centropy
+            metrics.update(replay_metrics(weights, new_priorities))
         return (
             params,
             target_params,
             opt_state,
             loss,
-            self.hl_gauss.to_scalar(jnp.expand_dims(target_distribution, 1)).mean(),
+            jnp.mean(target_values),
             new_priorities,
+            metrics,
         )
 
     def _loss(self, params, obses, actions, target_distribution, weights, key):
-        distribution = jnp.squeeze(
-            jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
-        )
+        distribution = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)[:, 0]
         cross_entropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
-        return jnp.mean(cross_entropy * weights), cross_entropy
+        return jnp.mean(cross_entropy * weights), (cross_entropy, distribution)
 
     def _target(
         self,
@@ -161,4 +184,5 @@ class HL_GAUSS_C51(Q_Network_Family):
             online_next_dists=online_next_dists,
             behavior_dists=behavior_dists,
             munchausen=munchausen,
+            return_diagnostics=True,
         )

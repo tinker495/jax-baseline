@@ -3,12 +3,14 @@ import jax.numpy as jnp
 import optax
 
 from jax_baselines.math.jax_utils import convert_normalized_obs
+from jax_baselines.math.metrics import replay_metrics
 from jax_baselines.math.param_updates import (
     filter_like_tree,
     scaled_by_reset_with_filter,
     soft_update,
     tree_random_normal_like,
 )
+from jax_baselines.optim import optimizer_metrics
 from jax_baselines.SPR.spr import SPR
 
 
@@ -67,7 +69,7 @@ class BBF(SPR):
         self.reset_hardsoft = filter_like_tree(
             self.params,
             "qnet",
-            (lambda x, filtered: (jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.5)),
+            (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.5),
         )  # hard_reset for qnet and scaled_by_reset for the rest
         self.soft_reset_freq = 40000
         self.optimizer = self._make_optimizer(self.learning_rate)
@@ -78,6 +80,7 @@ class BBF(SPR):
             axis=0,
         )  # [1, 51]
         self._categorial_bar = jnp.expand_dims(self.categorial_bar, axis=0)  # [1, 1, 51]
+        self.value_support = self.categorial_bar[0]
         self.delta_bar = jax.device_put(
             (self.categorial_max - self.categorial_min) / (self.categorial_bar_n - 1)
         )
@@ -175,7 +178,7 @@ class BBF(SPR):
             parsed_gamma = (
                 jnp.take_along_axis(jnp.expand_dims(_gamma, 0), last_idxs, axis=1) * gamma
             )
-            target_distribution = self._target(
+            target_distribution, target_metrics = self._target(
                 params,
                 target_params,
                 parsed_obses,
@@ -191,7 +194,9 @@ class BBF(SPR):
             )
             transition_actions = actions[:, : self.prediction_depth]
             transition_filled = filled[:, : self.prediction_depth]
-            (_, (centropy, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
+            (_, (centropy, qloss, rprloss, metrics)), grad = jax.value_and_grad(
+                self._loss, has_aux=True
+            )(
                 params,
                 target_params,
                 transition_obses,
@@ -204,6 +209,10 @@ class BBF(SPR):
                 key,
             )
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+            metrics.update(target_metrics)
+            metrics.update(optimizer_metrics(opt_state, "q"))
+            if self.prioritized_replay:
+                metrics.update(replay_metrics(weights, centropy))
             params = optax.apply_updates(params, updates)
             target_params = soft_update(params, target_params, 0.005)
             params, opt_state = scaled_by_reset_with_filter(
@@ -224,6 +233,7 @@ class BBF(SPR):
                 qloss,
                 rprloss,
                 target_q,
+                metrics,
             )
 
         (params, target_params, opt_state, _), outputs = jax.lax.scan(
@@ -239,7 +249,7 @@ class BBF(SPR):
                 batched_steps,
             ),
         )
-        centropy, qloss, rprloss, target_q = outputs
+        centropy, qloss, rprloss, target_q, metrics = outputs
         qloss = jnp.mean(qloss)
         rprloss = jnp.mean(rprloss)
         target_q = jnp.mean(target_q)
@@ -255,6 +265,7 @@ class BBF(SPR):
             target_q,
             new_priorities,
             rprloss,
+            jax.tree.map(jnp.mean, metrics),
         )
 
     def run_name_update(self, run_name):

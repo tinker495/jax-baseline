@@ -8,9 +8,19 @@ from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import QNetTrainResult
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.losses import FQFQuantileLosses, QuantileHuberLosses
+from jax_baselines.math.metrics import (
+    array_metrics,
+    quantile_metrics,
+    replay_metrics,
+    td_metrics,
+)
 from jax_baselines.math.param_updates import hard_update
 from jax_baselines.math.policy_math import q_log_pi
-from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
+from jax_baselines.optim import (
+    OptimizerFactory,
+    optimizer_metrics,
+    require_optimizer_factory,
+)
 
 
 class FQF(Q_Network_Family):
@@ -59,7 +69,7 @@ class FQF(Q_Network_Family):
 
         # Use common JIT compilation
         self._compile_common_functions()
-        self._bulk_scan = jax.jit(self._bulk_scan)
+        self._compiled_bulk_scan = jax.jit(self._bulk_scan)
 
     def actions(self, obs, epsilon, eval_mode=False):
         params_to_use = self.get_behavior_params()
@@ -104,6 +114,7 @@ class FQF(Q_Network_Family):
             t_std,
             tau,
             new_priorities,
+            metrics,
         ) = self._train_step(
             self.params,
             self.fqf_params,
@@ -119,7 +130,7 @@ class FQF(Q_Network_Family):
             loss=loss,
             target=t_mean,
             replay_priorities=new_priorities,
-            metrics={"loss/fqf_loss": fqf_loss, "loss/target_stds": t_std},
+            metrics={**metrics, "loss/fqf_loss": fqf_loss, "loss/target_stds": t_std},
             histograms={"loss/tau": tau},
         )
 
@@ -148,13 +159,15 @@ class FQF(Q_Network_Family):
                 target_stds,
                 taus,
                 priorities,
+                metrics,
             ),
-        ) = self._bulk_scan(carry, keys, steps, data)
+        ) = self._compiled_bulk_scan(carry, keys, steps, data)
         return QNetTrainResult.from_values(
             loss=jnp.mean(losses),
             target=jnp.mean(targets),
             replay_priorities=priorities,
             metrics={
+                **jax.tree.map(jnp.mean, metrics),
                 "loss/fqf_loss": jnp.mean(fqf_losses),
                 "loss/target_stds": jnp.mean(target_stds),
             },
@@ -178,6 +191,7 @@ class FQF(Q_Network_Family):
                 t_std,
                 tau,
                 priorities,
+                metrics,
             ) = self._train_step(
                 params,
                 fqf_params,
@@ -194,7 +208,7 @@ class FQF(Q_Network_Family):
                 target_params,
                 opt_state,
                 fqf_opt_state,
-            ), (loss, fqf_loss, t_mean, t_std, tau, priorities)
+            ), (loss, fqf_loss, t_mean, t_std, tau, priorities, metrics)
 
         return jax.lax.scan(train_one, carry, (steps, keys, data))
 
@@ -229,6 +243,7 @@ class FQF(Q_Network_Family):
                     theta_loss_tile,
                     targets,
                     target_weights,
+                    metrics,
                 ),
             ),
             grad,
@@ -252,11 +267,14 @@ class FQF(Q_Network_Family):
         )
         fqf_params = optax.apply_updates(fqf_params, fqf_update)
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+        metrics.update(optimizer_metrics(opt_state, "q"))
+        metrics.update(optimizer_metrics(fqf_opt_state, "fraction"))
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
+            metrics.update(replay_metrics(weights, new_priorities))
         return (
             params,
             fqf_params,
@@ -269,6 +287,7 @@ class FQF(Q_Network_Family):
             jnp.mean(jnp.std(targets, axis=1)),
             tau_hats,
             new_priorities,
+            metrics,
         )
 
     def _loss(
@@ -285,7 +304,7 @@ class FQF(Q_Network_Family):
         key,
     ):
         feature = self.preproc(params, key, obses)
-        taus, tau_hats, _ = self.fpf(fqf_params, key, jax.lax.stop_gradient(feature))
+        taus, tau_hats, entropy = self.fpf(fqf_params, key, jax.lax.stop_gradient(feature))
         targets, target_weights = jax.lax.stop_gradient(
             self._target(
                 params,
@@ -316,6 +335,9 @@ class FQF(Q_Network_Family):
             self.delta,
             logit_valid_weight,
         )
+        widths = taus[:, 1:] - taus[:, :-1]
+        q_values = jnp.sum(widths * theta_loss_tile[:, 0], axis=1)
+        target_values = jnp.sum(target_weights * targets, axis=1)
         return jnp.mean(hubber * weights), (
             hubber,
             feature,
@@ -323,6 +345,16 @@ class FQF(Q_Network_Family):
             theta_loss_tile,
             targets,
             target_weights,
+            {
+                **array_metrics(q_values, "loss/q"),
+                **array_metrics(target_values, "loss/target"),
+                **td_metrics(q_values, target_values),
+                **quantile_metrics(theta_loss_tile[:, 0]),
+                "loss/unweighted_loss": jnp.mean(hubber),
+                "loss/fraction_entropy": jnp.mean(entropy),
+                "loss/fraction_width_min": jnp.min(widths),
+                "loss/fraction_width_max": jnp.max(widths),
+            },
         )
 
     def _fqf_loss(self, fqf_params, params, feature, actions, tau_hat_vals, key):

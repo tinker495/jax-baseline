@@ -11,11 +11,13 @@ from jax_baselines.math.distributional import (
     distributional_td_target,
 )
 from jax_baselines.math.jax_utils import convert_normalized_obs
+from jax_baselines.math.metrics import replay_metrics
 from jax_baselines.math.param_updates import (
     filter_like_tree,
     scaled_by_reset_with_filter,
     soft_update,
 )
+from jax_baselines.optim import optimizer_metrics
 from jax_baselines.SPR.spr import SPR
 
 
@@ -90,7 +92,7 @@ class HL_GAUSS_SPR(SPR):
             self.reset_hardsoft = filter_like_tree(
                 self.params,
                 "qnet",
-                (lambda x, filtered: (jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2)),
+                (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2),
             )  # hard_reset for qnet and scaled_by_reset for the rest
             self.soft_reset_freq = 40000
 
@@ -99,6 +101,7 @@ class HL_GAUSS_SPR(SPR):
         self.hl_gauss = HLGaussTransform.build(
             self.categorial_min, self.categorial_max, self.categorial_bar_n
         )
+        self.value_support = (self.hl_gauss.support[:-1] + self.hl_gauss.support[1:]) / 2
 
         # Use common JIT compilation
         self._compile_common_functions()
@@ -204,7 +207,7 @@ class HL_GAUSS_SPR(SPR):
             parsed_gamma = (
                 jnp.take_along_axis(jnp.expand_dims(self._gamma, 0), last_idxs, axis=1) * self.gamma
             )
-            target_distribution = self._target(
+            target_distribution, target_metrics = self._target(
                 params,
                 target_params,
                 parsed_obses,
@@ -220,7 +223,9 @@ class HL_GAUSS_SPR(SPR):
             )
             transition_actions = actions[:, : self.prediction_depth]
             transition_filled = filled[:, : self.prediction_depth]
-            (_, (centropy, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
+            (_, (centropy, qloss, rprloss, metrics)), grad = jax.value_and_grad(
+                self._loss, has_aux=True
+            )(
                 params,
                 target_params,
                 transition_obses,
@@ -233,6 +238,10 @@ class HL_GAUSS_SPR(SPR):
                 key,
             )
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+            metrics.update(target_metrics)
+            metrics.update(optimizer_metrics(opt_state, "q"))
+            if self.prioritized_replay:
+                metrics.update(replay_metrics(weights, centropy))
             params = optax.apply_updates(params, updates)
             target_params = soft_update(params, target_params, 0.005)
             if self.scaled_by_reset:
@@ -251,6 +260,7 @@ class HL_GAUSS_SPR(SPR):
                 qloss,
                 rprloss,
                 target_q,
+                metrics,
             )
 
         (params, target_params, opt_state, _), outputs = jax.lax.scan(
@@ -266,7 +276,7 @@ class HL_GAUSS_SPR(SPR):
                 batched_steps,
             ),
         )
-        centropy, qloss, rprloss, target_q = outputs
+        centropy, qloss, rprloss, target_q, metrics = outputs
         qloss = jnp.mean(qloss)
         rprloss = jnp.mean(rprloss)
         target_q = jnp.mean(target_q)
@@ -282,6 +292,7 @@ class HL_GAUSS_SPR(SPR):
             target_q,
             new_priorities,
             rprloss,
+            jax.tree.map(jnp.mean, metrics),
         )
 
     def _target(
@@ -322,4 +333,5 @@ class HL_GAUSS_SPR(SPR):
             online_next_dists=online_next_dists,
             behavior_dists=behavior_dists,
             munchausen=munchausen,
+            return_diagnostics=True,
         )

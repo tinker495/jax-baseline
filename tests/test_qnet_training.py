@@ -555,9 +555,11 @@ def test_dqn_train_on_bulk_scans_updates_and_stacks_priorities():
             step.astype(float),
             step.astype(float) + 10.0,
             priorities,
+            {"loss/q_mean": step.astype(float)},
         )
 
     agent._train_step = train_step
+    agent._compiled_bulk_scan = agent._bulk_scan
     data = {
         "obses": np.ones((2, 4, 3)),
         "indexes": np.arange(8).reshape(2, 4),
@@ -575,6 +577,7 @@ def test_dqn_train_on_bulk_scans_updates_and_stacks_priorities():
     assert result.report.loss == pytest.approx(1.5)
     assert result.report.target == pytest.approx(11.5)
     assert result.report.update_count == 2
+    assert result.report.metrics["loss/q_mean"] == pytest.approx(1.5)
     assert np.array_equal(result.replay_priorities, np.array([[1, 1, 1, 1], [2, 2, 2, 2]]))
 
 
