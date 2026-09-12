@@ -469,6 +469,7 @@ class _EmptyBuffer:
 def test_on_policy_train_logger_is_explicit_and_not_retained(algorithm, train_result, metric_names):
     agent = algorithm.__new__(algorithm)
     agent.buffer = _EmptyBuffer()
+    agent.memory_backend = "cpu"
     agent.actor_params = "old-actor-params"
     agent.critic_params = "old-critic-params"
     agent.actor_opt_state = "old-actor-opt-state"
