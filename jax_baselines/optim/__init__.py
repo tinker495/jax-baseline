@@ -5,7 +5,8 @@ adapters. String names, defaults, clipping policy, and reset-suffix parsing are
 experiment policy and must not be resolved in core constructors.
 """
 
-from typing import Any, Callable, Optional, Protocol
+from collections.abc import Callable
+from typing import Any, NamedTuple, Protocol
 
 import jax
 import jax.numpy as jnp
@@ -31,12 +32,85 @@ def require_optimizer_factory(
     return optimizer_factory
 
 
+class OptimizerMetricsState(NamedTuple):
+    inner_state: optax.OptState
+    count: jax.Array
+    grad_norm_pre_clip: jax.Array
+    update_norm: jax.Array
+    parameter_norm: jax.Array
+    learning_rate: jax.Array
+    grad_clip_fraction: jax.Array
+
+
+def track_optimizer(
+    optimizer: optax.GradientTransformation,
+    learning_rate: optax.ScalarOrSchedule,
+    grad_max: float | None = None,
+    reset_steps: int | None = None,
+) -> optax.GradientTransformation:
+    """Observe optimizer inputs and updates without changing their values.
+
+    Learning rate is the supplied scalar schedule, before any adaptive
+    preconditioning. Parameter norm is measured before the update. A periodic
+    inner-state reset also restarts the schedule's diagnostic counter.
+    """
+    if reset_steps is not None and reset_steps <= 0:
+        raise ValueError("optimizer reset_steps must be positive")
+
+    def rate(count):
+        if reset_steps is not None:
+            count = count % reset_steps
+        return jnp.asarray(learning_rate(count) if callable(learning_rate) else learning_rate)
+
+    def init_fn(params):
+        zero = jnp.asarray(0.0)
+        return OptimizerMetricsState(
+            optimizer.init(params),
+            jnp.zeros((), dtype=jnp.int32),
+            zero,
+            zero,
+            optax.tree.norm(params),
+            rate(jnp.zeros((), dtype=jnp.int32)),
+            zero,
+        )
+
+    def update_fn(updates, state, params=None):
+        grad_norm = optax.tree.norm(updates)
+        updates, inner_state = optimizer.update(updates, state.inner_state, params)
+        return updates, OptimizerMetricsState(
+            inner_state,
+            jnp.asarray(optax.safe_increment(state.count)),
+            grad_norm,
+            optax.tree.norm(updates),
+            optax.tree.norm(params) if params is not None else jnp.asarray(jnp.nan),
+            rate(state.count),
+            (grad_norm > grad_max).astype(jnp.float32)
+            if grad_max is not None
+            else jnp.asarray(0.0),
+        )
+
+    return optax.GradientTransformation(init_fn, update_fn)
+
+
+def optimizer_metrics(opt_state: optax.OptState, prefix: str) -> dict[str, jax.Array]:
+    """Read the last update; arbitrary injected Optax optimizers may opt out."""
+    if not isinstance(opt_state, OptimizerMetricsState):
+        return {}
+    return {
+        f"optim/{prefix}_grad_norm_pre_clip": opt_state.grad_norm_pre_clip,
+        f"optim/{prefix}_update_norm": opt_state.update_norm,
+        f"optim/{prefix}_parameter_norm": opt_state.parameter_norm,
+        f"optim/{prefix}_learning_rate": opt_state.learning_rate,
+        f"optim/{prefix}_grad_clip_fraction": opt_state.grad_clip_fraction,
+    }
+
+
 def adopt(
     learning_rate: optax.ScalarOrSchedule,
     b1: float = 0.9,
     b2: float = 0.9999,
     eps: float = 1e-6,
-    mu_dtype: Optional[Any] = None,
+    mu_dtype: Any | None = None,
     *,
     nesterov: bool = False,
     use_clipping: bool = True,
@@ -58,7 +132,7 @@ def scale_by_adopt(
     b1: float = 0.9,
     b2: float = 0.9999,
     eps: float = 1e-6,
-    mu_dtype: Optional[jnp.dtype] = None,
+    mu_dtype: jnp.dtype | None = None,
     *,
     nesterov: bool = False,
     use_clipping: bool = True,
@@ -119,6 +193,8 @@ def optimizer_reset_by_period(
         return (opt_state, jnp.zeros((), dtype=jnp.int32))
 
     def update_fn(updates, state, params=None):
+        if params is None:
+            raise ValueError("periodic optimizer reset requires parameters")
         opt_state, step_count = state
         updates, opt_state = optimizer.update(updates, opt_state, params)
 
@@ -137,8 +213,11 @@ def optimizer_reset_by_period(
 
 __all__ = [
     "OptimizerFactory",
+    "OptimizerMetricsState",
     "adopt",
+    "optimizer_metrics",
     "optimizer_reset_by_period",
     "require_optimizer_factory",
     "scale_by_adopt",
+    "track_optimizer",
 ]

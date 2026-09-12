@@ -17,11 +17,12 @@ decisions (the canonical Munchausen form is ``c51.py`` / ``hl_gauss_c51.py``).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, Protocol
+from typing import Literal, Protocol, overload
 
 import jax
 import jax.numpy as jnp
 
+from jax_baselines.math.metrics import support_metrics
 from jax_baselines.math.policy_math import q_log_pi
 
 
@@ -138,11 +139,11 @@ class DistributionalBackend(Protocol):
         self,
         next_dists: jax.Array,
         weights: jax.Array,
-        entropy_shift: Optional[jax.Array],
+        entropy_shift: jax.Array | None,
         reward: jax.Array,
         not_terminated: jax.Array,
         gamma: jax.Array,
-    ) -> jax.Array:
+    ) -> tuple[jax.Array, dict[str, jax.Array]]:
         """Build the ``[B, bins]`` target distribution from per-action next dists.
 
         Args:
@@ -156,7 +157,7 @@ class DistributionalBackend(Protocol):
             gamma: scalar or ``[B, 1]`` discount.
 
         Returns:
-            ``[B, bins]`` target distribution.
+            ``[B, bins]`` target distribution and pre-projection support diagnostics.
         """
         ...
 
@@ -179,11 +180,11 @@ class CategoricalBackend:
         self,
         next_dists: jax.Array,
         weights: jax.Array,
-        entropy_shift: Optional[jax.Array],
+        entropy_shift: jax.Array | None,
         reward: jax.Array,
         not_terminated: jax.Array,
         gamma: jax.Array,
-    ) -> jax.Array:
+    ) -> tuple[jax.Array, dict[str, jax.Array]]:
         if entropy_shift is None:
             entropy_shift = jnp.zeros(weights.shape, dtype=self.support.dtype)
         # per-action shifted support: [B, A, bins]
@@ -206,7 +207,9 @@ class CategoricalBackend:
         dist_per_action = jax.vmap(project_action, in_axes=(1, 1), out_axes=1)(
             next_dists, target_atoms
         )
-        return jnp.sum(jnp.expand_dims(weights, axis=2) * dist_per_action, axis=1)
+        return jnp.sum(jnp.expand_dims(weights, axis=2) * dist_per_action, axis=1), support_metrics(
+            next_dists * weights[:, :, None], target_atoms, self.support_min, self.support_max
+        )
 
 
 @dataclass(frozen=True, eq=False)
@@ -223,11 +226,11 @@ class HLGaussBackend:
         self,
         next_dists: jax.Array,
         weights: jax.Array,
-        entropy_shift: Optional[jax.Array],
+        entropy_shift: jax.Array | None,
         reward: jax.Array,
         not_terminated: jax.Array,
         gamma: jax.Array,
-    ) -> jax.Array:
+    ) -> tuple[jax.Array, dict[str, jax.Array]]:
         next_q = self.hl_gauss.to_scalar(next_dists)  # [B, A]
         if entropy_shift is None:
             entropy_shift = jnp.zeros(next_q.shape, dtype=next_q.dtype)
@@ -235,7 +238,9 @@ class HLGaussBackend:
             jnp.sum(weights * (next_q - entropy_shift), axis=1, keepdims=True) * not_terminated
         )
         target_q = next_vals * gamma + reward
-        return self.hl_gauss.to_probs(target_q)
+        return self.hl_gauss.to_probs(target_q), support_metrics(
+            jnp.ones_like(target_q), target_q, self.hl_gauss.support[0], self.hl_gauss.support[-1]
+        )
 
 
 @dataclass(frozen=True)
@@ -246,6 +251,7 @@ class MunchausenSpec:
     tau: float
 
 
+@overload
 def distributional_td_target(
     *,
     next_dists: jax.Array,
@@ -254,10 +260,44 @@ def distributional_td_target(
     not_terminated: jax.Array,
     gamma: jax.Array,
     backend: DistributionalBackend,
-    online_next_dists: Optional[jax.Array] = None,
-    behavior_dists: Optional[jax.Array] = None,
-    munchausen: Optional[MunchausenSpec] = None,
+    online_next_dists: jax.Array | None = None,
+    behavior_dists: jax.Array | None = None,
+    munchausen: MunchausenSpec | None = None,
+    return_diagnostics: Literal[False] = False,
 ) -> jax.Array:
+    ...
+
+
+@overload
+def distributional_td_target(
+    *,
+    next_dists: jax.Array,
+    actions: jax.Array,
+    reward: jax.Array,
+    not_terminated: jax.Array,
+    gamma: jax.Array,
+    backend: DistributionalBackend,
+    online_next_dists: jax.Array | None = None,
+    behavior_dists: jax.Array | None = None,
+    munchausen: MunchausenSpec | None = None,
+    return_diagnostics: Literal[True],
+) -> tuple[jax.Array, dict[str, jax.Array]]:
+    ...
+
+
+def distributional_td_target(
+    *,
+    next_dists: jax.Array,
+    actions: jax.Array,
+    reward: jax.Array,
+    not_terminated: jax.Array,
+    gamma: jax.Array,
+    backend: DistributionalBackend,
+    online_next_dists: jax.Array | None = None,
+    behavior_dists: jax.Array | None = None,
+    munchausen: MunchausenSpec | None = None,
+    return_diagnostics: bool = False,
+) -> jax.Array | tuple[jax.Array, dict[str, jax.Array]]:
     """Compute the distributional TD target distribution ``[B, bins]``.
 
     Owns the scalar scaffolding shared by every distributional ``_target``;
@@ -281,6 +321,7 @@ def distributional_td_target(
         behavior_dists: ``[B, A, bins]`` current-state dists for the Munchausen
             addon; required when ``munchausen`` is set.
         munchausen: Munchausen spec, or ``None`` for the greedy target.
+        return_diagnostics: include probability mass clipped before projection.
 
     Returns:
         ``[B, bins]`` target distribution.
@@ -291,7 +332,7 @@ def distributional_td_target(
         q_next = backend.action_values(selection_dists)
         greedy = jnp.argmax(q_next, axis=1)
         weights = jax.nn.one_hot(greedy, q_next.shape[1], dtype=next_dists.dtype)
-        return backend.project(
+        target, metrics = backend.project(
             next_dists,
             weights,
             None,
@@ -299,6 +340,7 @@ def distributional_td_target(
             not_terminated,
             gamma,
         )
+        return (target, metrics) if return_diagnostics else target
 
     tau = munchausen.tau
     q_next = backend.action_values(selection_dists)
@@ -312,7 +354,7 @@ def distributional_td_target(
     addon = jnp.take_along_axis(clipped_tau_log_pi, actions, axis=1)
     shaped_reward = reward + munchausen.alpha * addon
 
-    return backend.project(
+    target, metrics = backend.project(
         next_dists,
         pi_next,
         tau_log_pi_next,
@@ -320,3 +362,4 @@ def distributional_td_target(
         not_terminated,
         gamma,
     )
+    return (target, metrics) if return_diagnostics else target
