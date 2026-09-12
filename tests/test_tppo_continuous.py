@@ -114,4 +114,13 @@ def test_continuous_tppo_full_train_step_handles_gaussian_minibatches(cls, famil
 
     assert jnp.isfinite(result[0]["bias"])
     assert jnp.isfinite(result[1]["bias"])
-    assert all(bool(jnp.all(jnp.isfinite(value))) for value in result[4:])
+    if kind == "local":
+        metrics = result[4]
+        assert jnp.isnan(metrics["loss/explained_variance"])
+        assert all(
+            bool(jnp.all(jnp.isfinite(value)))
+            for name, value in metrics.items()
+            if name != "loss/explained_variance"
+        )
+    else:
+        assert all(bool(jnp.all(jnp.isfinite(value))) for value in result[4:])

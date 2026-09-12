@@ -4,7 +4,9 @@ import optax
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.math.jax_utils import convert_normalized_obs
+from jax_baselines.math.metrics import gaussian_metrics, rollout_metrics
 from jax_baselines.math.returns import discount_with_terminated
+from jax_baselines.optim import optimizer_metrics
 
 
 class A2C(Actor_Critic_Policy_Gradient_Family):
@@ -34,10 +36,7 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             self.critic_params,
             self.actor_opt_state,
             self.critic_opt_state,
-            critic_loss,
-            actor_loss,
-            entropy_loss,
-            targets,
+            metrics,
         ) = self._train_step(
             self.actor_params,
             self.critic_params,
@@ -48,12 +47,10 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         )
 
         if logger_run:
-            logger_run.log_metric("loss/critic_loss", critic_loss, steps)
-            logger_run.log_metric("loss/actor_loss", actor_loss, steps)
-            logger_run.log_metric("loss/entropy_loss", entropy_loss, steps)
-            logger_run.log_metric("loss/mean_target", targets, steps)
+            for name, value in metrics.items():
+                logger_run.log_metric(name, value, steps)
 
-        return critic_loss
+        return metrics["loss/critic_loss"]
 
     def _train_step(
         self,
@@ -85,9 +82,9 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         value = jnp.vstack(value)
         targets = jnp.vstack(targets)
         adv = targets - value
-        (_, (actor_loss, entropy_loss)), actor_grad = jax.value_and_grad(
-            self._actor_loss, has_aux=True
-        )(actor_params, obses, actions, adv, key)
+        (actor_objective, metrics), actor_grad = jax.value_and_grad(self._actor_loss, has_aux=True)(
+            actor_params, obses, actions, adv, key
+        )
         critic_loss, critic_grad = jax.value_and_grad(self._critic_loss)(
             critic_params, actor_params, obses, targets, key
         )
@@ -99,15 +96,17 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         )
         actor_params = optax.apply_updates(actor_params, actor_updates)
         critic_params = optax.apply_updates(critic_params, critic_updates)
+        metrics.update(rollout_metrics(value, targets, adv))
+        metrics.update(optimizer_metrics(actor_opt_state, "actor"))
+        metrics.update(optimizer_metrics(critic_opt_state, "critic"))
+        metrics["loss/actor_objective"] = actor_objective
+        metrics["loss/critic_loss"] = critic_loss
         return (
             actor_params,
             critic_params,
             actor_opt_state,
             critic_opt_state,
-            critic_loss,
-            actor_loss,
-            entropy_loss,
-            jnp.mean(targets),
+            metrics,
         )
 
     def _critic_loss(self, critic_params, actor_params, obses, targets, key):
@@ -132,7 +131,10 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             actor_objective = actor_loss
         else:
             actor_objective = actor_loss + self.ent_coef * entropy_loss
-        return actor_objective, (actor_loss, entropy_loss)
+        return actor_objective, {
+            "loss/actor_loss": actor_loss,
+            "loss/entropy_loss": entropy_loss,
+        }
 
     def _actor_loss_continuous(self, actor_params, obses, actions, adv, key):
         prob, log_prob = self.get_logprob(
@@ -158,4 +160,8 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             actor_objective = actor_loss
         else:
             actor_objective = actor_loss + self.ent_coef * entropy_loss
-        return actor_objective, (actor_loss, entropy_loss)
+        return actor_objective, {
+            "loss/actor_loss": actor_loss,
+            "loss/entropy_loss": entropy_loss,
+            **gaussian_metrics(log_std),
+        }

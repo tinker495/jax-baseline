@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 
 from jax_baselines.A2C.surrogate_base import SurrogatePolicyGradient
+from jax_baselines.math.metrics import gaussian_metrics, policy_ratio_metrics
 
 
 class PPO(SurrogatePolicyGradient):
@@ -30,7 +31,11 @@ class PPO(SurrogatePolicyGradient):
             actor_objective = actor_loss
         else:
             actor_objective = actor_loss + self.ent_coef * entropy_loss
-        return actor_objective, (actor_loss, entropy_loss)
+        return actor_objective, {
+            "loss/actor_loss": actor_loss,
+            "loss/entropy_loss": entropy_loss,
+            **policy_ratio_metrics(log_prob, old_prob, self.ppo_eps),
+        }
 
     def _actor_loss_continuous(self, actor_params, obses, actions, old_prob, adv, key):
         prob, log_prob = self.get_logprob(
@@ -60,4 +65,9 @@ class PPO(SurrogatePolicyGradient):
             actor_objective = actor_loss
         else:
             actor_objective = actor_loss + self.ent_coef * entropy_loss
-        return actor_objective, (actor_loss, entropy_loss)
+        return actor_objective, {
+            "loss/actor_loss": actor_loss,
+            "loss/entropy_loss": entropy_loss,
+            **policy_ratio_metrics(log_prob, old_prob, self.ppo_eps),
+            **gaussian_metrics(log_std),
+        }

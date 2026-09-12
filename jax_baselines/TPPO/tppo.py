@@ -5,6 +5,7 @@ import optax
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.math.jax_utils import convert_normalized_obs
+from jax_baselines.math.metrics import gaussian_metrics, rollout_metrics
 from jax_baselines.math.policy_math import (
     kl_divergence_continuous,
     kl_divergence_discrete,
@@ -14,6 +15,7 @@ from jax_baselines.math.returns import (
     normalize_advantage,
     validate_advantage_normalize_scope,
 )
+from jax_baselines.optim import optimizer_metrics
 
 
 class TPPO(Actor_Critic_Policy_Gradient_Family):
@@ -74,11 +76,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             self.critic_params,
             self.actor_opt_state,
             self.critic_opt_state,
-            critic_loss,
-            actor_loss,
-            entropy_loss,
-            kls,
-            targets,
+            metrics,
         ) = self._train_step(
             self.actor_params,
             self.critic_params,
@@ -89,13 +87,10 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         )
 
         if logger_run:
-            logger_run.log_metric("loss/critic_loss", critic_loss, steps)
-            logger_run.log_metric("loss/actor_loss", actor_loss, steps)
-            logger_run.log_metric("loss/entropy_loss", entropy_loss, steps)
-            logger_run.log_metric("loss/mean_target", targets, steps)
-            logger_run.log_metric("loss/kl_divergence", kls, steps)
+            for name, value in metrics.items():
+                logger_run.log_metric(name, value, steps)
 
-        return critic_loss
+        return metrics["loss/critic_loss"]
 
     def _preprocess(
         self,
@@ -136,9 +131,10 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         pi_prob = jnp.vstack(pi_prob)
         adv = jnp.vstack(adv)
         targets = value + adv
+        metrics = rollout_metrics(value, targets, adv)
         if self.gae_normalize and self.gae_normalize_scope == "batch":
             adv = normalize_advantage(adv)
-        return obses, actions, value, targets, prob, pi_prob, adv
+        return obses, actions, value, targets, prob, pi_prob, adv, metrics
 
     def _train_step(
         self,
@@ -154,7 +150,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         terminateds,
         truncateds,
     ):
-        obses, actions, old_value, targets, old_prob, old_act_prob, adv = self._preprocess(
+        obses, actions, old_value, targets, old_prob, old_act_prob, adv, metrics = self._preprocess(
             actor_params,
             critic_params,
             key,
@@ -166,18 +162,8 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             truncateds,
         )
 
-        def i_f(idx, vals):
-            (
-                actor_params,
-                critic_params,
-                actor_opt_state,
-                critic_opt_state,
-                key,
-                critic_loss,
-                actor_loss,
-                entropy_loss,
-                kls,
-            ) = vals
+        def i_f(vals, _):
+            actor_params, critic_params, actor_opt_state, critic_opt_state, key = vals
             use_key, key = jax.random.split(key)
             batch_idxes = jax.random.permutation(use_key, jnp.arange(targets.shape[0])).reshape(
                 -1, self.minibatch_size
@@ -196,7 +182,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
                 if self.gae_normalize and self.gae_normalize_scope == "minibatch":
                     adv = normalize_advantage(adv)
                 use_key, key = jax.random.split(key)
-                (_, (a_loss, entropy_loss, kl)), actor_grad = jax.value_and_grad(
+                (actor_objective, batch_metrics), actor_grad = jax.value_and_grad(
                     self._actor_loss, has_aux=True
                 )(
                     actor_params,
@@ -218,12 +204,17 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
                 )
                 actor_params = optax.apply_updates(actor_params, actor_updates)
                 critic_params = optax.apply_updates(critic_params, critic_updates)
-                return (actor_params, critic_params, actor_opt_state, critic_opt_state, key), (
-                    c_loss,
-                    a_loss,
-                    entropy_loss,
-                    kl,
-                )
+                batch_metrics["loss/critic_loss"] = c_loss
+                batch_metrics["loss/actor_objective"] = actor_objective
+                batch_metrics.update(optimizer_metrics(actor_opt_state, "actor"))
+                batch_metrics.update(optimizer_metrics(critic_opt_state, "critic"))
+                return (
+                    actor_params,
+                    critic_params,
+                    actor_opt_state,
+                    critic_opt_state,
+                    key,
+                ), batch_metrics
 
             updates, losses = jax.lax.scan(
                 f,
@@ -238,61 +229,22 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
                     adv_batch,
                 ),
             )
-            actor_params, critic_params, actor_opt_state, critic_opt_state, key = updates
-            cl, al, el, kl = losses
-            critic_loss += jnp.mean(cl)
-            actor_loss += jnp.mean(al)
-            entropy_loss += jnp.mean(el)
-            kls += jnp.mean(kl)
-            return (
-                actor_params,
-                critic_params,
-                actor_opt_state,
-                critic_opt_state,
-                key,
-                critic_loss,
-                actor_loss,
-                entropy_loss,
-                kls,
-            )
+            return updates, jax.tree.map(jnp.mean, losses)
 
-        val = jax.lax.fori_loop(
-            0,
-            self.epoch_num,
+        updates, epoch_metrics = jax.lax.scan(
             i_f,
-            (
-                actor_params,
-                critic_params,
-                actor_opt_state,
-                critic_opt_state,
-                key,
-                0.0,
-                0.0,
-                0.0,
-                0.0,
-            ),
+            (actor_params, critic_params, actor_opt_state, critic_opt_state, key),
+            None,
+            length=self.epoch_num,
         )
-        (
-            actor_params,
-            critic_params,
-            actor_opt_state,
-            critic_opt_state,
-            key,
-            critic_loss,
-            actor_loss,
-            entropy_loss,
-            kls,
-        ) = val
+        actor_params, critic_params, actor_opt_state, critic_opt_state, key = updates
+        metrics.update(jax.tree.map(jnp.mean, epoch_metrics))
         return (
             actor_params,
             critic_params,
             actor_opt_state,
             critic_opt_state,
-            critic_loss / self.epoch_num,
-            actor_loss / self.epoch_num,
-            entropy_loss / self.epoch_num,
-            kls / self.epoch_num,
-            jnp.mean(targets),
+            metrics,
         )
 
     def _critic_loss(self, critic_params, actor_params, obses, old_value, targets, key):
@@ -341,7 +293,11 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             actor_objective = actor_loss
         else:
             actor_objective = actor_loss + self.ent_coef * entropy_loss
-        return actor_objective, (actor_loss, entropy_loss, jnp.mean(kl))
+        return actor_objective, {
+            "loss/actor_loss": actor_loss,
+            "loss/entropy_loss": entropy_loss,
+            "loss/kl_divergence": jnp.mean(kl),
+        }
 
     def _actor_loss_continuous(
         self,
@@ -391,4 +347,9 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             actor_objective = actor_loss
         else:
             actor_objective = actor_loss + self.ent_coef * entropy_loss
-        return actor_objective, (actor_loss, entropy_loss, jnp.mean(kl))
+        return actor_objective, {
+            "loss/actor_loss": actor_loss,
+            "loss/entropy_loss": entropy_loss,
+            "loss/kl_divergence": jnp.mean(kl),
+            **gaussian_metrics(log_std),
+        }
