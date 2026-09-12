@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
 
@@ -8,15 +9,22 @@ import optax
 from flax import struct
 
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
+from jax_baselines.DDPG.metrics import (
+    critic_metrics,
+    reduce_metrics,
+    stochastic_actor_metrics,
+)
 from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.distributional import categorical_projection
 from jax_baselines.math.jax_utils import convert_normalized_obs
+from jax_baselines.math.metrics import categorical_metrics, support_metrics
 from jax_baselines.math.param_updates import (
     project_dense_kernels,
     scaled_by_reset,
     soft_update,
 )
 from jax_baselines.math.policy_math import entropy_target_from_sigma
+from jax_baselines.optim import optimizer_metrics
 
 
 @struct.dataclass
@@ -33,7 +41,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
 
     def __init__(
         self,
-        env_builder: callable,
+        env_builder: Callable,
         model_builder_maker,
         ent_coef="auto_0.01",
         sigma_target=0.15,
@@ -116,7 +124,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
         self.target_critic_params = getattr(bundle, "target_critic_params", bundle.critic_params)
         self.log_ent_coef = bundle.log_ent_coef
 
-    def _get_pi_log_prob(self, params, obses, key=None, training: bool = True) -> jnp.ndarray:
+    def _get_pi_log_prob(self, params, obses, key, training: bool = True):
         (mu, log_std), updates = self.actor(params, None, obses, training)
         params["batch_stats"] = updates["batch_stats"]
         std = jnp.exp(log_std)
@@ -128,7 +136,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
             axis=1,
             keepdims=True,
         )
-        return pi, log_prob, params
+        return pi, log_prob, params, log_std
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         (mu, log_std), _ = self.actor(params, None, convert_normalized_obs(obses), False)
@@ -152,6 +160,8 @@ class XQC(Deteministic_Policy_Gradient_Family):
             t_mean,
             self.log_ent_coef,
             new_priorities,
+            metrics,
+            metric_counts,
         ) = self._train_step(
             self.policy_params,
             self.critic_params,
@@ -168,7 +178,8 @@ class XQC(Deteministic_Policy_Gradient_Family):
             loss=loss,
             target=t_mean,
             new_priorities=new_priorities,
-            metrics={"loss/ent_coef": jnp.exp(self.log_ent_coef)},
+            metrics={**metrics, "loss/ent_coef": jnp.exp(self.log_ent_coef)},
+            metric_counts=metric_counts,
         )
 
     def _train_on_bulk(self, data, contexts):
@@ -193,13 +204,15 @@ class XQC(Deteministic_Policy_Gradient_Family):
                 self.opt_ent_coef_state,
                 self.log_ent_coef,
             ),
-            (losses, targets, ent_coefs, priorities),
+            (losses, targets, ent_coefs, priorities, metrics, metric_counts),
         ) = self._bulk_scan(carry, keys, steps, data)
+        metrics, metric_counts = reduce_metrics(metrics, metric_counts)
         return DPGTrainReport(
             loss=jnp.mean(losses),
             target=jnp.mean(targets),
             new_priorities=priorities,
-            metrics={"loss/ent_coef": jnp.mean(jnp.exp(ent_coefs))},
+            metrics={**metrics, "loss/ent_coef": jnp.mean(jnp.exp(ent_coefs))},
+            metric_counts=metric_counts,
             update_count=len(contexts),
         )
 
@@ -226,6 +239,8 @@ class XQC(Deteministic_Policy_Gradient_Family):
                 t_mean,
                 log_ent_coef,
                 priorities,
+                metrics,
+                metric_counts,
             ) = self._train_step(
                 policy_params,
                 critic_params,
@@ -246,7 +261,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
                 opt_critic_state,
                 opt_ent_coef_state,
                 log_ent_coef,
-            ), (loss, t_mean, log_ent_coef, priorities)
+            ), (loss, t_mean, log_ent_coef, priorities, metrics, metric_counts)
 
         return jax.lax.scan(train_one, carry, (keys, steps, data))
 
@@ -274,7 +289,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
         not_terminateds = 1.0 - terminateds
         ent_coef = jnp.exp(log_ent_coef)
         key1, key2 = jax.random.split(key, 2)
-        target_distribution, target_q, next_policy = self._target(
+        target_distribution, target_q, next_policy, target_metrics = self._target(
             policy_params,
             target_critic_params,
             obses,
@@ -286,7 +301,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
             key1,
         )
 
-        (critic_loss, (cross_entropy, critic_params)), grad = jax.value_and_grad(
+        (critic_loss, (cross_entropy, critic_params, metrics)), grad = jax.value_and_grad(
             self._critic_loss, has_aux=True
         )(
             critic_params,
@@ -302,11 +317,33 @@ class XQC(Deteministic_Policy_Gradient_Family):
         updates, opt_critic_state = self.optimizer.update(
             grad, opt_critic_state, params=critic_params
         )
+        metrics.update(optimizer_metrics(opt_critic_state, "critic"))
+        metrics.update(target_metrics)
         critic_params = optax.apply_updates(critic_params, updates)
         critic_params = project_dense_kernels(critic_params)
         target_critic_params = soft_update(
             critic_params, target_critic_params, self.target_network_update_tau
         )
+        empty_actor_metrics = dict.fromkeys(
+            (
+                "loss/actor_loss",
+                *stochastic_actor_metrics(
+                    jnp.zeros(1), jnp.zeros(1), 0.0, ent_coef, self.target_entropy
+                ),
+                *optimizer_metrics(opt_policy_state, "actor"),
+            ),
+            jnp.asarray(0.0),
+        )
+        if self.auto_entropy:
+            empty_actor_metrics.update(
+                dict.fromkeys(
+                    (
+                        "loss/ent_coef_loss",
+                        *optimizer_metrics(opt_ent_coef_state, "ent_coef"),
+                    ),
+                    jnp.asarray(0.0),
+                )
+            )
 
         def _opt_actor(
             policy_params,
@@ -316,7 +353,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
             opt_ent_coef_state,
             key,
         ):
-            (_, (log_prob, policy_params)), grad = jax.value_and_grad(
+            (actor_loss, (log_prob, policy_params, actor_metrics)), grad = jax.value_and_grad(
                 self._actor_loss, has_aux=True
             )(policy_params, critic_params, obses, key2, ent_coef)
             updates, opt_policy_state = self.optimizer.update(
@@ -324,11 +361,18 @@ class XQC(Deteministic_Policy_Gradient_Family):
             )
             policy_params = optax.apply_updates(policy_params, updates)
             policy_params = project_dense_kernels(policy_params)
+            actor_metrics.update(
+                {
+                    "loss/actor_loss": actor_loss,
+                    **optimizer_metrics(opt_policy_state, "actor"),
+                }
+            )
 
             if self.auto_entropy:
-                log_ent_coef, opt_ent_coef_state = self._train_ent_coef(
+                log_ent_coef, opt_ent_coef_state, entropy_metrics = self._train_ent_coef(
                     log_ent_coef, opt_ent_coef_state, log_prob
                 )
+                actor_metrics.update(entropy_metrics)
             return (
                 policy_params,
                 critic_params,
@@ -336,6 +380,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
                 opt_policy_state,
                 opt_ent_coef_state,
                 key,
+                actor_metrics,
             )
 
         (
@@ -345,10 +390,11 @@ class XQC(Deteministic_Policy_Gradient_Family):
             opt_policy_state,
             opt_ent_coef_state,
             key,
+            actor_metrics,
         ) = jax.lax.cond(
             (step - 1) % self.policy_delay == 0,
             lambda x: _opt_actor(*x),
-            lambda x: x,
+            lambda x: (*x, empty_actor_metrics),
             (
                 policy_params,
                 critic_params,
@@ -357,6 +403,14 @@ class XQC(Deteministic_Policy_Gradient_Family):
                 opt_ent_coef_state,
                 key,
             ),
+        )
+        metric_counts = {name: jnp.asarray(1) for name in metrics}
+        metrics.update(actor_metrics)
+        metric_counts.update(
+            {
+                name: jnp.asarray((step - 1) % self.policy_delay == 0, dtype=jnp.int32)
+                for name in actor_metrics
+            }
         )
 
         new_priorities = None
@@ -392,6 +446,8 @@ class XQC(Deteministic_Policy_Gradient_Family):
             jnp.mean(target_q),
             log_ent_coef,
             new_priorities,
+            metrics,
+            metric_counts,
         )
 
     def _critic_loss(
@@ -425,18 +481,44 @@ class XQC(Deteministic_Policy_Gradient_Family):
         weights = jnp.asarray(weights).squeeze()
         critic_loss = jnp.mean(weights * cross_entropy1) + jnp.mean(weights * cross_entropy2)
         cross_entropy = 0.5 * (cross_entropy1 + cross_entropy2)
-        return critic_loss, (cross_entropy, critic_params)
+        metrics = critic_metrics(
+            (self._categorical_q(logits1), self._categorical_q(logits2)),
+            jnp.sum(target_distribution * self.value_support, axis=-1),
+            (cross_entropy1, cross_entropy2),
+            weights,
+            cross_entropy if self.prioritized_replay else None,
+        )
+        for index, logits in enumerate((logits1, logits2), start=1):
+            metrics.update(
+                categorical_metrics(
+                    jax.nn.softmax(logits, axis=-1),
+                    target_distribution,
+                    self.value_support,
+                    prefix=f"loss/critic{index}",
+                )
+            )
+        return critic_loss, (cross_entropy, critic_params, metrics)
 
     def _categorical_q(self, logits):
         return jnp.sum(jax.nn.softmax(logits, axis=-1) * self.value_support, axis=-1)
 
     def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
-        policy, log_prob, policy_params = self._get_pi_log_prob(policy_params, obses, key)
+        policy, log_prob, policy_params, log_std = self._get_pi_log_prob(policy_params, obses, key)
         (logits1, logits2), _ = self.critic(critic_params, policy_params, key, obses, policy, False)
         q1_pi = self._categorical_q(logits1)
         q2_pi = self._categorical_q(logits2)
         actor_loss = jnp.mean(ent_coef * jnp.squeeze(log_prob, axis=-1) - jnp.minimum(q1_pi, q2_pi))
-        return actor_loss, (log_prob, policy_params)
+        return actor_loss, (
+            log_prob,
+            policy_params,
+            stochastic_actor_metrics(
+                log_prob,
+                log_std,
+                jnp.minimum(q1_pi, q2_pi),
+                ent_coef,
+                self.target_entropy,
+            ),
+        )
 
     def _target(
         self,
@@ -453,7 +535,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
         concated_obses = {
             name: jnp.concatenate([obs, nxtobses[name]]) for name, obs in obses.items()
         }
-        next_policy, log_prob, _ = self._get_pi_log_prob(policy_params, nxtobses, key, False)
+        next_policy, log_prob, _, _ = self._get_pi_log_prob(policy_params, nxtobses, key, False)
         concated_actions = jnp.concatenate([actions, next_policy])
         (logits1, logits2), _ = self.critic(
             target_critic_params,
@@ -484,4 +566,9 @@ class XQC(Deteministic_Policy_Gradient_Family):
         )
         target_distribution = jax.lax.stop_gradient(target_distribution)
         target_q = jnp.sum(target_distribution * self.value_support, axis=-1)
-        return target_distribution, target_q, next_policy
+        return (
+            target_distribution,
+            target_q,
+            next_policy,
+            support_metrics(next_probs, shifted_atoms, self.value_min, self.value_max),
+        )

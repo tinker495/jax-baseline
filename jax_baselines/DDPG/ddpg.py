@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
 
@@ -8,10 +9,12 @@ import optax
 from flax import struct
 
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
+from jax_baselines.DDPG.metrics import critic_metrics, reduce_metrics
 from jax_baselines.DDPG.ou_noise import OUNoise
 from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.param_updates import scaled_by_reset, soft_update
+from jax_baselines.optim import optimizer_metrics
 
 
 @struct.dataclass
@@ -28,7 +31,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
 
     def __init__(
         self,
-        env_builder: callable,
+        env_builder: Callable,
         model_builder_maker,
         exploration_fraction=0.3,
         exploration_final_eps=0.02,
@@ -131,6 +134,8 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             loss,
             t_mean,
             new_priorities,
+            metrics,
+            metric_counts,
         ) = self._train_step(
             self.policy_params,
             self.critic_params,
@@ -142,7 +147,13 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             next(self.key_seq),
             **data,
         )
-        return DPGTrainReport(loss=loss, target=t_mean, new_priorities=new_priorities)
+        return DPGTrainReport(
+            loss=loss,
+            target=t_mean,
+            new_priorities=new_priorities,
+            metrics=metrics,
+            metric_counts=metric_counts,
+        )
 
     def _train_on_bulk(self, data, contexts):
         steps = jnp.asarray([context.train_steps_count for context in contexts])
@@ -164,12 +175,15 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                 self.opt_policy_state,
                 self.opt_critic_state,
             ),
-            (losses, targets, priorities),
+            (losses, targets, priorities, metrics, metric_counts),
         ) = self._bulk_scan(carry, keys, steps, data)
+        metrics, metric_counts = reduce_metrics(metrics, metric_counts)
         return DPGTrainReport(
             loss=jnp.mean(losses),
             target=jnp.mean(targets),
             new_priorities=priorities,
+            metrics=metrics,
+            metric_counts=metric_counts,
             update_count=len(contexts),
         )
 
@@ -194,6 +208,8 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                 loss,
                 t_mean,
                 priorities,
+                metrics,
+                metric_counts,
             ) = self._train_step(
                 policy_params,
                 critic_params,
@@ -212,7 +228,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                 target_critic_params,
                 opt_policy_state,
                 opt_critic_state,
-            ), (loss, t_mean, priorities)
+            ), (loss, t_mean, priorities, metrics, metric_counts)
 
         return jax.lax.scan(train_one, carry, (keys, steps, data))
 
@@ -246,19 +262,25 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             not_terminateds,
             key,
         )
-        (critic_loss, abs_error), grad = jax.value_and_grad(self._critic_loss, has_aux=True)(
-            critic_params, policy_params, obses, actions, targets, weights, key
-        )
+        (critic_loss, (abs_error, metrics)), grad = jax.value_and_grad(
+            self._critic_loss, has_aux=True
+        )(critic_params, policy_params, obses, actions, targets, weights, key)
         updates, opt_critic_state = self.optimizer.update(
             grad, opt_critic_state, params=critic_params
         )
+        metrics.update(optimizer_metrics(opt_critic_state, "critic"))
         critic_params = optax.apply_updates(critic_params, updates)
 
-        grad = jax.grad(self._actor_loss)(policy_params, critic_params, obses, key)
+        actor_loss, grad = jax.value_and_grad(self._actor_loss)(
+            policy_params, critic_params, obses, key
+        )
         updates, opt_policy_state = self.optimizer.update(
             grad, opt_policy_state, params=policy_params
         )
         policy_params = optax.apply_updates(policy_params, updates)
+        metrics.update(optimizer_metrics(opt_policy_state, "actor"))
+        metrics.update({"loss/actor_loss": actor_loss, "loss/actor_q_mean": -actor_loss})
+        metric_counts = {name: jnp.asarray(1) for name in metrics}
 
         target_critic_params = soft_update(
             critic_params, target_critic_params, self.target_network_update_tau
@@ -298,13 +320,24 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             critic_loss,
             jnp.mean(targets),
             new_priorities,
+            metrics,
+            metric_counts,
         )
 
     def _critic_loss(self, critic_params, policy_params, obses, actions, targets, weights, key):
         vals = self.critic(critic_params, policy_params, key, obses, actions)
         error = jnp.squeeze(vals - targets)
         critic_loss = jnp.mean(weights * jnp.square(error))
-        return critic_loss, jnp.abs(error)
+        return critic_loss, (
+            jnp.abs(error),
+            critic_metrics(
+                (vals,),
+                targets,
+                (jnp.square(error),),
+                weights,
+                jnp.abs(error) if self.prioritized_replay else None,
+            ),
+        )
 
     def _actor_loss(self, policy_params, critic_params, obses, key):
         actions = self.actor(policy_params, key, obses)

@@ -8,6 +8,7 @@ import pytest
 
 from experiments.cli.dpg import DPG_RUNNER
 from jax_baselines.CrossQ.crossq import CrossQ
+from jax_baselines.DDPG.metrics import stochastic_actor_metrics
 from jax_baselines.math.policy_math import entropy_target_from_sigma
 from jax_baselines.SAC.sac import SAC, mode_action, sample_action
 from jax_baselines.TQC.tqc import TQC
@@ -46,7 +47,9 @@ def test_dpg_eval_path_uses_sac_mode_without_sampling():
 
 def test_sac_actor_loss_uses_minimum_expected_q():
     agent = object.__new__(SAC)
+    agent.target_entropy = 0.0
     agent._get_pi_log_prob = lambda params, feature, key: (
+        jnp.zeros((feature["unified_obs"].shape[0], 1)),
         jnp.zeros((feature["unified_obs"].shape[0], 1)),
         jnp.zeros((feature["unified_obs"].shape[0], 1)),
     )
@@ -186,10 +189,13 @@ def test_sac_actor_and_temperature_update_on_configured_period():
     assert int(second[5][0].count) == 1
     np.testing.assert_allclose(second[0], first[0])
     assert int(first[5][0].count) == 1
+    assert first[11]["loss/actor_loss"] == 1
+    assert second[11]["loss/actor_loss"] == 0
 
 
 def test_sac_actor_and_target_use_distinct_fresh_keys():
     agent = object.__new__(SAC)
+    agent.target_entropy = 0.0
     agent.optimizer = optax.sgd(0.0)
     agent.actor_update_period = 1
     agent.target_network_update_tau = 0.01
@@ -201,11 +207,14 @@ def test_sac_actor_and_target_use_distinct_fresh_keys():
     )
     agent._critic_loss = lambda critic, policy, obses, actions, targets, weights, key: (
         targets + 0.0 * critic,
-        jnp.zeros((1,)),
+        (jnp.zeros((1,)), {}),
     )
     agent._actor_loss = lambda policy, critic, obses, key, alpha: (
         jax.random.uniform(key) + 0.0 * policy,
-        jnp.zeros((1, 1)),
+        (
+            jnp.zeros((1, 1)),
+            stochastic_actor_metrics(jnp.zeros((1, 1)), jnp.zeros((1, 1)), 0.0, 0.01, 0.0),
+        ),
     )
 
     policy_params = jnp.asarray(0.0)
@@ -232,8 +241,9 @@ def test_sac_actor_and_target_use_distinct_fresh_keys():
     target_key, _, actor_key = jax.random.split(key, 3)
 
     np.testing.assert_allclose(output[6], jax.random.uniform(target_key))
-    np.testing.assert_allclose(-output[7], jax.random.uniform(actor_key))
-    assert not np.allclose(output[6], -output[7])
+    np.testing.assert_allclose(output[7], jax.random.uniform(target_key))
+    np.testing.assert_allclose(output[10]["loss/actor_loss"], jax.random.uniform(actor_key))
+    assert not np.allclose(output[7], output[10]["loss/actor_loss"])
 
 
 def test_sac_cli_uses_flashsac_defaults_without_changing_sibling_algorithms():

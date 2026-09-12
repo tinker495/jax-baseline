@@ -32,10 +32,18 @@ from jax_baselines.core.rollout_stats import EpisodeTracker
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.training_session import TrainingSession, off_policy_loop
 from jax_baselines.DDPG.training import DPGTrainingLifecycle, DPGTrainReport
-from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
+from jax_baselines.optim import (
+    OptimizerFactory,
+    optimizer_metrics,
+    require_optimizer_factory,
+    track_optimizer,
+)
 
 
 class Deteministic_Policy_Gradient_Family:
+    _ent_coef: str | float
+    ent_coef_learning_rate: float | optax.Schedule
+    target_entropy: float
     _run_name = "DPG_network"
 
     supports_bulk_training = False
@@ -338,7 +346,9 @@ class Deteministic_Policy_Gradient_Family:
                 raise ValueError(f"Invalid value for ent_coef: {self._ent_coef}") from err
             self.auto_entropy = False
 
-        self.ent_coef_optimizer = optax.adam(self.ent_coef_learning_rate)
+        self.ent_coef_optimizer = track_optimizer(
+            optax.adam(self.ent_coef_learning_rate), self.ent_coef_learning_rate
+        )
         self.opt_ent_coef_state = self.ent_coef_optimizer.init(self.log_ent_coef)
 
     def _train_ent_coef(self, log_coef, opt_state, log_prob):
@@ -346,9 +356,16 @@ class Deteministic_Policy_Gradient_Family:
             entropy = -jax.lax.stop_gradient(log_prob)
             return jnp.mean(jnp.exp(log_ent_coef) * (entropy - self.target_entropy))
 
-        grad = jax.grad(loss)(log_coef)
+        ent_coef_loss, grad = jax.value_and_grad(loss)(log_coef)
         updates, opt_state = self.ent_coef_optimizer.update(grad, opt_state, log_coef)
-        return optax.apply_updates(log_coef, updates), opt_state
+        return (
+            optax.apply_updates(log_coef, updates),
+            opt_state,
+            {
+                "loss/ent_coef_loss": ent_coef_loss,
+                **optimizer_metrics(opt_state, "ent_coef"),
+            },
+        )
 
     def train_step(self, steps, gradient_steps, logger_run=None, log_interval=None):
         return self.training_lifecycle.train(steps, gradient_steps, logger_run, log_interval)
@@ -367,11 +384,19 @@ class Deteministic_Policy_Gradient_Family:
             return reports[-1]
         counts = jnp.array([report.update_count for report in reports])
         total = sum(report.update_count for report in reports)
-        metrics = {
-            name: jnp.sum(jnp.array([report.metrics[name] for report in reports]) * counts) / total
-            for name in reports[-1].metrics
-            if all(name in report.metrics for report in reports)
-        }
+        metrics = {}
+        metric_counts = {}
+        for name in dict.fromkeys(name for report in reports for name in report.metrics):
+            observations = [report for report in reports if name in report.metrics]
+            weights = jnp.asarray([report.metric_counts[name] for report in observations])
+            metric_counts[name] = jnp.sum(weights)
+            metrics[name] = jnp.sum(
+                jnp.where(
+                    weights > 0,
+                    jnp.asarray([report.metrics[name] for report in observations]) * weights,
+                    0,
+                )
+            ) / jnp.maximum(metric_counts[name], 1)
         target = None
         if all(report.target is not None for report in reports):
             target = jnp.sum(jnp.array([report.target for report in reports]) * counts) / total
@@ -379,6 +404,7 @@ class Deteministic_Policy_Gradient_Family:
             loss=jnp.sum(jnp.array([report.loss for report in reports]) * counts) / total,
             target=target,
             metrics=metrics,
+            metric_counts=metric_counts,
             update_count=total,
         )
 

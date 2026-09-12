@@ -391,6 +391,8 @@ def test_ddpg_train_on_bulk_scans_updates_and_stacks_priorities():
             step.astype(float),
             step.astype(float) + 10.0,
             priorities,
+            {},
+            {},
         )
 
     agent._train_step = train_step
