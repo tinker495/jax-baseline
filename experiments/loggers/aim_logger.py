@@ -10,11 +10,12 @@ uninstalled raises a clear, actionable error.
 from __future__ import annotations
 
 import os
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
-from experiments.runtime_adapters import _get_latest_run_id
+from experiments.run_metadata import tracking_experiment_name, write_run_metadata
+from experiments.runtime_adapters import create_run_directory
 from jax_baselines.core.hparams import get_hyper_params
 
 
@@ -73,22 +74,22 @@ class AimLogger:
         run_name: str,
         experiment_name: str,
         local_dir: str,
-        agent: Optional[Any],
+        agent: Any | None,
         *,
-        repo: Optional[str] = None,
+        repo: str | None = None,
         extra_hparams: dict[str, str] | None = None,
+        run_metadata: dict[str, object] | None = None,
     ):
         self._aim = aim_module
         self._run_name = run_name
-        self._experiment_name = experiment_name
-        run_id = _get_latest_run_id(local_dir, experiment_name, run_name) + 1
-        self._local_dir = os.path.join(local_dir, experiment_name, f"{run_name}_{run_id:02d}")
-        os.makedirs(self._local_dir, exist_ok=True)
+        self._experiment_name = tracking_experiment_name(experiment_name, run_metadata)
+        self._local_dir = create_run_directory(local_dir, experiment_name, run_name)
+        write_run_metadata(self._local_dir, run_metadata)
         self._repo = repo
         self._agent = agent
         self._extra_hparams = extra_hparams
         self._run = None
-        self._logger_run: Optional[AimRun] = None
+        self._logger_run: AimRun | None = None
 
     def _ensure_started(self) -> AimRun:
         if self._logger_run is not None:
@@ -97,11 +98,7 @@ class AimLogger:
         self._run.name = self._run_name
         self._logger_run = AimRun(self._aim, self._run, self._local_dir, self._extra_hparams)
         if self._agent is not None:
-            try:
-                self.log_hparams(self._agent)
-            except Exception:
-                # Match the TensorBoard backend: hparam logging must not break training.
-                pass
+            self.log_hparams(self._agent)
         return self._logger_run
 
     def log_hparams(self, agent_or_hparams):
@@ -135,7 +132,12 @@ class AimLogger:
             pass
 
 
-def make_aim_logger_factory(args, *, extra_hparams: dict[str, str] | None = None):
+def make_aim_logger_factory(
+    args,
+    *,
+    extra_hparams: dict[str, str] | None = None,
+    run_metadata: dict[str, object] | None = None,
+):
     """Return a ``LoggerFactory`` for Aim, capturing the CLI backend config.
 
     The ``aim`` import happens here (only when ``--logger aim`` is selected), so
@@ -154,6 +156,7 @@ def make_aim_logger_factory(args, *, extra_hparams: dict[str, str] | None = None
             agent,
             repo=repo,
             extra_hparams=extra_hparams,
+            run_metadata=run_metadata,
         )
 
     return factory

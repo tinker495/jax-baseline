@@ -31,6 +31,17 @@ Observation: TypeAlias = dict[str, Any]
 ObservationSpace: TypeAlias = dict[str, list[int]]
 
 
+class EnvironmentMetadata(TypedDict):
+    """Resolved backend and initialization semantics supplied by the adapter."""
+
+    backend: str
+    backend_env_id: str
+    seed: int | None
+    seed_rule: str
+    reward_clipping: str
+    episodic_life: bool
+
+
 class EnvInfo(TypedDict):
     """Environment metadata shared across adapter and core layers."""
 
@@ -41,6 +52,7 @@ class EnvInfo(TypedDict):
     env_id: str
     worker_num: int
     core_env_type: str
+    runtime: EnvironmentMetadata
     autoreset_steps: NotRequired[bool]
 
 

@@ -9,6 +9,8 @@ from jax_baselines.core.normalization import (
     RunningMeanStd,
     normalize_empirical_observation,
 )
+from jax_baselines.core.runtime_adapters import NoOpLoggerRun
+from jax_baselines.core.training_session import RunContext
 
 
 def _agent(enabled=True):
@@ -175,9 +177,9 @@ def test_rollout_normalizes_successors_before_reset_statistics(
     agent.buffer = SimpleNamespace(add=lambda *transition: transitions.append(transition))
     agent.train_step = lambda steps, logger_run: train_counts.append(agent.obs_rms.count) or 0.0
     agent.eval = lambda ctx, steps: None
-    ctx = SimpleNamespace(
+    ctx = RunContext(
         pbar=range(0, 2 * agent.worker_size, agent.worker_size),
-        logger_run=SimpleNamespace(log_metric=lambda *args: None),
+        logger_run=NoOpLoggerRun("/tmp"),
         log_interval=10_000,
         eval_freq=10_000,
     )

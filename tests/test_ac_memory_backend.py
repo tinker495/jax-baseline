@@ -1,5 +1,3 @@
-from types import SimpleNamespace
-
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -9,6 +7,8 @@ import pytest
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.core.env_protocols import PreparedEnvSpec
 from jax_baselines.core.normalization import normalize_empirical_observation
+from jax_baselines.core.runtime_adapters import NoOpLoggerRun
+from jax_baselines.core.training_session import RunContext
 
 
 class _Env:
@@ -31,6 +31,14 @@ class _Env:
                 "env_id": "MemoryBackend-v0",
                 "worker_num": 1,
                 "core_env_type": "SingleEnv",
+                "runtime": {
+                    "backend": "fake",
+                    "backend_env_id": "MemoryBackend-v0",
+                    "seed": seed,
+                    "seed_rule": "constructor seed",
+                    "reward_clipping": "none",
+                    "episodic_life": False,
+                },
             },
         )
 
@@ -141,9 +149,9 @@ def test_auto_detection_reuses_single_environment_reset_in_first_rollout():
     agent.actions = lambda obs: np.zeros((1, 1), np.float32)
 
     agent.learn_SingleEnv(
-        SimpleNamespace(
+        RunContext(
             pbar=range(1, 2),
-            logger_run=SimpleNamespace(log_metric=lambda *args: None),
+            logger_run=NoOpLoggerRun("/tmp"),
             log_interval=100,
             eval_freq=100,
         )

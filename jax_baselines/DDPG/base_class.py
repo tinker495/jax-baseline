@@ -532,7 +532,9 @@ class Deteministic_Policy_Gradient_Family:
         self.rollout_tracker = EpisodeTracker(ctx.logger_run.log_metric, ctx.log_interval)
 
         def train(steps, gradient_steps):
-            return self.train_step(steps, gradient_steps, ctx.logger_run, ctx.log_interval)
+            loss = self.train_step(steps, gradient_steps, ctx.logger_run, ctx.log_interval)
+            ctx.progress.update_steps += gradient_steps
+            return loss
 
         pulse = CheckpointTrainPulse(
             train_freq=self.train_freq,
@@ -545,6 +547,7 @@ class Deteministic_Policy_Gradient_Family:
         )
         spec = RolloutSpec(
             env=self.env,
+            progress=ctx.progress,
             logger_run=ctx.logger_run,
             replay_buffer=self.replay_buffer,
             learning_starts=self.learning_starts,

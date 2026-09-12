@@ -20,6 +20,7 @@ from jax_baselines.core.env_info import (
 from jax_baselines.core.env_protocols import (
     Env,
     EnvInfo,
+    EnvironmentMetadata,
     PreparedEnvSpec,
     PreparedWorkerEnvSpec,
     SingleEnv,
@@ -38,6 +39,14 @@ class _FakeSingleEnv:
     def __init__(self, seed=None):
         self.observation_space = {"unified_obs": [4]}
         self.seed = seed
+        self.runtime: EnvironmentMetadata = {
+            "backend": "fake",
+            "backend_env_id": "FakeSingle-v0",
+            "seed": seed,
+            "seed_rule": "constructor seed",
+            "reward_clipping": "none",
+            "episodic_life": False,
+        }
 
     def reset(self, *args, **kwargs):
         return {"unified_obs": np.zeros(4, dtype=np.float32)}, {}
@@ -56,6 +65,8 @@ class _FakeSingleEnv:
 
 
 class _FakeVectorizedEnv(VectorizedEnv):
+    env_info: EnvInfo
+
     def __init__(self, worker_num=3, seed=None):
         self.worker_num = worker_num
         self.seed = seed
@@ -67,6 +78,14 @@ class _FakeVectorizedEnv(VectorizedEnv):
             "env_id": "FakeVector-v0",
             "worker_num": worker_num,
             "core_env_type": "VectorizedEnv",
+            "runtime": {
+                "backend": "fake",
+                "backend_env_id": "FakeVector-v0",
+                "seed": seed,
+                "seed_rule": "constructor seed",
+                "reward_clipping": "none",
+                "episodic_life": False,
+            },
         }
 
     def get_info(self):
@@ -239,6 +258,7 @@ def test_get_local_env_info_consumes_adapter_prepared_single_envs():
                     "env_id": "FakeSingle-v0",
                     "worker_num": 1,
                     "core_env_type": "SingleEnv",
+                    "runtime": env.runtime,
                 },
             )
 
@@ -319,6 +339,7 @@ def test_get_local_env_info_requires_local_eval_env():
                     "env_id": "FakeSingle-v0",
                     "worker_num": 1,
                     "core_env_type": "SingleEnv",
+                    "runtime": env.runtime,
                 },
             )
 
@@ -329,8 +350,9 @@ def test_get_local_env_info_requires_local_eval_env():
 def test_prepare_worker_env_requires_single_worker_spec():
     class _Builder:
         def prepare_worker_env(self, seed=None):
+            env = _FakeVectorizedEnv(worker_num=2)
             return PreparedWorkerEnvSpec(
-                env=_FakeVectorizedEnv(worker_num=2),
+                env=env,
                 env_info={
                     "observation_space": {"unified_obs": [5]},
                     "action_size": [2],
@@ -339,6 +361,7 @@ def test_prepare_worker_env_requires_single_worker_spec():
                     "env_id": "FakeVector-v0",
                     "worker_num": 2,
                     "core_env_type": "VectorizedEnv",
+                    "runtime": env.env_info["runtime"],
                 },
             )
 
@@ -430,6 +453,7 @@ def test_experiments_composition_path_uses_adapter_prepared_envs(monkeypatch):
                     "env_id": "FakeSingle-v0",
                     "worker_num": 1,
                     "core_env_type": "SingleEnv",
+                    "runtime": env.runtime,
                 },
             )
 

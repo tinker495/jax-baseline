@@ -17,6 +17,11 @@ variants:
 ```
 
 `exp`는 실행 명령 앞에 `category: atari_100k`처럼 주제를 표시한다.
+기본 로그 경로는 `runs/<category>/`이며, 예를 들어 Go1 PG 실행은 `runs/mjlab/PG/`에 저장한다.
+`JAXBL_LOG_DIR`로 `runs`를 바꿀 수 있고, YAML 또는 `--set logdir=...`로 지정한 경로가 우선한다.
+Aim의 experiment와 W&B의 project도 `category`를 사용하므로 같은 카테고리의 알고리즘을
+함께 비교할 수 있다. 로컬 폴더의 `PG` 등은 `experiment_name`을 따른다. sweep 없이 runner를
+직접 실행하면 Aim/W&B의 그룹 이름도 `experiment_name`을 사용한다.
 
 | 폴더                                 | 실험 대상                          | 대표 설정                                                                                                                             |
 | ------------------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
@@ -47,3 +52,28 @@ uv run exp experiments/configs/mjlab/pg_mjlab_go1.yaml
 ```bash
 uv run exp experiments/configs/atari/dqn_breakout.yaml --dry-run --set model=../models/mlp_512x2_relu.json
 ```
+
+각 실행 폴더의 `run.json`에는 기본값과 override가 반영된 인자, 실제 모델 JSON,
+학습·평가 환경 backend와 seed, 평가 규칙, Git hash와 미커밋 diff, 설치된 패키지와
+`uv.lock`, JAX 장치 정보가 저장된다. sweep에서는 원본 YAML과 활성 variant 번호도
+함께 저장한다. TensorBoard·Aim·W&B 모두 같은 형식이며, 기록 저장에 실패하면 학습을
+시작하지 않는다. Git 저장소나 lockfile이 없는 설치 환경에서는 해당 정보의 부재를 명시한다.
+
+일반 `qnet`·`dpg`·`pg` 실행에서는 `eval_eps`로 평가 한 번의 episode 수를 지정한다
+(기본 20). `eval_num`은 전체 학습 중 주기적 평가의 목표 횟수이며, 정상 종료 시 최종
+평가는 별도로 수행한다. 분산 계열의 `rollout/` 지표는 학습 중 행동 정책의 결과이며,
+별도의 frozen-policy 평가로 해석하지 않는다.
+
+| 지표                    | 의미                                                                                                            |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `progress/env_steps`    | 평가와 자동 reset용 dummy 행을 제외한 실제 학습 transition 수                                                   |
+| `progress/update_steps` | 수행된 minibatch 업데이트 횟수. 같은 minibatch의 actor·critic 갱신은 한 번으로 센다.                            |
+| `time/elapsed_seconds`  | 학습 시작 이후 경과 시간. 학습 중 평가·worker 준비와 정리는 포함하고, 모델 초기화·체크포인트 직렬화는 제외한다. |
+
+기존 그래프의 step 축은 유지한다. 일반 계열의 `steps` 예산은 vector worker의 slot 수로
+계산하며 dummy 행을 포함할 수 있다. 분산 계열의 예산은 learner 반복 횟수다.
+계열 간 비교에는 위 지표 중 목적에 맞는 단위를 사용한다.
+
+`--dry-run`은 활성 variant 전체의 옵션 이름·값·알고리즘 및 모델 backend 조합·모델 JSON을
+검사한다. 오류가 있으면 variant 실행과 모델 export 전에 실패한다. 실제 환경 생성이나
+장치 할당은 하지 않으므로 환경 설치 상태·관측/행동 공간·GPU 가용성은 실행 시 확인한다.

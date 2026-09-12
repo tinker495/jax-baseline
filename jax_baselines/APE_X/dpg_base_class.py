@@ -255,6 +255,9 @@ class Ape_X_Deteministic_Policy_Gradient_Family:
                 self.runtime.shutdown()
 
     def learn_SingleEnv(self, pbar, callback=None, log_interval=1000):
+        started_at = time.perf_counter()
+        completed_iterations = 0
+        update_steps = 0
         stop = self.runtime.create_event()
         stop.clear()
         jobs = []
@@ -305,8 +308,17 @@ class Ape_X_Deteministic_Policy_Gradient_Family:
                 if stop.is_set():
                     raise RuntimeError("distributed worker stopped during training")
                 loss = self.train_step(steps, self.gradient_steps)
+                completed_iterations = steps + 1
+                update_steps += self.gradient_steps * (self.batch_size // self.mini_batch_size)
                 self.lossque.append(loss)
                 if steps % log_interval == 0:
+                    self.logger_server.log_trainer(
+                        steps,
+                        {
+                            "progress/update_steps": update_steps,
+                            "time/elapsed_seconds": time.perf_counter() - started_at,
+                        },
+                    )
                     pbar.set_description(self.description())
                 if steps % self.param_broadcast_freq == 0:
                     cpu_param = jax.device_put(
@@ -319,3 +331,11 @@ class Ape_X_Deteministic_Policy_Gradient_Family:
         finally:
             stop.set()
             self.runtime.wait(jobs, timeout=300)
+            jax.block_until_ready((self.policy_params, self.critic_params))
+            self.logger_server.log_trainer(
+                completed_iterations,
+                {
+                    "progress/update_steps": update_steps,
+                    "time/elapsed_seconds": time.perf_counter() - started_at,
+                },
+            )

@@ -135,6 +135,14 @@ def test_apex_dpg_constructors_initialize_model_setup_dependencies(monkeypatch, 
                 "env_id": "FakeContinuous-v0",
                 "worker_num": 1,
                 "core_env_type": "SingleEnv",
+                "runtime": {
+                    "backend": "fake",
+                    "backend_env_id": "FakeContinuous-v0",
+                    "seed": None,
+                    "seed_rule": "constructor seed",
+                    "reward_clipping": "none",
+                    "episodic_life": False,
+                },
             }
 
     class _Runtime:

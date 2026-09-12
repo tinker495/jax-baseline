@@ -11,7 +11,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from jax_baselines.core.env_protocols import EvaluationContextEnv
+from jax_baselines.core.env_protocols import EnvironmentMetadata, EvaluationContextEnv
 from jax_baselines.core.runtime_adapters import MetricLogger
 
 
@@ -221,10 +221,20 @@ class GymEnvMetrics:
 class GymLoggingWrapper(gym.Wrapper):
     """Expose diagnostics on the outer single-environment protocol surface."""
 
-    def __init__(self, env: gym.Env, *, is_atari: bool = False) -> None:
+    def __init__(
+        self, env: gym.Env, *, env_id: str, seed: int | None, is_atari: bool = False
+    ) -> None:
         super().__init__(env)
         self._is_atari = is_atari
         self._metrics = GymEnvMetrics(1)
+        self.runtime: EnvironmentMetadata = {
+            "backend": "gymnasium",
+            "backend_env_id": env_id,
+            "seed": seed,
+            "seed_rule": "reset seed; action and observation spaces seeded with the same seed",
+            "reward_clipping": "sign" if is_atari else "none",
+            "episodic_life": is_atari,
+        }
 
     def step(self, action: Any):
         observation, reward, terminated, truncated, info = self.env.step(action)

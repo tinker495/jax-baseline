@@ -150,7 +150,9 @@ def test_logger_selector_default_resolves_to_tensorboard(monkeypatch):
     _loggers.add_logger_args(parser)
     args = parser.parse_args([])
     assert args.logger == "tensorboard"
-    assert _loggers.resolve_logger_factory(args) is TensorboardLogger
+    factory = _loggers.resolve_logger_factory(args)
+    assert factory.func is TensorboardLogger
+    assert factory.keywords == {"extra_hparams": {}, "run_metadata": None}
 
 
 def test_logger_selector_exposes_three_backends():
@@ -186,8 +188,9 @@ def test_distributed_logger_server_logs_through_protocol_without_tensorboard(tmp
     server.register_hparams({"learning_rate": 0.1})
     server.add_multiline([0.1, 0.4])
     server.log_trainer(5, {"loss/qloss": 2.0})
-    server.log_worker({"rollout/episode_reward": 10.0}, episode=1)
+    server.log_worker({"rollout/episode_reward": 10.0}, episode=1, environment_steps=10)
     server.log_trainer(6, {"loss/qloss": 3.0})  # step advances -> worker buffer flushes
+    server.log_worker({}, episode=2, environment_steps=3, flush=True)
     server.last_update()
 
     logger = created["logger"]
@@ -197,6 +200,7 @@ def test_distributed_logger_server_logs_through_protocol_without_tensorboard(tmp
     assert ("loss/qloss", 2.0, 5) in run.metrics
     assert ("loss/qloss", 3.0, 6) in run.metrics
     assert ("rollout/episode_reward", 10.0, 6) in run.metrics
+    assert ("progress/env_steps", 13, 6) in run.metrics
     # get_log_dir returns the run's base directory (no trailing separator).
     assert server.get_log_dir() == os.path.normpath(run.get_local_path(""))
 

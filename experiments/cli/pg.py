@@ -42,6 +42,7 @@ def add_args(parser):
         default=100,
         help="number of evaluations over the whole training run (default 100)",
     )
+    parser.add_argument("--eval_eps", type=int, default=20, help="episodes per evaluation")
     parser.add_argument("--logdir", type=str, default=default_logdir("pg"), help="log file dir")
     parser.add_argument("--seed", type=int, default=0, help="random seed")
     parser.add_argument("--actor_model", type=str, help="actor network JSON file")
@@ -103,6 +104,7 @@ def build_env(args):
 def _common(a):
     return {
         "num_workers": a.worker,
+        "eval_eps": a.eval_eps,
         "gamma": a.gamma,
         "learning_rate": a.learning_rate,
         "batch_size": a.batch,

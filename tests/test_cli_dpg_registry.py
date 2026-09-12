@@ -20,11 +20,15 @@ import importlib
 import inspect
 import json
 from argparse import ArgumentParser
+from typing import ClassVar
 
+import gymnasium as gym
 import jax.numpy as jnp
 import numpy as np
 import optax
 import pytest
+
+from jax_baselines.core.env_protocols import EnvironmentMetadata
 
 # ---------------------------------------------------------------------------
 # Runners under test
@@ -36,6 +40,21 @@ EXPECTED_ALGOS = {
     "qnet": {"DQN", "C51", "QRDQN", "IQN", "FQF", "SPR", "BBF"},
 }
 LOCAL_FAMILIES = sorted(EXPECTED_ALGOS)
+
+
+class _MetadataEnv(gym.Env):
+    action_space = gym.spaces.Discrete(2)
+    observation_space = gym.spaces.Dict(
+        {"unified_obs": gym.spaces.Box(-np.inf, np.inf, shape=(1,), dtype=np.float32)}
+    )
+    runtime: ClassVar[EnvironmentMetadata] = {
+        "backend": "fake",
+        "backend_env_id": "Fake-v0",
+        "seed": 0,
+        "seed_rule": "constructor seed",
+        "reward_clipping": "none",
+        "episodic_life": False,
+    }
 
 
 def _runner(name: str):
@@ -332,6 +351,9 @@ def test_run_family_wires_agent_without_env_or_model(monkeypatch):
     class FakeAgent:
         def __init__(self, env_builder, maker, **kwargs):
             captured.update(env=env_builder, maker=maker, kwargs=kwargs)
+            self.env = _MetadataEnv()
+            self.eval_env = _MetadataEnv()
+            self.policy_kwargs = kwargs["policy_kwargs"]
 
         def learn(
             self,
@@ -361,12 +383,14 @@ def test_run_family_wires_agent_without_env_or_model(monkeypatch):
         build_env=lambda a: ("ENVB", {"pk": 1}),
     )
     monkeypatch.setattr(run_mod, "resolve_maker", lambda r, s, a: "MAKER")
+    monkeypatch.setattr(run_mod, "collect_run_metadata", lambda *args, **kwargs: {})
 
     run_mod.run_family(fake_runner, ["--algo", "DDPG", "--steps", "7"])
 
     assert captured["steps"] == 7
     assert captured["eval_num"] == 100
-    assert captured["logger_factory"] is TensorboardLogger
+    assert captured["logger_factory"].func is TensorboardLogger
+    assert captured["logger_factory"].keywords["run_metadata"] == {}
     assert captured["progress_factory"] is run_mod.make_progress
     assert captured["record_test_fn"] is run_mod.record_and_test
     assert captured["maker"] == "MAKER"
@@ -502,6 +526,11 @@ def test_run_distributed_family_wires_agent(monkeypatch):
     class FakeRuntime:
         def __init__(self, **kwargs):
             captured["runtime_kwargs"] = kwargs
+            captured["worker_info"] = []
+
+        def worker_info(self, worker):
+            captured["worker_info"].append(worker)
+            return run_mod.get_env_info(_MetadataEnv(), "Fake-v0")
 
         def shutdown(self):
             captured["runtime_shutdowns"] = captured.get("runtime_shutdowns", 0) + 1
@@ -509,6 +538,7 @@ def test_run_distributed_family_wires_agent(monkeypatch):
     class FakeAgent:
         def __init__(self, workers, maker, runtime, **kwargs):
             captured.update(workers=workers, maker=maker, runtime=runtime, kwargs=kwargs)
+            self.policy_kwargs = kwargs["policy_kwargs"]
 
         def learn(
             self,
@@ -532,17 +562,20 @@ def test_run_distributed_family_wires_agent(monkeypatch):
         policy_kwargs=lambda a: {"pk": 1},
     )
     monkeypatch.setattr(run_mod, "resolve_maker", lambda r, s, a: "MAKER")
+    monkeypatch.setattr(run_mod, "collect_run_metadata", lambda *args, **kwargs: {})
     monkeypatch.setattr(dist_runtime, "RayDistributedRuntime", FakeRuntime)
 
     run_mod.run_distributed_family(fake_runner, ["--algo", "DDPG", "--steps", "11"])
 
     assert captured["workers"] == ["W0", "W1"]
+    assert captured["worker_info"] == ["W0", "W1"]
     assert captured["maker"] == "MAKER"
     assert isinstance(captured["runtime"], FakeRuntime)
     assert captured["runtime_kwargs"] == {"num_cpus": 3, "num_gpus": 0}
     assert captured["steps"] == 11
     assert captured["experiment_name"] == "APEX_DPG"  # threaded from --experiment_name default
-    assert captured["logger_factory"] is TensorboardLogger
+    assert captured["logger_factory"].func is TensorboardLogger
+    assert captured["logger_factory"].keywords["run_metadata"] == {}
     assert captured["progress_factory"] is run_mod.make_progress
     assert captured["kwargs"]["policy_kwargs"] == {"pk": 1}
     assert isinstance(captured["kwargs"]["checkpoint_store"], run_mod.FileCheckpointStore)

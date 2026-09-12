@@ -64,8 +64,11 @@ class _RayLoggerServerHandle:
     def log_trainer(self, step, log_dict):
         return self._actor.log_trainer.remote(step, log_dict)
 
-    def log_worker(self, log_dict, episode):
-        return self._actor.log_worker.remote(log_dict, episode)
+    def log_worker(self, log_dict, episode, *, environment_steps=0, flush=False):
+        pending = self._actor.log_worker.remote(
+            log_dict, episode, environment_steps=environment_steps, flush=flush
+        )
+        return _ray().get(pending) if flush else pending
 
     def last_update(self):
         return self._actor.last_update.remote()

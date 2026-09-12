@@ -63,6 +63,7 @@ def add_args(parser):
         default=100,
         help="number of evaluations over the whole training run (default 100)",
     )
+    parser.add_argument("--eval_eps", type=int, default=20, help="episodes per evaluation")
     parser.add_argument("--logdir", type=str, default=default_logdir("qnet"), help="log file dir")
     parser.add_argument("--seed", type=int, default=0, help="random seed")
     parser.add_argument("--max", type=float, default=10, help="c51 max")
@@ -116,6 +117,7 @@ def _common(a):
     """Kwargs shared by the standard value-based algos (DQN/C51/QRDQN/IQN/FQF)."""
     return {
         "num_workers": a.worker,
+        "eval_eps": a.eval_eps,
         "seed": a.seed,
         "gamma": a.gamma,
         "learning_rate": a.learning_rate,
@@ -197,6 +199,7 @@ ALGOS = {
         "spr",
         lambda a: {
             "num_workers": a.worker,
+            "eval_eps": a.eval_eps,
             "seed": a.seed,
             "gamma": a.gamma,
             "learning_rate": a.learning_rate,
@@ -226,6 +229,7 @@ ALGOS = {
         "bbf",
         lambda a: {
             "num_workers": a.worker,
+            "eval_eps": a.eval_eps,
             "seed": a.seed,
             "gamma": a.gamma,
             "learning_rate": a.learning_rate,

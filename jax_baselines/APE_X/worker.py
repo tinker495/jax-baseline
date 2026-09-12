@@ -65,6 +65,7 @@ class Ape_X_Worker:
             params = jax.device_put(param_server.get_params())
             eplen = 0
             episode = 0
+            pending_steps = 0
             environment_logger = WorkerMetricLogger("" if eps is None else f"/eps{eps:.2f}")
             if eps is None:
                 rw_label = "rollout/episode_reward"
@@ -84,6 +85,7 @@ class Ape_X_Worker:
                 eplen += 1
                 actions = get_action(params, obs, eps, next(key_seq))
                 next_obs, reward, terminated, truncated, _info = self.env.step(actions)
+                pending_steps += 1
                 next_obs = batch_observation(next_obs)
                 local_buffer.add(obs, actions, reward, next_obs, terminated, truncated)
                 if logger_server is not None:
@@ -105,7 +107,8 @@ class Ape_X_Worker:
                             len_label: eplen,
                             to_label: float(truncated),
                         }
-                        logger_server.log_worker(log_dict, episode)
+                        logger_server.log_worker(log_dict, episode, environment_steps=pending_steps)
+                        pending_steps = 0
                         environment_logger.metrics.clear()
                     score = 0
                     eplen = 0
@@ -122,10 +125,17 @@ class Ape_X_Worker:
                         key=next(key_seq),
                     )
                     global_buffer.add(**transition, priorities=abs_td_error)
+                    if logger_server is not None and pending_steps:
+                        logger_server.log_worker({}, episode, environment_steps=pending_steps)
+                        pending_steps = 0
             if logger_server is not None:
                 log_environment_metrics(self.env, environment_logger, episode)
-                if environment_logger.metrics:
-                    logger_server.log_worker(environment_logger.metrics, episode)
+                logger_server.log_worker(
+                    environment_logger.metrics,
+                    episode,
+                    environment_steps=pending_steps,
+                    flush=True,
+                )
         finally:
             if stop.is_set():
                 print("worker stopped")

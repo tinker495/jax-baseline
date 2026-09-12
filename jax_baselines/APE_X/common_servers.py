@@ -38,6 +38,7 @@ class Logger_server:
         self.logger = logger_factory(log_name, experiment_name, log_dir, None)
         self.step = 0
         self.old_step = 0
+        self.environment_steps = 0
         self.save_dict = {}
         with self.logger as run:
             self.save_path = os.path.normpath(run.get_local_path(""))
@@ -52,10 +53,14 @@ class Logger_server:
     def log_trainer(self, step, log_dict):
         self.step = step
         with self.logger as run:
+            run.log_metric("progress/env_steps", self.environment_steps, self.step)
             for key, value in log_dict.items():
                 run.log_metric(key, value, self.step)
 
-    def log_worker(self, log_dict, episode):
+    def log_worker(self, log_dict, episode, *, environment_steps=0, flush=False):
+        if environment_steps < 0:
+            raise ValueError("environment_steps must be nonnegative")
+        self.environment_steps += environment_steps
         if self.old_step != self.step:
             with self.logger as run:
                 for key, value in self.save_dict.items():
@@ -67,9 +72,12 @@ class Logger_server:
                 self.save_dict[key].append(value)
             else:
                 self.save_dict[key] = [value]
+        if flush:
+            self.last_update()
 
     def last_update(self):
         with self.logger as run:
+            run.log_metric("progress/env_steps", self.environment_steps, self.step)
             for key, value in self.save_dict.items():
                 run.log_metric(key, np.mean(value), self.step)
 

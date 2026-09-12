@@ -10,11 +10,12 @@ uninstalled raises a clear, actionable error.
 from __future__ import annotations
 
 import os
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
-from experiments.runtime_adapters import _get_latest_run_id
+from experiments.run_metadata import tracking_experiment_name, write_run_metadata
+from experiments.runtime_adapters import create_run_directory
 from jax_baselines.core.hparams import get_hyper_params
 
 
@@ -74,26 +75,24 @@ class WandbLogger:
         run_name: str,
         experiment_name: str,
         local_dir: str,
-        agent: Optional[Any],
+        agent: Any | None,
         *,
-        entity: Optional[str] = None,
-        mode: Optional[str] = None,
+        entity: str | None = None,
+        mode: str | None = None,
         extra_hparams: dict[str, str] | None = None,
+        run_metadata: dict[str, object] | None = None,
     ):
         self._wandb = wandb_module
         self._run_name = run_name
-        self._experiment_name = experiment_name
-        run_id = _get_latest_run_id(local_dir, experiment_name, run_name) + 1
-        self._local_dir = os.path.join(local_dir, experiment_name, f"{run_name}_{run_id:02d}")
-        os.makedirs(self._local_dir, exist_ok=True)
-        # experiment_name IS the W&B project (the cross-backend experiment grouping).
-        self._project = experiment_name
+        self._project = tracking_experiment_name(experiment_name, run_metadata)
+        self._local_dir = create_run_directory(local_dir, experiment_name, run_name)
+        write_run_metadata(self._local_dir, run_metadata)
         self._entity = entity
         self._mode = mode
         self._agent = agent
         self._extra_hparams = extra_hparams
         self._run = None
-        self._logger_run: Optional[WandbRun] = None
+        self._logger_run: WandbRun | None = None
 
     def _ensure_started(self) -> WandbRun:
         if self._logger_run is not None:
@@ -107,11 +106,7 @@ class WandbLogger:
         )
         self._logger_run = WandbRun(self._wandb, self._run, self._local_dir, self._extra_hparams)
         if self._agent is not None:
-            try:
-                self.log_hparams(self._agent)
-            except Exception:
-                # Match the TensorBoard backend: hparam logging must not break training.
-                pass
+            self.log_hparams(self._agent)
         return self._logger_run
 
     def log_hparams(self, agent_or_hparams):
@@ -145,7 +140,12 @@ class WandbLogger:
             pass
 
 
-def make_wandb_logger_factory(args, *, extra_hparams: dict[str, str] | None = None):
+def make_wandb_logger_factory(
+    args,
+    *,
+    extra_hparams: dict[str, str] | None = None,
+    run_metadata: dict[str, object] | None = None,
+):
     """Return a ``LoggerFactory`` for W&B, capturing the CLI backend config.
 
     The ``wandb`` import happens here (only when ``--logger wandb`` is selected),
@@ -166,6 +166,7 @@ def make_wandb_logger_factory(args, *, extra_hparams: dict[str, str] | None = No
             entity=entity,
             mode=mode,
             extra_hparams=extra_hparams,
+            run_metadata=run_metadata,
         )
 
     return factory

@@ -1,15 +1,20 @@
 from __future__ import annotations
 
+import sys
 from argparse import ArgumentParser, Namespace
 from collections.abc import Callable
 from dataclasses import dataclass
 from importlib import import_module
 
+from env_builder.env_builder import get_env_info
 from experiments.checkpoint_store import FileCheckpointStore
 from experiments.cli._common import load_runtime_env
-from experiments.cli._loggers import add_logger_args, resolve_logger_factory
+from experiments.cli._loggers import resolve_logger_factory
+from experiments.cli._validation import parse_runner_args
+from experiments.run_metadata import collect_run_metadata
 from experiments.runtime_adapters import headless_test, make_progress, record_and_test
 from jax_baselines.core.distributed_runtime import DistributedRuntime
+from jax_baselines.core.hparams import get_hyper_params
 from model_builder.model_config import load_model_config
 
 
@@ -47,8 +52,7 @@ def resolve_maker(runner: FamilyRunner | DistributedFamilyRunner, spec: AlgoSpec
         if exc.name is None or not (module == exc.name or module.startswith(exc.name + ".")):
             raise
         raise SystemExit(
-            f"unsupported combo: algo={args.algo} model_lib={args.model_lib} "
-            f"(no module {module})"
+            f"unsupported combo: algo={args.algo} model_lib={args.model_lib} (no module {module})"
         ) from exc
     return mod.model_builder_maker
 
@@ -67,12 +71,7 @@ def actor_critic_policy_kwargs(args: Namespace) -> dict[str, object]:
 
 def run_family(runner: FamilyRunner, argv=None):
     load_runtime_env()
-    parser = ArgumentParser()
-    runner.add_args(parser)
-    add_logger_args(parser)
-    args = parser.parse_args(argv)
-    if args.algo not in runner.algos:
-        raise SystemExit(f"unknown algo '{args.algo}', expected one of {sorted(runner.algos)}")
+    args = parse_runner_args(runner, argv)
     spec = runner.algos[args.algo]
     maker = resolve_maker(runner, spec, args)
     env_builder, policy_kwargs = runner.build_env(args)
@@ -85,11 +84,25 @@ def run_family(runner: FamilyRunner, argv=None):
     )
     test_fn = record_and_test if getattr(env_builder, "supports_render", True) else headless_test
     try:
+        run_metadata = collect_run_metadata(
+            args,
+            command=[
+                runner.add_args.__module__.rsplit(".", 1)[-1].replace("_", "-"),
+                *(sys.argv[1:] if argv is None else argv),
+            ],
+            policy_kwargs=agent.policy_kwargs,
+            training_envs=[get_env_info(agent.env, args.env)],
+            evaluation_env=get_env_info(agent.eval_env, args.env),
+            shared_evaluation_env=agent.env is agent.eval_env,
+            algorithm_parameters=get_hyper_params(agent),
+        )
         agent.learn(
             int(args.steps),
             experiment_name=args.experiment_name,
             eval_num=args.eval_num,
-            logger_factory=resolve_logger_factory(args, policy_kwargs=policy_kwargs),
+            logger_factory=resolve_logger_factory(
+                args, policy_kwargs=agent.policy_kwargs, run_metadata=run_metadata
+            ),
             progress_factory=make_progress,
             record_test_fn=test_fn,
         )
@@ -137,16 +150,10 @@ def run_distributed_family(runner: DistributedFamilyRunner, argv=None):
     from experiments.distributed_runtime import RayDistributedRuntime
 
     load_runtime_env()
-    parser = ArgumentParser()
-    runner.add_args(parser)
-    add_logger_args(parser)
-    args = parser.parse_args(argv)
-    if args.algo not in runner.algos:
-        raise SystemExit(f"unknown algo '{args.algo}', expected one of {sorted(runner.algos)}")
+    args = parse_runner_args(runner, argv)
     spec = runner.algos[args.algo]
     maker = resolve_maker(runner, spec, args)
     policy_kwargs = runner.policy_kwargs(args)
-    logger_factory = resolve_logger_factory(args, policy_kwargs=policy_kwargs)
     runtime = RayDistributedRuntime(num_cpus=args.worker + runner.ray_cpu_headroom, num_gpus=0)
     try:
         workers = runner.make_workers(args, runtime)
@@ -158,10 +165,24 @@ def run_distributed_family(runner: DistributedFamilyRunner, argv=None):
             checkpoint_store=FileCheckpointStore(),
             **spec.build(args),
         )
+        run_metadata = collect_run_metadata(
+            args,
+            command=[
+                runner.add_args.__module__.rsplit(".", 1)[-1].replace("_", "-"),
+                *(sys.argv[1:] if argv is None else argv),
+            ],
+            policy_kwargs=agent.policy_kwargs,
+            training_envs=[runtime.worker_info(worker) for worker in workers],
+            evaluation_env=None,
+            shared_evaluation_env=False,
+            algorithm_parameters=get_hyper_params(agent),
+        )
         agent.learn(
             int(args.steps),
             experiment_name=args.experiment_name,
-            logger_factory=logger_factory,
+            logger_factory=resolve_logger_factory(
+                args, policy_kwargs=agent.policy_kwargs, run_metadata=run_metadata
+            ),
             progress_factory=make_progress,
         )
         return agent

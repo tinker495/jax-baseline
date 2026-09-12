@@ -3,25 +3,33 @@ from __future__ import annotations
 import os
 from contextlib import closing
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from tensorboardX import SummaryWriter
 from tensorboardX.summary import hparams
 from tqdm.auto import trange
 
+from experiments.run_metadata import write_run_metadata
 from jax_baselines.core.eval import run_test_episodes
 from jax_baselines.core.hparams import add_hparams
 
 
-def _get_latest_run_id(local_dir, experiment_name, run_name):
-    """Return the latest numbered TensorBoard run id for a run name."""
+def create_run_directory(local_dir: str, experiment_name: str, run_name: str) -> str:
+    """Reserve a numbered directory without sharing artifacts with concurrent runs."""
 
     max_run_id = 0
     for path in (Path(local_dir) / experiment_name).glob(f"{run_name}_[0-9]*"):
         prefix, _, ext = path.name.rpartition("_")
         if prefix == run_name and ext.isdigit():
             max_run_id = max(max_run_id, int(ext))
-    return max_run_id
+    while True:
+        max_run_id += 1
+        directory = Path(local_dir) / experiment_name / f"{run_name}_{max_run_id:02d}"
+        try:
+            directory.mkdir(parents=True)
+        except FileExistsError:
+            continue
+        return str(directory)
 
 
 class TensorboardRun:
@@ -72,23 +80,17 @@ class TensorboardLogger:
         run_name: str,
         experiment_name: str,
         local_dir: str,
-        agent: Optional[Any],
+        agent: Any | None,
         *,
         extra_hparams: dict[str, str] | None = None,
+        run_metadata: dict[str, object] | None = None,
     ):
         self.run_name = run_name
-        self.local_dir = os.path.join(
-            local_dir,
-            experiment_name,
-            f"{run_name}_{_get_latest_run_id(local_dir, experiment_name, run_name) + 1:02d}",
-        )
+        self.local_dir = create_run_directory(local_dir, experiment_name, run_name)
         self.run = TensorboardRun(self.local_dir, extra_hparams)
+        write_run_metadata(self.local_dir, run_metadata)
         if agent is not None:
-            try:
-                self.log_hparams(agent)
-            except Exception:
-                # Preserve historical permissiveness: hparam logging must not break training.
-                pass
+            self.log_hparams(agent)
 
     def log_hparams(self, agent_or_hparams):
         if agent_or_hparams is None:
