@@ -20,6 +20,10 @@ from jax_baselines.core.bulk_training import (
     reshape_bulk_batch,
     uses_bulk_pulse,
 )
+from jax_baselines.core.replay_training import (
+    ReplayTrainingBatch,
+    reward_normalization_statistics,
+)
 
 
 @dataclass(frozen=True)
@@ -97,18 +101,14 @@ class DPGTrainingLifecycle:
     def _train_one_bulk_chunk(self, steps, chunk_size, train_on_bulk):
         contexts = make_train_contexts(self.agent, DPGTrainContext, steps, chunk_size)
 
-        data = self._sample_batch(chunk_size * self.agent.batch_size)
-        data = self._reshape_bulk_batch(data, chunk_size)
-        data = normalize_bulk_weights(data)
-        self._normalize_batch(data)
+        data = self._prepare_batch(chunk_size)
         report = train_on_bulk(data, contexts)
         self._update_priorities(data, report)
         return report
 
     def _train_one_batch(self, steps):
         self.agent.train_steps_count += 1
-        data = self._sample_batch()
-        self._normalize_batch(data)
+        data = self._prepare_batch()
         context = DPGTrainContext(
             steps=steps,
             train_steps_count=self.agent.train_steps_count,
@@ -116,6 +116,24 @@ class DPGTrainingLifecycle:
         report = self.agent._train_on_batch(data, context)
         self._update_priorities(data, report)
         return report
+
+    def _prepare_batch(self, chunk_size=0):
+        sample_size = (chunk_size or 1) * self.agent.batch_size
+        if self.agent.memory_backend == "gpu":
+            obs_rms = self.agent._policy_update_obs_rms() if self.agent.obs_rms_norm else None
+            return ReplayTrainingBatch(
+                replay=self.agent.replay_buffer,
+                sample_size=sample_size,
+                beta=self.agent.prioritized_replay_beta0,
+                chunk_size=chunk_size,
+                observation_statistics=None if obs_rms is None else (obs_rms.means, obs_rms.vars),
+                reward_statistics=reward_normalization_statistics(self.agent.reward_normalizer),
+            )
+        data = self._sample_batch(sample_size)
+        if chunk_size:
+            data = normalize_bulk_weights(self._reshape_bulk_batch(data, chunk_size))
+        self._normalize_batch(data)
+        return data
 
     def _sample_batch(self, batch_size=None):
         batch_size = self.agent.batch_size if batch_size is None else batch_size
@@ -138,7 +156,7 @@ class DPGTrainingLifecycle:
             data["rewards"] = self.agent.reward_normalizer.normalize(data["rewards"])
 
     def _update_priorities(self, data, report):
-        if not self.agent.prioritized_replay:
+        if not self.agent.prioritized_replay or isinstance(data, ReplayTrainingBatch):
             return
         convert = (
             flatten_priority_values

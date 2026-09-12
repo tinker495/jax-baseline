@@ -6,6 +6,7 @@ import numpy as np
 import optax
 from flax import struct
 
+from jax_baselines.core.replay_training import train_replay_batch, train_replay_bulk
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.jax_utils import convert_normalized_obs
@@ -118,7 +119,9 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             t_mean,
             self.log_ent_coef,
             new_priorities,
-        ) = self._train_step(
+        ) = train_replay_batch(
+            self._train_step,
+            data,
             self.policy_params,
             self.critic_params,
             self.opt_policy_state,
@@ -127,7 +130,6 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
             next(self.key_seq),
             context.train_steps_count,
             self.log_ent_coef,
-            **data,
         )
         return DPGTrainReport(
             loss=loss,
@@ -157,7 +159,7 @@ class CrossQ(Deteministic_Policy_Gradient_Family):
                 self.log_ent_coef,
             ),
             (losses, targets, ent_coefs, priorities),
-        ) = self._bulk_scan(carry, keys, steps, data)
+        ) = train_replay_bulk(self._bulk_scan, data, carry, keys, steps)
         return DPGTrainReport(
             loss=jnp.mean(losses),
             target=jnp.mean(targets),

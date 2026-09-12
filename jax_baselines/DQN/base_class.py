@@ -21,6 +21,7 @@ from jax_baselines.core.replay_protocol import (
     require_replay_factory,
     select_replay_device,
 )
+from jax_baselines.core.replay_training import train_replay_batch, train_replay_bulk
 from jax_baselines.core.rollout import (
     ActionSelection,
     CheckpointTrainPulse,
@@ -280,13 +281,14 @@ class Q_Network_Family:
             loss,
             target,
             priorities,
-        ) = self._train_step(
+        ) = train_replay_batch(
+            self._train_step,
+            data,
             self.params,
             self.target_params,
             self.opt_state,
             context.train_steps_count,
             next(self.key_seq) if self.param_noise else None,
-            **data,
         )
         return QNetTrainResult.from_values(loss=loss, target=target, replay_priorities=priorities)
 
@@ -301,7 +303,7 @@ class Q_Network_Family:
                 targets,
                 priorities,
             ),
-        ) = self._bulk_scan(carry, keys, steps, data)
+        ) = train_replay_bulk(self._bulk_scan, data, carry, keys, steps)
         return QNetTrainResult.from_values(
             loss=jnp.mean(losses),
             target=jnp.mean(targets),

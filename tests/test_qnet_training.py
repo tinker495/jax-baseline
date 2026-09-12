@@ -85,6 +85,7 @@ class FakeRewardNormalizer:
 
 class FakeAgent:
     def __init__(self):
+        self.memory_backend = "cpu"
         self.replay_buffer = FakeReplayBuffer()
         self.batch_size = 4
         self.prioritized_replay = True
@@ -454,6 +455,7 @@ def test_qnet_training_lifecycle_keeps_non_positive_bulk_cap_invalid():
 
 def test_spr_lineage_single_update_uses_scalar_path_without_bulk_hook():
     agent = SPR.__new__(SPR)
+    agent.memory_backend = "cpu"
     agent.max_bulk_updates_per_pulse = 8
     agent.replay_buffer = FakeReplayBuffer()
     agent.batch_size = 4

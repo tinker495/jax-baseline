@@ -14,6 +14,7 @@ import optax
 from flax import struct
 
 from jax_baselines.core.normalization import FlashSACRewardNormalizer
+from jax_baselines.core.replay_training import ReplayTrainingBatch, train_replay_bulk
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.distributional import categorical_projection
@@ -196,10 +197,17 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
         return jnp.tanh(mean)
 
     def _train_on_batch(self, data, context):
-        return self._train_on_bulk(jax.tree.map(lambda x: jnp.expand_dims(x, 0), data), [context])
+        return self._train_on_bulk(
+            data
+            if isinstance(data, ReplayTrainingBatch)
+            else jax.tree.map(lambda x: jnp.expand_dims(x, 0), data),
+            [context],
+        )
 
     def _train_on_bulk(self, data, contexts):
-        carry, metrics = self._compiled_updates(
+        carry, metrics = train_replay_bulk(
+            self._compiled_updates,
+            data,
             (
                 self.policy_params,
                 self.critic_params,
@@ -211,7 +219,7 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
             ),
             jax.random.split(next(self.key_seq), len(contexts)),
             jnp.asarray([context.train_steps_count for context in contexts]),
-            data,
+            priority_index=None,
         )
         (
             self.policy_params,

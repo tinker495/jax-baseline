@@ -140,6 +140,7 @@ def test_prioritized_sample_consistent_with_ground_truth():
 
 class _FrameBufferBulkAgent:
     def __init__(self, replay_buffer):
+        self.memory_backend = "cpu"
         self.replay_buffer = replay_buffer
         self.batch_size = 4
         self.max_bulk_updates_per_pulse = 2

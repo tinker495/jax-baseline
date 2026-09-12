@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from jax_baselines.core.replay_training import train_replay_batch, train_replay_bulk
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import QNetTrainResult
 from jax_baselines.math.jax_utils import convert_normalized_obs
@@ -77,13 +78,14 @@ class QRDQN(Q_Network_Family):
             t_mean,
             t_std,
             new_priorities,
-        ) = self._train_step(
+        ) = train_replay_batch(
+            self._train_step,
+            data,
             self.params,
             self.target_params,
             self.opt_state,
             context.train_steps_count,
             next(self.key_seq) if self.param_noise else None,
-            **data,
         )
         return QNetTrainResult.from_values(
             loss=loss,
@@ -104,7 +106,7 @@ class QRDQN(Q_Network_Family):
                 target_stds,
                 priorities,
             ),
-        ) = self._bulk_scan(carry, keys, steps, data)
+        ) = train_replay_bulk(self._bulk_scan, data, carry, keys, steps)
         return QNetTrainResult.from_values(
             loss=jnp.mean(losses),
             target=jnp.mean(targets),
