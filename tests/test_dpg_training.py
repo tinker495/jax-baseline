@@ -90,6 +90,7 @@ class FakeLoggerRun:
 
 class FakeAgent:
     def __init__(self):
+        self.memory_backend = "cpu"
         self.replay_buffer = FakeReplayBuffer()
         self.batch_size = 4
         self.prioritized_replay = True

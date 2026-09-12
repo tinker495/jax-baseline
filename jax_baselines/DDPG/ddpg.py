@@ -7,6 +7,7 @@ import numpy as np
 import optax
 from flax import struct
 
+from jax_baselines.core.replay_training import train_replay_batch, train_replay_bulk
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.ou_noise import OUNoise
 from jax_baselines.DDPG.training import DPGTrainReport
@@ -131,7 +132,9 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             loss,
             t_mean,
             new_priorities,
-        ) = self._train_step(
+        ) = train_replay_batch(
+            self._train_step,
+            data,
             self.policy_params,
             self.critic_params,
             self.target_policy_params,
@@ -140,7 +143,6 @@ class DDPG(Deteministic_Policy_Gradient_Family):
             self.opt_critic_state,
             context.train_steps_count,
             next(self.key_seq),
-            **data,
         )
         return DPGTrainReport(loss=loss, target=t_mean, new_priorities=new_priorities)
 
@@ -165,7 +167,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
                 self.opt_critic_state,
             ),
             (losses, targets, priorities),
-        ) = self._bulk_scan(carry, keys, steps, data)
+        ) = train_replay_bulk(self._bulk_scan, data, carry, keys, steps)
         return DPGTrainReport(
             loss=jnp.mean(losses),
             target=jnp.mean(targets),

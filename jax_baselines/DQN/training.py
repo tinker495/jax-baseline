@@ -21,6 +21,10 @@ from jax_baselines.core.bulk_training import (
     reshape_bulk_batch,
     uses_bulk_pulse,
 )
+from jax_baselines.core.replay_training import (
+    ReplayTrainingBatch,
+    reward_normalization_statistics,
+)
 
 
 @dataclass(frozen=True)
@@ -112,8 +116,7 @@ class QNetTrainingLifecycle:
 
     def _train_one_batch(self, steps, gradient_steps):
         self.agent.train_steps_count += 1
-        data = self.agent._sample_batch()
-        self._normalize_batch(data)
+        data = self._prepare_batch()
         context = QNetTrainContext(
             steps=steps,
             train_steps_count=self.agent.train_steps_count,
@@ -141,10 +144,7 @@ class QNetTrainingLifecycle:
                 chunk_size,
                 gradient_steps=chunk_size,
             )
-            data = self.agent._sample_batch(chunk_size * self.agent.batch_size)
-            data = self._reshape_bulk_batch(data, chunk_size)
-            data = normalize_bulk_weights(data)
-            self._normalize_batch(data)
+            data = self._prepare_batch(chunk_size)
             result = self._normalise_train_result(train_on_bulk(data, contexts))
             self._update_priorities(data, result)
             reports.append(result.report)
@@ -155,6 +155,22 @@ class QNetTrainingLifecycle:
             remaining -= 1
 
         return self.agent._aggregate_train_reports(reports)
+
+    def _prepare_batch(self, chunk_size=0):
+        sample_size = (chunk_size or 1) * self.agent.batch_size
+        if self.agent.memory_backend == "gpu":
+            return ReplayTrainingBatch(
+                replay=self.agent.replay_buffer,
+                sample_size=sample_size,
+                beta=self.agent.prioritized_replay_beta0,
+                chunk_size=chunk_size,
+                reward_statistics=reward_normalization_statistics(self.agent.reward_normalizer),
+            )
+        data = self.agent._sample_batch(sample_size)
+        if chunk_size:
+            data = normalize_bulk_weights(self._reshape_bulk_batch(data, chunk_size))
+        self._normalize_batch(data)
+        return data
 
     def _reshape_bulk_batch(self, data, chunk_size):
         return reshape_bulk_batch(data, chunk_size, self.agent.batch_size)
@@ -174,7 +190,7 @@ class QNetTrainingLifecycle:
         )
 
     def _update_priorities(self, data, result):
-        if not self.agent.prioritized_replay:
+        if not self.agent.prioritized_replay or isinstance(data, ReplayTrainingBatch):
             return
 
         if data is None:

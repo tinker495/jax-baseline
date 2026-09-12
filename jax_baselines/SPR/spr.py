@@ -12,6 +12,7 @@ from jax_baselines.core.replay_protocol import (
     SelfPredictionReplayNeed,
     require_replay_factory,
 )
+from jax_baselines.core.replay_training import ReplayTrainingBatch, train_replay_batch
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import (
     QNetTrainContext,
@@ -169,13 +170,15 @@ class SPR(Q_Network_Family):
             t_mean,
             new_priorities,
             rprloss,
-        ) = self._train_step(
+        ) = train_replay_batch(
+            self._train_step,
+            data,
             self.params,
             self.target_params,
             self.opt_state,
             context.train_steps_count,
             next(self.key_seq),
-            **data,
+            priority_index=-2,
         )
 
         return QNetTrainResult.from_values(
@@ -187,7 +190,7 @@ class SPR(Q_Network_Family):
 
     def _train_on_bulk(self, data, contexts):
         result = self._train_on_batch(
-            flatten_bulk_batch(data),
+            data if isinstance(data, ReplayTrainingBatch) else flatten_bulk_batch(data),
             QNetTrainContext(
                 steps=contexts[0].steps,
                 train_steps_count=contexts[0].train_steps_count,
