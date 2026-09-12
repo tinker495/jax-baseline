@@ -2,9 +2,9 @@ import haiku as hk
 import jax
 import jax.numpy as jnp
 
-from model_builder.haiku.layers import NoisyLinear
+from model_builder.haiku.layers import NoisyLinear, network_body
 from model_builder.haiku.Module import PreProcess
-from model_builder.model_config import ACTIVATIONS, MLPConfig
+from model_builder.model_config import MLPConfig
 from model_builder.utils import (
     dummy_observation,
     print_haiku_model_summary,
@@ -26,45 +26,21 @@ class Model(hk.Module):
 
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         if not self.dueling:
-            return hk.Sequential(
-                [
-                    layer
-                    for config in self.network.layers
-                    for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
-                ]
-                + [
-                    self.layer(
-                        self.action_size[0] * self.support_n,
-                        w_init=hk.initializers.RandomUniform(-0.03, 0.03),
-                    ),
-                    hk.Reshape((self.action_size[0], self.support_n)),
-                ]
-            )(feature)
-        v = hk.Sequential(
-            [
-                layer
-                for config in self.network.layers
-                for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
-            ]
-            + [
-                self.layer(self.support_n, w_init=hk.initializers.RandomUniform(-0.03, 0.03)),
-                hk.Reshape((1, self.support_n)),
-            ]
-        )(feature)
-        a = hk.Sequential(
-            [
-                layer
-                for config in self.network.layers
-                for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
-            ]
-            + [
-                self.layer(
-                    self.action_size[0] * self.support_n,
-                    w_init=hk.initializers.RandomUniform(-0.03, 0.03),
-                ),
-                hk.Reshape((self.action_size[0], self.support_n)),
-            ]
-        )(feature)
+            q = network_body(feature, self.network, self.layer)
+            q = self.layer(
+                self.action_size[0] * self.support_n,
+                w_init=hk.initializers.RandomUniform(-0.03, 0.03),
+            )(q)
+            return hk.Reshape((self.action_size[0], self.support_n))(q)
+        v = network_body(feature, self.network, self.layer)
+        v = self.layer(self.support_n, w_init=hk.initializers.RandomUniform(-0.03, 0.03))(v)
+        v = hk.Reshape((1, self.support_n))(v)
+        a = network_body(feature, self.network, self.layer)
+        a = self.layer(
+            self.action_size[0] * self.support_n,
+            w_init=hk.initializers.RandomUniform(-0.03, 0.03),
+        )(a)
+        a = hk.Reshape((self.action_size[0], self.support_n))(a)
         return v + a - jnp.mean(a, axis=1, keepdims=True)
 
 

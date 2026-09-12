@@ -4,9 +4,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from model_builder.haiku.layers import NoisyLinear
+from model_builder.haiku.layers import NoisyLinear, network_body
 from model_builder.haiku.Module import PreProcess
-from model_builder.model_config import ACTIVATIONS, MLPConfig
+from model_builder.model_config import MLPConfig
 from model_builder.utils import (
     dummy_observation,
     print_haiku_model_summary,
@@ -44,38 +44,16 @@ class Model(hk.Module):
 
             mul_embedding = feature * quantile_embedding  # [ batch x feature ]
             if not self.dueling:
-                return hk.Sequential(
-                    [
-                        layer
-                        for config in self.network.layers
-                        for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
-                    ]
-                    + [
-                        self.layer(
-                            self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
-                        )
-                    ]
-                )(mul_embedding)
-            v = hk.Sequential(
-                [
-                    layer
-                    for config in self.network.layers
-                    for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
-                ]
-                + [self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))]
-            )(mul_embedding)
-            a = hk.Sequential(
-                [
-                    layer
-                    for config in self.network.layers
-                    for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
-                ]
-                + [
-                    self.layer(
-                        self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
-                    )
-                ]
-            )(mul_embedding)
+                q = network_body(mul_embedding, self.network, self.layer)
+                return self.layer(
+                    self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03)
+                )(q)
+            v = network_body(mul_embedding, self.network, self.layer)
+            v = self.layer(1, w_init=hk.initializers.RandomUniform(-0.03, 0.03))(v)
+            a = network_body(mul_embedding, self.network, self.layer)
+            a = self.layer(self.action_size[0], w_init=hk.initializers.RandomUniform(-0.03, 0.03))(
+                a
+            )
             return v + a - jnp.mean(a, axis=1, keepdims=True)
 
         out = jax.vmap(qnet, in_axes=(None, 2), out_axes=2)(

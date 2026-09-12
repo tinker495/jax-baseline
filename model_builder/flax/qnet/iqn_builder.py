@@ -7,9 +7,9 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
-from model_builder.flax.layers import Dense, NoisyDense
+from model_builder.flax.layers import Dense, NoisyDense, network_body
 from model_builder.flax.Module import PreProcess
-from model_builder.model_config import ACTIVATIONS, MLPConfig
+from model_builder.model_config import MLPConfig
 from model_builder.utils import (
     dummy_observation,
     print_flax_model_summary,
@@ -46,31 +46,14 @@ class Model(nn.Module):
             )  # [ batch x feature ]
             mul_embedding = feature * quantile_embedding  # [ batch x feature ]
             if not self.dueling:
-                q_net = nn.Sequential(
-                    [
-                        layer
-                        for config in self.network.layers
-                        for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
-                    ]
-                    + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))]
-                )(mul_embedding)
-                return q_net
-            v = nn.Sequential(
-                [
-                    layer
-                    for config in self.network.layers
-                    for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
-                ]
-                + [self.layer(1, kernel_init=clip_factorized_uniform(3))]
-            )(mul_embedding)
-            a = nn.Sequential(
-                [
-                    layer
-                    for config in self.network.layers
-                    for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
-                ]
-                + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))]
-            )(mul_embedding)
+                q_net = network_body(mul_embedding, self.network, self.layer)
+                return self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(
+                    q_net
+                )
+            v = network_body(mul_embedding, self.network, self.layer)
+            v = self.layer(1, kernel_init=clip_factorized_uniform(3))(v)
+            a = network_body(mul_embedding, self.network, self.layer)
+            a = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(a)
             q = v + a - jnp.mean(a, axis=1, keepdims=True)
             return q
 

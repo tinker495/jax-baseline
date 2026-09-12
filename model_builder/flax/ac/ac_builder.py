@@ -4,9 +4,9 @@ import jax.numpy as jnp
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
-from model_builder.flax.layers import Dense
+from model_builder.flax.layers import Dense, network_body
 from model_builder.flax.Module import PreProcess
-from model_builder.model_config import ACTIVATIONS, MLPConfig
+from model_builder.model_config import MLPConfig
 from model_builder.utils import (
     dummy_observation,
     get_critic_apply_fn,
@@ -23,13 +23,7 @@ class Actor(nn.Module):
 
     @nn.compact
     def __call__(self, features: jnp.ndarray) -> jnp.ndarray | tuple[jnp.ndarray, jnp.ndarray]:
-        mlp = nn.Sequential(
-            [
-                operation
-                for layer in self.network.layers
-                for operation in (self.layer(layer.units), ACTIVATIONS[layer.activation])
-            ]
-        )(features)
+        mlp = network_body(features, self.network, self.layer)
         if self.action_type == "discrete":
             action_probs = self.layer(
                 self.action_size[0], kernel_init=clip_factorized_uniform(0.01)
@@ -52,15 +46,8 @@ class Critic(nn.Module):
 
     @nn.compact
     def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
-        net = nn.Sequential(
-            [
-                operation
-                for layer in self.network.layers
-                for operation in (self.layer(layer.units), ACTIVATIONS[layer.activation])
-            ]
-            + [self.layer(1, kernel_init=clip_factorized_uniform(0.01))]
-        )(features)
-        return net
+        net = network_body(features, self.network, self.layer)
+        return self.layer(1, kernel_init=clip_factorized_uniform(0.01))(net)
 
 
 def model_builder_maker(observation_space, action_size, action_type, policy_kwargs):

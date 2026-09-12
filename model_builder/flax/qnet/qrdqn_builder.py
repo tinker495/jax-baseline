@@ -5,9 +5,9 @@ import jax.numpy as jnp
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
-from model_builder.flax.layers import Dense, NoisyDense
+from model_builder.flax.layers import Dense, NoisyDense, network_body
 from model_builder.flax.Module import PreProcess
-from model_builder.model_config import ACTIVATIONS, MLPConfig
+from model_builder.model_config import MLPConfig
 from model_builder.utils import (
     dummy_observation,
     print_flax_model_summary,
@@ -31,49 +31,24 @@ class Model(nn.Module):
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         if not self.dueling:
-            q_net = nn.Sequential(
-                [
-                    layer
-                    for config in self.network.layers
-                    for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
-                ]
-                + [
-                    self.layer(
-                        self.action_size[0] * self.support_n,
-                        kernel_init=clip_factorized_uniform(3 / self.support_n),
-                    ),
-                    lambda x: jnp.reshape(x, (x.shape[0], self.action_size[0], self.support_n)),
-                ]
-            )(feature)
-            return q_net
-        v = nn.Sequential(
-            [
-                layer
-                for config in self.network.layers
-                for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
-            ]
-            + [
-                self.layer(
-                    self.support_n,
-                    kernel_init=clip_factorized_uniform(3 / self.support_n),
-                ),
-                lambda x: jnp.reshape(x, (x.shape[0], 1, self.support_n)),
-            ]
-        )(feature)
-        a = nn.Sequential(
-            [
-                layer
-                for config in self.network.layers
-                for layer in (self.layer(config.units), ACTIVATIONS[config.activation])
-            ]
-            + [
-                self.layer(
-                    self.action_size[0] * self.support_n,
-                    kernel_init=clip_factorized_uniform(3 / self.support_n),
-                ),
-                lambda x: jnp.reshape(x, (x.shape[0], self.action_size[0], self.support_n)),
-            ]
-        )(feature)
+            q_net = network_body(feature, self.network, self.layer)
+            q_net = self.layer(
+                self.action_size[0] * self.support_n,
+                kernel_init=clip_factorized_uniform(3 / self.support_n),
+            )(q_net)
+            return jnp.reshape(q_net, (q_net.shape[0], self.action_size[0], self.support_n))
+        v = network_body(feature, self.network, self.layer)
+        v = self.layer(
+            self.support_n,
+            kernel_init=clip_factorized_uniform(3 / self.support_n),
+        )(v)
+        v = jnp.reshape(v, (v.shape[0], 1, self.support_n))
+        a = network_body(feature, self.network, self.layer)
+        a = self.layer(
+            self.action_size[0] * self.support_n,
+            kernel_init=clip_factorized_uniform(3 / self.support_n),
+        )(a)
+        a = jnp.reshape(a, (a.shape[0], self.action_size[0], self.support_n))
         q = v + a - jnp.mean(a, axis=1, keepdims=True)
         return q
 

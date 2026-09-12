@@ -1,10 +1,10 @@
-from typing import Optional
-
 import haiku as hk
 import jax
-import jax.lax as lax
 import jax.numpy as jnp
 import numpy as np
+from jax import lax
+
+from model_builder.model_config import ACTIVATIONS, MLPConfig
 
 SIGMA_INIT = 0.5
 
@@ -27,8 +27,8 @@ class NoisyLinear(hk.Module):
         self,
         output_size: int,
         with_bias: bool = True,
-        w_init: Optional[hk.initializers.Initializer] = None,
-        b_init: Optional[hk.initializers.Initializer] = None,
+        w_init: hk.initializers.Initializer | None = None,
+        b_init: hk.initializers.Initializer | None = None,
     ):
         super().__init__()
         self.output_size = output_size
@@ -40,7 +40,7 @@ class NoisyLinear(hk.Module):
         self,
         inputs: jnp.ndarray,
         *,
-        precision: Optional[lax.Precision] = None,
+        precision: lax.Precision | None = None,
     ) -> jnp.ndarray:
         """Computes a linear transform of the input."""
         if not inputs.shape:
@@ -80,3 +80,13 @@ class NoisyLinear(hk.Module):
             b = jnp.broadcast_to(b_mu + b_sigma * eps_out, out.shape)
             out = out + b
         return out
+
+
+def network_body(
+    features: jnp.ndarray,
+    network: MLPConfig,
+    layer: type[hk.Linear] | type[NoisyLinear] = hk.Linear,
+) -> jnp.ndarray:
+    for hidden in network.layers:
+        features = ACTIVATIONS[hidden.activation](layer(hidden.units)(features))
+    return features

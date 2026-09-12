@@ -89,7 +89,7 @@ def run_family(runner: FamilyRunner, argv=None):
             int(args.steps),
             experiment_name=args.experiment_name,
             eval_num=args.eval_num,
-            logger_factory=resolve_logger_factory(args),
+            logger_factory=resolve_logger_factory(args, policy_kwargs=policy_kwargs),
             progress_factory=make_progress,
             record_test_fn=test_fn,
         )
@@ -146,7 +146,7 @@ def run_distributed_family(runner: DistributedFamilyRunner, argv=None):
     spec = runner.algos[args.algo]
     maker = resolve_maker(runner, spec, args)
     policy_kwargs = runner.policy_kwargs(args)
-    logger_factory = resolve_logger_factory(args)
+    logger_factory = resolve_logger_factory(args, policy_kwargs=policy_kwargs)
     runtime = RayDistributedRuntime(num_cpus=args.worker + runner.ray_cpu_headroom, num_gpus=0)
     try:
         workers = runner.make_workers(args, runtime)
