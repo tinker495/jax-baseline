@@ -43,7 +43,7 @@ from pathlib import Path
 
 import yaml
 
-from experiments.cli._common import load_runtime_env
+from experiments.cli._common import default_logdir, load_runtime_env
 from experiments.cli._validation import parse_runner_args, runner_parser
 from experiments.cli.apex_dpg import APEX_DPG_RUNNER
 from experiments.cli.apex_qnet import APEX_QNET_RUNNER
@@ -80,8 +80,11 @@ def _iter_commands(config, cli_overrides=None, *, config_dir: Path | None = None
     cli_overrides = cli_overrides or {}
     if config_dir is None:
         config_dir = Path.cwd()
-    if not isinstance(config, dict) or "runner" not in config:
-        raise ValueError("sweep must be a mapping with a runner")
+    if not isinstance(config, dict) or "runner" not in config or "category" not in config:
+        raise ValueError("sweep must be a mapping with a runner and category")
+    category = config["category"]
+    if not isinstance(category, str) or not category.strip():
+        raise ValueError("category must be a nonempty string")
     config = {"base": {}, "runtime": {}, "variants": [{}], **config}
     runner = config["runner"]
     if not isinstance(runner, str) or runner not in RUNNERS:
@@ -110,7 +113,12 @@ def _iter_commands(config, cli_overrides=None, *, config_dir: Path | None = None
         if not variant["enabled"]:
             continue
         variant_args = {k: v for k, v in variant.items() if k != "enabled"}
-        merged = {**base, **variant_args, **cli_overrides}
+        merged = {
+            "logdir": default_logdir(category),
+            **base,
+            **variant_args,
+            **cli_overrides,
+        }
         for key, value in merged.items():
             if f"--{key}" not in parser._option_string_actions:
                 parser.error(f"unrecognized argument: --{key}")
@@ -176,17 +184,12 @@ def main(argv=None):
         config = yaml.safe_load(source)
     except (OSError, yaml.YAMLError) as exc:
         parser.error(str(exc))
-    if not isinstance(config, dict) or "category" not in config:
-        parser.error("sweep must be a mapping with a category")
-    category = config["category"]
-    if not isinstance(category, str) or not category.strip():
-        parser.error("category must be a nonempty string")
-
     try:
         commands = list(_iter_commands(config, cli_overrides, config_dir=Path(args.config).parent))
     except (TypeError, ValueError) as exc:
         parser.error(str(exc))
 
+    category = config["category"]
     runtime = config["runtime"] if "runtime" in config and config["runtime"] is not None else {}
     env = os.environ.copy()
     if "device" in runtime:
