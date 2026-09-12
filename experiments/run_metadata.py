@@ -191,6 +191,20 @@ def collect_run_metadata(
     }
 
 
+def tracking_experiment_name(experiment_name: str, metadata: dict[str, object] | None) -> str:
+    if metadata is None:
+        return experiment_name
+    sweep = metadata["sweep"]
+    if sweep is None:
+        return experiment_name
+    if not isinstance(sweep, dict):
+        raise TypeError("run metadata sweep must be a mapping")
+    category = dict(sweep)["category"]
+    if not isinstance(category, str) or not category.strip():
+        raise ValueError("run metadata sweep category must be a nonempty string")
+    return category
+
+
 def write_run_metadata(local_dir: str, metadata: dict[str, object] | None) -> None:
     if metadata is None:
         return

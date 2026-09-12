@@ -42,8 +42,8 @@ def add_logger_args(parser: ArgumentParser) -> None:
         help=f"logging backend (default tensorboard; env ${LOGGER_ENV})",
     )
     # Weights & Biases (--logger wandb); standard WANDB_* env vars are the defaults.
-    # The W&B project is `experiment_name` (--experiment_name), the cross-backend
-    # experiment grouping. WANDB_API_KEY is read by the wandb SDK once loaded from .env.
+    # Sweeps group Aim experiments and W&B projects by category; direct runners
+    # use --experiment_name. WANDB_API_KEY is read by the SDK once loaded from .env.
     parser.add_argument(
         "--wandb_entity",
         type=str,

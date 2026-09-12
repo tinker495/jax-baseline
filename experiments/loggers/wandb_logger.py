@@ -14,7 +14,7 @@ from typing import Any
 
 import numpy as np
 
-from experiments.run_metadata import write_run_metadata
+from experiments.run_metadata import tracking_experiment_name, write_run_metadata
 from experiments.runtime_adapters import create_run_directory
 from jax_baselines.core.hparams import get_hyper_params
 
@@ -84,11 +84,9 @@ class WandbLogger:
     ):
         self._wandb = wandb_module
         self._run_name = run_name
-        self._experiment_name = experiment_name
+        self._project = tracking_experiment_name(experiment_name, run_metadata)
         self._local_dir = create_run_directory(local_dir, experiment_name, run_name)
         write_run_metadata(self._local_dir, run_metadata)
-        # experiment_name IS the W&B project (the cross-backend experiment grouping).
-        self._project = experiment_name
         self._entity = entity
         self._mode = mode
         self._agent = agent
