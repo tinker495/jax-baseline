@@ -1,12 +1,13 @@
 """Config-driven experiment sweep runner (``exp``).
 
 Reads a YAML sweep definition and launches each variant as an isolated
-subprocess invoking the matching family console script. Process-per-variant
+subprocess invoking the selected runner console script. Process-per-variant
 preserves the JAX/XLA + GPU-memory isolation the legacy shell scripts relied on.
 
 YAML schema
 -----------
-family:   one of qnet | dpg | pg | impala | apex_qnet | apex_dpg
+category: experiment topic, e.g. atari_100k | atari | mjlab | mujoco
+runner:   one of qnet | dpg | pg | impala | apex_qnet | apex_dpg
 base:     mapping of CLI args shared by every variant (keys without leading --)
 variants: list of mappings; each is merged over ``base`` (variant wins).
           A variant may set ``enabled: false`` to keep it on record but skipped.
@@ -44,7 +45,7 @@ import yaml
 from experiments.cli._common import load_runtime_env
 from model_builder.model_config import load_model_config, model_config_dict
 
-FAMILY_SCRIPTS = {
+RUNNER_SCRIPTS = {
     "qnet": "qnet",
     "dpg": "dpg",
     "pg": "pg",
@@ -70,10 +71,10 @@ def _iter_commands(config, cli_overrides=None, *, config_dir: Path | None = None
     cli_overrides = cli_overrides or {}
     if config_dir is None:
         config_dir = Path.cwd()
-    family = config["family"]
-    if family not in FAMILY_SCRIPTS:
-        raise ValueError(f"unknown family '{family}', expected one of {sorted(FAMILY_SCRIPTS)}")
-    script = FAMILY_SCRIPTS[family]
+    runner = config["runner"]
+    if not isinstance(runner, str) or runner not in RUNNER_SCRIPTS:
+        raise ValueError(f"unknown runner '{runner}', expected one of {sorted(RUNNER_SCRIPTS)}")
+    script = RUNNER_SCRIPTS[runner]
     base = config.get("base") or {}
     runtime = config.get("runtime") or {}
     xvfb = runtime.get("xvfb", False)
@@ -134,6 +135,10 @@ def main(argv=None):
     with Path(args.config).open() as handle:
         config = yaml.safe_load(handle)
 
+    category = config["category"]
+    if not isinstance(category, str) or not category.strip():
+        raise ValueError("category must be a nonempty string")
+
     runtime = config.get("runtime") or {}
     env = os.environ.copy()
     if "device" in runtime:
@@ -151,6 +156,7 @@ def main(argv=None):
     export_dir = args.export_models.resolve() if args.export_models is not None else None
     if export_dir is not None:
         export_dir.mkdir(parents=True, exist_ok=True)
+    print(f"category: {category}", flush=True)
     failures = []
     for index, (command, models) in enumerate(
         zip(commands, model_definitions, strict=True), start=1

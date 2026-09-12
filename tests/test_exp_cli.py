@@ -8,7 +8,8 @@ def test_set_overrides_parse_yaml_scalars(tmp_path, capsys):
     config_path.write_text(
         yaml.safe_dump(
             {
-                "family": "qnet",
+                "category": "atari",
+                "runner": "qnet",
                 "base": {"clip_rewards": True, "batch_size": 32},
                 "variants": [{}],
             }
@@ -31,4 +32,6 @@ def test_set_overrides_parse_yaml_scalars(tmp_path, capsys):
         == 0
     )
 
-    assert capsys.readouterr().out.strip() == "[1/1] qnet --batch_size 64 --dueling_model"
+    assert capsys.readouterr().out.strip() == (
+        "category: atari\n[1/1] qnet --batch_size 64 --dueling_model"
+    )

@@ -82,7 +82,7 @@ testpaths = ["tests"]
 include = ["jax_baselines*", "env_builder*", "experiments*", "model_builder*", "replay_memory*"]
 
 [tool.setuptools.package-data]
-experiments = ["configs/*.yaml", "configs/models/*.json", "configs/models/README.md"]
+experiments = ["configs/*/*.yaml", "configs/README.md", "configs/models/*.json", "configs/models/README.md"]
 
 [tool.uv]
 package = true

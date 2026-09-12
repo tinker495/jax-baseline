@@ -16,18 +16,19 @@ def test_simulator_extra_is_optional_and_old_stacks_are_removed():
 
 
 @pytest.mark.parametrize(
-    ("filename", "family", "algorithms"),
+    ("filename", "runner", "algorithms"),
     [("pg_mjlab_go1.yaml", "pg", ["PPO", "SPO"]), ("dpg_mjlab_go1.yaml", "dpg", ["TQC"])],
 )
-def test_adapter_configs_preserve_actor_and_critic_observations(filename, family, algorithms):
-    path = Path("experiments/configs") / filename
+def test_adapter_configs_preserve_actor_and_critic_observations(filename, runner, algorithms):
+    path = Path("experiments/configs/mjlab") / filename
     config = yaml.safe_load(path.read_text())
     expected = {
         "env": "Mjlab-Velocity-Flat-Unitree-Go1",
         "env_backend": "mjlab",
         "env_device": "cuda:0",
     }
-    assert config["family"] == family
+    assert config["category"] == "mjlab"
+    assert config["runner"] == runner
     assert config["variants"] == [{"algo": algo, "enabled": True} for algo in algorithms]
     assert config["base"] | expected == config["base"]
     assert config["base"]["obs_rms_norm"] is True
@@ -35,7 +36,7 @@ def test_adapter_configs_preserve_actor_and_critic_observations(filename, family
     assert "env_observation_key" not in config["base"]
 
     command = next(_iter_commands(config, config_dir=path.parent))
-    assert command[0] == family
+    assert command[0] == runner
     assert "--obs_rms_norm" in command
     assert "--env_observation_key" not in command
     for key, value in expected.items():

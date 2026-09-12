@@ -1,0 +1,54 @@
+# translated from test/test_dpg_Humanoid.sh
+category: mujoco
+runner: dpg
+runtime:
+  device: 0
+  xvfb: true
+base:
+  # 20 evaluations over the whole run (was hardcoded ~100)
+  eval_num: 20
+  experiment_name: DPG_Humanoid
+  env: Humanoid-v5
+  learning_rate: 0.0003
+  steps: 5e6
+  buffer_size: 1e6
+  batch: 256
+  target_update_tau: 5e-3
+  learning_starts: 50000
+  use_checkpointing: true
+  actor_model: ../models/mlp_256x2_relu.json
+  critic_model: ../models/mlp_256x2_relu.json
+  optimizer: adam
+variants:
+  - {algo: TD3}
+  - algo: TD3
+    obs_rms_norm: true
+    actor_model: ../models/simba_256x2_relu.json
+    critic_model: ../models/simba_256x2_relu.json
+  - algo: TD3
+    obs_rms_norm: true
+    actor_model: ../models/simbav2_256x2_relu.json
+    critic_model: ../models/simbav2_256x2_relu.json
+  - {algo: SAC}
+  - algo: SAC
+    obs_rms_norm: true
+    actor_model: ../models/simba_256x2_relu.json
+    critic_model: ../models/simba_256x2_relu.json
+  - algo: SAC
+    obs_rms_norm: true
+    actor_model: ../models/simbav2_256x2_relu.json
+    critic_model: ../models/simbav2_256x2_relu.json
+  - {algo: TQC}
+  - algo: TQC
+    obs_rms_norm: true
+    actor_model: ../models/simba_256x2_relu.json
+    critic_model: ../models/simba_256x2_relu.json
+  - algo: TQC
+    obs_rms_norm: true
+    actor_model: ../models/simbav2_256x2_relu.json
+    critic_model: ../models/simbav2_256x2_relu.json
+  - {algo: CrossQ, critic_model: ../models/mlp_2048x2_tanh.json}
+  - algo: XQC
+    actor_model: ../models/mlp_256x4_relu.json
+    critic_model: ../models/mlp_512x4_relu.json
+  - {algo: TD7, critic_model: ../models/mlp_256x2_elu.json}
