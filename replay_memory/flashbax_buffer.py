@@ -8,6 +8,7 @@ import jax.numpy as jnp
 from flashbax.buffers import prioritised_trajectory_buffer, sum_tree, trajectory_buffer
 
 from jax_baselines.core.replay_protocol import LocalReplayNeed, SelfPredictionReplayNeed
+from jax_baselines.core.replay_training import ReplayTrainingBatch, train_replay
 
 
 class FlashbaxReplayBuffer:
@@ -62,6 +63,7 @@ class FlashbaxReplayBuffer:
         self._add_compiled = jax.jit(self._add, donate_argnums=(0, 1))
         self._sample_compiled = jax.jit(self._sample, static_argnums=(2, 3))
         self._update_compiled = jax.jit(self._update_priorities, donate_argnums=(0,))
+        self._trainers = {}
         self.clear()
 
     def clear(self):
@@ -245,14 +247,69 @@ class FlashbaxReplayBuffer:
         )
 
     def sample(self, batch_size: int, beta=0.4):
+        self._validate_sample(batch_size, beta)
+        self._key, batch = self._sample_compiled(self.state, self._key, batch_size, beta)
+        return batch
+
+    def _validate_sample(self, batch_size, beta):
         if batch_size < 1 or not 0 <= beta <= 1:
             raise ValueError("batch_size must be positive and beta must be in [0, 1]")
         if not self._sample_ready:
             if len(self) == 0:
                 raise ValueError("Cannot sample from empty replay")
             self._sample_ready = True
-        self._key, batch = self._sample_compiled(self.state, self._key, batch_size, beta)
-        return batch
+
+    def train(self, batch: ReplayTrainingBatch, learner, args, *, bulk, priority_index):
+        self._validate_sample(batch.sample_size, batch.beta)
+        if batch.chunk_size < 0 or (batch.chunk_size and batch.sample_size % batch.chunk_size):
+            raise ValueError("Replay sample size must divide evenly into positive chunks")
+        runner_key = (learner, bulk, priority_index)
+        if runner_key not in self._trainers:
+            # Keep callables out of static keys and partial signature defaults:
+            # both can retain finished agents through JAX's global caches.
+            def train(
+                state,
+                key,
+                args,
+                observation_statistics,
+                reward_statistics,
+                *,
+                sample_size,
+                beta,
+                chunk_size,
+            ):
+                return train_replay(
+                    state,
+                    key,
+                    args,
+                    observation_statistics,
+                    reward_statistics,
+                    sample=self._sample,
+                    update=self._update_priorities if self.priority is not None else None,
+                    learner=learner,
+                    sample_size=sample_size,
+                    beta=beta,
+                    chunk_size=chunk_size,
+                    bulk=bulk,
+                    priority_index=priority_index,
+                )
+
+            self._trainers[runner_key] = jax.jit(
+                train,
+                static_argnames=("sample_size", "beta", "chunk_size"),
+                donate_argnums=(0,),
+            )
+        self.state, self._key, result = self._trainers[runner_key](
+            self.state,
+            self._key,
+            args,
+            batch.observation_statistics,
+            batch.reward_statistics,
+            sample_size=batch.sample_size,
+            beta=batch.beta,
+            chunk_size=batch.chunk_size,
+        )
+        return result
 
     def _sample(self, state, key, batch_size, beta):
         key, sample_key = jax.random.split(key)
