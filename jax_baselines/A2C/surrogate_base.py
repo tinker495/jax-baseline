@@ -17,8 +17,8 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
 
     PPO and SPO share identical rollout preprocessing (GAE) and the
     minibatch/epoch optimization loop; they differ only in the per-sample actor
-    loss supplied through ``_loss_discrete``/``_loss_continuous`` (wired to
-    ``self._loss`` by ``Actor_Critic_Policy_Gradient_Family``).
+    loss supplied through ``_actor_loss_discrete``/``_actor_loss_continuous``
+    (wired to ``self._actor_loss`` by ``Actor_Critic_Policy_Gradient_Family``).
     """
 
     def __init__(
@@ -187,10 +187,11 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
                 if self.gae_normalize and self.gae_normalize_scope == "minibatch":
                     adv = normalize_advantage(adv)
                 use_key, key = jax.random.split(key)
-                (_total_loss, (c_loss, a_loss, entropy_loss)), (actor_grad, critic_grad) = (
-                    jax.value_and_grad(self._loss, argnums=(0, 1), has_aux=True)(
-                        actor_params, critic_params, obs, act, oldv, target, act_prob, adv, use_key
-                    )
+                (_, (a_loss, entropy_loss)), actor_grad = jax.value_and_grad(
+                    self._actor_loss, has_aux=True
+                )(actor_params, obs, act, act_prob, adv, use_key)
+                c_loss, critic_grad = jax.value_and_grad(self._critic_loss)(
+                    critic_params, actor_params, obs, oldv, target, use_key
                 )
                 actor_updates, actor_opt_state = self.optimizer.update(
                     actor_grad, actor_opt_state, params=actor_params
@@ -259,4 +260,11 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
             actor_loss / self.epoch_num,
             entropy_loss / self.epoch_num,
             jnp.mean(targets),
+        )
+
+    def _critic_loss(self, critic_params, actor_params, obses, old_value, targets, key):
+        values = self.critic(critic_params, actor_params, key, obses)
+        clipped_values = old_value + jnp.clip(values - old_value, -self.value_clip, self.value_clip)
+        return jnp.mean(
+            jnp.maximum(jnp.square(values - targets), jnp.square(clipped_values - targets))
         )

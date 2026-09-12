@@ -26,7 +26,6 @@ base:
   lr_annealing: true
   learning_rate: 0.00025
   ent_coef: 0.01
-  val_coef: 0.5
   epoch_num: 4
   value_clip: 0.1
   gae_normalize: true

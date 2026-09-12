@@ -2,8 +2,9 @@ from functools import partial
 
 import jax
 
+from jax_baselines.APE_X.common_servers import WorkerMetricLogger
 from jax_baselines.core.env_info import prepare_worker_env
-from jax_baselines.core.env_protocols import batch_observation
+from jax_baselines.core.env_protocols import batch_observation, log_environment_metrics
 from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
 from jax_baselines.core.seeding import seed_prngs
 
@@ -65,6 +66,7 @@ class Ape_X_Worker:
             params = jax.device_put(param_server.get_params())
             eplen = 0
             episode = 0
+            environment_logger = WorkerMetricLogger("" if eps is None else f"/eps{eps:.2f}")
             if eps is None:
                 rw_label = "rollout/episode_reward"
                 len_label = "rollout/episode_length"
@@ -85,6 +87,13 @@ class Ape_X_Worker:
                 next_obs, reward, terminated, truncated, _info = self.env.step(actions)
                 next_obs = batch_observation(next_obs)
                 local_buffer.add(obs, actions, reward, next_obs, terminated, truncated)
+                if logger_server is not None:
+                    log_environment_metrics(
+                        self.env,
+                        environment_logger,
+                        episode,
+                        flush=bool(terminated or truncated),
+                    )
                 score += reward
                 obs = next_obs
 
@@ -94,11 +103,13 @@ class Ape_X_Worker:
                     obs = batch_observation(obs)
                     if logger_server is not None:
                         log_dict = {
+                            **environment_logger.metrics,
                             rw_label: score,
                             len_label: eplen,
                             to_label: float(truncated),
                         }
                         logger_server.log_worker(log_dict, episode)
+                        environment_logger.metrics.clear()
                     score = 0
                     eplen = 0
                     episode += 1
@@ -113,6 +124,10 @@ class Ape_X_Worker:
                         key=next(key_seq),
                     )
                     global_buffer.add(**transition, priorities=abs_td_error)
+            if logger_server is not None:
+                log_environment_metrics(self.env, environment_logger, episode)
+                if environment_logger.metrics:
+                    logger_server.log_worker(environment_logger.metrics, episode)
         finally:
             if stop.is_set():
                 print("worker stopped")

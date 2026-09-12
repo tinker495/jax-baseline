@@ -23,6 +23,8 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from jax_baselines.core.runtime_adapters import MetricLogger
+
 # Keys retain their role from the environment boundary through replay and model input:
 # unified_* is shared, actor_* is policy-only, and critic_* is value-only.
 Observation: TypeAlias = dict[str, Any]
@@ -125,6 +127,43 @@ class EvaluationContextEnv(Protocol):
         ...
 
 
+@runtime_checkable
+class EnvironmentLogging(Protocol):
+    """Environment-owned diagnostics, independent of algorithm observations/rewards.
+
+    Call after each consumed transition, before reset or evaluation. ``active``
+    selects evaluation workers; adapters exclude their own autoreset dummy rows.
+    ``flush=False`` accumulates without logging or host synchronization. A flush
+    without a new transition only emits pending aggregates. Adapters never retain
+    the logger, and shared evaluation must isolate their diagnostic state too.
+    """
+
+    def log_metrics(
+        self,
+        logger: MetricLogger,
+        steps: int | None,
+        *,
+        namespace: str = "rollout",
+        active: Any = None,
+        flush: bool = True,
+    ) -> None:
+        ...
+
+
+def log_environment_metrics(
+    env: Any,
+    logger: MetricLogger | None,
+    steps: int | None,
+    *,
+    namespace: str = "rollout",
+    active: Any = None,
+    flush: bool = True,
+) -> None:
+    """Dispatch optional diagnostics through the environment protocol."""
+    if logger is not None and isinstance(env, EnvironmentLogging):
+        env.log_metrics(logger, steps, namespace=namespace, active=active, flush=flush)
+
+
 # Backward-compatible name exported by env_builder; no separate ABC needed.
 Env = VectorizedEnv
 
@@ -145,16 +184,6 @@ def _done_mask(terminateds: Any, truncateds: Any) -> np.ndarray | jax.Array:
     )
 
 
-def vector_real_reset_mask(
-    env: Any, terminateds: Any, truncateds: Any, infos: Any
-) -> np.ndarray | jax.Array:
-    real_reset_mask = getattr(env, "real_reset_mask", None)
-    if callable(real_reset_mask):
-        mask = real_reset_mask(terminateds, truncateds, infos)
-        return mask.astype(bool) if isinstance(mask, jax.Array) else np.asarray(mask, dtype=bool)
-    return _done_mask(terminateds, truncateds)
-
-
 def vector_autoreset_mask(
     env: Any, terminateds: Any, truncateds: Any, infos: Any
 ) -> np.ndarray | jax.Array:
@@ -163,13 +192,6 @@ def vector_autoreset_mask(
         mask = autoreset_mask(terminateds, truncateds, infos)
         return mask.astype(bool) if isinstance(mask, jax.Array) else np.asarray(mask, dtype=bool)
     return _done_mask(terminateds, truncateds)
-
-
-def single_real_episode_end(terminated: Any, truncated: Any, info: Any) -> bool:
-    """Return the adapter-normalized real episode boundary for one environment."""
-    if isinstance(info, dict) and "real_episode_end" in info:
-        return bool(info["real_episode_end"])
-    return bool(terminated or truncated)
 
 
 def reset_for_evaluation(env: Any) -> Any:

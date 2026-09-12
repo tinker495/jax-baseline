@@ -16,6 +16,17 @@ class Param_server:
         self.params = params
 
 
+class WorkerMetricLogger:
+    """Collect environment metrics for one worker's next episode report."""
+
+    def __init__(self, suffix: str = "") -> None:
+        self.suffix = suffix
+        self.metrics: dict[str, float] = {}
+
+    def log_metric(self, key: str, value: float, step: int | None = None) -> None:
+        self.metrics[f"{key}{self.suffix}"] = float(value)
+
+
 class Logger_server:
     def __init__(
         self, log_dir, log_name, experiment_name="experiment", logger_factory=None
@@ -27,7 +38,7 @@ class Logger_server:
         self.logger = logger_factory(log_name, experiment_name, log_dir, None)
         self.step = 0
         self.old_step = 0
-        self.save_dict = dict()
+        self.save_dict = {}
         with self.logger as run:
             self.save_path = os.path.normpath(run.get_local_path(""))
 
@@ -49,7 +60,7 @@ class Logger_server:
             with self.logger as run:
                 for key, value in self.save_dict.items():
                     run.log_metric(key, np.mean(value), self.step)
-                self.save_dict = dict()
+                self.save_dict = {}
                 self.old_step = self.step
         for key, value in log_dict.items():
             if key in self.save_dict:

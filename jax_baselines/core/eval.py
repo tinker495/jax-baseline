@@ -8,50 +8,10 @@ from jax_baselines.core.env_protocols import (
     EvaluationContextEnv,
     VectorizedEvalEnv,
     batch_observation,
+    log_environment_metrics,
     reset_for_evaluation,
-    single_real_episode_end,
     vector_autoreset_mask,
-    vector_real_reset_mask,
 )
-
-
-def extract_original_reward(info):
-    """Return a single-step original reward from an env info dict, if present."""
-    if isinstance(info, dict):
-        return info.get("original_reward")
-    return None
-
-
-def extract_vector_original_rewards(infos, worker_size):
-    """Return per-worker original rewards and a presence mask from vector infos.
-
-    Gymnasium vector envs usually return a dict of arrays, while some wrappers
-    expose one info dict per worker. Supporting both shapes keeps rollout
-    logging independent from the vector backend.
-    """
-    values = np.zeros(worker_size, dtype=np.float64)
-    present = np.zeros(worker_size, dtype=bool)
-    if isinstance(infos, (list, tuple)):
-        for idx, info in enumerate(infos[:worker_size]):
-            if not isinstance(info, dict) or "original_reward" not in info:
-                continue
-            values[idx] = info["original_reward"]
-            present[idx] = True
-        return values, present
-    if not isinstance(infos, dict) or "original_reward" not in infos:
-        return values, present
-    raw = np.asarray(infos["original_reward"], dtype=np.float64)
-    if raw.shape == ():
-        raw = np.full(worker_size, raw.item(), dtype=np.float64)
-    else:
-        raw = raw.reshape(-1)
-    count = min(worker_size, raw.shape[0])
-    values[:count] = raw[:count]
-    if "_original_reward" not in infos or infos["_original_reward"] is None:
-        present[:count] = True
-        return values, present
-    present[:count] = np.asarray(infos["_original_reward"], dtype=bool).reshape(-1)[:count]
-    return values, present
 
 
 def log_measurement(
@@ -62,18 +22,8 @@ def log_measurement(
     episode_reward,
     episode_length,
     timeout_rate,
-    original_reward=None,
 ):
-    """Write the canonical four measurement leaves under a namespace prefix.
-
-    The single tag-writer for both the ``eval/`` (frozen policy measured on a
-    separate ``eval_env``) and ``rollout/`` (behavior policy's own training
-    episodes) namespaces, so their leaf names can never drift apart again.
-    ``original_reward`` is logged only when an Atari wrapper supplied an
-    unclipped score.
-    """
-    if original_reward is not None:
-        log_metric(f"{namespace}/original_reward", original_reward, steps)
+    """Write algorithm-level episode statistics under a namespace prefix."""
     log_metric(f"{namespace}/episode_reward", episode_reward, steps)
     log_metric(f"{namespace}/episode_length", episode_length, steps)
     log_metric(f"{namespace}/timeout_rate", timeout_rate, steps)
@@ -96,17 +46,13 @@ def _normalize_action_for_step(step_action):
     return arr.reshape(-1)
 
 
-def _evaluate_single_episodes(eval_env, eval_eps, act_eval_fn, conv_action):
-    original_rewards = []
+def _evaluate_single_episodes(eval_env, eval_eps, act_eval_fn, conv_action, logger_run, steps):
     total_reward = np.zeros(eval_eps)
     total_ep_len = np.zeros(eval_eps)
     total_truncated = np.zeros(eval_eps)
 
-    obs, info = reset_for_evaluation(eval_env)
+    obs, _ = reset_for_evaluation(eval_env)
     obs = batch_observation(obs)
-    have_original_reward = "original_reward" in info
-    if have_original_reward:
-        original_reward = info["original_reward"]
     terminated = False
     truncated = False
     eplen = 0
@@ -119,29 +65,26 @@ def _evaluate_single_episodes(eval_env, eval_eps, act_eval_fn, conv_action):
             # Normalize action so env.step receives a proper scalar when applicable
             action_to_step = _normalize_action_for_step(step_action)
 
-            observation, reward, terminated, truncated, info = eval_env.step(action_to_step)
+            observation, reward, terminated, truncated, _ = eval_env.step(action_to_step)
+            log_environment_metrics(eval_env, logger_run, steps, namespace="eval", flush=False)
             obs = batch_observation(observation)
-            if have_original_reward and "original_reward" in info:
-                original_reward += info["original_reward"]
             total_reward[ep] += reward
             eplen += 1
 
         total_ep_len[ep] = eplen
         total_truncated[ep] = float(truncated)
-        if have_original_reward and single_real_episode_end(terminated, truncated, info):
-            original_rewards.append(original_reward)
-            original_reward = 0
-
-        obs, info = eval_env.reset()
+        obs, _ = eval_env.reset()
         obs = batch_observation(obs)
         terminated = False
         truncated = False
         eplen = 0
 
-    return total_reward, total_ep_len, total_truncated, original_rewards
+    return total_reward, total_ep_len, total_truncated
 
 
-def _evaluate_vector_episodes(eval_env: VectorizedEvalEnv, eval_eps, act_eval_fn, conv_action):
+def _evaluate_vector_episodes(
+    eval_env: VectorizedEvalEnv, eval_eps, act_eval_fn, conv_action, logger_run, steps
+):
     workers = eval_env.get_info()["worker_num"]
     if workers < 1:
         raise ValueError("Evaluation worker count must be positive")
@@ -151,13 +94,11 @@ def _evaluate_vector_episodes(eval_env: VectorizedEvalEnv, eval_eps, act_eval_fn
     counts = np.zeros(workers, dtype=np.int64)
     rewards_sum = np.zeros(workers)
     lengths = np.zeros(workers, dtype=np.int64)
-    _, info = eval_env.reset()
-    originals, original_present = extract_vector_original_rewards(info, workers)
+    eval_env.reset()
     prev_done = np.zeros(workers, dtype=bool)
     total_reward = np.zeros(eval_eps)
     total_ep_len = np.zeros(eval_eps)
     total_truncated = np.zeros(eval_eps)
-    original_rewards = []
     completed = 0
 
     while completed < eval_eps:
@@ -165,40 +106,22 @@ def _evaluate_vector_episodes(eval_env: VectorizedEvalEnv, eval_eps, act_eval_fn
         actions = act_eval_fn(eval_env.current_obs())
         eval_env.step(conv_action(actions) if conv_action is not None else actions)
         _, rewards, terminateds, truncateds, infos = eval_env.get_result()
-        reward_infos = {}
-        if isinstance(infos, dict):
-            reward_infos = {
-                key: infos[key] for key in ("original_reward", "_original_reward") if key in infos
-            }
-        elif isinstance(infos, (list, tuple)):
-            reward_infos = [
-                {"original_reward": info["original_reward"]}
-                if isinstance(info, dict) and "original_reward" in info
-                else {}
-                for info in infos
-            ]
-        rewards, terminateds, truncateds, real_reset, autoreset, reward_infos = jax.device_get(
+        rewards, terminateds, truncateds, autoreset = jax.device_get(
             (
                 rewards,
                 terminateds,
                 truncateds,
-                vector_real_reset_mask(eval_env, terminateds, truncateds, infos),
                 vector_autoreset_mask(eval_env, terminateds, truncateds, infos),
-                reward_infos,
             )
         )
         done = np.logical_or(terminateds, truncateds)
         active = ~prev_done & (counts < targets)
+        log_environment_metrics(
+            eval_env, logger_run, steps, namespace="eval", active=active, flush=False
+        )
         rewards_sum[active] += rewards[active]
         lengths[active] += 1
-        original, present = extract_vector_original_rewards(reward_infos, workers)
-        originals[active & present] += original[active & present]
-        original_present[active & present] = True
         finished = done & active
-        emit_original = finished & real_reset & original_present
-        original_rewards.extend(originals[emit_original].tolist())
-        originals[emit_original] = 0
-        original_present[emit_original] = False
         end = completed + int(finished.sum())
         total_reward[completed:end] = rewards_sum[finished]
         total_ep_len[completed:end] = lengths[finished]
@@ -209,7 +132,7 @@ def _evaluate_vector_episodes(eval_env: VectorizedEvalEnv, eval_eps, act_eval_fn
         lengths[finished] = 0
         prev_done = done & autoreset & active
 
-    return total_reward, total_ep_len, total_truncated, original_rewards
+    return total_reward, total_ep_len, total_truncated
 
 
 def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, conv_action=None):
@@ -226,17 +149,14 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
         if isinstance(eval_env, EvaluationContextEnv)
         else nullcontext()
     ):
-        total_reward, total_ep_len, total_truncated, original_rewards = collect(
-            eval_env, eval_eps, act_eval_fn, conv_action
+        total_reward, total_ep_len, total_truncated = collect(
+            eval_env, eval_eps, act_eval_fn, conv_action, logger_run, steps
         )
+        log_environment_metrics(eval_env, logger_run, steps, namespace="eval")
     mean_reward = np.mean(total_reward)
     mean_ep_len = np.mean(total_ep_len)
 
-    mean_original_score = None
-    if original_rewards:
-        mean_original_score = np.mean(original_rewards)
-
-    if logger_run:
+    if logger_run is not None:
         log_measurement(
             logger_run.log_metric,
             "eval",
@@ -244,22 +164,19 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
             episode_reward=mean_reward,
             episode_length=mean_ep_len,
             timeout_rate=np.mean(total_truncated),
-            original_reward=mean_original_score,
         )
 
-    if mean_original_score is not None:
-        return {
-            "mean_reward": mean_reward,
-            "mean_ep_len": mean_ep_len,
-            "mean_original_score": mean_original_score,
-        }
-    else:
-        return {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
+    return {"mean_reward": mean_reward, "mean_ep_len": mean_ep_len}
 
 
-def run_test_episodes(test_env, actions_eval_fn, episode, conv_action=None):
+def run_test_episodes(
+    test_env, actions_eval_fn, episode, conv_action=None, *, logger_run=None, logging_env=None
+):
     """Run evaluation episodes on an already-constructed test environment."""
-
+    if episode < 1:
+        raise ValueError("episode must be positive")
+    # Recording wrappers step the same environment but need not expose its diagnostics.
+    logging_env = test_env if logging_env is None else logging_env
     total_rewards = []
     for _ in range(episode):
         obs, _ = test_env.reset()
@@ -274,12 +191,14 @@ def run_test_episodes(test_env, actions_eval_fn, episode, conv_action=None):
             action_to_step = _normalize_action_for_step(step_action)
 
             observation, reward, terminated, truncated, _ = test_env.step(action_to_step)
+            log_environment_metrics(logging_env, logger_run, None, namespace="test", flush=False)
             obs = batch_observation(observation)
             episode_rew += reward
             eplen += 1
         print("episod reward :", episode_rew, "episod len :", eplen)
         total_rewards.append(episode_rew)
 
+    log_environment_metrics(logging_env, logger_run, None, namespace="test")
     avg_reward = np.mean(total_rewards)
     std_reward = np.std(total_rewards)
     print(f"reward : {avg_reward} +- {std_reward}(std)")
@@ -297,8 +216,8 @@ def record_and_test(env_builder, logger_run, actions_eval_fn, episode, conv_acti
 
     test_env, _ = prepare_worker_env(env_builder)
     try:
-        return run_test_episodes(test_env, actions_eval_fn, episode, conv_action)
+        return run_test_episodes(
+            test_env, actions_eval_fn, episode, conv_action, logger_run=logger_run
+        )
     finally:
-        close = getattr(test_env, "close", None)
-        if callable(close):
-            close()
+        test_env.close()

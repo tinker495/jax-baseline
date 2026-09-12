@@ -17,16 +17,13 @@ from jax_baselines.core.checkpoint_store import (
 from jax_baselines.core.env_info import get_local_env_info, infer_action_meta
 from jax_baselines.core.env_protocols import (
     batch_observation,
-    single_real_episode_end,
+    log_environment_metrics,
     vector_autoreset_mask,
-    vector_real_reset_mask,
 )
 from jax_baselines.core.epoch_buffer import EpochBuffer
 from jax_baselines.core.eval import (
     _normalize_action_for_step,
     evaluate_policy,
-    extract_original_reward,
-    extract_vector_original_rewards,
     record_and_test,
 )
 from jax_baselines.core.normalization import (
@@ -66,7 +63,6 @@ class Actor_Critic_Policy_Gradient_Family:
         gamma=0.995,
         learning_rate=3e-4,
         batch_size=32,
-        val_coef=0.2,
         ent_coef=0.01,
         use_entropy_adv_shaping=True,
         entropy_adv_shaping_kappa=2.0,
@@ -102,7 +98,6 @@ class Actor_Critic_Policy_Gradient_Family:
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.gamma = gamma
-        self.val_coef = val_coef
         self.ent_coef = ent_coef
         self.log_dir = log_dir
         self.use_entropy_adv_shaping = use_entropy_adv_shaping
@@ -219,12 +214,12 @@ class Actor_Critic_Policy_Gradient_Family:
         if self.action_type == "discrete":
             self._get_actions = self._get_actions_discrete
             self.get_logprob = self.get_logprob_discrete
-            self._loss = self._loss_discrete
+            self._actor_loss = self._actor_loss_discrete
             self.actions = self.action_discrete
         elif self.action_type == "continuous":
             self._get_actions = self._get_actions_continuous
             self.get_logprob = self.get_logprob_continuous
-            self._loss = self._loss_continuous
+            self._actor_loss = self._actor_loss_continuous
             self.actions = self.action_continuous
 
     def setup_model(self):
@@ -293,11 +288,11 @@ class Actor_Critic_Policy_Gradient_Family:
         )
         return (prob, log_prob) if out_prob else log_prob
 
-    def _loss_continuous(self):
-        pass
+    def _actor_loss_continuous(self):
+        raise NotImplementedError
 
-    def _loss_discrete(self):
-        pass
+    def _actor_loss_discrete(self):
+        raise NotImplementedError
 
     def description(self, eval_result=None):
         description = ""
@@ -394,7 +389,7 @@ class Actor_Critic_Policy_Gradient_Family:
         )
 
     def learn_SingleEnv(self, ctx):
-        obs, info = self.env.reset() if self._initial_reset is None else self._initial_reset
+        obs, _ = self.env.reset() if self._initial_reset is None else self._initial_reset
         self._initial_reset = None
         obs = normalize_empirical_observation(
             batch_observation(obs), self.obs_rms, on_device=self.memory_backend == "gpu"
@@ -404,16 +399,18 @@ class Actor_Critic_Policy_Gradient_Family:
         eval_result = None
         score = 0.0
         eplen = 0
-        original = 0.0
-        have_original = False
+        steps = 0
+        last_log_step = 0
         for steps in ctx.pbar:
             actions = self.actions(obs)
             step_action = _normalize_action_for_step(self.conv_action(actions))
-            next_obs, reward, terminated, truncated, info = self.env.step(step_action)
+            next_obs, reward, terminated, truncated, _ = self.env.step(step_action)
+            log_due = steps - last_log_step >= ctx.log_interval
+            log_environment_metrics(self.env, ctx.logger_run, steps, flush=log_due)
+            if log_due:
+                last_log_step = steps
             next_obs = batch_observation(next_obs)
-            step_original = extract_original_reward(info)
             if terminated or truncated:
-                real_episode_end = single_real_episode_end(terminated, truncated, info)
                 next_obs = {key: value.copy() for key, value in next_obs.items()}
                 action_observation, _ = self.env.reset()
                 action_observation = batch_observation(action_observation)
@@ -435,27 +432,19 @@ class Actor_Critic_Policy_Gradient_Family:
             )
             score += float(reward)
             eplen += 1
-            if step_original is not None:
-                have_original = True
-                original += float(step_original)
             obs = normalize_empirical_observation(
                 action_observation, self.obs_rms, on_device=self.memory_backend == "gpu"
             )
 
             if terminated or truncated:
-                emit_original = have_original and real_episode_end
                 self.rollout_tracker.record(
                     steps,
                     episode_reward=score,
                     episode_length=eplen,
                     timeout=float(truncated),
-                    original_reward=original if emit_original else None,
                 )
                 score = 0.0
                 eplen = 0
-                if emit_original:
-                    original = 0.0
-                    have_original = False
 
             if (steps + 1) % self.batch_size == 0:
                 loss = self.train_step(steps, logger_run=ctx.logger_run)
@@ -464,8 +453,9 @@ class Actor_Critic_Policy_Gradient_Family:
             if steps % ctx.eval_freq == 0:
                 eval_result = self.eval(ctx, steps)
 
-            if steps % ctx.log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+            if log_due and eval_result is not None and len(self.lossque) > 0:
                 ctx.pbar.set_description(self.description(eval_result))
+        log_environment_metrics(self.env, ctx.logger_run, steps)
 
     def learn_VectorizedEnv(self, ctx):
         raw_obs = self.env.current_obs()
@@ -476,8 +466,6 @@ class Actor_Critic_Policy_Gradient_Family:
             device_state = (
                 jnp.zeros(self.worker_size),
                 jnp.zeros(self.worker_size, dtype=jnp.int32),
-                jnp.zeros(self.worker_size),
-                jnp.zeros(self.worker_size, dtype=bool),
                 jnp.zeros(self.worker_size, dtype=bool),
             )
         completed_steps = []
@@ -487,8 +475,6 @@ class Actor_Critic_Policy_Gradient_Family:
         eval_result = None
         scores = np.zeros([self.worker_size], dtype=np.float64)
         eplens = np.zeros([self.worker_size], dtype=np.int32)
-        originals = np.zeros([self.worker_size], dtype=np.float64)
-        original_present = np.zeros([self.worker_size], dtype=bool)
         # Workers that ended an episode last step emit an autoreset dummy step
         # (action ignored, reward 0, fresh obs). On-policy rollouts have a fixed
         # per-worker length, so the dummy can't be dropped; instead flag it
@@ -511,6 +497,8 @@ class Actor_Critic_Policy_Gradient_Family:
         actions = self.actions(obs)
         end = object()
         first = True
+        steps = 0
+        last_log_step = 0
         for steps, next_step in pairwise(chain(ctx.pbar, (end,))):
             if first:
                 send(actions)
@@ -522,6 +510,15 @@ class Actor_Critic_Policy_Gradient_Family:
                 truncateds,
                 infos,
             ) = self.env.get_result()
+            log_due = steps - last_log_step >= ctx.log_interval
+            log_environment_metrics(
+                self.env,
+                ctx.logger_run,
+                steps,
+                flush=log_due,
+            )
+            if log_due:
+                last_log_step = steps
             action_observation = self.env.current_obs()
             # Autoreset observations belong to the next action, not this successor.
             next_obses = normalize_empirical_observation(
@@ -540,30 +537,12 @@ class Actor_Critic_Policy_Gradient_Family:
                 send(next_actions)
 
             if device_rollout:
-                if isinstance(infos, dict):
-                    original = (
-                        jnp.broadcast_to(jnp.asarray(infos["original_reward"]), (self.worker_size,))
-                        if "original_reward" in infos
-                        else jnp.zeros_like(rewards)
-                    )
-                    present = (
-                        jnp.broadcast_to(
-                            jnp.asarray(infos["_original_reward"], dtype=bool), (self.worker_size,)
-                        )
-                        if "_original_reward" in infos
-                        else jnp.full_like(terminateds, "original_reward" in infos)
-                    )
-                else:
-                    original, present = extract_vector_original_rewards(infos, self.worker_size)
                 device_state, rewards, terminateds, completed = device_episode_step(
                     device_state,
                     rewards,
                     terminateds,
                     truncateds,
-                    vector_real_reset_mask(self.env, terminateds, truncateds, infos),
                     vector_autoreset_mask(self.env, terminateds, truncateds, infos),
-                    original,
-                    present,
                 )
                 self.buffer.add(obs, actions, rewards, next_obses, terminateds, truncateds)
                 completed_steps.append(steps)
@@ -579,23 +558,15 @@ class Actor_Critic_Policy_Gradient_Family:
                             episode_reward=float(row[1]),
                             episode_length=int(row[2]),
                             timeout=float(row[3]),
-                            original_reward=float(row[4]) if row[5] else None,
                         )
                     completed_steps.clear()
                     completed_rows.clear()
             else:
                 done = np.logical_or(terminateds, truncateds)
-                real_reset = vector_real_reset_mask(self.env, terminateds, truncateds, infos)
                 autoreset = vector_autoreset_mask(self.env, terminateds, truncateds, infos)
                 active = ~prev_done
                 scores[active] += rewards[active]
                 eplens[active] += 1
-                step_original, step_original_present = extract_vector_original_rewards(
-                    infos, self.worker_size
-                )
-                active_original = active & step_original_present
-                originals[active_original] += step_original[active_original]
-                original_present[active_original] = True
 
                 if prev_done.any():
                     # Flag the dummy step terminal AND zero its reward so it is fully
@@ -606,19 +577,14 @@ class Actor_Critic_Policy_Gradient_Family:
                 self.buffer.add(obs, actions, rewards, next_obses, terminateds, truncateds)
 
                 for idx in np.where(done & active)[0]:
-                    emit_original = original_present[idx] and real_reset[idx]
                     self.rollout_tracker.record(
                         steps,
                         episode_reward=float(scores[idx]),
                         episode_length=int(eplens[idx]),
                         timeout=float(truncateds[idx]),
-                        original_reward=float(originals[idx]) if emit_original else None,
                     )
                     scores[idx] = 0.0
                     eplens[idx] = 0
-                    if emit_original:
-                        originals[idx] = 0.0
-                        original_present[idx] = False
 
                 prev_done = done & autoreset & active
 
@@ -638,8 +604,9 @@ class Actor_Critic_Policy_Gradient_Family:
             if steps % ctx.eval_freq == 0:
                 eval_result = self.eval(ctx, steps)
 
-            if steps % ctx.log_interval == 0 and eval_result is not None and len(self.lossque) > 0:
+            if log_due and eval_result is not None and len(self.lossque) > 0:
                 ctx.pbar.set_description(self.description(eval_result))
+        log_environment_metrics(self.env, ctx.logger_run, steps)
 
     def eval(self, ctx, steps):
         return evaluate_policy(

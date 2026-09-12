@@ -11,6 +11,7 @@ from gymnasium import spaces
 from gymnasium.vector.utils import concatenate, iterate
 from gymnasium.wrappers.utils import rescale_box
 
+from env_builder.metrics import GymEnvMetrics, GymLoggingWrapper
 from env_builder.observations import (
     flatten_observation_space,
     normalize_observation,
@@ -26,15 +27,16 @@ from jax_baselines.core.env_protocols import (
     SingleEnv,
     VectorizedEnv,
 )
+from jax_baselines.core.runtime_adapters import MetricLogger
 
 __all__ = [
     "Env",
     "EnvInfo",
+    "EnvPoolVectorizedEnv",
+    "GymVectorizedEnv",
     "PreparedEnvSpec",
     "PreparedWorkerEnvSpec",
     "VectorizedEnv",
-    "EnvPoolVectorizedEnv",
-    "GymVectorizedEnv",
     "get_env_builder",
 ]
 
@@ -196,7 +198,7 @@ def get_env_builder(
             if seed is None:
                 env.reset()
         seed_env(env, seed)
-        return env
+        return GymLoggingWrapper(env, is_atari=env_type == "atari_env")
 
     def prepare_envs(num_workers=1, seed=None):
         eval_seed = None if seed is None else seed + 1
@@ -238,8 +240,7 @@ def _get_envpool_env_id(env_name: str) -> str:
     - Classic: Same as gymnasium (e.g., "CartPole-v1")
     """
     # Handle ALE/ prefix
-    if env_name.startswith("ALE/"):
-        env_name = env_name[4:]
+    env_name = env_name.removeprefix("ALE/")
 
     # Handle NoFrameskip Atari environments
     if "NoFrameskip" in env_name:
@@ -295,6 +296,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
 
         # Determine if this is an Atari environment
         self._is_atari = self._check_atari_env(envpool_env_id)
+        self._metrics = GymEnvMetrics(worker_num, "reward" if self._is_atari else "original_reward")
 
         # Create EnvPool environment
         # EnvPool uses 'gymnasium' env_type for gymnasium compatibility
@@ -385,6 +387,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
         raw_obs, _, _, _, info = self.env.recv()
         order = np.argsort(info["env_id"])
         self.obs = self._process_observations(raw_obs, order)
+        self._metrics.reset()
         return self.obs, self._reorder_info(info, order)
 
     def step(self, actions):
@@ -420,16 +423,29 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
         truncateds = truncateds[order]
         infos = self._reorder_info(infos, order)
 
-        if self._is_atari and "original_reward" not in infos:
-            original_reward = infos.get("reward")
-            if original_reward is not None:
-                infos["original_reward"] = original_reward
+        self._metrics.capture(
+            infos,
+            terminateds | truncateds,
+            self.real_reset_mask(terminateds, truncateds, infos),
+            self.autoreset_mask(terminateds, truncateds, infos),
+        )
 
         # EnvPool handles auto-reset internally: after a done flag, next_obs
         # already holds the new episode's first observation.
         self.obs = next_obs
 
         return next_obs, rewards, terminateds, truncateds, infos
+
+    def log_metrics(
+        self,
+        logger: MetricLogger,
+        steps: int | None,
+        *,
+        namespace: str = "rollout",
+        active: Any = None,
+        flush: bool = True,
+    ) -> None:
+        self._metrics.log(logger, steps, namespace=namespace, active=active, flush=flush)
 
     def real_reset_mask(self, terminateds, truncateds, infos):
         return _real_reset_mask(self._is_atari, terminateds, truncateds, infos)
@@ -495,6 +511,7 @@ class GymVectorizedEnv(VectorizedEnv):
         self._observation_key = observation_key
         self._reuse_for_eval = reuse_for_eval
         self._evaluation_active = False
+        self._metrics = GymEnvMetrics(worker_num)
         self._pending_result: tuple[Observation, Any, Any, Any, dict[str, Any]] | None = None
 
         # Create vectorized environment using gymnasium
@@ -594,6 +611,7 @@ class GymVectorizedEnv(VectorizedEnv):
             self.env.set_attr("was_real_done", True)
         obs, info = self.env.reset(seed=seed)
         self.obs = normalize_observation(obs, self._observation_key)
+        self._metrics.reset()
         return self.obs, info
 
     def step(self, actions):
@@ -616,13 +634,35 @@ class GymVectorizedEnv(VectorizedEnv):
         next_obs, rewards, terminateds, truncateds, infos = self.env.step_wait()
         next_obs = normalize_observation(next_obs, self._observation_key)
         self.obs = next_obs
+        self._metrics.capture(
+            infos,
+            terminateds | truncateds,
+            self.real_reset_mask(terminateds, truncateds, infos),
+            self.autoreset_mask(terminateds, truncateds, infos),
+        )
 
         return next_obs, rewards, terminateds, truncateds, infos
+
+    def log_metrics(
+        self,
+        logger: MetricLogger,
+        steps: int | None,
+        *,
+        namespace: str = "rollout",
+        active: Any = None,
+        flush: bool = True,
+    ) -> None:
+        self._metrics.log(logger, steps, namespace=namespace, active=active, flush=flush)
 
     @contextmanager
     def evaluation_context(self) -> Iterator[None]:
         if not self._reuse_for_eval:
-            yield
+            metrics = self._metrics
+            self._metrics = GymEnvMetrics(self.worker_num)
+            try:
+                yield
+            finally:
+                self._metrics = metrics
             return
         if self._evaluation_active:
             raise RuntimeError("Training environment is already borrowed for evaluation")
@@ -631,6 +671,7 @@ class GymVectorizedEnv(VectorizedEnv):
         observation = self.obs
         awaiting = self._awaiting_result
         pending = self.get_result() if awaiting else None
+        metrics = self._metrics
         vector_observation = deepcopy(self.env.observations)
         global_rng = random.getstate(), np.random.get_state()
         with preserve_gym_spaces(self.env.action_space, self.env.observation_space):
@@ -638,6 +679,7 @@ class GymVectorizedEnv(VectorizedEnv):
             try:
                 self.env.call("save_training_state")
                 try:
+                    self._metrics = GymEnvMetrics(self.worker_num)
                     yield
                 finally:
                     # Finish an evaluation step even when its action callback raises.
@@ -653,6 +695,7 @@ class GymVectorizedEnv(VectorizedEnv):
                 self.obs = observation
                 self._pending_result = pending
                 self._awaiting_result = awaiting
+                self._metrics = metrics
                 self._evaluation_active = False
                 random.setstate(global_rng[0])
                 np.random.set_state(global_rng[1])

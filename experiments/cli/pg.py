@@ -66,7 +66,6 @@ def add_args(parser):
         help="linearly anneal learning rate from the configured value to 0",
     )
     parser.add_argument("--ent_coef", type=float, default=0.001, help="entropy coefficient")
-    parser.add_argument("--val_coef", type=float, default=0.6, help="val coefficient")
     parser.add_argument("--epoch_num", type=int, default=4, help="epoch number")
     parser.add_argument("--ppo_eps", type=float, default=0.2, help="PPO policy clip range")
     parser.add_argument(
@@ -107,7 +106,6 @@ def _common(a):
         "gamma": a.gamma,
         "learning_rate": a.learning_rate,
         "batch_size": a.batch,
-        "val_coef": a.val_coef,
         "ent_coef": a.ent_coef,
         "obs_normalization": a.obs_normalization,
         "memory_backend": a.memory_backend,

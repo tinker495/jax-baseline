@@ -22,16 +22,16 @@ _PAIRS = [
         SurrogatePolicyGradient,
         PPO,
         SPO,
-        ("setup_model", "train_step", "_preprocess", "_train_step", "learn"),
+        ("setup_model", "train_step", "_preprocess", "_train_step", "_critic_loss", "learn"),
     ),
     (
         SurrogateIMPALA,
         IMPALA_PPO,
         IMPALA_SPO,
-        ("setup_model", "train_step", "preprocess", "_train_step", "learn"),
+        ("setup_model", "train_step", "preprocess", "_train_step", "_critic_loss", "learn"),
     ),
 ]
-_ALGO_SPECIFIC = ("_loss_discrete", "_loss_continuous")
+_ALGO_SPECIFIC = ("_actor_loss_discrete", "_actor_loss_continuous")
 
 
 @pytest.mark.parametrize("base, ppo_cls, spo_cls, shared", _PAIRS)

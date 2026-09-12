@@ -1,3 +1,4 @@
+import gymnasium as gym
 import jax.numpy as jnp
 import numpy as np
 import pytest
@@ -132,15 +133,18 @@ def test_gym_vector_fast_path_honors_seed():
 def test_single_gym_env_exposes_normalized_continuous_actions():
     builder, _ = get_env_builder("Pendulum-v1")
     env = builder(worker=1, seed=7)
+    reference = gym.make("Pendulum-v1")
     try:
         assert np.array_equal(env.action_space.low, np.array([-1.0], dtype=np.float32))
         assert np.array_equal(env.action_space.high, np.array([1.0], dtype=np.float32))
-        assert np.array_equal(
-            env.action(np.array([1.0], dtype=np.float32)),
-            np.array([2.0], dtype=np.float32),
-        )
+        reference.reset(seed=7)
+        observation, reward, *_ = env.step(np.array([1.0], dtype=np.float32))
+        expected, expected_reward, *_ = reference.step(np.array([2.0], dtype=np.float32))
+        assert np.array_equal(observation["unified_obs"], expected)
+        assert reward == expected_reward
     finally:
         env.close()
+        reference.close()
 
 
 def test_gym_vector_env_exposes_normalized_continuous_actions():

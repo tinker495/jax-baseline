@@ -8,12 +8,7 @@ class IMPALA_PPO(SurrogateIMPALA):
     _run_name = "IMPALA_PPO"
     _learn_log_interval = 10
 
-    def _loss_discrete(
-        self, actor_params, critic_params, obses, actions, vs, mu_prob, pi_prob, adv, key
-    ):
-        vals = self.critic(critic_params, actor_params, key, obses)
-        critic_loss = jnp.mean(jnp.square(jnp.squeeze(vals - vs)))
-
+    def _actor_loss_discrete(self, actor_params, obses, actions, mu_prob, pi_prob, adv, key):
         logit = self.actor(actor_params, key, obses)
         prob, log_prob = self.get_logprob(logit, actions, key, out_prob=True)
         # Paper's entropy: H = -sum(p * log(p)) >= 0
@@ -33,19 +28,14 @@ class IMPALA_PPO(SurrogateIMPALA):
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
         entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
-            total_loss = self.val_coef * critic_loss + actor_loss
+            actor_objective = actor_loss
         else:
-            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
-        return total_loss, (critic_loss, actor_loss, entropy_loss)
+            actor_objective = actor_loss + self.ent_coef * entropy_loss
+        return actor_objective, (actor_loss, entropy_loss)
 
-    def _loss_continuous(
-        self, actor_params, critic_params, obses, actions, vs, mu_prob, pi_prob, adv, key
-    ):
-        # pi_prob is accepted for a uniform scan-call signature with _loss_discrete;
+    def _actor_loss_continuous(self, actor_params, obses, actions, mu_prob, pi_prob, adv, key):
+        # pi_prob is accepted for a uniform scan-call signature with _actor_loss_discrete;
         # the continuous IS ratio uses mu_prob only.
-        vals = self.critic(critic_params, actor_params, key, obses)
-        critic_loss = jnp.mean(jnp.square(jnp.squeeze(vals - vs)))
-
         prob = self.actor(actor_params, key, obses)
         prob, log_prob = self.get_logprob(prob, actions, key, out_prob=True)
         mu, log_std = prob
@@ -69,7 +59,7 @@ class IMPALA_PPO(SurrogateIMPALA):
         actor_loss = jnp.mean(jnp.maximum(cross_entropy1, cross_entropy2))
         entropy_loss = -jnp.mean(entropy_h)
         if self.use_entropy_adv_shaping:
-            total_loss = self.val_coef * critic_loss + actor_loss
+            actor_objective = actor_loss
         else:
-            total_loss = self.val_coef * critic_loss + actor_loss + self.ent_coef * entropy_loss
-        return total_loss, (critic_loss, actor_loss, entropy_loss)
+            actor_objective = actor_loss + self.ent_coef * entropy_loss
+        return actor_objective, (actor_loss, entropy_loss)

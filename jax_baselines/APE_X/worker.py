@@ -2,13 +2,14 @@ from functools import partial
 
 import jax
 
+from jax_baselines.APE_X.common_servers import WorkerMetricLogger
 from jax_baselines.core.env_info import prepare_worker_env
-from jax_baselines.core.env_protocols import batch_observation
+from jax_baselines.core.env_protocols import batch_observation, log_environment_metrics
 from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
 from jax_baselines.core.seeding import seed_prngs
 
 
-class Ape_X_Worker(object):
+class Ape_X_Worker:
     def __init__(self, env_builder, seed=None) -> None:
         seed_prngs(seed)
         # env_builder is the repo-local Environment Adapter callable injected by
@@ -54,30 +55,23 @@ class Ape_X_Worker(object):
 
             if seed is not None:
                 try:
-                    obs, info = self.env.reset(seed=seed)
+                    obs, _info = self.env.reset(seed=seed)
                 except TypeError:
-                    obs, info = self.env.reset()
+                    obs, _info = self.env.reset()
             else:
-                obs, info = self.env.reset()
-            have_original_reward = "original_reward" in info.keys()
-            have_lives = "lives" in info.keys()
-            if have_original_reward:
-                original_score = 0
+                obs, _info = self.env.reset()
             score = 0
             obs = batch_observation(obs)
             params = jax.device_put(param_server.get_params())
             eplen = 0
             episode = 0
+            environment_logger = WorkerMetricLogger("" if eps is None else f"/eps{eps:.2f}")
             if eps is None:
                 rw_label = "rollout/episode_reward"
-                if have_original_reward:
-                    original_rw_label = "rollout/original_reward"
                 len_label = "rollout/episode_length"
                 to_label = "rollout/timeout_rate"
             else:
                 rw_label = f"rollout/episode_reward/eps{eps:.2f}"
-                if have_original_reward:
-                    original_rw_label = f"rollout/original_reward/eps{eps:.2f}"
                 len_label = f"rollout/episode_length/eps{eps:.2f}"
                 to_label = f"rollout/timeout_rate/eps{eps:.2f}"
 
@@ -89,11 +83,16 @@ class Ape_X_Worker(object):
 
                 eplen += 1
                 actions = get_action(params, obs, eps, next(key_seq))
-                next_obs, reward, terminated, truncated, info = self.env.step(actions)
+                next_obs, reward, terminated, truncated, _info = self.env.step(actions)
                 next_obs = batch_observation(next_obs)
                 local_buffer.add(obs, actions, reward, next_obs, terminated, truncated)
-                if have_original_reward:
-                    original_score += info["original_reward"]
+                if logger_server is not None:
+                    log_environment_metrics(
+                        self.env,
+                        environment_logger,
+                        episode,
+                        flush=bool(terminated or truncated),
+                    )
                 score += reward
                 obs = next_obs
 
@@ -101,18 +100,17 @@ class Ape_X_Worker(object):
                     local_buffer.episode_end()
                     if logger_server is not None:
                         log_dict = {
+                            **environment_logger.metrics,
                             rw_label: score,
                             len_label: eplen,
                             to_label: float(truncated),
                         }
-                        if have_original_reward and (not have_lives or info["lives"] == 0):
-                            log_dict[original_rw_label] = original_score
-                            original_score = 0
                         logger_server.log_worker(log_dict, episode)
+                        environment_logger.metrics.clear()
                     score = 0
                     eplen = 0
                     episode += 1
-                    obs, info = self.env.reset()
+                    obs, _info = self.env.reset()
                     obs = batch_observation(obs)
 
                 if len(local_buffer) >= local_size:
@@ -124,9 +122,12 @@ class Ape_X_Worker(object):
                         key=next(key_seq),
                     )
                     global_buffer.add(**transition, priorities=abs_td_error)
+            if logger_server is not None:
+                log_environment_metrics(self.env, environment_logger, episode)
+                if environment_logger.metrics:
+                    logger_server.log_worker(environment_logger.metrics, episode)
         finally:
             if stop.is_set():
                 print("worker stopped")
             else:
                 stop.set()
-        return None

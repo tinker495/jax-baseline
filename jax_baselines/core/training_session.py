@@ -22,7 +22,7 @@ read back off ``self``. ``ctx.logger_run`` is valid only inside the session's
 from dataclasses import dataclass
 
 from jax_baselines.core.rollout import RolloutEngine
-from jax_baselines.core.runtime_adapters import NoOpLogger, make_progress
+from jax_baselines.core.runtime_adapters import LoggerRun, NoOpLogger, make_progress
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,7 @@ class RunContext:
     ``logger_run`` is valid only inside the session's ``with logger`` block.
     """
 
-    logger_run: object
+    logger_run: LoggerRun
     eval_freq: int
     pbar: object
     log_interval: int

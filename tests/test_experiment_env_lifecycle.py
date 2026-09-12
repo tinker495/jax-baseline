@@ -23,6 +23,7 @@ class _MjlabEnv(MjlabSingleEnv):
         self.steps = steps
         self.frame = 0
         self.closed = False
+        self.log_calls = []
 
     def reset(self):
         self.frame = 0
@@ -36,6 +37,9 @@ class _MjlabEnv(MjlabSingleEnv):
     def render(self):
         return np.full((16, 16, 3), self.frame, dtype=np.uint8)
 
+    def log_metrics(self, logger, steps, *, namespace="rollout", active=None, flush=True):
+        self.log_calls.append((logger, namespace, flush))
+
     def close(self):
         self.closed = True
 
@@ -48,12 +52,14 @@ def test_headless_test_never_requests_rendering_and_always_closes(monkeypatch):
         calls.append((worker, kwargs))
         return env
 
-    monkeypatch.setattr(adapters, "run_test_episodes", lambda *args: calls.append("run") or 3)
+    monkeypatch.setattr(
+        adapters, "run_test_episodes", lambda *args, **kwargs: calls.append("run") or 3
+    )
     assert adapters.headless_test(builder, None, object(), 2) == 3
     assert calls == [(1, {}), "run", "close"]
 
     monkeypatch.setattr(
-        adapters, "run_test_episodes", lambda *args: (_ for _ in ()).throw(ValueError())
+        adapters, "run_test_episodes", lambda *args, **kwargs: (_ for _ in ()).throw(ValueError())
     )
     with pytest.raises(ValueError):
         adapters.headless_test(builder, None, object(), 2)
@@ -79,6 +85,7 @@ def test_record_and_test_writes_one_mjlab_video_per_episode(tmp_path):
         "rl-video-episode-1.mp4",
     ]
     assert [imageio_ffmpeg.count_frames_and_secs(video)[0] for video in videos] == [3, 3]
+    assert env.log_calls == [(logger, "test", False)] * 4 + [(logger, "test", True)]
     assert env.closed
 
 
@@ -87,7 +94,7 @@ def test_record_and_test_closes_mjlab_env_when_evaluation_fails(monkeypatch, tmp
     env = _MjlabEnv()
     logger = type("Logger", (), {"get_local_path": lambda self, path: str(tmp_path / path)})()
 
-    def fail_after_reset(test_env, *args):
+    def fail_after_reset(test_env, *args, **kwargs):
         test_env.reset()
         raise RuntimeError("evaluation failed")
 

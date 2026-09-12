@@ -1,5 +1,7 @@
 import time
 from collections import deque
+from collections.abc import Callable
+from typing import Any
 
 import jax
 import jax.numpy as jnp
@@ -24,6 +26,7 @@ from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 class IMPALA_Family:
+    critic: Callable[..., Any]
     _run_name = "IMPALA"
     _learn_log_interval = 1000
 
@@ -39,7 +42,6 @@ class IMPALA_Family:
         update_freq=100,
         batch_size=1024,
         sample_size=1,
-        val_coef=0.2,
         ent_coef=0.01,
         use_entropy_adv_shaping=True,
         entropy_adv_shaping_kappa=2.0,
@@ -77,7 +79,6 @@ class IMPALA_Family:
         self.learning_rate = learning_rate
         self.gamma = gamma
         self.lamda = lamda
-        self.val_coef = val_coef
         self.ent_coef = ent_coef
         self.use_entropy_adv_shaping = use_entropy_adv_shaping
         self.entropy_adv_shaping_kappa = entropy_adv_shaping_kappa
@@ -115,6 +116,9 @@ class IMPALA_Family:
 
     def _make_optimizer(self, learning_rate):
         return self.optimizer_factory(learning_rate)
+
+    def _critic_loss(self, critic_params, actor_params, obses, targets, key):
+        return jnp.mean(jnp.square(targets - self.critic(critic_params, actor_params, key, obses)))
 
     def get_env_setup(self):
         (

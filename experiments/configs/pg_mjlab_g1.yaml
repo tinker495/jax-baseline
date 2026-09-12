@@ -2,7 +2,7 @@ family: pg
 runtime:
   device: 0
 base:
-  env: Mjlab-Velocity-Flat-Unitree-Go1
+  env: Mjlab-Velocity-Flat-Unitree-G1
   env_backend: mjlab
   env_device: cuda:0
   env_jax_arrays: true

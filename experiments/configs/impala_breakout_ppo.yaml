@@ -15,7 +15,6 @@ base:
   hidden_n: 1
   sample_size: 32
   update_freq: 100
-  val_coef: 0.6
   buffer_size: 256
   optimizer: rmsprop
 variants:

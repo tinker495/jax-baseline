@@ -14,7 +14,6 @@ base:
   hidden_n: 2
   sample_size: 8
   update_freq: 100
-  val_coef: 0.6
   buffer_size: 32
 variants:
   - {algo: PPO, optimizer: rmsprop}

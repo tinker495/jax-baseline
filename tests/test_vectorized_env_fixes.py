@@ -191,6 +191,7 @@ def _fake_recv_env(is_atari):
     env._is_atari = is_atari
     env._observation_key = None
     env.worker_num = 2
+    env._metrics = eb.GymEnvMetrics(2, "reward" if is_atari else "original_reward")
     env.obs = None
     env._awaiting_recv = True
     next_obs = np.zeros((2, 4), dtype=np.float32)
@@ -205,12 +206,15 @@ def _fake_recv_env(is_atari):
     return env, infos
 
 
-def test_envpool_atari_exposes_info_reward_as_original_reward():
+def test_envpool_atari_logs_backend_reward_as_original_reward():
     env, infos = _fake_recv_env(is_atari=True)
 
     _, _, _, _, result_infos = env.get_result()
+    logged = []
+    env.log_metrics(SimpleNamespace(log_metric=lambda *args: logged.append(args)), 10)
 
-    assert np.array_equal(result_infos["original_reward"], infos["reward"])
+    assert logged == [("rollout/original_reward", -2.0, 10)]
+    assert "original_reward" not in result_infos
     assert "original_reward" not in infos
 
 
@@ -270,6 +274,7 @@ def test_envpool_get_result_resorts_recv_into_canonical_env_order():
     env._is_atari = False
     env._observation_key = None
     env.worker_num = 3
+    env._metrics = eb.GymEnvMetrics(3)
     env.obs = None
     env._awaiting_recv = True
     # Row r belongs to env env_id[r]; values encode the owning env so the
