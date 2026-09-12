@@ -81,10 +81,10 @@ class MjlabVectorizedEnv(VectorizedEnv):
         if not self.jax_arrays:
             return _to_numpy(value).copy()
         if isinstance(value, self._torch.Tensor):
-            # Clone on the producer stream before mjlab mutates/reset its buffers.
-            return jax.dlpack.from_dlpack(
-                value.detach().clone(memory_format=self._torch.contiguous_format)
-            )
+            # Finish the copy while the Torch storage is owned and before mjlab reuses it.
+            contiguous = value.detach().contiguous()
+            imported = jax.dlpack.from_dlpack(contiguous)
+            return jnp.array(imported, copy=True).block_until_ready()
         return jnp.array(value, copy=True)
 
     def _snapshot(self, value):
