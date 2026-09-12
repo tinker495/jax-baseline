@@ -405,6 +405,7 @@ class Actor_Critic_Policy_Gradient_Family:
             actions = self.actions(obs)
             step_action = _normalize_action_for_step(self.conv_action(actions))
             next_obs, reward, terminated, truncated, _ = self.env.step(step_action)
+            ctx.progress.env_steps += 1
             log_due = steps - last_log_step >= ctx.log_interval
             log_environment_metrics(self.env, ctx.logger_run, steps, flush=log_due)
             if log_due:
@@ -448,6 +449,7 @@ class Actor_Critic_Policy_Gradient_Family:
 
             if (steps + 1) % self.batch_size == 0:
                 loss = self.train_step(steps, logger_run=ctx.logger_run)
+                ctx.progress.update_steps += self._optimizer_updates_per_train_step()
                 self.lossque.append(loss)
 
             if steps % ctx.eval_freq == 0:
@@ -455,7 +457,10 @@ class Actor_Critic_Policy_Gradient_Family:
 
             if log_due and eval_result is not None and len(self.lossque) > 0:
                 ctx.pbar.set_description(self.description(eval_result))
+            if log_due:
+                ctx.progress.log(ctx.logger_run, steps)
         log_environment_metrics(self.env, ctx.logger_run, steps)
+        ctx.progress.log(ctx.logger_run, steps)
 
     def learn_VectorizedEnv(self, ctx):
         raw_obs = self.env.current_obs()
@@ -470,6 +475,7 @@ class Actor_Critic_Policy_Gradient_Family:
             )
         completed_steps = []
         completed_rows = []
+        transition_counts = []
         self.lossque = deque(maxlen=10)
         self.rollout_tracker = EpisodeTracker(ctx.logger_run.log_metric, ctx.log_interval)
         eval_result = None
@@ -537,6 +543,7 @@ class Actor_Critic_Policy_Gradient_Family:
                 send(next_actions)
 
             if device_rollout:
+                transition_counts.append(jnp.count_nonzero(~device_state[2]))
                 device_state, rewards, terminateds, completed = device_episode_step(
                     device_state,
                     rewards,
@@ -547,10 +554,13 @@ class Actor_Critic_Policy_Gradient_Family:
                 self.buffer.add(obs, actions, rewards, next_obses, terminateds, truncateds)
                 completed_steps.append(steps)
                 completed_rows.append(completed)
-                if train_due or next_step is end:
+                if train_due or log_due or next_step is end:
                     # Transfer logging payload once per rollout; training tensors stay on device.
                     with jax.profiler.TraceAnnotation("rollout.metrics"):
-                        episode_rows = jax.device_get(jnp.stack(completed_rows))
+                        episode_rows, transition_count = jax.device_get(
+                            (jnp.stack(completed_rows), jnp.sum(jnp.stack(transition_counts)))
+                        )
+                    ctx.progress.env_steps += int(transition_count)
                     for time_idx, worker_idx in np.argwhere(episode_rows[..., 0]):
                         row = episode_rows[time_idx, worker_idx]
                         self.rollout_tracker.record(
@@ -561,10 +571,12 @@ class Actor_Critic_Policy_Gradient_Family:
                         )
                     completed_steps.clear()
                     completed_rows.clear()
+                    transition_counts.clear()
             else:
                 done = np.logical_or(terminateds, truncateds)
                 autoreset = vector_autoreset_mask(self.env, terminateds, truncateds, infos)
                 active = ~prev_done
+                ctx.progress.env_steps += int(active.sum())
                 scores[active] += rewards[active]
                 eplens[active] += 1
 
@@ -590,6 +602,7 @@ class Actor_Critic_Policy_Gradient_Family:
 
             if train_due:
                 loss = self.train_step(steps, logger_run=ctx.logger_run)
+                ctx.progress.update_steps += self._optimizer_updates_per_train_step()
                 self.lossque.append(loss)
                 if next_step is not end:
                     next_actions = self.actions(action_observation)
@@ -606,7 +619,10 @@ class Actor_Critic_Policy_Gradient_Family:
 
             if log_due and eval_result is not None and len(self.lossque) > 0:
                 ctx.pbar.set_description(self.description(eval_result))
+            if log_due:
+                ctx.progress.log(ctx.logger_run, steps)
         log_environment_metrics(self.env, ctx.logger_run, steps)
+        ctx.progress.log(ctx.logger_run, steps)
 
     def eval(self, ctx, steps):
         return evaluate_policy(

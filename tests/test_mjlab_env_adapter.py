@@ -8,7 +8,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
-from env_builder.env_builder import get_env_builder
+from env_builder.env_builder import get_env_builder, get_env_info
 from env_builder.mjlab_env import MjlabSingleEnv, MjlabVectorizedEnv, make_mjlab_env
 from jax_baselines.core.env_protocols import SingleEnv, VectorizedEnv
 
@@ -234,14 +234,24 @@ def test_mjlab_without_separate_groups_uses_unified_observations(monkeypatch):
 
 def test_single_factory_metadata_preserves_canonical_keys(monkeypatch):
     install_runtime(monkeypatch)
-    for env_name, backend, expected in [
-        ("CartPole-v1", "gymnasium", {"unified_obs": [4]}),
-        ("task", "mjlab", {"actor_state": [1], "critic_obs": [2], "unified_command": [1]}),
+    for env_name, backend, actual_backend, expected in [
+        ("CartPole-v1", "gymnasium", "gymnasium", {"unified_obs": [4]}),
+        ("CartPole-v1", "envpool", "gymnasium", {"unified_obs": [4]}),
+        (
+            "task",
+            "mjlab",
+            "mjlab",
+            {"actor_state": [1], "critic_obs": [2], "unified_command": [1]},
+        ),
     ]:
         builder, _ = get_env_builder(env_name, env_backend=backend, device="cpu")
         prepared = builder.prepare_envs(num_workers=1, seed=3)
         try:
             assert prepared.env_info["observation_space"] == expected
+            assert prepared.env_info["runtime"]["backend"] == actual_backend
+            assert prepared.env_info["runtime"]["seed"] == 3
+            assert prepared.env_info["runtime"]["reward_clipping"] == "none"
+            assert get_env_info(prepared.eval_env, env_name)["runtime"]["seed"] == 4
             assert set(prepared.env.reset()[0]) == set(expected)
             assert set(prepared.eval_env.reset()[0]) == set(expected)
         finally:

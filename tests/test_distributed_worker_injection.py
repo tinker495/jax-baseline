@@ -66,6 +66,14 @@ def test_worker_builds_env_through_injected_adapter(worker_cls):
                 "env_id": "FakeEnv-v0",
                 "worker_num": 1,
                 "core_env_type": "SingleEnv",
+                "runtime": {
+                    "backend": "fake",
+                    "backend_env_id": "FakeEnv-v0",
+                    "seed": seed,
+                    "seed_rule": "constructor seed",
+                    "reward_clipping": "none",
+                    "episodic_life": False,
+                },
             },
         )
 

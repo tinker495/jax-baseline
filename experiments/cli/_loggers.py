@@ -66,7 +66,12 @@ def add_logger_args(parser: ArgumentParser) -> None:
     )
 
 
-def resolve_logger_factory(args: Namespace, *, policy_kwargs: dict[str, object] | None = None):
+def resolve_logger_factory(
+    args: Namespace,
+    *,
+    policy_kwargs: dict[str, object] | None = None,
+    run_metadata: dict[str, object] | None = None,
+):
     """Return the ``LoggerFactory`` selected by ``args.logger`` (lazy import)."""
     model_names: list[str] = []
     model_hparams: dict[str, str] = {}
@@ -86,19 +91,19 @@ def resolve_logger_factory(args: Namespace, *, policy_kwargs: dict[str, object] 
     if name == "tensorboard":
         from experiments.runtime_adapters import TensorboardLogger
 
-        factory = (
-            partial(TensorboardLogger, extra_hparams=model_hparams)
-            if model_hparams
-            else TensorboardLogger
-        )
+        factory = partial(TensorboardLogger, extra_hparams=model_hparams, run_metadata=run_metadata)
     elif name == "wandb":
         from experiments.loggers.wandb_logger import make_wandb_logger_factory
 
-        factory = make_wandb_logger_factory(args, extra_hparams=model_hparams)
+        factory = make_wandb_logger_factory(
+            args, extra_hparams=model_hparams, run_metadata=run_metadata
+        )
     elif name == "aim":
         from experiments.loggers.aim_logger import make_aim_logger_factory
 
-        factory = make_aim_logger_factory(args, extra_hparams=model_hparams)
+        factory = make_aim_logger_factory(
+            args, extra_hparams=model_hparams, run_metadata=run_metadata
+        )
     else:
         raise SystemExit(f"unknown --logger '{name}', expected one of {list(LOGGER_BACKENDS)}")
     if not model_names:

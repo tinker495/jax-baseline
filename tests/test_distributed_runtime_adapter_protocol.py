@@ -40,7 +40,7 @@ class _LoggerServer:
     def log_trainer(self, step, log_dict):
         self.trainer_logs.append((step, log_dict))
 
-    def log_worker(self, log_dict, episode):
+    def log_worker(self, log_dict, episode, *, environment_steps=0, flush=False):
         self.worker_logs.append((episode, log_dict))
 
     def last_update(self):
@@ -80,6 +80,14 @@ class _Worker:
             "env_id": "FakeEnv-v0",
             "worker_num": 1,
             "core_env_type": "SingleEnv",
+            "runtime": {
+                "backend": "fake",
+                "backend_env_id": "FakeEnv-v0",
+                "seed": None,
+                "seed_rule": "constructor seed",
+                "reward_clipping": "none",
+                "episodic_life": False,
+            },
         }
 
 

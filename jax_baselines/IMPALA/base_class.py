@@ -14,6 +14,7 @@ from jax_baselines.core.checkpoint_store import (
 )
 from jax_baselines.core.distributed_runtime import DistributedRuntime, ImpalaRolloutNeed
 from jax_baselines.core.env_info import get_worker_env_info
+from jax_baselines.core.hparams import get_hyper_params
 from jax_baselines.core.replay_protocol import (
     WorkerReplayBufferFactory,
     require_replay_factory,
@@ -250,6 +251,9 @@ class IMPALA_Family:
     def run_name_update(self, run_name):
         return run_name
 
+    def _optimizer_updates_per_train_step(self):
+        return 1
+
     def learn(
         self,
         total_trainstep,
@@ -276,6 +280,7 @@ class IMPALA_Family:
                 self.log_dir, run_name, experiment_name, logger_factory
             )
             self.logger_server = logger_server
+            logger_server.register_hparams(get_hyper_params(self))
 
             if self.env_type == "SingleEnv":
                 self.learn_SingleEnv(pbar, callback, log_interval)
@@ -292,6 +297,9 @@ class IMPALA_Family:
                 self.runtime.shutdown()
 
     def learn_SingleEnv(self, pbar, callback, log_interval):
+        started_at = time.perf_counter()
+        completed_iterations = 0
+        update_steps = 0
         stop = self.runtime.create_event()
         stop.clear()
         jobs = []
@@ -334,8 +342,17 @@ class IMPALA_Family:
                 if stop.is_set():
                     raise RuntimeError("distributed worker stopped during training")
                 loss, _rho = self.train_step(steps)
+                completed_iterations = steps + 1
+                update_steps += self._optimizer_updates_per_train_step()
                 self.lossque.append(loss)
                 if steps % log_interval == 0:
+                    self.logger_server.log_trainer(
+                        steps,
+                        {
+                            "progress/update_steps": update_steps,
+                            "time/elapsed_seconds": time.perf_counter() - started_at,
+                        },
+                    )
                     pbar.set_description(self.description())
 
                 if steps % self.update_freq == 0:
@@ -349,3 +366,11 @@ class IMPALA_Family:
                 self.buffer.clear()
             finally:
                 self.runtime.wait(jobs, timeout=300)
+                jax.block_until_ready((self.actor_params, self.critic_params))
+                self.logger_server.log_trainer(
+                    completed_iterations,
+                    {
+                        "progress/update_steps": update_steps,
+                        "time/elapsed_seconds": time.perf_counter() - started_at,
+                    },
+                )

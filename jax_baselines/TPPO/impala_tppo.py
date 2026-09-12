@@ -74,6 +74,9 @@ class IMPALA_TPPO(IMPALA_Family):
             checkpoint_store=checkpoint_store,
         )
 
+    def _optimizer_updates_per_train_step(self):
+        return self.epoch_num * (self.batch_size * self.sample_size // self.minibatch_size)
+
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
             self.observation_space, self.action_size, self.action_type, self.policy_kwargs

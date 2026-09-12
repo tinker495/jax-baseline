@@ -19,9 +19,10 @@ read back off ``self``. ``ctx.logger_run`` is valid only inside the session's
 ``with logger`` block; the agent must not retain ``ctx`` past ``run()``.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from jax_baselines.core.rollout import RolloutEngine
+from jax_baselines.core.rollout_stats import TrainingProgress
 from jax_baselines.core.runtime_adapters import LoggerRun, NoOpLogger, make_progress
 
 
@@ -36,6 +37,7 @@ class RunContext:
     eval_freq: int
     pbar: object
     log_interval: int
+    progress: TrainingProgress = field(default_factory=TrainingProgress)
 
 
 def eval_freq_from_count(eval_num, total_timesteps, worker_size):
@@ -86,6 +88,7 @@ class TrainingSession:
                 ctx = RunContext(logger_run, eval_freq, pbar, log_interval)
                 agent.run_training_loop(ctx)
                 agent.eval(ctx, total_timesteps)
+                ctx.progress.log(logger_run, total_timesteps)
                 agent.save_params(logger_run.get_local_path("params"))
         finally:
             if hasattr(agent, "rollout_tracker"):

@@ -111,6 +111,14 @@ def test_core_record_and_test_uses_worker_env_protocol(tmp_path):
                     "env_id": "Fake-v0",
                     "worker_num": 1,
                     "core_env_type": "SingleEnv",
+                    "runtime": {
+                        "backend": "fake",
+                        "backend_env_id": "Fake-v0",
+                        "seed": seed,
+                        "seed_rule": "constructor seed",
+                        "reward_clipping": "none",
+                        "episodic_life": False,
+                    },
                 },
             )
 

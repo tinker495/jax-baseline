@@ -1,5 +1,7 @@
 from dataclasses import replace
+from typing import ClassVar
 
+import gymnasium as gym
 import numpy as np
 import pytest
 
@@ -7,9 +9,23 @@ import experiments.cli._run as run_mod
 import experiments.runtime_adapters as adapters
 from env_builder.mjlab_env import MjlabSingleEnv
 from experiments.cli.dpg import DPG_RUNNER
+from jax_baselines.core.env_protocols import EnvironmentMetadata
 
 
-class _Env:
+class _Env(gym.Env):
+    action_space = gym.spaces.Discrete(2)
+    observation_space = gym.spaces.Dict(
+        {"unified_obs": gym.spaces.Box(-np.inf, np.inf, shape=(1,), dtype=np.float32)}
+    )
+    runtime: ClassVar[EnvironmentMetadata] = {
+        "backend": "fake",
+        "backend_env_id": "Fake-v0",
+        "seed": 0,
+        "seed_rule": "constructor seed",
+        "reward_clipping": "none",
+        "episodic_life": False,
+    }
+
     def __init__(self, events):
         self.events = events
 
@@ -126,6 +142,7 @@ def test_run_family_closes_distinct_envs_and_selects_headless_callback(
         def __init__(self, *args, **kwargs):
             self.env = train
             self.eval_env = evaluation
+            self.policy_kwargs = kwargs["policy_kwargs"]
 
         def learn(self, *args, record_test_fn=None, **kwargs):
             events.append(("learn", record_test_fn))
@@ -144,6 +161,7 @@ def test_run_family_closes_distinct_envs_and_selects_headless_callback(
         build_env=lambda args: (Builder(), {}),
     )
     monkeypatch.setattr(run_mod, "resolve_maker", lambda *args: object())
+    monkeypatch.setattr(run_mod, "collect_run_metadata", lambda *args, **kwargs: {})
 
     if failure:
         with pytest.raises(RuntimeError, match=failure):
@@ -164,6 +182,7 @@ def test_run_family_deduplicates_shared_train_eval_identity(monkeypatch):
     class Agent:
         def __init__(self, *args, **kwargs):
             self.env = self.eval_env = env
+            self.policy_kwargs = kwargs["policy_kwargs"]
 
         def learn(self, *args, **kwargs):
             pass
@@ -178,6 +197,7 @@ def test_run_family_deduplicates_shared_train_eval_identity(monkeypatch):
         build_env=lambda args: (lambda: None, {}),
     )
     monkeypatch.setattr(run_mod, "resolve_maker", lambda *args: object())
+    monkeypatch.setattr(run_mod, "collect_run_metadata", lambda *args, **kwargs: {})
 
     run_mod.run_family(runner, ["--algo", "DDPG", "--steps", "1"])
 

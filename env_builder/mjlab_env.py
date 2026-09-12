@@ -66,6 +66,14 @@ class MjlabVectorizedEnv(VectorizedEnv):
             "env_id": env_id,
             "worker_num": self.worker_num,
             "core_env_type": "VectorizedEnv",
+            "runtime": {
+                "backend": "mjlab",
+                "backend_env_id": env_id,
+                "seed": seed,
+                "seed_rule": "backend-managed streams from configuration and reset seed",
+                "reward_clipping": "none",
+                "episodic_life": False,
+            },
             "autoreset_steps": False,
         }
 
@@ -245,6 +253,7 @@ class MjlabVectorizedEnv(VectorizedEnv):
 class MjlabSingleEnv(SingleEnv):
     def __init__(self, vector: MjlabVectorizedEnv):
         self._vector = vector
+        self.runtime = vector.env_info["runtime"]
         self.render_mode = vector.env.render_mode
         self.metadata = dict(vector.env.metadata)
         self.observation_space = vector.observation_space

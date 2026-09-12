@@ -116,14 +116,17 @@ def model_builder_maker(
     policy_kwargs,
 ):
     """Build FlashSAC's residual policy and independent categorical twin critics."""
-    policy_kwargs = {} if policy_kwargs is None else dict(policy_kwargs)
-    n_atoms = policy_kwargs.pop("n_atoms", 101)
+    model_options = {} if policy_kwargs is None else dict(policy_kwargs)
+    n_atoms = model_options.pop("n_atoms", 101)
     actor_kwargs, critic_kwargs = split_actor_critic_kwargs(
-        policy_kwargs,
+        model_options,
         actor_default=ResidualConfig("flashsac", (128, 128)),
         critic_default=ResidualConfig("flashsac"),
         allowed_embeddings=("normal",),
     )
+    if policy_kwargs is not None:
+        policy_kwargs["actor_model"] = actor_kwargs["network"]
+        policy_kwargs["critic_model"] = critic_kwargs["network"]
     unsupported = set(actor_kwargs) - {"network"}
     if unsupported:
         raise ValueError(f"Unsupported FlashSAC policy options: {sorted(unsupported)}")

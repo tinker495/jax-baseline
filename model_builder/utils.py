@@ -25,6 +25,8 @@ def qnet_model_kwargs(
     options["network"] = resolve_model_config(
         options.pop("model", None), default, allowed_embeddings=allowed_embeddings
     )
+    if policy_kwargs is not None:
+        policy_kwargs["model"] = options["network"]
     return options
 
 
@@ -100,4 +102,7 @@ def split_actor_critic_kwargs(
         allowed_types=allowed_types,
         allowed_embeddings=allowed_embeddings,
     )
+    if policy_kwargs is not None:
+        policy_kwargs["actor_model"] = actor
+        policy_kwargs["critic_model"] = critic
     return {**options, "network": actor}, {**options, "network": critic}

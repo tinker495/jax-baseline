@@ -14,12 +14,35 @@ families keep their own server-side aggregation and do not use this tracker
 """
 
 from collections import deque
+from dataclasses import dataclass, field
+from time import perf_counter
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
 from jax_baselines.core.eval import log_measurement
+from jax_baselines.core.runtime_adapters import MetricLogger
+
+
+@dataclass
+class TrainingProgress:
+    """Performed training transitions and minibatch update rounds for one run.
+
+    Update rounds count a joint actor/critic minibatch once. Time includes
+    evaluation within the training session; evaluation transitions are excluded.
+    """
+
+    env_steps: int = 0
+    update_steps: int = 0
+    started_at: float = field(default_factory=perf_counter)
+
+    def log(self, logger: MetricLogger | None, steps: int) -> None:
+        if logger is None:
+            return
+        logger.log_metric("progress/env_steps", self.env_steps, steps)
+        logger.log_metric("progress/update_steps", self.update_steps, steps)
+        logger.log_metric("time/elapsed_seconds", perf_counter() - self.started_at, steps)
 
 
 @jax.jit

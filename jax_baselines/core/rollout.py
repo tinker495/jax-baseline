@@ -23,7 +23,7 @@ family serializes it as part of the checkpoint state.
 
 from collections import deque
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import jax
 import jax.numpy as jnp
@@ -36,7 +36,7 @@ from jax_baselines.core.env_protocols import (
     vector_autoreset_mask,
 )
 from jax_baselines.core.replay_protocol import ReplayWriter
-from jax_baselines.core.rollout_stats import device_episode_step
+from jax_baselines.core.rollout_stats import TrainingProgress, device_episode_step
 from jax_baselines.core.runtime_adapters import MetricLogger
 
 
@@ -130,6 +130,7 @@ class RolloutSpec:
     autoreset_steps: bool = True
     initial_reset: tuple | None = None
     logger_run: MetricLogger | None = None
+    progress: TrainingProgress = field(default_factory=TrainingProgress)
 
 
 class RolloutEngine:
@@ -158,6 +159,7 @@ class RolloutEngine:
         for steps in pbar:
             sel = spec.single_action(obs, steps)
             next_obs, reward, terminated, truncated, _ = spec.env.step(sel.env_action)
+            spec.progress.env_steps += 1
             log_due = steps - last_log_step >= log_interval
             log_environment_metrics(spec.env, spec.logger_run, steps, flush=log_due)
             if log_due:
@@ -192,7 +194,10 @@ class RolloutEngine:
 
             if log_due and eval_result is not None and len(lossque) > 0:
                 pbar.set_description(spec.describe(eval_result))
+            if log_due:
+                spec.progress.log(spec.logger_run, steps)
         log_environment_metrics(spec.env, spec.logger_run, steps)
+        spec.progress.log(spec.logger_run, steps)
 
     def learn_vectorized_env(self, pbar, callback=None, log_interval=1000):
         spec = self.spec
@@ -217,6 +222,7 @@ class RolloutEngine:
             next_obses, rewards, terminateds, truncateds, infos = spec.env.get_result()
             done = np.logical_or(terminateds, truncateds)
             active = np.ones(spec.worker_size, dtype=bool) if prev_done is None else ~prev_done
+            spec.progress.env_steps += int(active.sum())
             log_due = steps - last_log_step >= log_interval
             log_environment_metrics(spec.env, spec.logger_run, steps, flush=log_due)
             if log_due:
@@ -262,7 +268,10 @@ class RolloutEngine:
 
             if log_due and eval_result is not None and len(lossque) > 0:
                 pbar.set_description(spec.describe(eval_result))
+            if log_due:
+                spec.progress.log(spec.logger_run, steps)
         log_environment_metrics(spec.env, spec.logger_run, steps)
+        spec.progress.log(spec.logger_run, steps)
 
     def learn_single_env_checkpointing(self, pbar, callback=None, log_interval=1000, obs=None):
         spec = self.spec
@@ -281,6 +290,7 @@ class RolloutEngine:
             eplen += 1
             sel = spec.single_action(obs, steps)
             next_obs, reward, terminated, truncated, _ = spec.env.step(sel.env_action)
+            spec.progress.env_steps += 1
             log_due = steps - last_log_step >= log_interval
             log_environment_metrics(spec.env, spec.logger_run, steps, flush=log_due)
             if log_due:
@@ -325,7 +335,10 @@ class RolloutEngine:
 
             if log_due and eval_result is not None and len(lossque) > 0:
                 pbar.set_description(spec.describe(eval_result))
+            if log_due:
+                spec.progress.log(spec.logger_run, steps)
         log_environment_metrics(spec.env, spec.logger_run, steps)
+        spec.progress.log(spec.logger_run, steps)
 
     def learn_vectorized_env_checkpointing(self, pbar, callback=None, log_interval=1000):
         spec = self.spec
@@ -375,6 +388,7 @@ class RolloutEngine:
             next_obses, rewards, terminateds, truncateds, infos = spec.env.get_result()
             done = np.logical_or(terminateds, truncateds)
             active = np.ones(spec.worker_size, dtype=bool) if prev_done is None else ~prev_done
+            spec.progress.env_steps += int(active.sum())
             log_due = steps - last_log_step >= log_interval
             log_environment_metrics(spec.env, spec.logger_run, steps, flush=log_due)
             if log_due:
@@ -437,11 +451,14 @@ class RolloutEngine:
 
             if log_due and eval_result is not None and len(lossque) > 0:
                 pbar.set_description(spec.describe(eval_result))
+            if log_due:
+                spec.progress.log(spec.logger_run, steps)
 
         flush_checkpoint_pulses()
         log_environment_metrics(spec.env, spec.logger_run, steps)
         while pending_eval_steps:
             run_eval(pending_eval_steps.popleft())
+        spec.progress.log(spec.logger_run, steps)
 
     def _learn_vectorized_device(self, pbar, log_interval, *, checkpointing):
         """Keep same-step autoreset rollouts resident; copy only episode reports."""
@@ -495,6 +512,7 @@ class RolloutEngine:
             env.step(sel.env_action)
             flush_checkpoint_pulses()
             next_obs, rewards, terminated, truncated, _ = env.get_result()
+            spec.progress.env_steps += spec.worker_size
             log_due = steps - last_log_step >= log_interval
             log_environment_metrics(env, spec.logger_run, steps, flush=log_due)
             if log_due:
@@ -550,6 +568,7 @@ class RolloutEngine:
                     eval_result = spec.evaluate(steps)
             if log_due:
                 flush_reports()
+                spec.progress.log(spec.logger_run, steps)
                 if eval_result is not None and lossque:
                     pbar.set_description(spec.describe(eval_result))
         flush_checkpoint_pulses()
@@ -557,3 +576,4 @@ class RolloutEngine:
         log_environment_metrics(env, spec.logger_run, steps)
         while pending_evals:
             eval_result = spec.evaluate(pending_evals.popleft())
+        spec.progress.log(spec.logger_run, steps)

@@ -32,6 +32,7 @@ Network files:
 """
 
 import argparse
+import hashlib
 import json
 import os
 import shlex
@@ -43,15 +44,23 @@ from pathlib import Path
 import yaml
 
 from experiments.cli._common import load_runtime_env
+from experiments.cli._validation import parse_runner_args, runner_parser
+from experiments.cli.apex_dpg import APEX_DPG_RUNNER
+from experiments.cli.apex_qnet import APEX_QNET_RUNNER
+from experiments.cli.dpg import DPG_RUNNER
+from experiments.cli.impala import IMPALA_RUNNER
+from experiments.cli.pg import PG_RUNNER
+from experiments.cli.qnet import QNET_RUNNER
+from experiments.run_metadata import SWEEP_CONTEXT_ENV
 from model_builder.model_config import load_model_config, model_config_dict
 
-RUNNER_SCRIPTS = {
-    "qnet": "qnet",
-    "dpg": "dpg",
-    "pg": "pg",
-    "impala": "impala",
-    "apex_qnet": "apex-qnet",
-    "apex_dpg": "apex-dpg",
+RUNNERS = {
+    "qnet": QNET_RUNNER,
+    "dpg": DPG_RUNNER,
+    "pg": PG_RUNNER,
+    "impala": IMPALA_RUNNER,
+    "apex_qnet": APEX_QNET_RUNNER,
+    "apex_dpg": APEX_DPG_RUNNER,
 }
 MODEL_ARGUMENTS = ("model", "actor_model", "critic_model")
 
@@ -71,27 +80,57 @@ def _iter_commands(config, cli_overrides=None, *, config_dir: Path | None = None
     cli_overrides = cli_overrides or {}
     if config_dir is None:
         config_dir = Path.cwd()
+    if not isinstance(config, dict) or "runner" not in config:
+        raise ValueError("sweep must be a mapping with a runner")
+    config = {"base": {}, "runtime": {}, "variants": [{}], **config}
     runner = config["runner"]
-    if not isinstance(runner, str) or runner not in RUNNER_SCRIPTS:
-        raise ValueError(f"unknown runner '{runner}', expected one of {sorted(RUNNER_SCRIPTS)}")
-    script = RUNNER_SCRIPTS[runner]
-    base = config.get("base") or {}
-    runtime = config.get("runtime") or {}
-    xvfb = runtime.get("xvfb", False)
-    for variant in config.get("variants") or [{}]:
-        variant = variant or {}
-        if not variant.get("enabled", True):
+    if not isinstance(runner, str) or runner not in RUNNERS:
+        raise ValueError(f"unknown runner '{runner}', expected one of {sorted(RUNNERS)}")
+    script = runner.replace("_", "-")
+    parser = runner_parser(RUNNERS[runner], prog=script)
+    base = {} if config["base"] is None else config["base"]
+    runtime = {} if config["runtime"] is None else config["runtime"]
+    variants = (
+        [{}] if config["variants"] is None or config["variants"] == [] else config["variants"]
+    )
+    if not isinstance(base, dict) or not isinstance(runtime, dict):
+        raise TypeError("base and runtime must be mappings")
+    if not isinstance(variants, list):
+        raise TypeError("variants must be a list of argument mappings")
+    runtime = {"xvfb": False, **runtime}
+    if not isinstance(runtime["xvfb"], bool):
+        raise TypeError("runtime.xvfb must be a boolean")
+    for variant in variants:
+        variant = {} if variant is None else variant
+        if not isinstance(variant, dict):
+            raise TypeError("each variant must be an argument mapping")
+        variant = {"enabled": True, **variant}
+        if not isinstance(variant["enabled"], bool):
+            raise TypeError("variant.enabled must be a boolean")
+        if not variant["enabled"]:
             continue
         variant_args = {k: v for k, v in variant.items() if k != "enabled"}
         merged = {**base, **variant_args, **cli_overrides}
+        for key, value in merged.items():
+            if f"--{key}" not in parser._option_string_actions:
+                parser.error(f"unrecognized argument: --{key}")
+            if isinstance(value, bool) and not isinstance(
+                parser._option_string_actions[f"--{key}"], argparse._StoreConstAction
+            ):
+                parser.error(f"--{key} requires a value, not a boolean")
+            if not isinstance(value, (str, int, float, bool)):
+                parser.error(f"--{key} requires a scalar value")
         for name in MODEL_ARGUMENTS:
             if name not in merged:
                 continue
-            if not isinstance(merged[name], str) or not merged[name]:
+            model_path = merged[name]
+            if not isinstance(model_path, str) or not model_path:
                 raise ValueError(f"{name} must be a nonempty JSON file path")
-            merged[name] = str((config_dir / merged[name]).resolve())
-        command = [script, *_build_args(merged)]
-        if xvfb:
+            merged[name] = str((config_dir / model_path).resolve())
+        variant_argv = _build_args(merged)
+        parse_runner_args(RUNNERS[runner], variant_argv, prog=script)
+        command = [script, *variant_argv]
+        if runtime["xvfb"]:
             command = ["xvfb-run", "-a", *command]
         yield command
 
@@ -107,7 +146,7 @@ def main(argv=None):
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="validate model JSON and print commands without running them",
+        help="validate all runner arguments, algorithm/backend combinations and model JSON",
     )
     parser.add_argument(
         "--export-models",
@@ -132,19 +171,27 @@ def main(argv=None):
         key, value = item.split("=", 1)
         cli_overrides[key] = yaml.safe_load(value)
 
-    with Path(args.config).open() as handle:
-        config = yaml.safe_load(handle)
-
+    try:
+        source = Path(args.config).read_text(encoding="utf-8")
+        config = yaml.safe_load(source)
+    except (OSError, yaml.YAMLError) as exc:
+        parser.error(str(exc))
+    if not isinstance(config, dict) or "category" not in config:
+        parser.error("sweep must be a mapping with a category")
     category = config["category"]
     if not isinstance(category, str) or not category.strip():
-        raise ValueError("category must be a nonempty string")
+        parser.error("category must be a nonempty string")
 
-    runtime = config.get("runtime") or {}
+    try:
+        commands = list(_iter_commands(config, cli_overrides, config_dir=Path(args.config).parent))
+    except (TypeError, ValueError) as exc:
+        parser.error(str(exc))
+
+    runtime = config["runtime"] if "runtime" in config and config["runtime"] is not None else {}
     env = os.environ.copy()
     if "device" in runtime:
         env["CUDA_VISIBLE_DEVICES"] = str(runtime["device"])
 
-    commands = list(_iter_commands(config, cli_overrides, config_dir=Path(args.config).parent))
     model_definitions = [
         {
             name: model_config_dict(load_model_config(command[command.index(f"--{name}") + 1]))
@@ -172,6 +219,17 @@ def main(argv=None):
             if models:
                 print(json.dumps(models, indent=2), flush=True)
             continue
+        env[SWEEP_CONTEXT_ENV] = json.dumps(
+            {
+                "config_path": str(Path(args.config).resolve()),
+                "config_yaml": source,
+                "config_sha256": hashlib.sha256(source.encode()).hexdigest(),
+                "category": category,
+                "runner": config["runner"],
+                "enabled_variant_index": index,
+                "overrides": cli_overrides,
+            }
+        )
         result = subprocess.run(command, env=env, check=False)
         if result.returncode != 0:
             failures.append((index, printable, result.returncode))

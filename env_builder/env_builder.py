@@ -21,6 +21,7 @@ from env_builder.seeding import seed_env
 from jax_baselines.core.env_protocols import (
     Env,
     EnvInfo,
+    EnvironmentMetadata,
     Observation,
     PreparedEnvSpec,
     PreparedWorkerEnvSpec,
@@ -38,6 +39,7 @@ __all__ = [
     "PreparedWorkerEnvSpec",
     "VectorizedEnv",
     "get_env_builder",
+    "get_env_info",
 ]
 
 
@@ -75,6 +77,7 @@ def _autoreset_mask(terminateds, truncateds):
 
 
 def _single_env_info(env, env_id: str) -> EnvInfo:
+    runtime: EnvironmentMetadata = env.runtime
     if not isinstance(env, SingleEnv):
         raise ValueError("Single env must satisfy the SingleEnv protocol")
     action_size, action_type = _action_meta(env.action_space)
@@ -91,16 +94,15 @@ def _single_env_info(env, env_id: str) -> EnvInfo:
         "env_id": env_id,
         "worker_num": 1,
         "core_env_type": "SingleEnv",
+        "runtime": runtime,
     }
 
 
-def _prepared_env_info(env, env_id: str) -> EnvInfo:
+def get_env_info(env, env_id: str) -> EnvInfo:
+    """Describe an environment after the adapter has resolved its backend."""
     if not isinstance(env, VectorizedEnv):
         return _single_env_info(env, env_id)
-    env_info = env.env_info
-    if env_info is None:
-        raise ValueError("Vectorized env must expose env_info")
-    return env_info
+    return env.get_info()
 
 
 _ENV_BACKENDS = ("gymnasium", "envpool", "mjlab")
@@ -198,7 +200,7 @@ def get_env_builder(
             if seed is None:
                 env.reset()
         seed_env(env, seed)
-        return GymLoggingWrapper(env, is_atari=env_type == "atari_env")
+        return GymLoggingWrapper(env, env_id=env_name, seed=seed, is_atari=env_type == "atari_env")
 
     def prepare_envs(num_workers=1, seed=None):
         eval_seed = None if seed is None else seed + 1
@@ -209,7 +211,7 @@ def get_env_builder(
             return PreparedEnvSpec(
                 env=env,
                 eval_env=eval_env,
-                env_info=_prepared_env_info(env, env_name),
+                env_info=get_env_info(env, env_name),
             )
         except Exception:
             _close_envs(env, eval_env)
@@ -343,6 +345,14 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
             "env_id": env_id,
             "worker_num": worker_num,
             "core_env_type": "VectorizedEnv",
+            "runtime": {
+                "backend": "envpool",
+                "backend_env_id": envpool_env_id,
+                "seed": seed,
+                "seed_rule": "backend-managed streams from constructor seed",
+                "reward_clipping": "sign" if self._is_atari else "none",
+                "episodic_life": self._is_atari,
+            },
         }
 
         # Set up action conversion for the normalized [-1, 1] core contract.
@@ -586,6 +596,14 @@ class GymVectorizedEnv(VectorizedEnv):
             "env_id": env_id,
             "worker_num": worker_num,
             "core_env_type": "VectorizedEnv",
+            "runtime": {
+                "backend": "gymnasium",
+                "backend_env_id": env_id,
+                "seed": seed,
+                "seed_rule": "reset seed + worker index",
+                "reward_clipping": "sign" if self._is_atari else "none",
+                "episodic_life": self._is_atari,
+            },
         }
 
         # Set up action conversion

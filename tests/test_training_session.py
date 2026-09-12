@@ -26,6 +26,9 @@ from jax_baselines.TPPO.tppo import TPPO
 
 
 class FakeLoggerRun:
+    def log_metric(self, key, value, step=None):
+        pass
+
     def get_local_path(self, name):
         return ("local_path", name)
 

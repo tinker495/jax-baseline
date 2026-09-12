@@ -71,6 +71,7 @@ def add_args(parser):
         default=100,
         help="number of evaluations over the whole training run (default 100)",
     )
+    parser.add_argument("--eval_eps", type=int, default=20, help="episodes per evaluation")
     parser.add_argument("--logdir", type=str, default=default_logdir("dpg"), help="log file dir")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
     parser.add_argument("--n_support", type=int, default=25, help="n_support for QRDQN,IQN,FQF")
@@ -122,6 +123,7 @@ def build_env(args):
 def _common(a):
     return {
         "num_workers": a.worker,
+        "eval_eps": a.eval_eps,
         "gamma": a.gamma,
         "learning_rate": a.learning_rate,
         "batch_size": a.batch,
@@ -228,6 +230,7 @@ ALGOS = {
         "td7",
         lambda a: {
             "num_workers": a.worker,
+            "eval_eps": a.eval_eps,
             "gamma": a.gamma,
             "learning_rate": a.learning_rate,
             "batch_size": a.batch,

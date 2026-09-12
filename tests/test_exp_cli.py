@@ -10,7 +10,7 @@ def test_set_overrides_parse_yaml_scalars(tmp_path, capsys):
             {
                 "category": "atari",
                 "runner": "qnet",
-                "base": {"clip_rewards": True, "batch_size": 32},
+                "base": {"double": True, "batch": 32},
                 "variants": [{}],
             }
         )
@@ -22,16 +22,14 @@ def test_set_overrides_parse_yaml_scalars(tmp_path, capsys):
                 str(config_path),
                 "--dry-run",
                 "--set",
-                "clip_rewards=false",
+                "double=false",
                 "--set",
-                "batch_size=64",
+                "batch=64",
                 "--set",
-                "dueling_model=true",
+                "dueling=true",
             ]
         )
         == 0
     )
 
-    assert capsys.readouterr().out.strip() == (
-        "category: atari\n[1/1] qnet --batch_size 64 --dueling_model"
-    )
+    assert capsys.readouterr().out.strip() == ("category: atari\n[1/1] qnet --batch 64 --dueling")

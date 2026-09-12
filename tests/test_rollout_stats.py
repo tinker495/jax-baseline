@@ -301,7 +301,9 @@ def test_vectorized_env_excludes_autoreset_dummy_step():
         worker_size=ws,
     )
     records, record = _episode_recorder()
-    RolloutEngine(_spec(env, record)).learn_vectorized_env(range(4), log_interval=10**9)
+    engine = RolloutEngine(_spec(env, record))
+    engine.learn_vectorized_env(range(4), log_interval=10**9)
+    assert engine.spec.progress.env_steps == 3
 
     # The dummy step's reward 5 is excluded; two clean episodes recorded.
     assert [(r["reward"], r["length"], r["timeout"]) for r in records] == [

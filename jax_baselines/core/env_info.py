@@ -20,6 +20,7 @@ REQUIRED_ENV_INFO_KEYS = (
     "env_id",
     "worker_num",
     "core_env_type",
+    "runtime",
 )
 
 
@@ -47,6 +48,17 @@ def _require_env_info(env_info: EnvInfo | None) -> EnvInfo:
         raise ValueError("Prepared env_info observation_space must be a non-empty dict")
     if any(not isinstance(key, str) for key in observation_space):
         raise ValueError("Prepared env_info observation keys must be strings")
+
+    runtime = env_info["runtime"]
+    if not isinstance(runtime, dict):
+        raise TypeError("Prepared env_info runtime must be a dict")
+    for key in ("backend", "backend_env_id", "seed_rule", "reward_clipping"):
+        if key not in runtime or not isinstance(runtime[key], str) or not runtime[key]:
+            raise ValueError(f"Prepared env_info runtime {key} must be a non-empty string")
+    if "seed" not in runtime or (runtime["seed"] is not None and type(runtime["seed"]) is not int):
+        raise ValueError("Prepared env_info runtime seed must be an int or None")
+    if "episodic_life" not in runtime or not isinstance(runtime["episodic_life"], bool):
+        raise ValueError("Prepared env_info runtime episodic_life must be a bool")
 
     return env_info
 
