@@ -99,7 +99,8 @@ python -m pip install -e '.[all]'
 ## Run experiments
 
 Runs work from any directory via the `uv run *` console scripts.
-Predefined sweeps live in `experiments/configs/` (run with
+Predefined sweeps are grouped by benchmark and environment in
+[`experiments/configs/`](experiments/configs/README.md) (run with
 `uv run exp <config>`, or add `--dry-run` to preview the commands).
 
 To run Q-Net on Atari (DQN, or C51/QRDQN/IQN/FQF):

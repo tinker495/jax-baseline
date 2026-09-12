@@ -39,7 +39,12 @@ def test_single_distribution_includes_experiment_packages_and_commands():
     for target in project["scripts"].values():
         module, _ = target.split(":")
         assert (REPO_ROOT / (module.replace(".", "/") + ".py")).is_file()
-    assert setuptools["package-data"]["experiments"] == ["configs/*.yaml"]
+    assert setuptools["package-data"]["experiments"] == [
+        "configs/*/*.yaml",
+        "configs/README.md",
+        "configs/models/*.json",
+        "configs/models/README.md",
+    ]
     assert {
         "jax",
         "dm-pix",

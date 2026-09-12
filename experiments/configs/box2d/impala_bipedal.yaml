@@ -1,0 +1,20 @@
+category: box2d
+runner: impala
+runtime:
+  device: 0
+base:
+  env: BipedalWalker-v3
+  learning_rate: 0.00003
+  steps: 5e5
+  batch: 32
+  gamma: 0.995
+  worker: 8
+  ent_coef: 1e-3
+  actor_model: ../models/mlp_512x2_relu.json
+  critic_model: ../models/mlp_512x2_relu.json
+  sample_size: 8
+  update_freq: 100
+  buffer_size: 32
+variants:
+  - {algo: PPO, optimizer: rmsprop}
+  - {algo: PPO, optimizer: adam}

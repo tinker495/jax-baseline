@@ -1,0 +1,19 @@
+category: atari
+runner: impala
+runtime:
+  device: 1
+base:
+  env: BreakoutNoFrameskip-v4
+  steps: 5e5
+  batch: 128
+  gamma: 0.99
+  worker: 16
+  ent_coef: 1e-2
+  actor_model: ../models/mlp_512x1_relu.json
+  critic_model: ../models/mlp_512x1_relu.json
+  sample_size: 32
+  update_freq: 100
+  buffer_size: 256
+  optimizer: rmsprop
+variants:
+  - {algo: PPO, learning_rate: 0.00003}

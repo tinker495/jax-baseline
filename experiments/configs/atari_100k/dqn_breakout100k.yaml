@@ -1,0 +1,124 @@
+# translated from test/test_dqn_breakout100k.sh
+category: atari_100k
+runner: qnet
+runtime:
+  device: 0
+base:
+  # 20 evaluations over the whole run (was hardcoded ~100)
+  eval_num: 20
+  experiment_name: DQN_Breakout100k
+  env: BreakoutNoFrameskip-v4
+  learning_rate: 0.00005
+  model: ../models/mlp_2048x1_relu.json
+  optimizer: adamw
+variants:
+  # Group 1: train_freq=4, gradient_steps=1
+  - algo: DQN
+    steps: 1e5
+    batch: 32
+    train_freq: 4
+    final_eps: 0.001
+    learning_starts: 1600
+    gamma: 0.99
+    buffer_size: 1e5
+    exploration_fraction: 0.4
+    target_update: 1000
+    gradient_steps: 1
+    double: true
+    dueling: true
+    per: true
+    n_step: 3
+    noisynet: true
+  - algo: C51
+    steps: 1e5
+    batch: 32
+    train_freq: 4
+    final_eps: 0.001
+    learning_starts: 1600
+    gamma: 0.99
+    buffer_size: 1e5
+    exploration_fraction: 0.4
+    target_update: 1000
+    gradient_steps: 1
+    double: true
+    dueling: true
+    per: true
+    n_step: 3
+    noisynet: true
+  # Group 2: High replay ratio, train_freq=1, gradient_steps=2
+  - algo: DQN
+    steps: 1e5
+    batch: 32
+    train_freq: 1
+    final_eps: 0.001
+    learning_starts: 1600
+    gamma: 0.99
+    buffer_size: 1e5
+    exploration_fraction: 0.4
+    target_update: 1000
+    gradient_steps: 2
+    double: true
+    dueling: true
+    per: true
+    n_step: 3
+    noisynet: true
+  - algo: C51
+    steps: 1e5
+    batch: 32
+    train_freq: 1
+    final_eps: 0.001
+    learning_starts: 1600
+    gamma: 0.99
+    buffer_size: 1e5
+    exploration_fraction: 0.4
+    target_update: 1000
+    gradient_steps: 2
+    double: true
+    dueling: true
+    per: true
+    n_step: 3
+    noisynet: true
+  - algo: SPR
+    steps: 1e5
+    batch: 32
+    train_freq: 1
+    final_eps: 0.001
+    learning_starts: 1600
+    gamma: 0.99
+    buffer_size: 1e5
+    exploration_fraction: 0.4
+    gradient_steps: 2
+  - algo: SPR
+    steps: 1e5
+    batch: 32
+    train_freq: 1
+    final_eps: 0.001
+    learning_starts: 1600
+    gamma: 0.99
+    buffer_size: 1e5
+    exploration_fraction: 0.4
+    gradient_steps: 2
+    scaled_by_reset: true
+  - algo: BBF
+    model: ../models/mlp_2048x1_relu_resnet.json
+    steps: 1e5
+    batch: 32
+    train_freq: 1
+    final_eps: 0.001
+    learning_starts: 1600
+    gamma: 0.99
+    buffer_size: 1e5
+    exploration_fraction: 0.4
+    gradient_steps: 2
+  # Group 3: Super high replay ratio, gradient_steps=8
+  - algo: BBF
+    model: ../models/mlp_2048x1_relu_resnet.json
+    steps: 1e5
+    batch: 32
+    train_freq: 1
+    final_eps: 0.001
+    learning_starts: 1600
+    gamma: 0.99
+    buffer_size: 1e5
+    exploration_fraction: 0.4
+    gradient_steps: 8
