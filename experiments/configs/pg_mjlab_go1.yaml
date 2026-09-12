@@ -8,7 +8,7 @@ base:
   env_jax_arrays: true
   env_reuse_for_eval: true
   worker: 4096
-  steps: 491520000
+  steps: 983040000
   eval_num: 5
   batch: 24
   actor_node: 512
