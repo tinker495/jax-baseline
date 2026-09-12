@@ -9,9 +9,8 @@ base:
   gamma: 0.995
   worker: 8
   ent_coef: 1e-3
-  actor_node: 512
-  critic_node: 512
-  hidden_n: 2
+  actor_model: models/mlp_512x2_relu.json
+  critic_model: models/mlp_512x2_relu.json
   sample_size: 8
   update_freq: 100
   buffer_size: 32

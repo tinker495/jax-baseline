@@ -74,7 +74,7 @@ class Actor_Critic_Policy_Gradient_Family:
         optimizer_factory: OptimizerFactory | None = None,
         lr_annealing=False,
         checkpoint_store: CheckpointStore | None = None,
-        obs_normalization=False,
+        obs_rms_norm: bool = False,
         memory_backend: Literal["auto", "cpu", "gpu"] = "auto",
     ):
         if memory_backend not in ("auto", "cpu", "gpu"):
@@ -125,7 +125,7 @@ class Actor_Critic_Policy_Gradient_Family:
             "gpu" if self.memory_device is not None else "cpu"
         )
         print("memory backend : ", self.memory_backend)
-        self.obs_normalization = obs_normalization
+        self.obs_rms_norm = obs_rms_norm
         with jax.default_device(self.memory_device):
             self.obs_rms = (
                 RunningMeanStd(
@@ -134,7 +134,7 @@ class Actor_Critic_Policy_Gradient_Family:
                     dtype=np.float32,
                     on_device=self.memory_backend == "gpu",
                 )
-                if obs_normalization
+                if obs_rms_norm
                 else None
             )
         # Control model initialization timing across children
@@ -176,7 +176,7 @@ class Actor_Critic_Policy_Gradient_Family:
         self.actor_params = jax.device_put(state.actor_params, self.memory_device)
         self.critic_params = jax.device_put(state.critic_params, self.memory_device)
         self.obs_rms = obs_rms
-        self.obs_normalization = obs_rms is not None
+        self.obs_rms_norm = obs_rms is not None
 
     def get_memory_setup(self):
         self.buffer = EpochBuffer(

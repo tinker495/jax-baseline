@@ -3,9 +3,13 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from model_builder.haiku.Module import PreProcess, pop_embedding_mode
+from model_builder.haiku.Module import PreProcess
 from model_builder.haiku.qnet.iqn_builder import Model
-from model_builder.utils import dummy_observation, print_haiku_model_summary
+from model_builder.utils import (
+    dummy_observation,
+    print_haiku_model_summary,
+    qnet_model_kwargs,
+)
 
 
 class FractionProposal(hk.Module):
@@ -39,11 +43,13 @@ class FractionProposal(hk.Module):
 def model_builder_maker(
     observation_space, action_space, dueling_model, param_noise, n_support, policy_kwargs
 ):
-    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
+    policy_kwargs = qnet_model_kwargs(policy_kwargs, allowed_embeddings=("normal",))
 
     def _model_builder(key=None, print_model=False):
         preproc = hk.transform(
-            lambda x: PreProcess(observation_space, embedding_mode=embedding_mode)(x)
+            lambda x: PreProcess(
+                observation_space, embedding_mode=policy_kwargs["network"].embedding_mode
+            )(x)
         )
         fqf = hk.transform(lambda x: FractionProposal(n_support)(x))
         model = hk.transform(

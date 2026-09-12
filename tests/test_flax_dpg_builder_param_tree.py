@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import importlib
-
 import jax
 import jax.numpy as jnp
 import pytest
@@ -20,27 +18,37 @@ from model_builder.flax.dpg.td3_builder import (
 from model_builder.flax.dpg.tqc_builder import (
     model_builder_maker as tqc_model_builder_maker,
 )
+from model_builder.model_config import LayerConfig, MLPConfig, ResidualConfig
 
-_POLICY_KWARGS = {"actor_node": 16, "critic_node": 32, "hidden_n": 2, "embedding_mode": "normal"}
+_POLICY_KWARGS = {
+    "actor_model": MLPConfig((LayerConfig(16),) * 2),
+    "critic_model": MLPConfig((LayerConfig(32),) * 2),
+}
 _OBSERVATION_SPACE = {"unified_obs": [4]}
 _ACTION_SIZE = [2]
 _SUPPORT_N = 25
 
-_DETERMINISTIC_BUILDERS = [
-    ("ddpg_builder", {"Dense_0", "Dense_1", "Dense_2"}, False),
+_NETWORK_CONFIGURATIONS = [
     (
-        "simba_ddpg_builder",
+        _POLICY_KWARGS["actor_model"],
+        _POLICY_KWARGS["critic_model"],
+        {"Dense_0", "Dense_1", "Dense_2"},
+    ),
+    (
+        ResidualConfig("simba", (16, 16)),
+        ResidualConfig("simba", (32, 32)),
         {"Dense_0", "ResidualBlock_0", "ResidualBlock_1", "LayerNorm_0", "Dense_1"},
-        False,
     ),
     (
-        "simbav2_ddpg_builder",
+        ResidualConfig("simbav2", (16, 16)),
+        ResidualConfig("simbav2", (32, 32)),
         {"SimbaV2Embedding_0", "SimbaV2Block_0", "SimbaV2Block_1", "SimbaV2Head_0"},
-        False,
     ),
-    ("td3_builder", {"crit1", "crit2"}, True),
-    ("simba_td3_builder", {"crit1", "crit2"}, True),
-    ("simbav2_td3_builder", {"crit1", "crit2"}, True),
+    (
+        _POLICY_KWARGS["actor_model"],
+        ResidualConfig("simbav2", (32, 32)),
+        {"SimbaV2Embedding_0", "SimbaV2Block_0", "SimbaV2Block_1", "SimbaV2Head_0"},
+    ),
 ]
 
 _ACTOR_STRUCTURE = {
@@ -69,7 +77,7 @@ def _twin_tower(name):
     }
 
 
-# Squashed-Gaussian actor (gaussian_blocks.Actor): a shared 2*hidden_n MLP stack
+# Squashed-Gaussian actor (gaussian_blocks.Actor): a shared two-layer MLP stack
 # (Dense_0/Dense_1) followed by TWO heads -- the mu head (Dense_2) and the
 # log_std head (Dense_3). The extra Dense_3 vs the deterministic ddpg/td3 actor is
 # the load-bearing difference; dropping the log_std head would fail this set.
@@ -115,21 +123,24 @@ def _build(maker):
     return policy_params, critic_params
 
 
-@pytest.mark.parametrize("module_name, critic_roots, twin", _DETERMINISTIC_BUILDERS)
+@pytest.mark.parametrize(
+    "make_builder, twin", [(ddpg_model_builder_maker, False), (td3_model_builder_maker, True)]
+)
+@pytest.mark.parametrize("actor_model, critic_model, critic_roots", _NETWORK_CONFIGURATIONS)
 def test_deterministic_builders_preserve_public_contract_and_param_roots(
-    module_name, critic_roots, twin
+    make_builder, twin, actor_model, critic_model, critic_roots
 ):
-    module = importlib.import_module(f"model_builder.flax.dpg.{module_name}")
-    assert hasattr(module, "Actor")
-    assert hasattr(module, "Critic")
-
-    builder = module.model_builder_maker(_OBSERVATION_SPACE, _ACTION_SIZE, dict(_POLICY_KWARGS))
+    builder = make_builder(
+        _OBSERVATION_SPACE,
+        _ACTION_SIZE,
+        {**_POLICY_KWARGS, "actor_model": actor_model, "critic_model": critic_model},
+    )
     assert len(builder()) == 2
     actor, critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
     assert set(policy_params["params"]) == {"act"}
-    assert set(critic_params["params"]) == (critic_roots if twin else {"crit1"})
-    if not twin:
-        assert set(critic_params["params"]["crit1"]) == critic_roots
+    assert set(critic_params["params"]) == ({"crit1", "crit2"} if twin else {"crit1"})
+    for critic_params_tree in critic_params["params"].values():
+        assert set(critic_params_tree) == critic_roots
 
     key = jax.random.PRNGKey(1)
     observations = {"unified_obs": jnp.zeros((1, 4), dtype=jnp.float32)}

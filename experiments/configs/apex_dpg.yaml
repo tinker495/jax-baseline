@@ -13,9 +13,8 @@ base:
   gamma: 0.99
   buffer_size: 1e7
   worker: 8
-  actor_node: 512
-  critic_node: 512
-  hidden_n: 2
+  actor_model: models/mlp_512x2_relu.json
+  critic_model: models/mlp_512x2_relu.json
   initial_eps: 0.1
   eps_decay: 0
   optimizer: rmsprop

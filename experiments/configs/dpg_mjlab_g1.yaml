@@ -21,11 +21,9 @@ base:
   learning_starts: 100000
   gamma: 0.99
   n_step: 3
-  # Local observation normalization uses the SIMBA residual-network variant.
-  simba: true
-  actor_node: 512
-  critic_node: 512
-  hidden_n: 2
+  obs_rms_norm: true
+  actor_model: models/simba_512x2_relu.json
+  critic_model: models/simba_512x2_relu.json
   reward_normalization: true
   target_update_tau: 0.01
   ent_coef: auto_0.005

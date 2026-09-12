@@ -50,7 +50,6 @@ class Ape_X_Deteministic_Policy_Gradient_Family:
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-3,
         scaled_by_reset=False,
-        simba=False,
         log_interval=200,
         log_dir=None,
         _init_setup_model=True,

@@ -44,9 +44,8 @@ def add_args(parser):
     )
     parser.add_argument("--logdir", type=str, default=default_logdir("pg"), help="log file dir")
     parser.add_argument("--seed", type=int, default=0, help="random seed")
-    parser.add_argument("--actor_node", type=int, default=None, help="actor hidden width")
-    parser.add_argument("--critic_node", type=int, default=None, help="critic hidden width")
-    parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
+    parser.add_argument("--actor_model", type=str, help="actor network JSON file")
+    parser.add_argument("--critic_model", type=str, help="critic network JSON file")
     parser.add_argument("--optimizer", type=str, default="adamw", help="optimaizer")
     parser.add_argument(
         "--optimizer_eps",
@@ -76,7 +75,7 @@ def add_args(parser):
     )
     parser.add_argument("--gae_normalize", action="store_true")
     parser.add_argument(
-        "--obs_normalization",
+        "--obs_rms_norm",
         action="store_true",
         help="normalize observations with running per-feature mean and standard deviation",
     )
@@ -93,11 +92,12 @@ def add_args(parser):
 
 
 def build_env(args):
+    policy_kwargs = actor_critic_policy_kwargs(args)
     env_builder, _ = get_env_builder(
         args.env,
         **env_builder_kwargs(args),
     )
-    return env_builder, actor_critic_policy_kwargs(args)
+    return env_builder, policy_kwargs
 
 
 def _common(a):
@@ -107,7 +107,7 @@ def _common(a):
         "learning_rate": a.learning_rate,
         "batch_size": a.batch,
         "ent_coef": a.ent_coef,
-        "obs_normalization": a.obs_normalization,
+        "obs_rms_norm": a.obs_rms_norm,
         "memory_backend": a.memory_backend,
         "use_entropy_adv_shaping": a.use_entropy_adv_shaping,
         "log_dir": a.logdir,
@@ -160,7 +160,6 @@ PG_RUNNER = FamilyRunner(
     build_env=build_env,
     algos=ALGOS,
     maker_pkg="model_builder.{lib}.ac",
-    variant=lambda _args: "",
 )
 
 

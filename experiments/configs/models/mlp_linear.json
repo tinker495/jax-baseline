@@ -1,0 +1,6 @@
+{
+  "type": "mlp",
+  "layers": [],
+  "activation": "relu",
+  "embedding_mode": "normal"
+}

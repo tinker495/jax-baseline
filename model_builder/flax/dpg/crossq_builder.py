@@ -5,8 +5,21 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
-from model_builder.flax.layers import LOG_STD_MEAN, LOG_STD_SCALE, Dense
-from model_builder.flax.Module import BatchReNorm, PreProcess, pop_embedding_mode
+from model_builder.flax.layers import (
+    LOG_STD_MEAN,
+    LOG_STD_SCALE,
+    Dense,
+    SimbaV2Head,
+    network_body,
+)
+from model_builder.flax.Module import BatchReNorm, PreProcess
+from model_builder.model_config import (
+    ACTIVATIONS,
+    LayerConfig,
+    MLPConfig,
+    ModelConfig,
+    ResidualConfig,
+)
 from model_builder.utils import (
     dummy_observation,
     get_critic_apply_fn,
@@ -17,54 +30,69 @@ from model_builder.utils import (
 
 class Actor(nn.Module):
     action_size: tuple
-    node: int = 256
-    hidden_n: int = 2
-    layer: nn.Module = Dense
+    network: ModelConfig = MLPConfig()
+    layer: type[nn.Dense] = Dense
 
     @nn.compact
-    def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
-        feature = features
-        for _ in range(self.hidden_n):
-            feature = self.layer(self.node)(feature)
-            feature = jax.nn.relu(feature)
-        mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(feature)
-        log_std = self.layer(
-            self.action_size[0],
-            kernel_init=clip_factorized_uniform(3),
-            bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
-        )(feature)  # initialize std with high values
+    def __call__(self, features: jnp.ndarray) -> tuple[jax.Array, jax.Array]:
+        feature = network_body(features, self.network, self.layer)
+        if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
+            mu = SimbaV2Head(
+                self.network.blocks[-1], self.action_size[0], kernel_init=clip_factorized_uniform(3)
+            )(feature)
+            log_std = SimbaV2Head(
+                self.network.blocks[-1],
+                self.action_size[0],
+                use_bias=True,
+                kernel_init=clip_factorized_uniform(3),
+                bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
+            )(feature)
+        else:
+            mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(feature)
+            log_std = self.layer(
+                self.action_size[0],
+                kernel_init=clip_factorized_uniform(3),
+                bias_init=lambda key, shape, dtype: jnp.full(shape, 10.0, dtype=dtype),
+            )(feature)
         return mu, LOG_STD_MEAN + LOG_STD_SCALE * jax.nn.tanh(log_std / LOG_STD_SCALE)
 
 
 class Critic(nn.Module):
-    node: int = 2048
-    hidden_n: int = 2
-    layer: nn.Module = Dense
+    network: ModelConfig = MLPConfig((LayerConfig(2048, "tanh"),) * 2)
+    layer: type[nn.Dense] = Dense
 
     @nn.compact
     def __call__(
         self, features: jnp.ndarray, actions: jnp.ndarray, training: bool = True
     ) -> jnp.ndarray:
-        feature = features
-        concat = jnp.concatenate([feature, actions], axis=1)
+        concat = jnp.concatenate([features, actions], axis=1)
+        if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
+            return SimbaV2Head(self.network.blocks[-1], 1)(network_body(concat, self.network))
         feature = BatchReNorm(use_running_average=not training)(concat)
-        for _ in range(self.hidden_n):
-            feature = self.layer(self.node)(feature)
-            feature = BatchReNorm(use_running_average=not training)(feature)
-            feature = jax.nn.tanh(feature)
-        q_net = self.layer(1, kernel_init=clip_factorized_uniform(3))(feature)
-        return q_net
+        if isinstance(self.network, MLPConfig):
+            for layer in self.network.layers:
+                feature = self.layer(layer.units)(feature)
+                feature = BatchReNorm(use_running_average=not training)(feature)
+                feature = ACTIVATIONS[layer.activation](feature)
+        else:
+            feature = network_body(feature, self.network, self.layer)
+        return self.layer(1, kernel_init=clip_factorized_uniform(3))(feature)
 
 
 def model_builder_maker(observation_space, action_size, policy_kwargs):
-    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
-    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(policy_kwargs, critic_node=2048)
+    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(
+        policy_kwargs,
+        critic_default=MLPConfig((LayerConfig(2048, "tanh"),) * 2),
+        allowed_types=("mlp", "simba", "simbav2"),
+    )
 
     def model_builder(key=None, print_model=False):
         class Merged_Actor(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(
-                    observation_space, embedding_mode=embedding_mode, role="actor"
+                    observation_space,
+                    embedding_mode=actor_kwargs["network"].embedding_mode,
+                    role="actor",
                 )
                 self.act = Actor(action_size, **actor_kwargs)
 
@@ -77,7 +105,9 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         class Merged_Critic(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(
-                    observation_space, embedding_mode=embedding_mode, role="critic"
+                    observation_space,
+                    embedding_mode=critic_kwargs["network"].embedding_mode,
+                    role="critic",
                 )
                 self.crit1 = Critic(**critic_kwargs)
                 self.crit2 = Critic(**critic_kwargs)

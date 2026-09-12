@@ -8,8 +8,7 @@ base:
   experiment_name: DQN_Asterix100k
   env: AsterixNoFrameskip-v4
   learning_rate: 0.00005
-  node: 512
-  hidden_n: 1
+  model: models/mlp_512x1_relu.json
   optimizer: adamw
 variants:
   # Group 1: train_freq=4, gradient_steps=1
@@ -104,6 +103,7 @@ variants:
     min: -15
     scaled_by_reset: true
   - algo: BBF
+    model: models/mlp_512x1_relu_resnet.json
     steps: 1e5
     batch: 32
     train_freq: 1
@@ -142,6 +142,7 @@ variants:
     min: -15
     scaled_by_reset: true
   - algo: BBF
+    model: models/mlp_512x1_relu_resnet.json
     steps: 1e5
     batch: 32
     train_freq: 1

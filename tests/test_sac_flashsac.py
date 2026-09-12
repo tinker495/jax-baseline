@@ -15,9 +15,7 @@ from jax_baselines.XQC.xqc import XQC
 from model_builder.flax.dpg.crossq_builder import (
     model_builder_maker as crossq_model_builder_maker,
 )
-from model_builder.flax.dpg.simba_crossq_builder import (
-    model_builder_maker as simba_crossq_model_builder_maker,
-)
+from model_builder.model_config import LayerConfig, MLPConfig, ResidualConfig
 
 
 def test_action_sampling_and_mode_are_explicitly_separate():
@@ -31,7 +29,7 @@ def test_action_sampling_and_mode_are_explicitly_separate():
 def test_dpg_eval_path_uses_sac_mode_without_sampling():
     agent = object.__new__(SAC)
     agent.memory_backend = "cpu"
-    agent.simba = False
+    agent.obs_rms_norm = False
     agent.learning_starts = 100
     agent.use_checkpointing = False
     agent.policy_params = None
@@ -83,15 +81,17 @@ def test_other_stochastic_dpg_algorithms_also_use_mode_for_evaluation(cls):
 
 
 def test_crossq_actors_have_no_batch_stats_but_critics_do():
-    for make_builder in (crossq_model_builder_maker, simba_crossq_model_builder_maker):
-        builder = make_builder(
+    for actor_config, critic_config in (
+        (MLPConfig((LayerConfig(16),)), MLPConfig((LayerConfig(128, "tanh"),))),
+        (ResidualConfig("simba", (16,)), ResidualConfig("simba", (32,))),
+        (ResidualConfig("simbav2", (16,)), MLPConfig((LayerConfig(32, "tanh"),))),
+    ):
+        builder = crossq_model_builder_maker(
             {"unified_obs": [4]},
             [2],
             {
-                "actor_node": 16,
-                "critic_node": 128,
-                "hidden_n": 1,
-                "embedding_mode": "normal",
+                "actor_model": actor_config,
+                "critic_model": critic_config,
             },
         )
         actor, critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))

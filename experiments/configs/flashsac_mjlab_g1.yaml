@@ -25,9 +25,8 @@ base:
   learning_starts: 100000
   gamma: 0.99
   n_step: 3
-  actor_node: 128
-  critic_node: 256
-  hidden_n: 2
+  actor_model: models/flashsac_128x2_relu.json
+  critic_model: models/flashsac_256x2_relu.json
   reward_normalization: true
   target_update_tau: 0.01
   ent_coef: auto_0.01

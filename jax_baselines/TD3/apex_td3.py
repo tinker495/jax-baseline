@@ -37,7 +37,6 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
         prioritized_replay_beta0=0.4,
         prioritized_replay_eps=1e-3,
         scaled_by_reset=False,
-        simba=False,
         log_interval=200,
         log_dir=None,
         _init_setup_model=True,
@@ -73,7 +72,6 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
             prioritized_replay_beta0=prioritized_replay_beta0,
             prioritized_replay_eps=prioritized_replay_eps,
             scaled_by_reset=scaled_by_reset,
-            simba=simba,
             log_interval=log_interval,
             log_dir=log_dir,
             _init_setup_model=_init_setup_model,
@@ -232,17 +230,18 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
                 not_terminateds,
                 subkeys[0],
             )
-            (_, (critic_loss, actor_loss, abs_error)), (actor_grad, critic_grad) = (
-                jax.value_and_grad(self._loss, argnums=(0, 1), has_aux=True)(
-                    policy_params,
-                    critic_params,
-                    obses,
-                    actions,
-                    targets,
-                    weights,
-                    subkeys[1],
-                    step,
-                )
+            (_, (critic_loss, actor_loss, abs_error)), (
+                actor_grad,
+                critic_grad,
+            ) = jax.value_and_grad(self._loss, argnums=(0, 1), has_aux=True)(
+                policy_params,
+                critic_params,
+                obses,
+                actions,
+                targets,
+                weights,
+                subkeys[1],
+                step,
             )
             critic_updates, opt_critic_state = self.optimizer.update(
                 critic_grad, opt_critic_state, params=critic_params

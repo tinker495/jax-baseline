@@ -1,0 +1,6 @@
+{
+  "type": "mlp",
+  "layers": [2048],
+  "activation": "relu",
+  "embedding_mode": "resnet"
+}

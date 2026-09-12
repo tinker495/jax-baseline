@@ -61,14 +61,16 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
         target_network_update_tau: float = 0.01,
         reward_normalization: bool = True,
         policy_kwargs: dict[str, Any] | None = None,
-        simba: bool = False,
-        simba_v2: bool = False,
+        obs_rms_norm: bool = False,
         scaled_by_reset: bool = False,
         prioritized_replay: bool = False,
         **kwargs: Any,
     ):
-        if simba or simba_v2 or scaled_by_reset or prioritized_replay:
-            raise ValueError("FlashSAC requires its unit-normalized model and uniform replay")
+        if obs_rms_norm or scaled_by_reset or prioritized_replay:
+            raise ValueError(
+                "FlashSAC requires disabled observation RMS normalization and parameter resets, "
+                "and uniform replay"
+            )
         if actor_update_period < 1 or lr_transition_steps < 1 or n_step < 1 or n_atoms < 2:
             raise ValueError(
                 "update periods and n_step must be positive; n_atoms must be at least 2"

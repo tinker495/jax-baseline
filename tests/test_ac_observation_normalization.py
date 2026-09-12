@@ -18,7 +18,7 @@ def _agent(enabled=True):
     agent.action_type = "continuous"
     agent._initial_reset = None
     agent.observation_space = {"unified_obs": [1]}
-    agent.obs_normalization = enabled
+    agent.obs_rms_norm = enabled
     agent.obs_rms = (
         RunningMeanStd(epsilon=0.0, shapes=agent.observation_space, dtype=np.float32)
         if enabled
@@ -89,7 +89,7 @@ def test_eval_and_recording_restore_checkpoint_normalization(tmp_path, monkeypat
     expected = [[4 / 1.01]] if enabled else [[10]]
     np.testing.assert_allclose(evaluated, expected)
     np.testing.assert_array_equal(recorded, evaluated)
-    assert restored.obs_normalization is enabled
+    assert restored.obs_rms_norm is enabled
     if enabled:
         assert restored.obs_rms is not None
         assert restored.obs_rms.count == 2

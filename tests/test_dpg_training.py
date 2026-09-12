@@ -94,7 +94,7 @@ class FakeAgent:
         self.batch_size = 4
         self.prioritized_replay = True
         self.prioritized_replay_beta0 = 0.4
-        self.simba = True
+        self.obs_rms_norm = True
         self.obs_rms = FakeNormalizer(100.0)
         self.action_obs_rms = FakeNormalizer(10.0)
         self.train_steps_count = 0

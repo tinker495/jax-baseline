@@ -4,7 +4,12 @@ from env_builder.env_builder import get_env_builder
 
 # isort: on
 from experiments.cli._env import add_env_args, env_builder_kwargs
-from experiments.cli._run import AlgoSpec, FamilyRunner, run_family
+from experiments.cli._run import (
+    AlgoSpec,
+    FamilyRunner,
+    default_policy_kwargs,
+    run_family,
+)
 from experiments.optimizers import (
     make_batch_scaled_optimizer_factory,
     make_optimizer_factory,
@@ -67,8 +72,7 @@ def add_args(parser):
         "--delta", type=float, default=1.0, help="huber loss delta  for QRDQN,IQN,FQF"
     )
     parser.add_argument("--CVaR", type=float, default=1.0, help="IQN risk avoiding factor")
-    parser.add_argument("--node", type=int, default=256, help="network node number")
-    parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
+    parser.add_argument("--model", type=str, help="Q-network JSON file")
     parser.add_argument("--final_eps", type=float, default=0.1, help="final epsilon")
     parser.add_argument("--worker", type=int, default=1, help="gym_worker_size")
     parser.add_argument("--optimizer", type=str, default="adamw", help="optimaizer")
@@ -100,11 +104,11 @@ def add_args(parser):
 
 
 def build_env(args):
+    policy_kwargs = default_policy_kwargs(args)
     env_builder, _ = get_env_builder(
         args.env,
         **env_builder_kwargs(args),
     )
-    policy_kwargs = {"node": args.node, "hidden_n": args.hidden_n}
     return env_builder, policy_kwargs
 
 
@@ -255,7 +259,6 @@ QNET_RUNNER = FamilyRunner(
     build_env=build_env,
     algos=ALGOS,
     maker_pkg="model_builder.{lib}.qnet",
-    variant=lambda _args: "",
 )
 
 

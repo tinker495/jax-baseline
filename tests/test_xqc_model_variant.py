@@ -2,35 +2,34 @@ import jax
 import jax.numpy as jnp
 
 from model_builder.flax.dpg.xqc_builder import model_builder_maker
+from model_builder.model_config import LayerConfig, MLPConfig
 
 
-def test_xqc_builder_uses_four_layer_batchnorm_mlp():
+def test_xqc_builder_uses_configured_batchnorm_mlp():
     builder = model_builder_maker(
         {"unified_obs": [4]},
         [2],
         {
-            "actor_node": 16,
-            "critic_node": 32,
-            "hidden_n": 1,
-            "embedding_mode": "normal",
+            "actor_model": MLPConfig((LayerConfig(16, "elu"), LayerConfig(8, "tanh"))),
+            "critic_model": MLPConfig((LayerConfig(32, "tanh"), LayerConfig(16), LayerConfig(8))),
         },
     )
     actor, critic, policy_params, critic_params = builder(jax.random.PRNGKey(0))
 
     actor_params = policy_params["params"]["act"]
-    assert set(policy_params["batch_stats"]["act"]) == {f"BatchNorm_{index}" for index in range(5)}
+    assert set(policy_params["batch_stats"]["act"]) == {f"BatchNorm_{index}" for index in range(3)}
     assert actor_params["Dense_0"]["kernel"].shape == (4, 16)
     assert "bias" not in actor_params["Dense_0"]
-    assert actor_params["Dense_3"]["kernel"].shape == (16, 16)
+    assert actor_params["Dense_1"]["kernel"].shape == (16, 8)
 
     critic_one = critic_params["params"]["crit1"]
     assert set(critic_params["batch_stats"]["crit1"]) == {
-        f"BatchNorm_{index}" for index in range(5)
+        f"BatchNorm_{index}" for index in range(4)
     }
     assert critic_one["Dense_0"]["kernel"].shape == (6, 32)
     assert "bias" not in critic_one["Dense_0"]
-    assert critic_one["Dense_3"]["kernel"].shape == (32, 32)
-    assert critic_one["Dense_4"]["kernel"].shape == (32, 101)
+    assert critic_one["Dense_2"]["kernel"].shape == (16, 8)
+    assert critic_one["Dense_3"]["kernel"].shape == (8, 101)
 
     obs = {"unified_obs": jnp.zeros((2, 4), dtype=jnp.float32)}
     (mu, log_std), actor_updates = actor(policy_params, None, obs, True)

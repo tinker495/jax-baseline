@@ -64,17 +64,6 @@ def flatten_fn(x: jnp.ndarray) -> jnp.ndarray:
     return x.reshape((x.shape[0], -1))
 
 
-def pop_embedding_mode(policy_kwargs: dict | None, default: str = "normal") -> tuple[dict, str]:
-    """Normalize policy_kwargs and split out the embedding_mode entry.
-
-    Returns the (mutated) policy_kwargs dict with ``embedding_mode`` removed and
-    the embedding mode string (defaulting to ``default``).
-    """
-    policy_kwargs = {} if policy_kwargs is None else policy_kwargs
-    embedding_mode = policy_kwargs.pop("embedding_mode", default)
-    return policy_kwargs, embedding_mode
-
-
 def visual_embedding(
     mode: str = "normal", flatten: bool = True, multiple: int = 1
 ) -> Callable[[jnp.ndarray], jnp.ndarray]:

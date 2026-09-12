@@ -25,12 +25,13 @@ def _get_latest_run_id(local_dir, experiment_name, run_name):
 
 
 class TensorboardRun:
-    def __init__(self, dir: str):
+    def __init__(self, dir: str, extra_hparams: dict[str, str] | None = None):
         self.dir = dir
         self._writer = SummaryWriter(dir)
+        self._extra_hparams = {} if extra_hparams is None else dict(extra_hparams)
 
     def log_param(self, hparam_dict):
-        exp, ssi, sei = hparams(hparam_dict, {})
+        exp, ssi, sei = hparams({**hparam_dict, **self._extra_hparams}, {})
 
         self._writer.file_writer.add_summary(exp)
         self._writer.file_writer.add_summary(ssi)
@@ -66,14 +67,22 @@ class TensorboardRun:
 
 
 class TensorboardLogger:
-    def __init__(self, run_name: str, experiment_name: str, local_dir: str, agent: Optional[Any]):
+    def __init__(
+        self,
+        run_name: str,
+        experiment_name: str,
+        local_dir: str,
+        agent: Optional[Any],
+        *,
+        extra_hparams: dict[str, str] | None = None,
+    ):
         self.run_name = run_name
         self.local_dir = os.path.join(
             local_dir,
             experiment_name,
             f"{run_name}_{_get_latest_run_id(local_dir, experiment_name, run_name) + 1:02d}",
         )
-        self.run = TensorboardRun(self.local_dir)
+        self.run = TensorboardRun(self.local_dir, extra_hparams)
         if agent is not None:
             try:
                 self.log_hparams(agent)

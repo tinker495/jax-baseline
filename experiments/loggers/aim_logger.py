@@ -32,13 +32,16 @@ def _import_aim():
 class AimRun:
     """A :class:`LoggerRun` backed by one live Aim ``Run``."""
 
-    def __init__(self, aim_module, run, local_dir: str):
+    def __init__(
+        self, aim_module, run, local_dir: str, extra_hparams: dict[str, str] | None = None
+    ):
         self._aim = aim_module
         self._run = run
         self._dir = local_dir
+        self._extra_hparams = {} if extra_hparams is None else dict(extra_hparams)
 
     def log_param(self, hparam_dict):
-        self._run["hparams"] = dict(hparam_dict)
+        self._run["hparams"] = {**hparam_dict, **self._extra_hparams}
 
     def log_metric(self, key, value, step=None):
         # Aim requires a Python number; the core emits JAX/NumPy scalars.
@@ -73,6 +76,7 @@ class AimLogger:
         agent: Optional[Any],
         *,
         repo: Optional[str] = None,
+        extra_hparams: dict[str, str] | None = None,
     ):
         self._aim = aim_module
         self._run_name = run_name
@@ -82,6 +86,7 @@ class AimLogger:
         os.makedirs(self._local_dir, exist_ok=True)
         self._repo = repo
         self._agent = agent
+        self._extra_hparams = extra_hparams
         self._run = None
         self._logger_run: Optional[AimRun] = None
 
@@ -90,7 +95,7 @@ class AimLogger:
             return self._logger_run
         self._run = self._aim.Run(repo=self._repo, experiment=self._experiment_name)
         self._run.name = self._run_name
-        self._logger_run = AimRun(self._aim, self._run, self._local_dir)
+        self._logger_run = AimRun(self._aim, self._run, self._local_dir, self._extra_hparams)
         if self._agent is not None:
             try:
                 self.log_hparams(self._agent)
@@ -130,7 +135,7 @@ class AimLogger:
             pass
 
 
-def make_aim_logger_factory(args):
+def make_aim_logger_factory(args, *, extra_hparams: dict[str, str] | None = None):
     """Return a ``LoggerFactory`` for Aim, capturing the CLI backend config.
 
     The ``aim`` import happens here (only when ``--logger aim`` is selected), so
@@ -148,6 +153,7 @@ def make_aim_logger_factory(args):
             local_dir,
             agent,
             repo=repo,
+            extra_hparams=extra_hparams,
         )
 
     return factory

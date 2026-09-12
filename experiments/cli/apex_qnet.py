@@ -49,8 +49,7 @@ def add_args(parser):
     parser.add_argument("--n_support", type=int, default=200, help="n_support for QRDQN,IQN,FQF")
     parser.add_argument("--delta", type=float, default=0.001, help="delta for QRDQN,IQN,FQF")
     parser.add_argument("--CVaR", type=float, default=1.0, help="IQN risk avoiding factor")
-    parser.add_argument("--node", type=int, default=256, help="network node number")
-    parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
+    parser.add_argument("--model", type=str, help="Q-network JSON file")
     parser.add_argument("--worker", type=int, default=1, help="gym_worker_size")
     parser.add_argument("--optimizer", type=str, default="adamw", help="optimaizer")
     parser.add_argument("--gradient_steps", type=int, default=1, help="gradient steps")
@@ -126,7 +125,6 @@ APEX_QNET_RUNNER = DistributedFamilyRunner(
     policy_kwargs=default_policy_kwargs,
     algos=ALGOS,
     maker_pkg="model_builder.{lib}.qnet",
-    variant=lambda _args: "",
     ray_cpu_headroom=2,
 )
 

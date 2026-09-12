@@ -7,8 +7,14 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
-from model_builder.flax.layers import Dense, avgl1norm
-from model_builder.flax.Module import PreProcess, pop_embedding_mode
+from model_builder.flax.layers import Dense, SimbaV2Head, avgl1norm, network_body
+from model_builder.flax.Module import PreProcess
+from model_builder.model_config import (
+    LayerConfig,
+    MLPConfig,
+    ModelConfig,
+    ResidualConfig,
+)
 from model_builder.utils import (
     dummy_observation,
     get_critic_apply_fn,
@@ -18,61 +24,49 @@ from model_builder.utils import (
 
 
 class Encoder(nn.Module):
-    node: int = 256
-    hidden_n: int = 3
-    layer: type[nn.Dense] = Dense
+    network: ModelConfig = MLPConfig()
+    normalize: bool = True
 
     @nn.compact
     def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
-        encoder = nn.Sequential(
-            [
-                self.layer(self.node) if i % 2 == 0 else jax.nn.elu
-                for i in range(2 * self.hidden_n - 1)
-            ]
-        )(features)
-        return avgl1norm(encoder)
-
-
-class Action_Encoder(nn.Module):
-    node: int = 256
-    hidden_n: int = 3
-    layer: type[nn.Dense] = Dense
-
-    @nn.compact
-    def __call__(self, zs: jnp.ndarray, action: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([zs, action], axis=1)
-        zsa = nn.Sequential(
-            [
-                self.layer(self.node) if i % 2 == 0 else jax.nn.elu
-                for i in range(2 * self.hidden_n - 1)
-            ]
-        )(concat)
-        return zsa
+        if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
+            return network_body(features, self.network)
+        width = (
+            self.network.layers[0].units
+            if isinstance(self.network, MLPConfig)
+            else self.network.blocks[0]
+        )
+        encoded = nn.Sequential([Dense(width), jax.nn.elu, Dense(width), jax.nn.elu, Dense(width)])(
+            features
+        )
+        return avgl1norm(encoded) if self.normalize else encoded
 
 
 class Actor(nn.Module):
     action_size: tuple
-    node: int = 256
-    hidden_n: int = 2
+    network: ModelConfig = MLPConfig()
     layer: type[nn.Dense] = Dense
 
     @nn.compact
     def __call__(self, features: jnp.ndarray, zs: jnp.ndarray) -> jnp.ndarray:
-        a0 = avgl1norm(self.layer(self.node)(features))
-        embed_concat = jnp.concatenate([a0, zs], axis=1)
-        action = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [
-                self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3)),
-                jax.nn.tanh,
-            ]
-        )(embed_concat)
-        return action
+        if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
+            base = network_body(features, self.network)
+            encoded = network_body(jnp.concatenate([base, zs], axis=1), self.network)
+            return jax.nn.tanh(SimbaV2Head(self.network.blocks[-1], self.action_size[0])(encoded))
+        width = (
+            self.network.layers[0].units
+            if isinstance(self.network, MLPConfig)
+            else self.network.blocks[0]
+        )
+        base = avgl1norm(self.layer(width)(features))
+        encoded = network_body(jnp.concatenate([base, zs], axis=1), self.network, self.layer)
+        return jax.nn.tanh(
+            self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(encoded)
+        )
 
 
 class Critic(nn.Module):
-    node: int = 256
-    hidden_n: int = 2
+    network: ModelConfig = MLPConfig((LayerConfig(256, "elu"),) * 2)
     layer: type[nn.Dense] = Dense
 
     @nn.compact
@@ -84,32 +78,43 @@ class Critic(nn.Module):
         actions: jnp.ndarray,
     ) -> jnp.ndarray:
         concat = jnp.concatenate([features, actions], axis=1)
-        embedding = jnp.concatenate([zs, zsa], axis=1)
-        q0 = avgl1norm(self.layer(self.node)(concat))
-        embed_concat = jnp.concatenate([q0, embedding], axis=1)
-        q_net = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.elu for i in range(2 * self.hidden_n)]
-            + [self.layer(1, kernel_init=clip_factorized_uniform(3))]
-        )(embed_concat)
-        return q_net
+        if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
+            base = network_body(concat, self.network)
+            encoded = network_body(jnp.concatenate([base, zs, zsa], axis=1), self.network)
+            return SimbaV2Head(self.network.blocks[-1], 1)(encoded)
+        width = (
+            self.network.layers[0].units
+            if isinstance(self.network, MLPConfig)
+            else self.network.blocks[0]
+        )
+        base = avgl1norm(self.layer(width)(concat))
+        encoded = network_body(jnp.concatenate([base, zs, zsa], axis=1), self.network, self.layer)
+        return self.layer(1, kernel_init=clip_factorized_uniform(3))(encoded)
 
 
 def model_builder_maker(observation_space, action_size, policy_kwargs):
-    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
-    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(policy_kwargs)
+    actor_kwargs, critic_kwargs = split_actor_critic_kwargs(
+        policy_kwargs,
+        critic_default=MLPConfig((LayerConfig(256, "elu"),) * 2),
+        allowed_types=("mlp", "simba", "simbav2"),
+    )
+    for options in (actor_kwargs, critic_kwargs):
+        if isinstance(options["network"], MLPConfig) and not options["network"].layers:
+            raise ValueError("TD7 actor_model and critic_model require at least one hidden layer")
 
     def model_builder(key=None, print_model=False):
         class RoleEncoder(nn.Module):
             role: Literal["actor", "critic"]
-            node: int
-            hidden_n: int
+            network: ModelConfig
 
             def setup(self):
                 self.preproc = PreProcess(
-                    observation_space, embedding_mode=embedding_mode, role=self.role
+                    observation_space,
+                    embedding_mode=self.network.embedding_mode,
+                    role=self.role,
                 )
-                self.enc = Encoder(node=self.node, hidden_n=self.hidden_n)
-                self.act_enc = Action_Encoder(node=self.node, hidden_n=self.hidden_n)
+                self.enc = Encoder(network=self.network)
+                self.act_enc = Encoder(network=self.network, normalize=False)
 
             def __call__(self, obs, actions, shared_features=None):
                 feature, zs = self.encode_state(obs, shared_features)
@@ -123,7 +128,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 return self.preproc.shared_features(obs)
 
             def encode_action(self, zs, actions):
-                return self.act_enc(zs, actions)
+                return self.act_enc(jnp.concatenate([zs, actions], axis=1))
 
         class TwinCritic(nn.Module):
             def setup(self):
@@ -133,8 +138,8 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
             def __call__(self, feature, zs, zsa, actions):
                 return self.crit1(feature, zs, zsa, actions), self.crit2(feature, zs, zsa, actions)
 
-        actor_encoder_model = RoleEncoder("actor", actor_kwargs["node"], 3)
-        critic_encoder_model = RoleEncoder("critic", critic_kwargs["node"], 3)
+        actor_encoder_model = RoleEncoder("actor", actor_kwargs["network"])
+        critic_encoder_model = RoleEncoder("critic", critic_kwargs["network"])
         policy_model = Actor(action_size=action_size, **actor_kwargs)
         critic_model = TwinCritic()
         shared_preproc_fn = get_apply_fn_flax_module(

@@ -11,9 +11,8 @@ base:
   steps: 2949120000
   eval_num: 5
   batch: 24
-  actor_node: 512
-  critic_node: 512
-  hidden_n: 3
+  actor_model: models/mlp_512x3_relu.json
+  critic_model: models/mlp_512x3_relu.json
   mini_batch: 24576
   epoch_num: 5
   learning_rate: 0.001
@@ -22,7 +21,7 @@ base:
   ppo_eps: 0.2
   value_clip: 0.2
   ent_coef: 0.01
-  obs_normalization: true
+  obs_rms_norm: true
   gae_normalize: true
   gae_normalize_scope: minibatch
   max_grad_norm: 1.0

@@ -1,0 +1,6 @@
+{
+  "type": "simbav2",
+  "blocks": [256, 256],
+  "activation": "relu",
+  "embedding_mode": "normal"
+}

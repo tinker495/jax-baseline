@@ -35,9 +35,8 @@ def add_args(parser):
     parser.add_argument("--steps", type=float, default=1e5, help="step size")
     parser.add_argument("--logdir", type=str, default=default_logdir("impala"), help="log file dir")
     parser.add_argument("--seed", type=int, default=42, help="random seed")
-    parser.add_argument("--actor_node", type=int, default=None, help="actor hidden width")
-    parser.add_argument("--critic_node", type=int, default=None, help="critic hidden width")
-    parser.add_argument("--hidden_n", type=int, default=2, help="hidden layer number")
+    parser.add_argument("--actor_model", type=str, help="actor network JSON file")
+    parser.add_argument("--critic_model", type=str, help="critic network JSON file")
     parser.add_argument("--optimizer", type=str, default="rmsprop", help="optimaizer")
     parser.add_argument("--ent_coef", type=float, default=0.1, help="entropy coefficient")
 
@@ -82,7 +81,6 @@ IMPALA_RUNNER = DistributedFamilyRunner(
     policy_kwargs=actor_critic_policy_kwargs,
     algos=ALGOS,
     maker_pkg="model_builder.{lib}.ac",
-    variant=lambda _args: "",
     ray_cpu_headroom=4,
 )
 

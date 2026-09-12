@@ -55,7 +55,7 @@ def test_host_environment_keeps_rollout_arrays_on_cpu(backend, jax_observation):
         _Env(observation),
         None,
         memory_backend=backend,
-        obs_normalization=True,
+        obs_rms_norm=True,
         optimizer_factory=optax.sgd,
         _init_setup_model=False,
     )
@@ -85,7 +85,7 @@ def test_gpu_environment_selects_device_memory_unless_cpu_requested(backend):
         _Env(jax.device_put(np.ones(2, np.float32), gpu_devices[0])),
         None,
         memory_backend=backend,
-        obs_normalization=True,
+        obs_rms_norm=True,
         optimizer_factory=optax.sgd,
         _init_setup_model=False,
     )

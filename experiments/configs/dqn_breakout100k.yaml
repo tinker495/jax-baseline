@@ -8,8 +8,7 @@ base:
   experiment_name: DQN_Breakout100k
   env: BreakoutNoFrameskip-v4
   learning_rate: 0.00005
-  node: 2048
-  hidden_n: 1
+  model: models/mlp_2048x1_relu.json
   optimizer: adamw
 variants:
   # Group 1: train_freq=4, gradient_steps=1
@@ -100,6 +99,7 @@ variants:
     gradient_steps: 2
     scaled_by_reset: true
   - algo: BBF
+    model: models/mlp_2048x1_relu_resnet.json
     steps: 1e5
     batch: 32
     train_freq: 1
@@ -111,6 +111,7 @@ variants:
     gradient_steps: 2
   # Group 3: Super high replay ratio, gradient_steps=8
   - algo: BBF
+    model: models/mlp_2048x1_relu_resnet.json
     steps: 1e5
     batch: 32
     train_freq: 1

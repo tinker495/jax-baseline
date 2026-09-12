@@ -32,13 +32,16 @@ def _import_wandb():
 class WandbRun:
     """A :class:`LoggerRun` backed by one live ``wandb`` run."""
 
-    def __init__(self, wandb_module, run, local_dir: str):
+    def __init__(
+        self, wandb_module, run, local_dir: str, extra_hparams: dict[str, str] | None = None
+    ):
         self._wandb = wandb_module
         self._run = run
         self._dir = local_dir
+        self._extra_hparams = {} if extra_hparams is None else dict(extra_hparams)
 
     def log_param(self, hparam_dict):
-        self._run.config.update(dict(hparam_dict), allow_val_change=True)
+        self._run.config.update({**hparam_dict, **self._extra_hparams}, allow_val_change=True)
 
     def log_metric(self, key, value, step=None):
         # Coerce JAX/NumPy scalars (what the core emits) to a Python float.
@@ -75,6 +78,7 @@ class WandbLogger:
         *,
         entity: Optional[str] = None,
         mode: Optional[str] = None,
+        extra_hparams: dict[str, str] | None = None,
     ):
         self._wandb = wandb_module
         self._run_name = run_name
@@ -87,6 +91,7 @@ class WandbLogger:
         self._entity = entity
         self._mode = mode
         self._agent = agent
+        self._extra_hparams = extra_hparams
         self._run = None
         self._logger_run: Optional[WandbRun] = None
 
@@ -100,7 +105,7 @@ class WandbLogger:
             dir=self._local_dir,
             mode=self._mode,
         )
-        self._logger_run = WandbRun(self._wandb, self._run, self._local_dir)
+        self._logger_run = WandbRun(self._wandb, self._run, self._local_dir, self._extra_hparams)
         if self._agent is not None:
             try:
                 self.log_hparams(self._agent)
@@ -140,7 +145,7 @@ class WandbLogger:
             pass
 
 
-def make_wandb_logger_factory(args):
+def make_wandb_logger_factory(args, *, extra_hparams: dict[str, str] | None = None):
     """Return a ``LoggerFactory`` for W&B, capturing the CLI backend config.
 
     The ``wandb`` import happens here (only when ``--logger wandb`` is selected),
@@ -160,6 +165,7 @@ def make_wandb_logger_factory(args):
             agent,
             entity=entity,
             mode=mode,
+            extra_hparams=extra_hparams,
         )
 
     return factory

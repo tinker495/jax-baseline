@@ -15,10 +15,13 @@ parsers.
 
 from __future__ import annotations
 
+import json
 import os
 from argparse import ArgumentParser, Namespace
+from functools import partial
 
 from experiments.cli._common import LOGGER_ENV
+from model_builder.model_config import MLPConfig, ResidualConfig, model_config_dict
 
 DEFAULT_LOGGER = "tensorboard"
 LOGGER_BACKENDS = ("tensorboard", "wandb", "aim")
@@ -63,19 +66,45 @@ def add_logger_args(parser: ArgumentParser) -> None:
     )
 
 
-def resolve_logger_factory(args: Namespace):
+def resolve_logger_factory(args: Namespace, *, policy_kwargs: dict[str, object] | None = None):
     """Return the ``LoggerFactory`` selected by ``args.logger`` (lazy import)."""
-    name = getattr(args, "logger", DEFAULT_LOGGER)
+    model_names: list[str] = []
+    model_hparams: dict[str, str] = {}
+    options = {} if policy_kwargs is None else policy_kwargs
+    for role in ("model", "actor_model", "critic_model"):
+        if role not in options:
+            continue
+        config = options[role]
+        if not isinstance(config, (MLPConfig, ResidualConfig)):
+            raise TypeError(f"{role} must be a validated model configuration")
+        description = model_config_dict(config)
+        model_names.append(f"{role.removesuffix('_model').title()}-{description['type']}")
+        model_hparams[f"{role}_type"] = description["type"]
+        model_hparams[role] = json.dumps(description, sort_keys=True)
+
+    name = args.logger
     if name == "tensorboard":
         from experiments.runtime_adapters import TensorboardLogger
 
-        return TensorboardLogger
-    if name == "wandb":
+        factory = (
+            partial(TensorboardLogger, extra_hparams=model_hparams)
+            if model_hparams
+            else TensorboardLogger
+        )
+    elif name == "wandb":
         from experiments.loggers.wandb_logger import make_wandb_logger_factory
 
-        return make_wandb_logger_factory(args)
-    if name == "aim":
+        factory = make_wandb_logger_factory(args, extra_hparams=model_hparams)
+    elif name == "aim":
         from experiments.loggers.aim_logger import make_aim_logger_factory
 
-        return make_aim_logger_factory(args)
-    raise SystemExit(f"unknown --logger '{name}', expected one of {list(LOGGER_BACKENDS)}")
+        factory = make_aim_logger_factory(args, extra_hparams=model_hparams)
+    else:
+        raise SystemExit(f"unknown --logger '{name}', expected one of {list(LOGGER_BACKENDS)}")
+    if not model_names:
+        return factory
+
+    def model_logger(run_name, experiment_name, local_dir, agent):
+        return factory(f"{'_'.join(model_names)}_{run_name}", experiment_name, local_dir, agent)
+
+    return model_logger

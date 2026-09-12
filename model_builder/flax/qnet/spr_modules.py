@@ -6,6 +6,8 @@ PreProcess embedding-mode default and channel ``multiple``. Both builders are th
 wrappers over :func:`make_spr_style_builder_maker`.
 """
 
+from collections.abc import Callable, Sequence
+
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -13,16 +15,21 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
-from model_builder.flax.layers import Dense, NoisyDense
-from model_builder.flax.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import dummy_observation, print_flax_model_summary
+from model_builder.flax.layers import Dense, NoisyDense, network_body
+from model_builder.flax.Module import PreProcess
+from model_builder.model_config import DEFAULT_MLP, MLPConfig
+from model_builder.utils import (
+    dummy_observation,
+    print_flax_model_summary,
+    qnet_model_kwargs,
+)
 
 
 class Projection(nn.Module):
     embed_size: int = 128
     node: int = 512
     hidden_n: int = 2
-    layer: nn.Module = Dense
+    layer: type[Dense] = Dense
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
@@ -37,7 +44,7 @@ class Projection(nn.Module):
 class Transition(nn.Module):
     node: int = 64
     hidden_n: int = 2
-    layer: callable = lambda ch: nn.Sequential(
+    layer: Callable[[int], nn.Module] = lambda ch: nn.Sequential(
         [
             nn.Conv(
                 ch,
@@ -50,7 +57,7 @@ class Transition(nn.Module):
             nn.relu,
         ]
     )
-    last: callable = lambda ch: nn.Conv(
+    last: Callable[[int], nn.Module] = lambda ch: nn.Conv(
         ch,
         kernel_size=[3, 3],
         strides=[1, 1],
@@ -69,7 +76,7 @@ class Transition(nn.Module):
 class Prediction(nn.Module):
     node: int = 128
     hidden_n: int = 1
-    layer: nn.Module = Dense
+    layer: type[Dense] = Dense
 
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
@@ -81,9 +88,8 @@ class Prediction(nn.Module):
 
 
 class Model(nn.Module):
-    action_size: int
-    node: int
-    hidden_n: int
+    action_size: Sequence[int]
+    network: MLPConfig
     noisy: bool
     dueling: bool
     categorial_bar_n: int
@@ -97,37 +103,22 @@ class Model(nn.Module):
     @nn.compact
     def __call__(self, feature: jnp.ndarray) -> jnp.ndarray:
         if not self.dueling:
-            q_net = nn.Sequential(
-                [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [
-                    self.layer(
-                        self.action_size[0] * self.categorial_bar_n,
-                        kernel_init=clip_factorized_uniform(0.01),
-                    ),
-                    lambda x: jnp.reshape(x, (-1, self.action_size[0], self.categorial_bar_n)),
-                ]
-            )(feature)
+            q_net = network_body(feature, self.network, self.layer)
+            q_net = self.layer(
+                self.action_size[0] * self.categorial_bar_n,
+                kernel_init=clip_factorized_uniform(0.01),
+            )(q_net)
+            q_net = jnp.reshape(q_net, (-1, self.action_size[0], self.categorial_bar_n))
             return jax.nn.softmax(q_net, axis=2)
-        v = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [
-                self.layer(self.categorial_bar_n, kernel_init=clip_factorized_uniform(0.01)),
-                lambda x: jnp.reshape(x, (-1, 1, self.categorial_bar_n)),
-            ]
-        )(feature)
-        a = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [
-                self.layer(
-                    self.action_size[0] * self.categorial_bar_n,
-                    kernel_init=clip_factorized_uniform(0.01),
-                ),
-                lambda x: jnp.reshape(x, (-1, self.action_size[0], self.categorial_bar_n)),
-            ]
-        )(feature)
+        v = network_body(feature, self.network, self.layer)
+        v = self.layer(self.categorial_bar_n, kernel_init=clip_factorized_uniform(0.01))(v)
+        v = jnp.reshape(v, (-1, 1, self.categorial_bar_n))
+        a = network_body(feature, self.network, self.layer)
+        a = self.layer(
+            self.action_size[0] * self.categorial_bar_n,
+            kernel_init=clip_factorized_uniform(0.01),
+        )(a)
+        a = jnp.reshape(a, (-1, self.action_size[0], self.categorial_bar_n))
         q = v + a - jnp.mean(a, axis=1, keepdims=True)
         return jax.nn.softmax(q, axis=-1)
 
@@ -140,17 +131,17 @@ def make_spr_style_builder_maker(
     categorial_bar_n,
     policy_kwargs,
     *,
-    embedding_default,
     preproc_multiple,
+    model_default: MLPConfig = DEFAULT_MLP,
 ):
-    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs, default=embedding_default)
+    policy_kwargs = qnet_model_kwargs(policy_kwargs, default=model_default)
 
     def model_builder(key=None, print_model=False):
         class Merged(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(
                     observation_space,
-                    embedding_mode=embedding_mode,
+                    embedding_mode=policy_kwargs["network"].embedding_mode,
                     flatten=False,
                     multiple=preproc_multiple,
                 )

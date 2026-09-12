@@ -1,4 +1,5 @@
 from model_builder.flax.qnet.spr_modules import make_spr_style_builder_maker
+from model_builder.model_config import MLPConfig
 
 
 def model_builder_maker(
@@ -11,6 +12,6 @@ def model_builder_maker(
         param_noise,
         categorial_bar_n,
         policy_kwargs,
-        embedding_default="resnet",
+        model_default=MLPConfig(embedding_mode="resnet"),
         preproc_multiple=4,
     )

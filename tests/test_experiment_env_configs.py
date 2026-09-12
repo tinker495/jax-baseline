@@ -30,11 +30,13 @@ def test_adapter_configs_preserve_actor_and_critic_observations(filename, family
     assert config["family"] == family
     assert config["variants"] == [{"algo": algo, "enabled": True} for algo in algorithms]
     assert config["base"] | expected == config["base"]
+    assert config["base"]["obs_rms_norm"] is True
     assert "env_episode_length" not in config["base"]
     assert "env_observation_key" not in config["base"]
 
-    command = next(_iter_commands(config))
+    command = next(_iter_commands(config, config_dir=path.parent))
     assert command[0] == family
+    assert "--obs_rms_norm" in command
     assert "--env_observation_key" not in command
     for key, value in expected.items():
         index = command.index(f"--{key}")

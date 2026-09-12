@@ -1,3 +1,5 @@
+from collections.abc import Sequence
+
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -5,15 +7,19 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
-from model_builder.flax.layers import Dense, NoisyDense
-from model_builder.flax.Module import PreProcess, pop_embedding_mode
-from model_builder.utils import dummy_observation, print_flax_model_summary
+from model_builder.flax.layers import Dense, NoisyDense, network_body
+from model_builder.flax.Module import PreProcess
+from model_builder.model_config import MLPConfig
+from model_builder.utils import (
+    dummy_observation,
+    print_flax_model_summary,
+    qnet_model_kwargs,
+)
 
 
 class Model(nn.Module):
-    action_size: int
-    node: int
-    hidden_n: int
+    action_size: Sequence[int]
+    network: MLPConfig
     noisy: bool
     dueling: bool
 
@@ -40,28 +46,14 @@ class Model(nn.Module):
             )  # [ batch x feature ]
             mul_embedding = feature * quantile_embedding  # [ batch x feature ]
             if not self.dueling:
-                q_net = nn.Sequential(
-                    [
-                        self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                        for i in range(2 * self.hidden_n)
-                    ]
-                    + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))]
-                )(mul_embedding)
-                return q_net
-            v = nn.Sequential(
-                [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [self.layer(1, kernel_init=clip_factorized_uniform(3))]
-            )(mul_embedding)
-            a = nn.Sequential(
-                [
-                    self.layer(self.node) if i % 2 == 0 else jax.nn.relu
-                    for i in range(2 * self.hidden_n)
-                ]
-                + [self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))]
-            )(mul_embedding)
+                q_net = network_body(mul_embedding, self.network, self.layer)
+                return self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(
+                    q_net
+                )
+            v = network_body(mul_embedding, self.network, self.layer)
+            v = self.layer(1, kernel_init=clip_factorized_uniform(3))(v)
+            a = network_body(mul_embedding, self.network, self.layer)
+            a = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(a)
             q = v + a - jnp.mean(a, axis=1, keepdims=True)
             return q
 
@@ -72,13 +64,15 @@ class Model(nn.Module):
 
 
 def model_builder_maker(observation_space, action_space, dueling_model, param_noise, policy_kwargs):
-    policy_kwargs, embedding_mode = pop_embedding_mode(policy_kwargs)
+    policy_kwargs = qnet_model_kwargs(policy_kwargs)
 
     def model_builder(key=None, print_model=False):
         class Merged(nn.Module):
             def setup(self):
                 self.preproc = PreProcess(
-                    observation_space, embedding_mode=embedding_mode, pre_postprocess=nn.Dense(512)
+                    observation_space,
+                    embedding_mode=policy_kwargs["network"].embedding_mode,
+                    pre_postprocess=nn.Dense(512),
                 )
                 self.qnet = Model(
                     action_space, dueling=dueling_model, noisy=param_noise, **policy_kwargs

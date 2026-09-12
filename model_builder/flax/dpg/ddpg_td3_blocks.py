@@ -1,47 +1,40 @@
-"""Shared actor/critic blocks for the deterministic DDPG/TD3 builders.
-
-ddpg and td3 use the byte-identical deterministic ``Actor`` and ``Critic``
-architecture; they differ only in critic wiring (DDPG one critic, TD3 twin critics),
-which stays in each builder's ``model_builder_maker``. Mirrors the
-``simba_ddpg_td3_blocks`` / ``simbav2_ddpg_td3_blocks`` siblings.
-"""
+"""Configured deterministic actor and scalar critic shared by DDPG, TD3 and SAC."""
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
 
 from model_builder.flax.initializers import clip_factorized_uniform
-from model_builder.flax.layers import Dense
+from model_builder.flax.layers import Dense, SimbaV2Head, network_body
+from model_builder.model_config import DEFAULT_MLP, ModelConfig, ResidualConfig
 
 
 class Actor(nn.Module):
     action_size: tuple
-    node: int = 256
-    hidden_n: int = 2
-    layer: nn.Module = Dense
+    network: ModelConfig = DEFAULT_MLP
+    layer: type[nn.Module] = Dense
 
     @nn.compact
     def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
-        action = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [
-                self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3)),
-                jax.nn.tanh,
-            ]
-        )(features)
-        return action
+        features = network_body(features, self.network, self.layer)
+        if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
+            action = SimbaV2Head(self.network.blocks[-1], self.action_size[0])(features)
+        else:
+            action = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(
+                features
+            )
+        return jax.nn.tanh(action)
 
 
 class Critic(nn.Module):
-    node: int = 256
-    hidden_n: int = 2
-    layer: nn.Module = Dense
+    network: ModelConfig = DEFAULT_MLP
+    layer: type[nn.Module] = Dense
 
     @nn.compact
     def __call__(self, features: jnp.ndarray, actions: jnp.ndarray) -> jnp.ndarray:
-        concat = jnp.concatenate([features, actions], axis=1)
-        q_net = nn.Sequential(
-            [self.layer(self.node) if i % 2 == 0 else jax.nn.relu for i in range(2 * self.hidden_n)]
-            + [self.layer(1, kernel_init=clip_factorized_uniform(3))]
-        )(concat)
-        return q_net
+        features = network_body(
+            jnp.concatenate([features, actions], axis=1), self.network, self.layer
+        )
+        if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
+            return SimbaV2Head(self.network.blocks[-1], 1)(features)
+        return self.layer(1, kernel_init=clip_factorized_uniform(3))(features)
