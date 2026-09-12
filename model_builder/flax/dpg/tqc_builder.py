@@ -28,7 +28,7 @@ class Critic(nn.Module):
             jnp.concatenate([features, actions], axis=1), self.network, self.layer
         )
         if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
-            return SimbaV2Head(self.network.width, self.support_n)(features)
+            return SimbaV2Head(self.network.blocks[-1], self.support_n)(features)
         return self.layer(self.support_n, kernel_init=clip_factorized_uniform(3 / self.support_n))(
             features
         )

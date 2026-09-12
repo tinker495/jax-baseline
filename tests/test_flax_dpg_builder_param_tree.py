@@ -35,18 +35,18 @@ _NETWORK_CONFIGURATIONS = [
         {"Dense_0", "Dense_1", "Dense_2"},
     ),
     (
-        ResidualConfig("simba", 16),
-        ResidualConfig("simba", 32),
+        ResidualConfig("simba", (16, 16)),
+        ResidualConfig("simba", (32, 32)),
         {"Dense_0", "ResidualBlock_0", "ResidualBlock_1", "LayerNorm_0", "Dense_1"},
     ),
     (
-        ResidualConfig("simbav2", 16),
-        ResidualConfig("simbav2", 32),
+        ResidualConfig("simbav2", (16, 16)),
+        ResidualConfig("simbav2", (32, 32)),
         {"SimbaV2Embedding_0", "SimbaV2Block_0", "SimbaV2Block_1", "SimbaV2Head_0"},
     ),
     (
         _POLICY_KWARGS["actor_model"],
-        ResidualConfig("simbav2", 32),
+        ResidualConfig("simbav2", (32, 32)),
         {"SimbaV2Embedding_0", "SimbaV2Block_0", "SimbaV2Block_1", "SimbaV2Head_0"},
     ),
 ]

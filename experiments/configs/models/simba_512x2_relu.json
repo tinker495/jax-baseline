@@ -1,7 +1,6 @@
 {
   "type": "simba",
-  "width": 512,
-  "blocks": 2,
+  "blocks": [512, 512],
   "activation": "relu",
   "embedding_mode": "normal"
 }

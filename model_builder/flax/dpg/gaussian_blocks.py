@@ -24,8 +24,8 @@ class Actor(nn.Module):
     def __call__(self, features: jnp.ndarray) -> tuple[jnp.ndarray, jnp.ndarray]:
         features = network_body(features, self.network, self.layer)
         if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
-            mu = SimbaV2Head(self.network.width, self.action_size[0])(features)
-            log_std = SimbaV2Head(self.network.width, self.action_size[0])(features)
+            mu = SimbaV2Head(self.network.blocks[-1], self.action_size[0])(features)
+            log_std = SimbaV2Head(self.network.blocks[-1], self.action_size[0])(features)
         else:
             mu = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(features)
             log_std = self.layer(

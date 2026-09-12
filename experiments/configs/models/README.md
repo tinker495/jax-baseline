@@ -33,7 +33,8 @@ TD7의 MLP에는 은닉층이 하나 이상 필요합니다. 첫 층의 너비�
 SALE 인코더와 입력 투영 너비에도 적용됩니다. SIMBAv2 TD7의 `blocks`는
 인코더와 네트워크의 각 잔차 블록 구간에 동일하게 적용됩니다.
 
-SIMBA, SIMBAv2, FlashSAC의 잔차 네트워크는 블록 너비와 개수를 지정합니다.
+SIMBA, SIMBAv2, FlashSAC의 잔차 네트워크는 `blocks` 배열에 각 블록의
+출력 너비를 순서대로 지정합니다. `[512, 512]`는 출력 너비가 512인 블록 두 개입니다.
 Flax의 DDPG, TD3, SAC, TQC, CrossQ, TD7에서 MLP, SIMBA, SIMBAv2는
 JSON의 `type`으로 선택하며, actor와 critic에 서로 다른 구조를 사용할 수 있습니다.
 XQC와 Haiku 빌더는 MLP를 사용합니다.
@@ -41,8 +42,7 @@ XQC와 Haiku 빌더는 MLP를 사용합니다.
 ```json
 {
   "type": "simba",
-  "width": 512,
-  "blocks": 2,
+  "blocks": [512, 256],
   "activation": "relu",
   "embedding_mode": "normal"
 }
@@ -50,11 +50,14 @@ XQC와 Haiku 빌더는 MLP를 사용합니다.
 
 `type`에는 `simba`, `simbav2`, `flashsac`을 사용할 수 있습니다.
 `flashsac`은 FlashSAC 알고리즘의 블록입니다.
+`blocks`는 양의 정수로 이루어진 비어 있지 않은 배열이어야 합니다.
+첫 값은 입력 임베딩 너비도 결정하며, 마지막 값은 출력 헤드에 전달되는 너비입니다.
+예시의 `[512, 256]`처럼 너비가 달라지는 구간에는 투영을 적용합니다.
+별도의 `width` 필드와 정수 형태의 `blocks`, 빈 배열은 허용하지 않습니다.
 
 관측값의 평균과 표준편차를 누적해 정규화하는 기능은 네트워크 구조와 독립적입니다.
 `dpg`와 `pg`에서는 CLI의 `--obs_rms_norm` 또는 YAML의 `obs_rms_norm: true`로
 설정하며 기본값은 꺼짐입니다. FlashSAC은 외부 관측 RMS 정규화를 지원하지 않습니다.
-`blocks: 0`은 잔차 블록을 생략하며 입력 임베딩과 출력 헤드는 유지합니다.
 
 ## 이미지 임베딩
 

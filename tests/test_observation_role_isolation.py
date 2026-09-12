@@ -58,8 +58,8 @@ def test_actor_critic_observation_roles_are_isolated(backend, family):
     "backend, actor_model, critic_model",
     [
         ("flax", MLPConfig((LayerConfig(16),)), MLPConfig((LayerConfig(32),))),
-        ("flax", ResidualConfig("simba", 16), ResidualConfig("simba", 32)),
-        ("flax", ResidualConfig("simbav2", 16), ResidualConfig("simbav2", 32)),
+        ("flax", ResidualConfig("simba", (16, 16)), ResidualConfig("simba", (32, 32))),
+        ("flax", ResidualConfig("simbav2", (16, 16)), ResidualConfig("simbav2", (32, 32))),
         ("haiku", MLPConfig((LayerConfig(16),)), MLPConfig((LayerConfig(32),))),
     ],
 )

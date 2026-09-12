@@ -18,7 +18,7 @@ class Actor(nn.Module):
     def __call__(self, features: jnp.ndarray) -> jnp.ndarray:
         features = network_body(features, self.network, self.layer)
         if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
-            action = SimbaV2Head(self.network.width, self.action_size[0])(features)
+            action = SimbaV2Head(self.network.blocks[-1], self.action_size[0])(features)
         else:
             action = self.layer(self.action_size[0], kernel_init=clip_factorized_uniform(3))(
                 features
@@ -36,5 +36,5 @@ class Critic(nn.Module):
             jnp.concatenate([features, actions], axis=1), self.network, self.layer
         )
         if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
-            return SimbaV2Head(self.network.width, 1)(features)
+            return SimbaV2Head(self.network.blocks[-1], 1)(features)
         return self.layer(1, kernel_init=clip_factorized_uniform(3))(features)

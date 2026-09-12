@@ -83,8 +83,8 @@ def test_other_stochastic_dpg_algorithms_also_use_mode_for_evaluation(cls):
 def test_crossq_actors_have_no_batch_stats_but_critics_do():
     for actor_config, critic_config in (
         (MLPConfig((LayerConfig(16),)), MLPConfig((LayerConfig(128, "tanh"),))),
-        (ResidualConfig("simba", 16, 1), ResidualConfig("simba", 32, 1)),
-        (ResidualConfig("simbav2", 16, 1), MLPConfig((LayerConfig(32, "tanh"),))),
+        (ResidualConfig("simba", (16,)), ResidualConfig("simba", (32,))),
+        (ResidualConfig("simbav2", (16,)), MLPConfig((LayerConfig(32, "tanh"),))),
     ):
         builder = crossq_model_builder_maker(
             {"unified_obs": [4]},

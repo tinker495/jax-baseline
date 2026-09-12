@@ -38,10 +38,10 @@ class Actor(nn.Module):
         feature = network_body(features, self.network, self.layer)
         if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
             mu = SimbaV2Head(
-                self.network.width, self.action_size[0], kernel_init=clip_factorized_uniform(3)
+                self.network.blocks[-1], self.action_size[0], kernel_init=clip_factorized_uniform(3)
             )(feature)
             log_std = SimbaV2Head(
-                self.network.width,
+                self.network.blocks[-1],
                 self.action_size[0],
                 use_bias=True,
                 kernel_init=clip_factorized_uniform(3),
@@ -67,7 +67,7 @@ class Critic(nn.Module):
     ) -> jnp.ndarray:
         concat = jnp.concatenate([features, actions], axis=1)
         if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
-            return SimbaV2Head(self.network.width, 1)(network_body(concat, self.network))
+            return SimbaV2Head(self.network.blocks[-1], 1)(network_body(concat, self.network))
         feature = BatchReNorm(use_running_average=not training)(concat)
         if isinstance(self.network, MLPConfig):
             for layer in self.network.layers:

@@ -1,7 +1,6 @@
 {
   "type": "flashsac",
-  "width": 128,
-  "blocks": 2,
+  "blocks": [128, 128],
   "activation": "relu",
   "embedding_mode": "normal"
 }

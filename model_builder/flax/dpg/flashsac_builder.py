@@ -45,15 +45,22 @@ class Encoder(nn.Module):
     def __call__(self, feature: jax.Array, training: bool) -> jax.Array:
         feature = UnitBatchNorm(name="input_norm")(feature, training)
         feature = nn.Dense(
-            self.network.width,
+            self.network.blocks[0],
             use_bias=False,
             kernel_init=nn.initializers.orthogonal(),
             name="embed",
         )(feature)
-        for block in range(self.network.blocks):
+        for block, width in enumerate(self.network.blocks):
+            if feature.shape[-1] != width:
+                feature = nn.Dense(
+                    width,
+                    use_bias=False,
+                    kernel_init=nn.initializers.orthogonal(),
+                    name=f"block_{block}_project",
+                )(feature)
             residual = feature
             feature = nn.Dense(
-                self.network.width * 4,
+                width * 4,
                 use_bias=False,
                 kernel_init=nn.initializers.orthogonal(),
                 name=f"block_{block}_expand",
@@ -61,7 +68,7 @@ class Encoder(nn.Module):
             feature = UnitBatchNorm(name=f"block_{block}_norm1")(feature, training)
             feature = ACTIVATIONS[self.network.activation](feature)
             feature = nn.Dense(
-                self.network.width,
+                width,
                 use_bias=False,
                 kernel_init=nn.initializers.orthogonal(),
                 name=f"block_{block}_contract",
@@ -73,7 +80,7 @@ class Encoder(nn.Module):
 
 class Actor(nn.Module):
     action_dim: int
-    network: ResidualConfig = ResidualConfig("flashsac", width=128)
+    network: ResidualConfig = ResidualConfig("flashsac", (128, 128))
 
     @nn.compact
     def __call__(
@@ -113,7 +120,7 @@ def model_builder_maker(
     n_atoms = policy_kwargs.pop("n_atoms", 101)
     actor_kwargs, critic_kwargs = split_actor_critic_kwargs(
         policy_kwargs,
-        actor_default=ResidualConfig("flashsac", width=128),
+        actor_default=ResidualConfig("flashsac", (128, 128)),
         critic_default=ResidualConfig("flashsac"),
         allowed_embeddings=("normal",),
     )

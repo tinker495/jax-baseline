@@ -49,18 +49,19 @@ class MLPConfig:
 @dataclass(frozen=True)
 class ResidualConfig:
     kind: Literal["simba", "simbav2", "flashsac"]
-    width: int = 256
-    blocks: int = 2
+    blocks: tuple[int, ...] = (256, 256)
     activation: str = "relu"
     embedding_mode: str = "normal"
 
     def __post_init__(self):
         if self.kind not in ("simba", "simbav2", "flashsac"):
             raise ValueError(f"Unknown residual network type: {self.kind!r}")
-        if type(self.width) is not int or self.width < 1:
-            raise ValueError("Residual width must be a positive integer")
-        if type(self.blocks) is not int or self.blocks < 0:
-            raise ValueError("Residual blocks must be a nonnegative integer")
+        if (
+            not isinstance(self.blocks, tuple)
+            or not self.blocks
+            or any(type(width) is not int or width < 1 for width in self.blocks)
+        ):
+            raise ValueError("Residual blocks must contain at least one positive integer width")
         if not isinstance(self.activation, str) or self.activation not in ACTIVATIONS:
             raise ValueError(f"Unknown activation: {self.activation!r}; use {sorted(ACTIVATIONS)}")
         if not isinstance(self.embedding_mode, str) or self.embedding_mode not in EMBEDDING_MODES:
@@ -114,18 +115,19 @@ def parse_model_config(value: object) -> ModelConfig:
     kind = options["type"]
     if not isinstance(kind, str) or kind not in kinds:
         raise ValueError(f"Unknown model type: {kind!r}")
-    if set(options) - {"type", "width", "blocks", "activation", "embedding_mode"} or not {
-        "width",
-        "blocks",
-    } <= set(options):
+    if set(options) - {"type", "blocks", "activation", "embedding_mode"} or "blocks" not in options:
         raise ValueError(
-            "Residual JSON requires width/blocks and accepts "
-            "type/width/blocks/activation/embedding_mode"
+            "Residual JSON requires 'blocks' and accepts type/blocks/activation/embedding_mode"
         )
-    width, blocks, activation = options["width"], options["blocks"], options["activation"]
-    if type(width) is not int or type(blocks) is not int or not isinstance(activation, str):
-        raise ValueError("Residual width/blocks must be integers and activation must be a name")
-    return ResidualConfig(kinds[kind], width, blocks, activation, embedding_mode=embedding_mode)
+    blocks, activation = options["blocks"], options["activation"]
+    if not isinstance(blocks, list) or not isinstance(activation, str):
+        raise TypeError("Residual blocks must be a JSON array and activation must be a name")
+    widths = []
+    for width in blocks:
+        if type(width) is not int:
+            raise TypeError("Residual block widths must be integers")
+        widths.append(width)
+    return ResidualConfig(kinds[kind], tuple(widths), activation, embedding_mode=embedding_mode)
 
 
 def load_model_config(path: str | Path) -> ModelConfig:
@@ -146,8 +148,7 @@ def model_config_dict(config: ModelConfig) -> dict:
         }
     return {
         "type": config.kind,
-        "width": config.width,
-        "blocks": config.blocks,
+        "blocks": list(config.blocks),
         "activation": config.activation,
         "embedding_mode": config.embedding_mode,
     }

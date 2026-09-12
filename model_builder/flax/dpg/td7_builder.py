@@ -34,7 +34,7 @@ class Encoder(nn.Module):
         width = (
             self.network.layers[0].units
             if isinstance(self.network, MLPConfig)
-            else self.network.width
+            else self.network.blocks[0]
         )
         encoded = nn.Sequential([Dense(width), jax.nn.elu, Dense(width), jax.nn.elu, Dense(width)])(
             features
@@ -52,11 +52,11 @@ class Actor(nn.Module):
         if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
             base = network_body(features, self.network)
             encoded = network_body(jnp.concatenate([base, zs], axis=1), self.network)
-            return jax.nn.tanh(SimbaV2Head(self.network.width, self.action_size[0])(encoded))
+            return jax.nn.tanh(SimbaV2Head(self.network.blocks[-1], self.action_size[0])(encoded))
         width = (
             self.network.layers[0].units
             if isinstance(self.network, MLPConfig)
-            else self.network.width
+            else self.network.blocks[0]
         )
         base = avgl1norm(self.layer(width)(features))
         encoded = network_body(jnp.concatenate([base, zs], axis=1), self.network, self.layer)
@@ -81,11 +81,11 @@ class Critic(nn.Module):
         if isinstance(self.network, ResidualConfig) and self.network.kind == "simbav2":
             base = network_body(concat, self.network)
             encoded = network_body(jnp.concatenate([base, zs, zsa], axis=1), self.network)
-            return SimbaV2Head(self.network.width, 1)(encoded)
+            return SimbaV2Head(self.network.blocks[-1], 1)(encoded)
         width = (
             self.network.layers[0].units
             if isinstance(self.network, MLPConfig)
-            else self.network.width
+            else self.network.blocks[0]
         )
         base = avgl1norm(self.layer(width)(concat))
         encoded = network_body(jnp.concatenate([base, zs, zsa], axis=1), self.network, self.layer)

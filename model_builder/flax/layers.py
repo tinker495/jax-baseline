@@ -332,17 +332,17 @@ def network_body(
             features = ACTIVATIONS[hidden.activation](layer(hidden.units)(features))
         return features
     if network.kind == "simba":
-        features = layer(network.width)(features)
-        for _ in range(network.blocks):
-            features = ResidualBlock(network.width, activation=ACTIVATIONS[network.activation])(
-                features
-            )
+        features = layer(network.blocks[0])(features)
+        for width in network.blocks:
+            if features.shape[-1] != width:
+                features = layer(width)(features)
+            features = ResidualBlock(width, activation=ACTIVATIONS[network.activation])(features)
         return nn.LayerNorm()(features)
     if network.kind == "simbav2":
-        features = SimbaV2Embedding(network.width)(features)
-        for _ in range(network.blocks):
-            features = SimbaV2Block(network.width, activation=ACTIVATIONS[network.activation])(
-                features
-            )
+        features = SimbaV2Embedding(network.blocks[0])(features)
+        for width in network.blocks:
+            if features.shape[-1] != width:
+                features = l2_normalize(HypersphericalDense(width, use_bias=False)(features))
+            features = SimbaV2Block(width, activation=ACTIVATIONS[network.activation])(features)
         return features
     raise ValueError(f"Unsupported network body: {network.kind!r}")
