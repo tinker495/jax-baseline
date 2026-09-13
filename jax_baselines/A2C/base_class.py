@@ -302,6 +302,8 @@ class Actor_Critic_Policy_Gradient_Family:
     def sample_actions(self, obs):
         if not self._store_old_policy:
             return self.actions(obs), None
+        if self.memory_backend == "gpu":
+            return self._sample_actions_gpu(self.actor_params, obs, next(self.key_seq))
         policy = self._get_actions(self.actor_params, obs)
         if self.action_type == "discrete":
             actions = self._action_from_discrete(policy)
@@ -310,9 +312,17 @@ class Actor_Critic_Policy_Gradient_Family:
             mu, std, _ = policy
             actions = self._action_from_continuous(mu, std)
             old_policy = _continuous_old_policy(policy, actions)
-        if self.memory_backend == "cpu":
-            old_policy = jax.tree.map(np.asarray, old_policy)
-        return actions, old_policy
+        return actions, jax.tree.map(np.asarray, old_policy)
+
+    @jax.jit(static_argnums=0)
+    def _sample_actions_gpu(self, actor_params, obs, key):
+        policy = self._get_actions(actor_params, obs)
+        if self.action_type == "discrete":
+            actions = _sample_discrete(policy, key)
+            return actions, (_categorical_log_prob(policy, actions), policy)
+        mu, std, _ = policy
+        actions = _sample_continuous(mu, std, key)
+        return actions, _continuous_old_policy(policy, actions)
 
     def get_logprob_discrete(self, prob, action, key, out_prob=False):
         prob = _categorical_policy(prob)
