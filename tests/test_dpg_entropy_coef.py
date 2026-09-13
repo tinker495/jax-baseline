@@ -65,12 +65,13 @@ def test_train_ent_coef_uses_adam_state_and_entropy_error():
     log_coef = jnp.asarray(np.log(0.1))
     log_prob = jnp.asarray([[-2.0]])
 
-    updated, opt_state = Deteministic_Policy_Gradient_Family._train_ent_coef(
+    updated, opt_state, metrics = Deteministic_Policy_Gradient_Family._train_ent_coef(
         carrier, log_coef, carrier.opt_ent_coef_state, log_prob
     )
 
     assert float(updated) < float(log_coef)
-    assert int(opt_state[0].count) == 1
+    assert int(opt_state.inner_state[0].count) == 1
+    assert float(metrics["loss/ent_coef_loss"]) == pytest.approx(0.1)
 
 
 def test_train_ent_coef_is_jittable():
@@ -81,5 +82,5 @@ def test_train_ent_coef_is_jittable():
             carrier, lc, state, lp
         )
     )
-    out, _ = fn(jnp.asarray(0.0), carrier.opt_ent_coef_state, jnp.asarray([[-1.0]]))
+    out, _, _ = fn(jnp.asarray(0.0), carrier.opt_ent_coef_state, jnp.asarray([[-1.0]]))
     assert np.isfinite(float(out))

@@ -1,10 +1,13 @@
+from collections.abc import Callable
 from copy import deepcopy
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 
+from jax_baselines.DDPG.metrics import critic_metrics, stochastic_actor_metrics
 from jax_baselines.math.losses import QuantileHuberLosses
+from jax_baselines.math.metrics import quantile_metrics
 from jax_baselines.math.policy_math import truncated_mixture
 from jax_baselines.SAC.sac import SAC, SACCheckpointParams
 
@@ -17,7 +20,7 @@ class TQC(SAC):
 
     def __init__(
         self,
-        env_builder: callable,
+        env_builder: Callable,
         model_builder_maker,
         ent_coef="auto",
         n_support=25,
@@ -82,26 +85,45 @@ class TQC(SAC):
             self.quantile,
             self.delta,
         )
+        losses = [huber0]
         critic_loss = jnp.mean(weights * huber0)
         for q in qnets[1:]:
-            critic_loss += jnp.mean(
-                weights
-                * QuantileHuberLosses(
+            losses.append(
+                QuantileHuberLosses(
                     logit_valid_tile,
                     jnp.expand_dims(q, axis=1),
                     self.quantile,
                     self.delta,
                 )
             )
-        return critic_loss, huber0
+            critic_loss += jnp.mean(weights * losses[-1])
+        metrics = critic_metrics(
+            [jnp.mean(q, axis=-1) for q in qnets],
+            jnp.mean(targets, axis=-1),
+            losses,
+            weights,
+            huber0 if self.prioritized_replay else None,
+        )
+        for index, q in enumerate(qnets, start=1):
+            metrics.update(quantile_metrics(q, prefix=f"loss/critic{index}"))
+        return critic_loss, (huber0, metrics)
 
     def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
-        policy, log_prob = self._get_pi_log_prob(policy_params, obses, key)
+        policy, log_prob, log_std = self._get_pi_log_prob(policy_params, obses, key)
         qnets_pi = self.critic(critic_params, policy_params, key, obses, policy)
         actor_loss = jnp.mean(
             ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi, axis=1), axis=1)
         )
-        return actor_loss, log_prob
+        return actor_loss, (
+            log_prob,
+            stochastic_actor_metrics(
+                log_prob,
+                log_std,
+                jnp.mean(jnp.concatenate(qnets_pi, axis=1), axis=1),
+                ent_coef,
+                self.target_entropy,
+            ),
+        )
 
     def _target(
         self,
@@ -113,7 +135,7 @@ class TQC(SAC):
         key,
         ent_coef,
     ):
-        policy, log_prob = self._get_pi_log_prob(policy_params, nxtobses, key)
+        policy, log_prob, _ = self._get_pi_log_prob(policy_params, nxtobses, key)
         qnets_pi = self.critic(target_critic_params, policy_params, key, nxtobses, policy)
         if self.mixture_type == "min":
             next_q = jnp.min(jnp.stack(qnets_pi, axis=-1), axis=-1) - ent_coef * log_prob

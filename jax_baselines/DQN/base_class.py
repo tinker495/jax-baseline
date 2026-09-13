@@ -40,6 +40,7 @@ from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 class Q_Network_Family:
     _run_name = "Q_network"
     _get_actions: Callable[..., jax.Array]
+    _compiled_bulk_scan: Callable[..., tuple[tuple, tuple]]
 
     supports_bulk_training = False
 
@@ -280,6 +281,7 @@ class Q_Network_Family:
             loss,
             target,
             priorities,
+            metrics,
         ) = self._train_step(
             self.params,
             self.target_params,
@@ -288,7 +290,9 @@ class Q_Network_Family:
             next(self.key_seq) if self.param_noise else None,
             **data,
         )
-        return QNetTrainResult.from_values(loss=loss, target=target, replay_priorities=priorities)
+        return QNetTrainResult.from_values(
+            loss=loss, target=target, replay_priorities=priorities, metrics=metrics
+        )
 
     def _train_on_bulk(self, data, contexts):
         steps = jnp.asarray([context.train_steps_count for context in contexts])
@@ -300,12 +304,14 @@ class Q_Network_Family:
                 losses,
                 targets,
                 priorities,
+                metrics,
             ),
-        ) = self._bulk_scan(carry, keys, steps, data)
+        ) = self._compiled_bulk_scan(carry, keys, steps, data)
         return QNetTrainResult.from_values(
             loss=jnp.mean(losses),
             target=jnp.mean(targets),
             replay_priorities=priorities,
+            metrics=jax.tree.map(jnp.mean, metrics),
             update_count=len(contexts),
         )
 
@@ -317,7 +323,7 @@ class Q_Network_Family:
             else:
                 step, batch = xs
                 key = None
-            params, target_params, opt_state, loss, target, priorities = self._train_step(
+            params, target_params, opt_state, loss, target, priorities, metrics = self._train_step(
                 params,
                 target_params,
                 opt_state,
@@ -325,7 +331,7 @@ class Q_Network_Family:
                 key,
                 **batch,
             )
-            return (params, target_params, opt_state), (loss, target, priorities)
+            return (params, target_params, opt_state), (loss, target, priorities, metrics)
 
         xs = (steps, keys, data) if self.param_noise else (steps, data)
         return jax.lax.scan(train_one, carry, xs)
@@ -336,9 +342,13 @@ class Q_Network_Family:
         counts = jnp.array([report.update_count for report in reports])
         total = sum(report.update_count for report in reports)
         metrics = {
-            name: jnp.sum(jnp.array([report.metrics[name] for report in reports]) * counts) / total
-            for name in reports[-1].metrics
-            if all(name in report.metrics for report in reports)
+            name: sum(
+                report.metrics[name] * report.update_count
+                for report in reports
+                if name in report.metrics
+            )
+            / sum(report.update_count for report in reports if name in report.metrics)
+            for name in set().union(*(report.metrics for report in reports))
         }
         histograms = {
             name: jnp.sum(

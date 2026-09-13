@@ -39,6 +39,7 @@ class DPGTrainReport:
     new_priorities: object = None
     metrics: dict = field(default_factory=dict)
     update_count: int = 1
+    metric_counts: dict[str, int | jax.Array] = field(default_factory=dict)
 
     def __post_init__(self):
         metrics = dict(self.metrics)
@@ -46,6 +47,9 @@ class DPGTrainReport:
         if self.target is not None:
             metrics.setdefault("loss/targets", self.target)
         self.metrics = metrics
+        if not self.metric_counts.keys() <= metrics.keys():
+            raise ValueError("Metric counts must refer to reported metrics")
+        self.metric_counts = {**dict.fromkeys(metrics, self.update_count), **self.metric_counts}
 
 
 class DPGTrainingLifecycle:
@@ -156,6 +160,12 @@ class DPGTrainingLifecycle:
         self.agent._last_log_step = steps
         metrics = report.metrics
         if self.agent.reward_normalizer is not None:
-            metrics = {**metrics, "rollout/reward_scale": self.agent.reward_normalizer.scale}
-        for metric_name, metric_value in jax.device_get(metrics).items():
+            metrics = {
+                **metrics,
+                "rollout/reward_scale": self.agent.reward_normalizer.scale,
+            }
+        metrics, counts = jax.device_get((metrics, report.metric_counts))
+        for metric_name, metric_value in metrics.items():
+            if metric_name in counts and counts[metric_name] == 0:
+                continue
             logger_run.log_metric(metric_name, metric_value, steps)

@@ -8,8 +8,15 @@ from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import QNetTrainResult
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.losses import QuantileHuberLosses
+from jax_baselines.math.metrics import (
+    array_metrics,
+    quantile_metrics,
+    replay_metrics,
+    td_metrics,
+)
 from jax_baselines.math.param_updates import hard_update
 from jax_baselines.math.policy_math import q_log_pi
+from jax_baselines.optim import optimizer_metrics
 
 
 class QRDQN(Q_Network_Family):
@@ -55,7 +62,7 @@ class QRDQN(Q_Network_Family):
 
         # Use common JIT compilation
         self._compile_common_functions()
-        self._bulk_scan = jax.jit(self._bulk_scan)
+        self._compiled_bulk_scan = jax.jit(self._bulk_scan)
 
     def get_q(self, params, obses, key=None) -> jnp.ndarray:
         return self.model(params, key, self.preproc(params, key, obses))
@@ -77,6 +84,7 @@ class QRDQN(Q_Network_Family):
             t_mean,
             t_std,
             new_priorities,
+            metrics,
         ) = self._train_step(
             self.params,
             self.target_params,
@@ -89,7 +97,7 @@ class QRDQN(Q_Network_Family):
             loss=loss,
             target=t_mean,
             replay_priorities=new_priorities,
-            metrics={"loss/target_stds": t_std},
+            metrics={**metrics, "loss/target_stds": t_std},
         )
 
     def _train_on_bulk(self, data, contexts):
@@ -103,13 +111,14 @@ class QRDQN(Q_Network_Family):
                 targets,
                 target_stds,
                 priorities,
+                metrics,
             ),
-        ) = self._bulk_scan(carry, keys, steps, data)
+        ) = self._compiled_bulk_scan(carry, keys, steps, data)
         return QNetTrainResult.from_values(
             loss=jnp.mean(losses),
             target=jnp.mean(targets),
             replay_priorities=priorities,
-            metrics={"loss/target_stds": jnp.mean(target_stds)},
+            metrics={**jax.tree.map(jnp.mean, metrics), "loss/target_stds": jnp.mean(target_stds)},
             update_count=len(contexts),
         )
 
@@ -121,7 +130,16 @@ class QRDQN(Q_Network_Family):
             else:
                 step, batch = xs
                 key = None
-            params, target_params, opt_state, loss, t_mean, t_std, priorities = self._train_step(
+            (
+                params,
+                target_params,
+                opt_state,
+                loss,
+                t_mean,
+                t_std,
+                priorities,
+                metrics,
+            ) = self._train_step(
                 params,
                 target_params,
                 opt_state,
@@ -129,7 +147,7 @@ class QRDQN(Q_Network_Family):
                 key,
                 **batch,
             )
-            return (params, target_params, opt_state), (loss, t_mean, t_std, priorities)
+            return (params, target_params, opt_state), (loss, t_mean, t_std, priorities, metrics)
 
         xs = (steps, keys, data) if self.param_noise else (steps, data)
         return jax.lax.scan(train_one, carry, xs)
@@ -163,15 +181,26 @@ class QRDQN(Q_Network_Family):
             not_terminateds,
             key,
         )
-        (loss, abs_error), grad = jax.value_and_grad(self._loss, has_aux=True)(
+        (loss, (abs_error, quantiles)), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params, obses, actions, targets, weights, key
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+        q_values = jnp.mean(quantiles, axis=1)
+        target_values = jnp.mean(targets, axis=1)
+        metrics = {
+            **array_metrics(q_values, "loss/q"),
+            **array_metrics(target_values, "loss/target"),
+            **td_metrics(q_values, target_values),
+            **quantile_metrics(quantiles),
+            **optimizer_metrics(opt_state, "q"),
+            "loss/unweighted_loss": jnp.mean(abs_error),
+        }
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
+            metrics.update(replay_metrics(weights, new_priorities))
         return (
             params,
             target_params,
@@ -180,6 +209,7 @@ class QRDQN(Q_Network_Family):
             jnp.mean(targets),
             jnp.mean(jnp.std(targets, axis=1)),
             new_priorities,
+            metrics,
         )
 
     def _loss(self, params, obses, actions, targets, weights, key):
@@ -188,7 +218,7 @@ class QRDQN(Q_Network_Family):
         )  # batch x 1 x support
         logit_valid_tile = jnp.expand_dims(targets, axis=2)  # batch x support x 1
         loss = QuantileHuberLosses(logit_valid_tile, theta_loss_tile, self.quantile, self.delta)
-        return jnp.mean(loss * weights), loss
+        return jnp.mean(loss * weights), (loss, theta_loss_tile[:, 0])
 
     def _target(
         self,

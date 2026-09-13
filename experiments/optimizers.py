@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import optax
 
-from jax_baselines.optim import OptimizerFactory, adopt, optimizer_reset_by_period
+from jax_baselines.optim import (
+    OptimizerFactory,
+    adopt,
+    optimizer_reset_by_period,
+    track_optimizer,
+)
 
 
 def _require_contrib_transform(name: str):
@@ -68,7 +73,7 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, weight_decay=1e-4, grad_ma
     if reset_steps is not None:
         optim = optimizer_reset_by_period(optim, reset_steps)
 
-    return optim
+    return track_optimizer(optim, lr, grad_max=grad_max, reset_steps=reset_steps)
 
 
 def make_optimizer_factory(
@@ -78,10 +83,10 @@ def make_optimizer_factory(
     weight_decay: float = 1e-4,
     grad_max: float | None = None,
 ) -> OptimizerFactory:
-    def factory(lr):
+    def factory(learning_rate: optax.ScalarOrSchedule) -> optax.GradientTransformation:
         return select_optimizer(
             optim_str,
-            lr,
+            learning_rate,
             eps=eps,
             weight_decay=weight_decay,
             grad_max=grad_max,

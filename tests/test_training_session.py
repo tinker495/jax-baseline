@@ -441,21 +441,18 @@ class _EmptyBuffer:
 
 
 @pytest.mark.parametrize(
-    ("algorithm", "train_result", "metric_names"),
+    ("algorithm", "metric_names"),
     [
         (
             A2C,
-            ("actor-params", "critic-params", "actor-opt-state", "critic-opt-state", 1, 2, 3, 4),
             ["critic_loss", "actor_loss", "entropy_loss", "mean_target"],
         ),
         (
             SurrogatePolicyGradient,
-            ("actor-params", "critic-params", "actor-opt-state", "critic-opt-state", 1, 2, 3, 4),
             ["critic_loss", "actor_loss", "entropy_loss", "mean_target"],
         ),
         (
             TPPO,
-            ("actor-params", "critic-params", "actor-opt-state", "critic-opt-state", 1, 2, 3, 4, 5),
             [
                 "critic_loss",
                 "actor_loss",
@@ -466,7 +463,7 @@ class _EmptyBuffer:
         ),
     ],
 )
-def test_on_policy_train_logger_is_explicit_and_not_retained(algorithm, train_result, metric_names):
+def test_on_policy_train_logger_is_explicit_and_not_retained(algorithm, metric_names):
     agent = algorithm.__new__(algorithm)
     agent.buffer = _EmptyBuffer()
     agent.actor_params = "old-actor-params"
@@ -474,15 +471,23 @@ def test_on_policy_train_logger_is_explicit_and_not_retained(algorithm, train_re
     agent.actor_opt_state = "old-actor-opt-state"
     agent.critic_opt_state = "old-critic-opt-state"
     agent.key_seq = iter(["key-1", "key-2"])
-    agent._train_step = lambda *args, **kwargs: train_result
+    metrics = {f"loss/{name}": index for index, name in enumerate(metric_names, start=1)}
+    metrics["optim/actor_learning_rate"] = 0.001
+    agent._train_step = lambda *args, **kwargs: (
+        "actor-params",
+        "critic-params",
+        "actor-opt-state",
+        "critic-opt-state",
+        metrics,
+    )
     logger_run = _MetricLoggerRun()
 
     assert algorithm.train_step(agent, 7, logger_run=logger_run) == 1
-    assert [name for name, _, _ in logger_run.metrics] == [f"loss/{name}" for name in metric_names]
+    assert logger_run.metrics == [(name, value, 7) for name, value in metrics.items()]
     assert not hasattr(agent, "logger_run")
 
     algorithm.train_step(agent, 8)
-    assert len(logger_run.metrics) == len(metric_names)
+    assert len(logger_run.metrics) == len(metrics)
 
 
 def test_on_policy_test_logger_is_local_to_context_manager():

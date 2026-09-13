@@ -6,8 +6,10 @@ import optax
 
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.math.jax_utils import convert_normalized_obs
+from jax_baselines.math.metrics import array_metrics, replay_metrics, td_metrics
 from jax_baselines.math.param_updates import hard_update
 from jax_baselines.math.policy_math import q_log_pi
+from jax_baselines.optim import optimizer_metrics
 
 
 class DQN(Q_Network_Family):
@@ -32,7 +34,7 @@ class DQN(Q_Network_Family):
 
         # Use common JIT compilation
         self._compile_common_functions()
-        self._bulk_scan = jax.jit(self._bulk_scan)
+        self._compiled_bulk_scan = jax.jit(self._bulk_scan)
 
     def get_q(self, params, obses, key=None) -> jnp.ndarray:
         return self.model(params, key, self.preproc(params, key, obses))
@@ -71,24 +73,32 @@ class DQN(Q_Network_Family):
             not_terminateds,
             key,
         )
-        (loss, abs_error), grad = jax.value_and_grad(self._loss, has_aux=True)(
+        (loss, (abs_error, metrics)), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params, obses, actions, targets, weights, key
         )
         updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+        metrics.update(optimizer_metrics(opt_state, "q"))
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
-        return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities
+            metrics.update(replay_metrics(weights, new_priorities))
+        return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities, metrics
 
     def _loss(self, params, obses, actions, targets, weights, key):
         vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         error = jnp.squeeze(vals - targets)
         loss = jnp.square(error)
-        return jnp.mean(loss * weights), jnp.abs(
-            error
-        )  # remove weight multiply cpprb weight is something wrong
+        return jnp.mean(loss * weights), (
+            jnp.abs(error),
+            {
+                **array_metrics(vals, "loss/q"),
+                **array_metrics(targets, "loss/target"),
+                **td_metrics(vals, targets),
+                "loss/unweighted_loss": jnp.mean(loss),
+            },
+        )
 
     def _target(
         self,

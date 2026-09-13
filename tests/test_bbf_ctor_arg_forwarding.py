@@ -31,6 +31,7 @@ def test_spr_family_forwards_clobbered_ctor_args_to_spr_owner(cls, extra, monkey
         env_builder=lambda *args, **kwargs: None,
         model_builder_maker=lambda *args, **kwargs: None,
         optimizer_factory=lambda learning_rate: None,
+        memory_backend="cpu",
         off_policy_fix=True,
         spr_weight=2.5,
         categorial_bar_n=41,

@@ -13,23 +13,26 @@ from jax_baselines.core.replay_protocol import (
     require_replay_factory,
 )
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.DQN.training import (
-    QNetTrainContext,
-    QNetTrainReport,
-    QNetTrainResult,
-)
+from jax_baselines.DQN.training import QNetTrainContext, QNetTrainResult
 from jax_baselines.math.distributional import (
     CategoricalBackend,
     MunchausenSpec,
     distributional_td_target,
 )
 from jax_baselines.math.jax_utils import convert_normalized_obs
+from jax_baselines.math.metrics import (
+    array_metrics,
+    categorical_metrics,
+    replay_metrics,
+    td_metrics,
+)
 from jax_baselines.math.param_updates import (
     filter_like_tree,
     scaled_by_reset_with_filter,
     soft_update,
     tree_random_normal_like,
 )
+from jax_baselines.optim import optimizer_metrics
 
 
 class SPR(Q_Network_Family):
@@ -124,7 +127,7 @@ class SPR(Q_Network_Family):
             self.reset_hardsoft = filter_like_tree(
                 self.params,
                 "qnet",
-                (lambda x, filtered: (jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2)),
+                (lambda x, filtered: jnp.ones_like(x) if filtered else jnp.ones_like(x) * 0.2),
             )  # hard_reset for qnet and scaled_by_reset for the rest
             self.soft_reset_freq = 40000
         self.opt_state = self.optimizer.init(self.params)
@@ -134,6 +137,7 @@ class SPR(Q_Network_Family):
             axis=0,
         )  # [1, 51]
         self._categorial_bar = jnp.expand_dims(self.categorial_bar, axis=0)  # [1, 1, 51]
+        self.value_support = self.categorial_bar[0]
         self.delta_bar = jax.device_put(
             (self.categorial_max - self.categorial_min) / (self.categorial_bar_n - 1)
         )
@@ -161,6 +165,11 @@ class SPR(Q_Network_Family):
         )
 
     def _train_on_batch(self, data, context):
+        if context.collect_diagnostics:
+            diagnostic_obs = jax.tree.map(lambda value: value[:32, 0], data["obses"])
+            diagnostic_key = jax.random.PRNGKey(0)
+            online_before = self._get_actions(self.params, diagnostic_obs, diagnostic_key)
+            target_before = self._get_actions(self.target_params, diagnostic_obs, diagnostic_key)
         (
             self.params,
             self.target_params,
@@ -169,6 +178,7 @@ class SPR(Q_Network_Family):
             t_mean,
             new_priorities,
             rprloss,
+            metrics,
         ) = self._train_step(
             self.params,
             self.target_params,
@@ -178,11 +188,23 @@ class SPR(Q_Network_Family):
             **data,
         )
 
+        if context.collect_diagnostics:
+            online_after = self._get_actions(self.params, diagnostic_obs, diagnostic_key)
+            target_after = self._get_actions(self.target_params, diagnostic_obs, diagnostic_key)
+            metrics.update(
+                {
+                    "loss/online_action_churn": jnp.mean(online_before != online_after),
+                    "loss/target_action_churn": jnp.mean(target_before != target_after),
+                    "loss/online_target_action_agreement": jnp.mean(online_after == target_after),
+                    "loss/action_churn_updates_spanned": data["actions"].shape[0]
+                    // self.batch_size,
+                }
+            )
         return QNetTrainResult.from_values(
             loss=loss,
             target=t_mean,
             replay_priorities=new_priorities,
-            metrics={"loss/rprloss": rprloss},
+            metrics={**metrics, "loss/rprloss": rprloss},
         )
 
     def _train_on_bulk(self, data, contexts):
@@ -192,28 +214,11 @@ class SPR(Q_Network_Family):
                 steps=contexts[0].steps,
                 train_steps_count=contexts[0].train_steps_count,
                 gradient_steps=len(contexts),
+                collect_diagnostics=contexts[-1].collect_diagnostics,
             ),
         )
         result.report.update_count = len(contexts)
         return result
-
-    def _aggregate_train_reports(self, reports):
-        if len(reports) == 1:
-            return reports[0]
-        counts = jnp.array([report.update_count for report in reports])
-        total = sum(report.update_count for report in reports)
-        mean_loss = jnp.sum(jnp.array([report.loss for report in reports]) * counts) / total
-        mean_target = jnp.sum(jnp.array([report.target for report in reports]) * counts) / total
-        mean_rprloss = (
-            jnp.sum(jnp.array([report.metrics["loss/rprloss"] for report in reports]) * counts)
-            / total
-        )
-        return QNetTrainReport(
-            loss=mean_loss,
-            target=mean_target,
-            metrics={"loss/rprloss": mean_rprloss},
-            update_count=total,
-        )
 
     def _image_augmentation(self, obs, key):
         """Random shift + intensity augmentation for B x K x H x W x C images."""
@@ -355,7 +360,7 @@ class SPR(Q_Network_Family):
             parsed_gamma = (
                 jnp.take_along_axis(jnp.expand_dims(self._gamma, 0), last_idxs, axis=1) * self.gamma
             )
-            target_distribution = self._target(
+            target_distribution, target_metrics = self._target(
                 params,
                 target_params,
                 parsed_obses,
@@ -371,7 +376,9 @@ class SPR(Q_Network_Family):
             )
             transition_actions = actions[:, : self.prediction_depth]
             transition_filled = filled[:, : self.prediction_depth]
-            (_, (centropy, qloss, rprloss)), grad = jax.value_and_grad(self._loss, has_aux=True)(
+            (_, (centropy, qloss, rprloss, metrics)), grad = jax.value_and_grad(
+                self._loss, has_aux=True
+            )(
                 params,
                 target_params,
                 transition_obses,
@@ -384,6 +391,10 @@ class SPR(Q_Network_Family):
                 key,
             )
             updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+            metrics.update(target_metrics)
+            metrics.update(optimizer_metrics(opt_state, "q"))
+            if self.prioritized_replay:
+                metrics.update(replay_metrics(weights, centropy))
             params = optax.apply_updates(params, updates)
             target_params = soft_update(params, target_params, 0.005)
             if self.scaled_by_reset:
@@ -405,6 +416,7 @@ class SPR(Q_Network_Family):
                 qloss,
                 rprloss,
                 target_q,
+                metrics,
             )
 
         (params, target_params, opt_state, _), outputs = jax.lax.scan(
@@ -420,7 +432,7 @@ class SPR(Q_Network_Family):
                 batched_steps,
             ),
         )
-        centropy, qloss, rprloss, target_q = outputs
+        centropy, qloss, rprloss, target_q, metrics = outputs
         qloss = jnp.mean(qloss)
         rprloss = jnp.mean(rprloss)
         target_q = jnp.mean(target_q)
@@ -436,6 +448,7 @@ class SPR(Q_Network_Family):
             target_q,
             new_priorities,
             rprloss,
+            jax.tree.map(jnp.mean, metrics),
         )
 
     def _loss(
@@ -452,16 +465,27 @@ class SPR(Q_Network_Family):
         key,
     ):
         rprloss = self._represetation_loss(params, target_params, obses, actions, filled, key)
-        distribution = jnp.squeeze(
-            jnp.take_along_axis(self.get_q(params, parsed_obses, key), parsed_actions, axis=1)
-        )
+        distribution = jnp.take_along_axis(
+            self.get_q(params, parsed_obses, key), parsed_actions, axis=1
+        )[:, 0]
         centropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
         mean_centropy = jnp.mean(centropy * weights)
         total_loss = mean_centropy + self.spr_weight * rprloss
+        q_values = jnp.sum(distribution * self.value_support, axis=1)
+        target_values = jnp.sum(target_distribution * self.value_support, axis=1)
         return total_loss, (
             centropy,
             mean_centropy,
             rprloss,
+            {
+                **array_metrics(q_values, "loss/q"),
+                **array_metrics(target_values, "loss/target"),
+                **td_metrics(q_values, target_values),
+                **categorical_metrics(distribution, target_distribution, self.value_support),
+                "loss/unweighted_loss": jnp.mean(centropy),
+                "loss/total_loss": total_loss,
+                "loss/weighted_rprloss": self.spr_weight * rprloss,
+            },
         )
 
     def _represetation_loss(self, params, target_params, obses, actions, filled, key):
@@ -545,6 +569,7 @@ class SPR(Q_Network_Family):
             online_next_dists=online_next_dists,
             behavior_dists=behavior_dists,
             munchausen=munchausen,
+            return_diagnostics=True,
         )
 
     def run_name_update(self, run_name):

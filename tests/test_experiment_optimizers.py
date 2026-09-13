@@ -92,12 +92,14 @@ def test_select_optimizer_reset_suffix_resets_inner_state_on_period_boundary():
     state = optimizer.init(params)
 
     _, state = optimizer.update(_grads(), state, params)
-    assert int(state[1]) == 1
+    assert int(state.inner_state[1]) == 1
 
     _, state = optimizer.update(_grads(), state, params)
-    fresh_inner_state = select_optimizer("adam", 0.1).init(params)
-    assert int(state[1]) == 2
-    for observed, expected in zip(jax.tree.leaves(state[0]), jax.tree.leaves(fresh_inner_state)):
+    fresh_inner_state = select_optimizer("adam", 0.1).init(params).inner_state
+    assert int(state.inner_state[1]) == 2
+    for observed, expected in zip(
+        jax.tree.leaves(state.inner_state[0]), jax.tree.leaves(fresh_inner_state)
+    ):
         np.testing.assert_allclose(observed, expected, rtol=1e-6)
 
 

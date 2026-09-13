@@ -16,7 +16,7 @@ def test_c51_loss_applies_per_importance_weights(family):
     agent.get_q = lambda *_args: PREDICTIONS
 
     full, _ = family._loss(agent, None, None, ACTIONS, TARGETS, jnp.ones(2), None)
-    first_only, per_sample = family._loss(
+    first_only, (per_sample, _) = family._loss(
         agent, None, None, ACTIONS, TARGETS, jnp.asarray([1.0, 0.0]), None
     )
 
@@ -29,6 +29,7 @@ def test_spr_loss_applies_per_importance_weights():
     agent.get_q = lambda *_args: PREDICTIONS
     agent._represetation_loss = lambda *_args: jnp.asarray(0.0)
     agent.spr_weight = 5.0
+    agent.value_support = jnp.asarray([-1.0, 1.0])
 
     def loss(weights):
         return SPR._loss(
