@@ -20,6 +20,7 @@ from jax_baselines.optim import optimizer_metrics
 
 class TPPO(Actor_Critic_Policy_Gradient_Family):
     _run_name = "TPPO"
+    _store_old_policy = True
 
     def __init__(
         self,
@@ -103,6 +104,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         nxtobses,
         terminateds,
         truncateds,
+        old_policy,
     ):
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
@@ -112,21 +114,13 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         next_value = jax.vmap(self.critic, in_axes=(None, None, None, 0))(
             critic_params, actor_params, key, nxtobses
         )
-        prob, pi_prob = jax.vmap(self.get_logprob, in_axes=(0, 0, None, None))(
-            jax.vmap(self.actor, in_axes=(None, None, 0))(actor_params, key, obses),
-            actions,
-            key,
-            True,
-        )
+        pi_prob, prob = old_policy
         adv = jax.vmap(get_gaes, in_axes=(0, 0, 0, 0, 0, None, None))(
             rewards, terminateds, truncateds, value, next_value, self.gamma, self.lamda
         )
         obses = {key: jnp.vstack(value) for key, value in obses.items()}
         actions = jnp.vstack(actions)
         value = jnp.vstack(value)
-        if self.action_type == "continuous":
-            mu, log_std = prob
-            prob = (mu, jnp.broadcast_to(log_std, mu.shape))
         prob = jax.tree.map(jnp.vstack, prob)
         pi_prob = jnp.vstack(pi_prob)
         adv = jnp.vstack(adv)
@@ -149,6 +143,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         nxtobses,
         terminateds,
         truncateds,
+        old_policy,
     ):
         obses, actions, old_value, targets, old_prob, old_act_prob, adv, metrics = self._preprocess(
             actor_params,
@@ -160,6 +155,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             nxtobses,
             terminateds,
             truncateds,
+            old_policy,
         )
 
         def i_f(vals, _):

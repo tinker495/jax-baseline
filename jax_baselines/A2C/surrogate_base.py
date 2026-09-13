@@ -23,6 +23,8 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
     (wired to ``self._actor_loss`` by ``Actor_Critic_Policy_Gradient_Family``).
     """
 
+    _store_old_policy = True
+
     def __init__(
         self,
         env_builder,
@@ -127,6 +129,7 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
         nxtobses,
         terminateds,
         truncateds,
+        old_policy,
     ):
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
@@ -136,14 +139,9 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
         next_value = jax.vmap(self.critic, in_axes=(None, None, None, 0))(
             critic_params, actor_params, key, nxtobses
         )
-        old_distribution, pi_prob = jax.vmap(self.get_logprob, in_axes=(0, 0, None, None))(
-            jax.vmap(self.actor, in_axes=(None, None, 0))(actor_params, key, obses),
-            actions,
-            key,
-            True,
-        )
+        pi_prob, old_distribution = old_policy
         if self.action_type == "continuous":
-            old_mu, old_log_std = jax.vmap(jnp.broadcast_arrays)(*old_distribution)
+            old_mu, old_log_std = old_distribution
             old_distribution = (old_mu, jnp.exp(old_log_std))
         adv = jax.vmap(get_gaes, in_axes=(0, 0, 0, 0, 0, None, None))(
             rewards, terminateds, truncateds, value, next_value, self.gamma, self.lamda
@@ -172,6 +170,7 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
         nxtobses,
         terminateds,
         truncateds,
+        old_policy,
     ):
         obses, actions, old_values, targets, old_policy, adv, metrics = self._preprocess(
             actor_params,
@@ -183,6 +182,7 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
             nxtobses,
             terminateds,
             truncateds,
+            old_policy,
         )
 
         def i_f(vals, _):

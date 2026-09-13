@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+
+_Array = np.ndarray | jax.Array
+OldPolicy = tuple[_Array, _Array | tuple[_Array, _Array]]
 
 
 class EpochBatch(TypedDict):
@@ -16,6 +19,7 @@ class EpochBatch(TypedDict):
     nxtobses: dict[str, np.ndarray | jax.Array]
     terminateds: np.ndarray | jax.Array
     truncateds: np.ndarray | jax.Array
+    old_policy: NotRequired[OldPolicy]
 
 
 @jax.jit
@@ -61,7 +65,17 @@ class EpochBuffer:
         )
         self._transitions: list[EpochBatch] = []
 
-    def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated):
+    def add(
+        self,
+        obs_t,
+        action,
+        reward,
+        nxtobs_t,
+        terminated,
+        truncated,
+        *,
+        old_policy: OldPolicy | None = None,
+    ):
         if len(self._transitions) >= self.epoch_size:
             raise ValueError("EpochBuffer is full; consume the rollout before adding transitions")
         if (
@@ -96,6 +110,35 @@ class EpochBuffer:
                 },
                 is_leaf=lambda value: isinstance(value, (list, tuple)),
             )
+        if old_policy is not None:
+            log_prob, distribution = old_policy
+            if log_prob.shape != (self.worker_size, 1):
+                raise ValueError(
+                    f"Expected old-policy log probabilities with shape {(self.worker_size, 1)}"
+                )
+            if isinstance(distribution, tuple):
+                if len(distribution) != 2 or any(
+                    value.shape != (self.worker_size, *self.action_shape) for value in distribution
+                ):
+                    raise ValueError("Expected old-policy mean and log std with the action shape")
+            elif (
+                distribution.ndim != 2
+                or distribution.shape[0] != self.worker_size
+                or distribution.shape[1] < 1
+            ):
+                raise ValueError("Expected old-policy probabilities with shape (workers, actions)")
+            transition["old_policy"] = (
+                jax.tree.map(lambda value: np.array(value, copy=True), old_policy)
+                if self.memory_backend == "cpu"
+                else jax.tree.map(
+                    lambda value: jnp.array(
+                        value,
+                        copy=not isinstance(value, jax.Array),
+                        device=self._device,
+                    ),
+                    old_policy,
+                )
+            )
         transition["rewards"] = transition["rewards"].reshape(self.worker_size)
         transition["terminateds"] = (
             transition["terminateds"].astype(bool, copy=False).reshape(self.worker_size)
@@ -114,26 +157,23 @@ class EpochBuffer:
             raise ValueError(
                 f"Expected actions with shape {(self.worker_size, *self.action_shape)}"
             )
+        if self._transitions and (
+            jax.tree.structure(transition) != jax.tree.structure(self._transitions[0])
+            or [value.shape for value in jax.tree.leaves(transition)]
+            != [value.shape for value in jax.tree.leaves(self._transitions[0])]
+        ):
+            raise ValueError(
+                "Transition structure and shapes must remain constant within a rollout"
+            )
         self._transitions.append(transition)
 
     def get_buffer(self) -> EpochBatch:
         if not self._transitions:
             raise ValueError("Cannot consume an empty EpochBuffer")
         if self.memory_backend == "cpu":
-            transitions: EpochBatch = {
-                "obses": {
-                    key: np.stack([row["obses"][key] for row in self._transitions], axis=1)
-                    for key in self.observation_space
-                },
-                "actions": np.stack([row["actions"] for row in self._transitions], axis=1),
-                "rewards": np.stack([row["rewards"] for row in self._transitions], axis=1),
-                "nxtobses": {
-                    key: np.stack([row["nxtobses"][key] for row in self._transitions], axis=1)
-                    for key in self.observation_space
-                },
-                "terminateds": np.stack([row["terminateds"] for row in self._transitions], axis=1),
-                "truncateds": np.stack([row["truncateds"] for row in self._transitions], axis=1),
-            }
+            transitions: EpochBatch = jax.tree.map(
+                lambda *values: np.stack(values, axis=1), *self._transitions
+            )
         else:
             transitions = _stack_transitions(self._transitions)
         self._transitions.clear()
