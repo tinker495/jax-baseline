@@ -103,9 +103,11 @@ def test_epoch_and_replay_buffers_keep_observation_keys():
 def test_crossq_critic_loss_concatenates_dict_observation_values():
     agent = CrossQ.__new__(CrossQ)
     agent._gamma = 0.99
+    agent.prioritized_replay = False
     seen = {}
 
     agent._get_pi_log_prob = lambda _params, observations, _key: (
+        jnp.zeros((observations["unified_obs"].shape[0], 1)),
         jnp.zeros((observations["unified_obs"].shape[0], 1)),
         jnp.zeros((observations["unified_obs"].shape[0], 1)),
     )

@@ -1711,7 +1711,7 @@ requires-dist = [
     { name = "numpy" },
     { name = "opencv-python", marker = "extra == 'all'" },
     { name = "opencv-python", marker = "extra == 'atari'" },
-    { name = "optax" },
+    { name = "optax", specifier = ">=0.2.5" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "ray", marker = "extra == 'all'" },

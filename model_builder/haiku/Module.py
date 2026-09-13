@@ -5,48 +5,38 @@ import jax.numpy as jnp
 from model_builder.utils import observation_role_keys
 
 
-def _visual_embedding_constructor(mode="normal"):
-    if mode == "normal":
-
-        def net_fn():
-            return hk.Sequential(
-                [
-                    hk.Conv2D(
-                        32,
-                        kernel_shape=[8, 8],
-                        stride=[4, 4],
-                        padding="VALID",
-                        w_init=hk.initializers.Orthogonal(scale=1.0),
-                    ),
-                    jax.nn.relu,
-                    hk.Conv2D(
-                        64,
-                        kernel_shape=[4, 4],
-                        stride=[2, 2],
-                        padding="VALID",
-                        w_init=hk.initializers.Orthogonal(scale=1.0),
-                    ),
-                    jax.nn.relu,
-                    hk.Conv2D(
-                        64,
-                        kernel_shape=[3, 3],
-                        stride=[1, 1],
-                        padding="VALID",
-                        w_init=hk.initializers.Orthogonal(scale=1.0),
-                    ),
-                    jax.nn.relu,
-                    hk.Flatten(),
-                ]
-            )
-
-    else:
-        raise ValueError(f"Unknown visual_embedding mode: {mode!r}")
-    return net_fn
-
-
 def visual_embedding(mode="normal"):
-    constructor = _visual_embedding_constructor(mode)
-    return lambda x: constructor()(x)
+    if mode != "normal":
+        raise ValueError(f"Unknown visual_embedding mode: {mode!r}")
+    return hk.Sequential(
+        [
+            hk.Conv2D(
+                32,
+                kernel_shape=[8, 8],
+                stride=[4, 4],
+                padding="VALID",
+                w_init=hk.initializers.Orthogonal(scale=1.0),
+            ),
+            jax.nn.relu,
+            hk.Conv2D(
+                64,
+                kernel_shape=[4, 4],
+                stride=[2, 2],
+                padding="VALID",
+                w_init=hk.initializers.Orthogonal(scale=1.0),
+            ),
+            jax.nn.relu,
+            hk.Conv2D(
+                64,
+                kernel_shape=[3, 3],
+                stride=[1, 1],
+                padding="VALID",
+                w_init=hk.initializers.Orthogonal(scale=1.0),
+            ),
+            jax.nn.relu,
+            hk.Flatten(),
+        ]
+    )
 
 
 class PreProcess(hk.Module):
@@ -56,7 +46,7 @@ class PreProcess(hk.Module):
         self.role = role
         self.observation_keys = observation_role_keys(state_size, role)
         self.embedding = {
-            key: (_visual_embedding_constructor(embedding_mode)() if len(st) == 3 else lambda x: x)
+            key: (visual_embedding(embedding_mode) if len(st) == 3 else lambda x: x)
             for key, st in state_size.items()
             if key in self.observation_keys and (role == "actor" or key.startswith("critic_"))
         }

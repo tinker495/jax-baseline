@@ -21,16 +21,12 @@ class NoopResetEnv(gym.Wrapper):
         """
         gym.Wrapper.__init__(self, env)
         self.noop_max = noop_max
-        self.override_num_noops = None
         self.noop_action = 0
         assert env.unwrapped.get_action_meanings()[0] == "NOOP"
 
     def reset(self, **kwargs):
         self.env.reset(**kwargs)
-        if self.override_num_noops is not None:
-            noops = self.override_num_noops
-        else:
-            noops = np.random.randint(1, self.noop_max + 1)
+        noops = np.random.randint(1, self.noop_max + 1)
         assert noops > 0
         obs = None
         for _ in range(noops):
@@ -38,9 +34,6 @@ class NoopResetEnv(gym.Wrapper):
             if terminated or truncated:
                 obs, info = self.env.reset(**kwargs)
         return obs, info
-
-    def step(self, action):
-        return self.env.step(action)
 
 
 class FireResetEnv(gym.Wrapper):
@@ -62,9 +55,6 @@ class FireResetEnv(gym.Wrapper):
         if terminated or truncated:
             self.env.reset(**kwargs)
         return obs, info
-
-    def step(self, action):
-        return self.env.step(action)
 
 
 class EpisodicLifeEnv(gym.Wrapper):
@@ -163,9 +153,6 @@ class MaxAndSkipEnv(gym.Wrapper):
 
         return max_frame, total_reward, terminated, truncated, info
 
-    def reset(self, **kwargs):
-        return self.env.reset(**kwargs)
-
 
 class ClipRewardEnv(gym.RewardWrapper):
     def __init__(self, env):
@@ -224,14 +211,7 @@ class WarpFrame(gym.ObservationWrapper):
 
 class FrameStack(gym.Wrapper):
     def __init__(self, env, n_frames):
-        """Stack n_frames last frames.
-        Returns lazy array, which is much more memory efficient.
-        See Also
-        --------
-        stable_baselines.common.atari_wrappers.LazyFrames
-        :param env: (Gym Environment) the environment
-        :param n_frames: (int) the number of frames to stack
-        """
+        """Stack the latest frames along the channel axis."""
         gym.Wrapper.__init__(self, env)
         self.n_frames = n_frames
         self.frames = deque([], maxlen=n_frames)
@@ -256,37 +236,7 @@ class FrameStack(gym.Wrapper):
 
     def _get_ob(self):
         assert len(self.frames) == self.n_frames
-        return LazyFrames(list(self.frames))
-
-
-class LazyFrames(object):
-    def __init__(self, frames):
-        """This object ensures that common frames between the observations are only stored once. It exists purely
-        to optimize memory usage which can be huge for DQN's 1M frames replay buffers. This object should only be
-        converted to np.ndarray before being passed to the model.
-
-        :param frames: ([int] or [float]) environment frames
-        """
-        self._frames = frames
-        self._out = None
-
-    def _force(self):
-        if self._out is None:
-            self._out = np.concatenate(self._frames, axis=2)
-            self._frames = None
-        return self._out
-
-    def __array__(self, dtype=None):
-        out = self._force()
-        if dtype is not None:
-            out = out.astype(dtype)
-        return out
-
-    def __len__(self):
-        return len(self._force())
-
-    def __getitem__(self, i):
-        return self._force()[i]
+        return np.concatenate(self.frames, axis=2)
 
 
 def make_wrap_atari(env_id="Breakout-v0", clip_rewards=False):

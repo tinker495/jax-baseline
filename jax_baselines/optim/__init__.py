@@ -5,13 +5,11 @@ adapters. String names, defaults, clipping policy, and reset-suffix parsing are
 experiment policy and must not be resolved in core constructors.
 """
 
-from collections.abc import Callable
-from typing import Any, NamedTuple, Protocol
+from typing import NamedTuple, Protocol
 
 import jax
 import jax.numpy as jnp
 import optax
-from optax import tree_utils as otu
 
 
 class OptimizerFactory(Protocol):
@@ -107,84 +105,6 @@ def optimizer_metrics(opt_state: optax.OptState, prefix: str) -> dict[str, jax.A
     }
 
 
-def adopt(
-    learning_rate: optax.ScalarOrSchedule,
-    b1: float = 0.9,
-    b2: float = 0.9999,
-    eps: float = 1e-6,
-    mu_dtype: Any | None = None,
-    *,
-    nesterov: bool = False,
-    use_clipping: bool = True,
-) -> optax.GradientTransformationExtraArgs:
-    return optax.chain(
-        scale_by_adopt(
-            b1=b1,
-            b2=b2,
-            eps=eps,
-            mu_dtype=mu_dtype,
-            nesterov=nesterov,
-            use_clipping=use_clipping,
-        ),
-        optax.scale_by_learning_rate(learning_rate),
-    )
-
-
-def scale_by_adopt(
-    b1: float = 0.9,
-    b2: float = 0.9999,
-    eps: float = 1e-6,
-    mu_dtype: jnp.dtype | None = None,
-    *,
-    nesterov: bool = False,
-    use_clipping: bool = True,
-    clip_value_fn: Callable[[jnp.ndarray], jnp.ndarray] = lambda x: x**0.25,
-) -> optax.GradientTransformation:
-    r"""Rescale updates according to the ADOPT algorithm.
-
-    ADOPT (Modified Adam Can Converge with Any beta2 with the Optimal Rate) is a variant
-    of Adam that can converge with any beta2 value while maintaining the optimal rate.
-
-    This implementation includes a clipping operation to improve stability, especially
-    in the early stages of training. The clipping helps avoid near-zero divisions when
-    some elements of the parameter gradient are near zero at initialization.
-    """
-
-    mu_dtype = optax._src.utils.canonicalize_dtype(mu_dtype)
-
-    def init_fn(params):
-        mu = otu.tree_zeros_like(params, dtype=mu_dtype)  # First moment
-        nu = otu.tree_zeros_like(params)  # Second moment
-        return optax.ScaleByAdamState(count=jnp.zeros([], jnp.int32), mu=mu, nu=nu)
-
-    def update_fn(updates, state, params=None):
-        del params
-        b2_ = jnp.where(state.count > 0, b2, 0)
-        b1_ = jnp.where(state.count > 0, b1, 1)
-        nu = otu.tree_update_moment_per_elem_norm(updates, state.nu, b2_, 2)
-        if use_clipping:
-            clip_value = clip_value_fn(state.count)
-            mu_updates = jax.tree.map(
-                lambda ud, nu: jnp.clip(
-                    ud / jnp.maximum(jnp.sqrt(nu), eps), -clip_value, clip_value
-                ),
-                updates,
-                state.nu,
-            )
-        else:
-            mu_updates = jax.tree.map(
-                lambda ud, nu: ud / jnp.maximum(jnp.sqrt(nu), eps), updates, state.nu
-            )
-        mu = otu.tree_update_moment(mu_updates, state.mu, b1_, 1)
-        count_inc = optax._src.numerics.safe_increment(state.count)
-        mu_ = otu.tree_update_moment(mu_updates, mu, b1_, 1) if nesterov else mu
-        updates = mu_
-        mu = otu.tree_cast(mu, mu_dtype)
-        return updates, optax.ScaleByAdamState(count=count_inc, mu=mu, nu=nu)
-
-    return optax.GradientTransformation(init_fn, update_fn)
-
-
 def optimizer_reset_by_period(
     optimizer: optax.GradientTransformation, reset_steps: int
 ) -> optax.GradientTransformation:
@@ -216,10 +136,8 @@ def optimizer_reset_by_period(
 __all__ = [
     "OptimizerFactory",
     "OptimizerMetricsState",
-    "adopt",
     "optimizer_metrics",
     "optimizer_reset_by_period",
     "require_optimizer_factory",
-    "scale_by_adopt",
     "track_optimizer",
 ]

@@ -4,7 +4,6 @@ import optax
 
 from jax_baselines.optim import (
     OptimizerFactory,
-    adopt,
     optimizer_reset_by_period,
     track_optimizer,
 )
@@ -43,9 +42,9 @@ def select_optimizer(optim_str, lr, eps=1e-2 / 256.0, weight_decay=1e-4, grad_ma
         case "schedule_free_adam":
             optim = optax.contrib.schedule_free_adamw(lr, b1=0.9, b2=0.999, eps=eps)
         case "adopt":
-            optim = adopt(lr, b1=0.9, b2=0.9999, eps=eps)
+            optim = optax.contrib.adopt(lr, b1=0.9, b2=0.9999, eps=eps)
         case "nadopt":
-            optim = adopt(lr, b1=0.9, b2=0.9999, eps=eps, nesterov=True)
+            optim = optax.contrib.adopt(lr, b1=0.9, b2=0.9999, eps=eps, nesterov=True)
         case "adamw":
             optim = optax.adamw(lr, b1=0.9, b2=0.999, eps=eps, weight_decay=weight_decay)
         case "ano":

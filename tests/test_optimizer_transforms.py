@@ -2,7 +2,8 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
-from jax_baselines.optim import adopt, optimizer_reset_by_period, scale_by_adopt
+from experiments.optimizers import select_optimizer
+from jax_baselines.optim import optimizer_reset_by_period
 
 
 def _params():
@@ -14,7 +15,7 @@ def _grads():
 
 
 def test_scale_by_adopt_matches_locked_three_step_updates():
-    optimizer = scale_by_adopt()
+    optimizer = optax.contrib.scale_by_adopt()
     state = optimizer.init(_params())
 
     observed = []
@@ -37,7 +38,7 @@ def test_scale_by_adopt_matches_locked_three_step_updates():
 
 
 def test_adopt_applies_learning_rate_with_negative_update_direction():
-    optimizer = adopt(0.1)
+    optimizer = select_optimizer("adopt", 0.1)
     state = optimizer.init(_params())
 
     observed = []
