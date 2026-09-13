@@ -27,7 +27,7 @@ Aim의 experiment와 W&B의 project도 `category`를 사용하므로 같은 카�
 | ------------------------------------ | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | [atari_100k/](atari_100k/)           | Atari 100K 샘플 효율 실험          | [Breakout DQN 계열](atari_100k/dqn_breakout100k.yaml), [Asterix DQN 계열](atari_100k/dqn_asterix100k.yaml)                            |
 | [atari/](atari/)                     | 일반 Atari 실험과 분산 학습        | [Breakout DQN](atari/dqn_breakout.yaml), [Breakout PG](atari/pg_breakout.yaml), [Space Invaders APE-X](atari/apex_spaceinvaders.yaml) |
-| [mjlab/](mjlab/)                     | mjlab의 Unitree Go1·G1 로봇 실험   | [Go1 PG](mjlab/pg_mjlab_go1.yaml), [G1 FlashSAC](mjlab/flashsac_mjlab_g1.yaml)                                                        |
+| [mjlab/](mjlab/README.md)            | mjlab의 Cartpole·보행·로봇팔 실험  | [권장 설정과 출처](mjlab/README.md), [Go1 rough PPO](mjlab/pg_mjlab_go1_rough.yaml), [YAM PPO](mjlab/pg_mjlab_yam.yaml)               |
 | [mujoco/](mujoco/)                   | Humanoid·Walker2d 연속 제어        | [Humanoid DPG](mujoco/dpg_humanoid.yaml), [Walker2d APE-X](mujoco/apex_dpg_walker2d.yaml), [Humanoid XQC](mujoco/xqc_humanoid.yaml)   |
 | [box2d/](box2d/)                     | LunarLander·BipedalWalker          | [LunarLander PG](box2d/pg_lunarlander.yaml), [BipedalWalker IMPALA](box2d/impala_bipedal.yaml)                                        |
 | [classic_control/](classic_control/) | 고전 제어 환경                     | [Acrobot DQN](classic_control/dqn_acrobot.yaml)                                                                                       |

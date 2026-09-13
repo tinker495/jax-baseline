@@ -1,0 +1,9 @@
+{
+  "type": "mlp",
+  "layers": [
+    64,
+    64
+  ],
+  "activation": "elu",
+  "embedding_mode": "normal"
+}
