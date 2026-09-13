@@ -12,7 +12,7 @@ from model_builder.utils import (
 )
 
 
-def model_builder_maker(observation_space, action_size, policy_kwargs):
+def _make_model_builder(observation_space, action_size, policy_kwargs, *, twin_critic):
     actor_kwargs, critic_kwargs = split_actor_critic_kwargs(
         policy_kwargs, allowed_embeddings=("normal",)
     )
@@ -39,6 +39,11 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 embedding_mode=critic_kwargs["network"].embedding_mode,
                 role="critic",
             )(observation, shared_features)
+            if twin_critic:
+                return (
+                    Critic(**critic_kwargs)(feature, action),
+                    Critic(**critic_kwargs)(feature, action),
+                )
             return Critic(**critic_kwargs)(feature, action)
 
         actor = hk.transform(actor_forward)
@@ -61,3 +66,12 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         return actor.apply, critic_fn, policy_params, critic_params
 
     return model_builder
+
+
+def model_builder_maker(observation_space, action_size, policy_kwargs):
+    return _make_model_builder(
+        observation_space,
+        action_size,
+        policy_kwargs,
+        twin_critic=False,
+    )

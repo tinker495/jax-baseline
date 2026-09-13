@@ -10,6 +10,7 @@ uninstalled raises a clear, actionable error.
 from __future__ import annotations
 
 import os
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -152,21 +153,11 @@ def make_wandb_logger_factory(
     so an uninstalled extra fails fast with a clear message before training or
     ``ray.init()`` starts.
     """
-    wandb_module = _import_wandb()
-    entity = getattr(args, "wandb_entity", None)
-    mode = getattr(args, "wandb_mode", None)
-
-    def factory(run_name, experiment_name, local_dir, agent):
-        return WandbLogger(
-            wandb_module,
-            run_name,
-            experiment_name,
-            local_dir,
-            agent,
-            entity=entity,
-            mode=mode,
-            extra_hparams=extra_hparams,
-            run_metadata=run_metadata,
-        )
-
-    return factory
+    return partial(
+        WandbLogger,
+        _import_wandb(),
+        entity=args.wandb_entity,
+        mode=args.wandb_mode,
+        extra_hparams=extra_hparams,
+        run_metadata=run_metadata,
+    )
