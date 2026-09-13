@@ -52,13 +52,10 @@ def bulk_chunk_plan(gradient_steps, buckets):
                 continue
             candidate_calls = calls[steps - bucket] + 1
             candidate_scalars = scalar_counts[steps - bucket]
-            if not _is_better_chunk_plan(
-                candidate_calls,
-                candidate_scalars,
-                bucket,
+            if (candidate_calls, candidate_scalars, -bucket) >= (
                 calls[steps],
                 scalar_counts[steps],
-                first_chunks[steps],
+                -first_chunks[steps],
             ):
                 continue
             calls[steps] = candidate_calls
@@ -75,25 +72,6 @@ def bulk_chunk_plan(gradient_steps, buckets):
         chunks.append(chunk_size)
         remaining -= chunk_size
     return tuple(chunks)
-
-
-def _is_better_chunk_plan(
-    candidate_calls,
-    candidate_scalars,
-    candidate_chunk,
-    current_calls,
-    current_scalars,
-    current_chunk,
-):
-    return (
-        candidate_calls < current_calls
-        or (candidate_calls == current_calls and candidate_scalars < current_scalars)
-        or (
-            candidate_calls == current_calls
-            and candidate_scalars == current_scalars
-            and candidate_chunk > current_chunk
-        )
-    )
 
 
 def bulk_chunk_buckets(max_chunk):

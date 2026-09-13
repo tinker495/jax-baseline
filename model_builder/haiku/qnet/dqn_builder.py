@@ -36,7 +36,15 @@ class Model(hk.Module):
         return v + a - jnp.mean(a, axis=1, keepdims=True)
 
 
-def model_builder_maker(observation_space, action_space, dueling_model, param_noise, policy_kwargs):
+def make_qnet_builder(
+    observation_space,
+    model_cls,
+    action_space,
+    dueling_model,
+    param_noise,
+    policy_kwargs,
+    **head_kwargs
+):
     policy_kwargs = qnet_model_kwargs(policy_kwargs, allowed_embeddings=("normal",))
 
     def _model_builder(key=None, print_model=False):
@@ -46,8 +54,12 @@ def model_builder_maker(observation_space, action_space, dueling_model, param_no
             )(x)
         )
         model = hk.transform(
-            lambda x: Model(
-                action_space, dueling=dueling_model, noisy=param_noise, **policy_kwargs
+            lambda x: model_cls(
+                action_space,
+                dueling=dueling_model,
+                noisy=param_noise,
+                **head_kwargs,
+                **policy_kwargs,
             )(x)
         )
         preproc_fn = preproc.apply
@@ -64,3 +76,9 @@ def model_builder_maker(observation_space, action_space, dueling_model, param_no
         return preproc_fn, model_fn
 
     return _model_builder
+
+
+def model_builder_maker(observation_space, action_space, dueling_model, param_noise, policy_kwargs):
+    return make_qnet_builder(
+        observation_space, Model, action_space, dueling_model, param_noise, policy_kwargs
+    )

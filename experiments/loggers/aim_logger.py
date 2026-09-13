@@ -10,6 +10,7 @@ uninstalled raises a clear, actionable error.
 from __future__ import annotations
 
 import os
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -144,19 +145,10 @@ def make_aim_logger_factory(
     an uninstalled extra fails fast with a clear message before training or
     ``ray.init()`` starts.
     """
-    aim_module = _import_aim()
-    repo = getattr(args, "aim_repo", None)
-
-    def factory(run_name, experiment_name, local_dir, agent):
-        return AimLogger(
-            aim_module,
-            run_name,
-            experiment_name,
-            local_dir,
-            agent,
-            repo=repo,
-            extra_hparams=extra_hparams,
-            run_metadata=run_metadata,
-        )
-
-    return factory
+    return partial(
+        AimLogger,
+        _import_aim(),
+        repo=args.aim_repo,
+        extra_hparams=extra_hparams,
+        run_metadata=run_metadata,
+    )
