@@ -69,6 +69,12 @@ def add_args(parser):
     parser.add_argument("--epoch_num", type=int, default=4, help="epoch number")
     parser.add_argument("--ppo_eps", type=float, default=0.2, help="PPO policy clip range")
     parser.add_argument(
+        "--desired_kl",
+        type=float,
+        default=None,
+        help="PPO exact KL target for adaptive learning rate; omitted disables adaptation",
+    )
+    parser.add_argument(
         "--value_clip",
         type=float,
         default=2.0,
@@ -139,6 +145,7 @@ def _ppo_build(a):
         **_ppo_like(a),
         "ppo_eps": a.ppo_eps,
         "value_clip": a.value_clip,
+        **({"desired_kl": a.desired_kl} if a.algo == "PPO" else {}),
     }
 
 

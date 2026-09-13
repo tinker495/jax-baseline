@@ -78,6 +78,10 @@ def test_continuous_tppo_full_train_step_handles_gaussian_minibatches(cls, famil
         agent.gae_normalize = False
         agent.gae_normalize_scope = "batch"
         agent.value_clip = 0.3
+        distribution, log_prob = agent.get_logprob(
+            agent.actor(agent.actor_params, None, obses), actions, None, out_prob=True
+        )
+        old_mu, old_log_std = distribution
         result = TPPO._train_step(
             agent,
             agent.actor_params,
@@ -91,6 +95,7 @@ def test_continuous_tppo_full_train_step_handles_gaussian_minibatches(cls, famil
             obses,
             scalars,
             scalars,
+            old_policy=(log_prob, (old_mu, jnp.broadcast_to(old_log_std, old_mu.shape))),
         )
     else:
         agent.mu_ratio = 0.0

@@ -79,9 +79,14 @@ def parse_runner_args(
         value = values[name]
         if value < 0 or int(value) != value:
             parser.error(f"--{name} must be a nonnegative integer")
-    for name in {"learning_rate", "optimizer_eps", "max_grad_norm"} & values.keys():
+    for name in {"learning_rate", "optimizer_eps", "max_grad_norm", "desired_kl"} & values.keys():
         if values[name] is not None and values[name] <= 0:
             parser.error(f"--{name} must be positive")
+    if "desired_kl" in values and args.desired_kl is not None:
+        if args.algo != "PPO":
+            parser.error("--desired_kl is only supported for PPO")
+        if args.lr_annealing:
+            parser.error("--desired_kl cannot be combined with --lr_annealing")
     for name in {
         "gamma",
         "lamda",

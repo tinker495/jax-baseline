@@ -31,6 +31,7 @@ def _agent(enabled=True):
     agent._get_actions = lambda params, obs: (
         params * obs["unified_obs"],
         np.ones_like(obs["unified_obs"]),
+        np.zeros_like(obs["unified_obs"]),
     )
     agent.actions = agent.action_continuous
     return agent
@@ -174,7 +175,9 @@ def test_rollout_normalizes_successors_before_reset_statistics(
     agent.conv_action = lambda action: action
     transitions = []
     train_counts = []
-    agent.buffer = SimpleNamespace(add=lambda *transition: transitions.append(transition))
+    agent.buffer = SimpleNamespace(
+        add=lambda *transition, old_policy=None: transitions.append(transition)
+    )
     agent.train_step = lambda steps, logger_run: train_counts.append(agent.obs_rms.count) or 0.0
     agent.eval = lambda ctx, steps: None
     ctx = RunContext(

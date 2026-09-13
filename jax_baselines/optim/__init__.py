@@ -94,6 +94,8 @@ def track_optimizer(
 
 def optimizer_metrics(opt_state: optax.OptState, prefix: str) -> dict[str, jax.Array]:
     """Read the last update; arbitrary injected Optax optimizers may opt out."""
+    if isinstance(opt_state, optax.InjectStatefulHyperparamsState):
+        opt_state = opt_state.inner_state
     if not isinstance(opt_state, OptimizerMetricsState):
         return {}
     return {

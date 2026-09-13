@@ -78,7 +78,11 @@ def test_host_environment_keeps_rollout_arrays_on_cpu(backend, jax_observation):
         on_device=agent.memory_backend == "gpu",
     )
     assert isinstance(normalized["unified_obs"], np.ndarray)
-    agent._get_actions = lambda params, obs: (jnp.zeros((1, 1)), jnp.ones((1, 1)))
+    agent._get_actions = lambda params, obs: (
+        jnp.zeros((1, 1)),
+        jnp.ones((1, 1)),
+        jnp.zeros((1, 1)),
+    )
     assert isinstance(agent.action_continuous(normalized), np.ndarray)
     agent._get_actions = lambda params, obs: jnp.array([[0.25, 0.75]])
     assert isinstance(agent.action_discrete(normalized), np.ndarray)

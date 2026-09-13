@@ -47,6 +47,8 @@ def kl_divergence_discrete(p, q, eps: float = 1e-8):
 def kl_divergence_continuous(p, q):
     p_mu, p_std = p
     q_mu, q_std = q
-    term1 = jnp.log(q_std / p_std)
-    term2 = (p_std**2 + (p_mu - q_mu) ** 2) / (2 * q_std**2)
-    return jnp.sum(term1 + term2 - 0.5, axis=-1, keepdims=True)
+    variance_ratio = jnp.square(p_std / q_std)
+    mean_difference = jnp.square((p_mu - q_mu) / q_std)
+    return 0.5 * jnp.sum(
+        variance_ratio + mean_difference - 1.0 - jnp.log(variance_ratio), axis=-1, keepdims=True
+    )

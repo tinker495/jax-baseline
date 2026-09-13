@@ -27,6 +27,7 @@ from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
 from jax_baselines.APE_X.dpg_worker import Ape_X_Worker as ApeXDPGWorker
 from jax_baselines.APE_X.worker import Ape_X_Worker as ApeXQWorker
 from jax_baselines.core.env_info import infer_action_meta
+from jax_baselines.core.rollout_stats import TrainingProgress
 from jax_baselines.IMPALA.base_class import IMPALA_Family
 from jax_baselines.IMPALA.worker import Impala_Worker
 from jax_baselines.math.returns import discount_with_terminated, get_gaes, get_vtrace
@@ -317,7 +318,7 @@ class _RecordingBuffer:
         self.obses = []
         self.nxtobses = []
 
-    def add(self, obs, action, reward, nxtobs, terminated, truncated):
+    def add(self, obs, action, reward, nxtobs, terminated, truncated, *, old_policy=None):
         self.terminateds.append(np.asarray(terminated).copy())
         self.rewards.append(np.asarray(reward).copy())
         self.truncateds.append(np.asarray(truncated).copy())
@@ -342,6 +343,7 @@ class _Ctx:
         self.eval_freq = 10_000
         self.log_interval = 10_000
         self.logger_run = _NullLogger()
+        self.progress = TrainingProgress()
 
 
 def test_a2c_vectorized_flags_autoreset_dummy_step_as_terminal():

@@ -23,6 +23,8 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
     (wired to ``self._actor_loss`` by ``Actor_Critic_Policy_Gradient_Family``).
     """
 
+    _store_old_policy = True
+
     def __init__(
         self,
         env_builder,
@@ -34,8 +36,20 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
         epoch_num=4,
         ppo_eps=0.2,
         value_clip=2.0,
+        batch_size=256,
+        learning_rate=3e-4,
+        lr_annealing=False,
+        desired_kl: float | None = None,
         **kwargs,
     ):
+        if desired_kl is not None:
+            if not np.isfinite(desired_kl) or desired_kl <= 0:
+                raise ValueError("desired_kl must be finite and positive")
+            if lr_annealing or callable(learning_rate):
+                raise ValueError("desired_kl requires a scalar learning rate without lr_annealing")
+            if not np.isfinite(learning_rate) or learning_rate <= 0:
+                raise ValueError("desired_kl requires a finite positive learning rate")
+        self.desired_kl = desired_kl
         self.lamda = lamda
         self.gae_normalize = gae_normalize
         self.gae_normalize_scope = validate_advantage_normalize_scope(gae_normalize_scope)
@@ -44,14 +58,26 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
         self.minibatch_size = minibatch_size
         self.epoch_num = epoch_num
 
-        super().__init__(env_builder, model_builder_maker, **kwargs)
+        super().__init__(
+            env_builder,
+            model_builder_maker,
+            batch_size=batch_size,
+            learning_rate=learning_rate,
+            lr_annealing=lr_annealing,
+            **kwargs,
+        )
 
         self.batch_size = int(
-            np.ceil(kwargs.get("batch_size", 256) * self.worker_size / minibatch_size)
+            np.ceil(batch_size * self.worker_size / minibatch_size)
             * minibatch_size
             / self.worker_size
         )
         self.get_memory_setup()
+
+    def _make_optimizer(self, learning_rate):
+        if self.desired_kl is not None:
+            return optax.inject_hyperparams(super()._make_optimizer)(learning_rate=learning_rate)
+        return super()._make_optimizer(learning_rate)
 
     def setup_model(self):
         self.model_builder = self.model_builder_maker(
@@ -103,6 +129,7 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
         nxtobses,
         terminateds,
         truncateds,
+        old_policy,
     ):
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
@@ -112,24 +139,23 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
         next_value = jax.vmap(self.critic, in_axes=(None, None, None, 0))(
             critic_params, actor_params, key, nxtobses
         )
-        pi_prob = jax.vmap(self.get_logprob, in_axes=(0, 0, None))(
-            jax.vmap(self.actor, in_axes=(None, None, 0))(actor_params, key, obses),
-            actions,
-            key,
-        )
+        pi_prob, old_distribution = old_policy
+        if self.action_type == "continuous":
+            old_mu, old_log_std = old_distribution
+            old_distribution = (old_mu, jnp.exp(old_log_std))
         adv = jax.vmap(get_gaes, in_axes=(0, 0, 0, 0, 0, None, None))(
             rewards, terminateds, truncateds, value, next_value, self.gamma, self.lamda
         )
         obses = {key: jnp.vstack(value) for key, value in obses.items()}
         actions = jnp.vstack(actions)
         value = jnp.vstack(value)
-        pi_prob = jnp.vstack(pi_prob)
+        old_policy = (jnp.vstack(pi_prob), jax.tree.map(jnp.vstack, old_distribution))
         adv = jnp.vstack(adv)
         targets = value + adv
         metrics = rollout_metrics(value, targets, adv)
         if self.gae_normalize and self.gae_normalize_scope == "batch":
             adv = normalize_advantage(adv)
-        return obses, actions, value, targets, pi_prob, adv, metrics
+        return obses, actions, value, targets, old_policy, adv, metrics
 
     def _train_step(
         self,
@@ -144,8 +170,9 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
         nxtobses,
         terminateds,
         truncateds,
+        old_policy,
     ):
-        obses, actions, old_values, targets, act_prob, adv, metrics = self._preprocess(
+        obses, actions, old_values, targets, old_policy, adv, metrics = self._preprocess(
             actor_params,
             critic_params,
             key,
@@ -155,6 +182,7 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
             nxtobses,
             terminateds,
             truncateds,
+            old_policy,
         )
 
         def i_f(vals, _):
@@ -167,21 +195,39 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
             actions_batch = actions[batch_idxes]
             old_values_batch = old_values[batch_idxes]
             targets_batch = targets[batch_idxes]
-            act_prob_batch = act_prob[batch_idxes]
+            old_policy_batch = jax.tree.map(lambda value: value[batch_idxes], old_policy)
             adv_batch = adv[batch_idxes]
 
             def f(updates, input):
                 actor_params, critic_params, actor_opt_state, critic_opt_state, key = updates
-                obs, act, oldv, target, act_prob, adv = input
+                obs, act, oldv, target, old_policy, adv = input
                 if self.gae_normalize and self.gae_normalize_scope == "minibatch":
                     adv = normalize_advantage(adv)
                 use_key, key = jax.random.split(key)
                 (actor_objective, batch_metrics), actor_grad = jax.value_and_grad(
                     self._actor_loss, has_aux=True
-                )(actor_params, obs, act, act_prob, adv, use_key)
+                )(actor_params, obs, act, old_policy, adv, use_key)
                 c_loss, critic_grad = jax.value_and_grad(self._critic_loss)(
                     critic_params, actor_params, obs, oldv, target, use_key
                 )
+                if self.desired_kl is not None:
+                    kl = batch_metrics["loss/kl_divergence"]
+                    learning_rate = actor_opt_state.hyperparams["learning_rate"]
+                    learning_rate = jnp.where(
+                        kl > 2.0 * self.desired_kl,
+                        jnp.maximum(1e-5, learning_rate / 1.5),
+                        jnp.where(
+                            (kl > 0.0) & (kl < self.desired_kl / 2.0),
+                            jnp.minimum(1e-2, learning_rate * 1.5),
+                            learning_rate,
+                        ),
+                    )
+                    actor_opt_state = actor_opt_state._replace(
+                        hyperparams={**actor_opt_state.hyperparams, "learning_rate": learning_rate}
+                    )
+                    critic_opt_state = critic_opt_state._replace(
+                        hyperparams={**critic_opt_state.hyperparams, "learning_rate": learning_rate}
+                    )
                 actor_updates, actor_opt_state = self.optimizer.update(
                     actor_grad, actor_opt_state, params=actor_params
                 )
@@ -210,7 +256,7 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
                     actions_batch,
                     old_values_batch,
                     targets_batch,
-                    act_prob_batch,
+                    old_policy_batch,
                     adv_batch,
                 ),
             )

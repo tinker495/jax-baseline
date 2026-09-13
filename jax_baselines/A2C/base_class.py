@@ -48,8 +48,36 @@ def _sample_discrete(prob, key):
     return jax.random.categorical(key, jnp.log(prob), axis=-1)[:, None]
 
 
+def _categorical_policy(logits):
+    prob = jnp.clip(jax.nn.softmax(logits, axis=-1), 1e-8, 1.0)
+    return prob / jnp.sum(prob, axis=-1, keepdims=True)
+
+
+@jax.jit
+def _categorical_log_prob(prob, action):
+    return jnp.log(jnp.take_along_axis(prob, action.astype(jnp.int32), axis=1))
+
+
+def _continuous_log_prob(prob, action):
+    mu, log_std = prob
+    std = jnp.exp(log_std)
+    return -(
+        0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True)
+        + jnp.sum(log_std, axis=-1, keepdims=True)
+        + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
+    )
+
+
+@jax.jit
+def _continuous_old_policy(policy, actions):
+    mu, _, log_std = policy
+    old_policy = (mu, jnp.broadcast_to(log_std, mu.shape))
+    return _continuous_log_prob(old_policy, actions), old_policy
+
+
 class Actor_Critic_Policy_Gradient_Family:
     _run_name = "A2C"
+    _store_old_policy = False
     actor: Callable
     _get_actions: Callable
     logger: AbstractContextManager
@@ -232,20 +260,18 @@ class Actor_Critic_Policy_Gradient_Family:
         raise NotImplementedError
 
     def _get_actions_discrete(self, actor_params, obses, key=None) -> jnp.ndarray:
-        prob = jax.nn.softmax(
-            self.actor(actor_params, key, convert_normalized_obs(obses)),
-            axis=1,
-        )
-        return prob
+        return _categorical_policy(self.actor(actor_params, key, convert_normalized_obs(obses)))
 
     def _get_actions_continuous(
         self, actor_params, obses, key=None
-    ) -> tuple[jnp.ndarray, jnp.ndarray]:
-        mu, std = self.actor(actor_params, key, convert_normalized_obs(obses))
-        return mu, jnp.exp(std)
+    ) -> tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray]:
+        mu, log_std = self.actor(actor_params, key, convert_normalized_obs(obses))
+        return mu, jnp.exp(log_std), log_std
 
     def action_discrete(self, obs, eval=False):
-        prob = self._get_actions(self.actor_params, obs)
+        return self._action_from_discrete(self._get_actions(self.actor_params, obs), eval)
+
+    def _action_from_discrete(self, prob, eval=False):
         if self.memory_backend == "cpu":
             prob = np.asarray(prob)
             if eval:
@@ -260,7 +286,10 @@ class Actor_Critic_Policy_Gradient_Family:
         return _sample_discrete(prob, next(self.key_seq))
 
     def action_continuous(self, obs, eval=False):
-        mu, std = self._get_actions(self.actor_params, obs)
+        mu, std, _ = self._get_actions(self.actor_params, obs)
+        return self._action_from_continuous(mu, std, eval)
+
+    def _action_from_continuous(self, mu, std, eval=False):
         if self.memory_backend == "cpu":
             if eval:
                 return np.asarray(mu)
@@ -270,22 +299,38 @@ class Actor_Critic_Policy_Gradient_Family:
             return mu
         return _sample_continuous(mu, std, next(self.key_seq))
 
+    def sample_actions(self, obs):
+        if not self._store_old_policy:
+            return self.actions(obs), None
+        if self.memory_backend == "gpu":
+            return self._sample_actions_gpu(self.actor_params, obs, next(self.key_seq))
+        policy = self._get_actions(self.actor_params, obs)
+        if self.action_type == "discrete":
+            actions = self._action_from_discrete(policy)
+            old_policy = (_categorical_log_prob(policy, actions), policy)
+        else:
+            mu, std, _ = policy
+            actions = self._action_from_continuous(mu, std)
+            old_policy = _continuous_old_policy(policy, actions)
+        return actions, jax.tree.map(np.asarray, old_policy)
+
+    @jax.jit(static_argnums=0)
+    def _sample_actions_gpu(self, actor_params, obs, key):
+        policy = self._get_actions(actor_params, obs)
+        if self.action_type == "discrete":
+            actions = _sample_discrete(policy, key)
+            return actions, (_categorical_log_prob(policy, actions), policy)
+        mu, std, _ = policy
+        actions = _sample_continuous(mu, std, key)
+        return actions, _continuous_old_policy(policy, actions)
+
     def get_logprob_discrete(self, prob, action, key, out_prob=False):
-        prob = jax.nn.softmax(prob)
-        prob = jnp.clip(prob, 1e-8, 1.0)
-        prob = prob / jnp.sum(prob, axis=-1, keepdims=True)
-        action = action.astype(jnp.int32)
-        log_prob = jnp.log(jnp.take_along_axis(prob, action, axis=1))
+        prob = _categorical_policy(prob)
+        log_prob = _categorical_log_prob(prob, action)
         return (prob, log_prob) if out_prob else log_prob
 
     def get_logprob_continuous(self, prob, action, key, out_prob=False):
-        mu, log_std = prob
-        std = jnp.exp(log_std)
-        log_prob = -(
-            0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True)
-            + jnp.sum(log_std, axis=-1, keepdims=True)
-            + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
-        )
+        log_prob = _continuous_log_prob(prob, action)
         return (prob, log_prob) if out_prob else log_prob
 
     def _actor_loss_continuous(self):
@@ -402,7 +447,7 @@ class Actor_Critic_Policy_Gradient_Family:
         steps = 0
         last_log_step = 0
         for steps in ctx.pbar:
-            actions = self.actions(obs)
+            actions, old_policy = self.sample_actions(obs)
             step_action = _normalize_action_for_step(self.conv_action(actions))
             next_obs, reward, terminated, truncated, _ = self.env.step(step_action)
             ctx.progress.env_steps += 1
@@ -430,6 +475,7 @@ class Actor_Critic_Policy_Gradient_Family:
                 next_obs,
                 [terminated],
                 [truncated],
+                old_policy=old_policy,
             )
             score += float(reward)
             eplen += 1
@@ -500,7 +546,7 @@ class Actor_Critic_Policy_Gradient_Family:
         obs = normalize_empirical_observation(
             raw_obs, self.obs_rms, on_device=self.memory_backend == "gpu"
         )
-        actions = self.actions(obs)
+        actions, old_policy = self.sample_actions(obs)
         end = object()
         first = True
         steps = 0
@@ -539,7 +585,7 @@ class Actor_Critic_Policy_Gradient_Family:
             train_due = (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0
             if not train_due and next_step is not end:
                 # Keep the async overlap except when train_step changes the policy.
-                next_actions = self.actions(action_observation)
+                next_actions, next_old_policy = self.sample_actions(action_observation)
                 send(next_actions)
 
             if device_rollout:
@@ -551,7 +597,15 @@ class Actor_Critic_Policy_Gradient_Family:
                     truncateds,
                     vector_autoreset_mask(self.env, terminateds, truncateds, infos),
                 )
-                self.buffer.add(obs, actions, rewards, next_obses, terminateds, truncateds)
+                self.buffer.add(
+                    obs,
+                    actions,
+                    rewards,
+                    next_obses,
+                    terminateds,
+                    truncateds,
+                    old_policy=old_policy,
+                )
                 completed_steps.append(steps)
                 completed_rows.append(completed)
                 if train_due or log_due or next_step is end:
@@ -586,7 +640,15 @@ class Actor_Critic_Policy_Gradient_Family:
                     # whatever the env reports on the discarded autoreset step.
                     terminateds = np.where(prev_done, True, terminateds)
                     rewards = np.where(prev_done, np.float32(0.0), rewards)
-                self.buffer.add(obs, actions, rewards, next_obses, terminateds, truncateds)
+                self.buffer.add(
+                    obs,
+                    actions,
+                    rewards,
+                    next_obses,
+                    terminateds,
+                    truncateds,
+                    old_policy=old_policy,
+                )
 
                 for idx in np.where(done & active)[0]:
                     self.rollout_tracker.record(
@@ -605,7 +667,7 @@ class Actor_Critic_Policy_Gradient_Family:
                 ctx.progress.update_steps += self._optimizer_updates_per_train_step()
                 self.lossque.append(loss)
                 if next_step is not end:
-                    next_actions = self.actions(action_observation)
+                    next_actions, next_old_policy = self.sample_actions(action_observation)
                     send(next_actions)
 
             if next_step is not end:
@@ -613,6 +675,7 @@ class Actor_Critic_Policy_Gradient_Family:
                 # the action just sent belongs to the env's current observation.
                 obs = action_observation
                 actions = next_actions
+                old_policy = next_old_policy
 
             if steps % ctx.eval_freq == 0:
                 eval_result = self.eval(ctx, steps)
