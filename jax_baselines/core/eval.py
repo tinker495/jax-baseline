@@ -172,15 +172,18 @@ def evaluate_policy(eval_env, eval_eps, act_eval_fn, logger_run=None, steps=0, c
 def run_test_episodes(
     test_env, actions_eval_fn, episode, conv_action=None, *, logger_run=None, logging_env=None
 ):
-    """Run evaluation episodes on an already-constructed test environment."""
+    """Test one worker's episodes, keeping vector policies at their native batch size."""
     if episode < 1:
         raise ValueError("episode must be positive")
     # Recording wrappers step the same environment but need not expose its diagnostics.
     logging_env = test_env if logging_env is None else logging_env
+    vectorized = isinstance(test_env, VectorizedEvalEnv)
+    active = np.arange(test_env.get_info()["worker_num"]) == 0 if vectorized else None
     total_rewards = []
     for _ in range(episode):
         obs, _ = test_env.reset()
-        obs = batch_observation(obs)
+        if not vectorized:
+            obs = batch_observation(obs)
         terminated = False
         truncated = False
         episode_rew = 0
@@ -188,11 +191,21 @@ def run_test_episodes(
         while not terminated and not truncated:
             actions = actions_eval_fn(obs)
             step_action = conv_action(actions) if conv_action is not None else actions
-            action_to_step = _normalize_action_for_step(step_action)
-
-            observation, reward, terminated, truncated, _ = test_env.step(action_to_step)
-            log_environment_metrics(logging_env, logger_run, None, namespace="test", flush=False)
-            obs = batch_observation(observation)
+            if vectorized:
+                test_env.step(step_action)
+                _, rewards, terminateds, truncateds, _ = test_env.get_result()
+                reward, terminated, truncated = jax.device_get(
+                    (rewards[0], terminateds[0], truncateds[0])
+                )
+                obs = test_env.current_obs()
+            else:
+                observation, reward, terminated, truncated, _ = test_env.step(
+                    _normalize_action_for_step(step_action)
+                )
+                obs = batch_observation(observation)
+            log_environment_metrics(
+                logging_env, logger_run, None, namespace="test", active=active, flush=False
+            )
             episode_rew += reward
             eplen += 1
         print("episod reward :", episode_rew, "episod len :", eplen)
@@ -208,8 +221,7 @@ def run_test_episodes(
 def record_and_test(env_builder, logger_run, actions_eval_fn, episode, conv_action=None):
     """Run an unrecorded evaluation loop when no experiments recorder is injected.
 
-    Concrete Gymnasium ``RecordVideo`` / ``RecordEpisodeStatistics`` wrapping
-    lives in ``experiments.runtime_adapters.record_and_test``. This fallback
+    Concrete video recording lives in ``experiments.runtime_adapters.record_and_test``. This fallback
     preserves the direct core ``agent.test()`` reward/std return shape without
     creating video artifacts or importing Gymnasium wrappers.
     """

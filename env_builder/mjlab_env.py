@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
+from dataclasses import replace
 from typing import Any, TypeAlias
 
 import jax
@@ -134,6 +135,41 @@ class MjlabVectorizedEnv(VectorizedEnv):
     def current_obs(self) -> Observation:
         return self._obs
 
+    @property
+    def metadata(self):
+        return self.env.metadata
+
+    @contextmanager
+    def rendering_context(self) -> Iterator[None]:
+        if self._closed:
+            raise RuntimeError("Cannot render a closed environment")
+        if self.env.render_mode == "rgb_array":
+            yield
+            return
+        from mjlab.viewer.offscreen_renderer import OffscreenRenderer
+
+        with closing(
+            OffscreenRenderer(
+                model=self.env.sim.mj_model,
+                cfg=replace(self.env.cfg.viewer, env_idx=0),
+                scene=self.env.scene,
+                sim_model=self.env.sim.model,
+                expanded_fields=self.env.sim.expanded_fields,
+            )
+        ) as renderer:
+            renderer.initialize()
+            self.env._offline_renderer = renderer
+            self.env.render_mode = "rgb_array"
+            try:
+                yield
+            finally:
+                self.env.render_mode = None
+                self.env._offline_renderer = None
+                self._frame = None
+
+    def render(self):
+        return self._frame if self._frame is not None else self.env.render()
+
     @contextmanager
     def evaluation_context(self) -> Iterator[None]:
         if not self._reuse_for_eval:
@@ -153,6 +189,25 @@ class MjlabVectorizedEnv(VectorizedEnv):
             finally:
                 self._obs, self._frame, self._pending = observation, frame, pending
                 self._metrics = metrics
+
+    @contextmanager
+    def testing_context(self) -> Iterator[None]:
+        """Test at the trained difficulty without advancing reset-time curricula."""
+        if self._closed:
+            raise RuntimeError("Cannot test a closed environment")
+        from mjlab.managers.curriculum_manager import NullCurriculumManager
+
+        with self.evaluation_context():
+            if self._pending is not None:
+                self.get_result()
+            curriculum = self.env.curriculum_manager
+            self.env.curriculum_manager = NullCurriculumManager()
+            try:
+                print(f"Test curriculum: fixed at environment step {self.env.common_step_counter}")
+                yield
+            finally:
+                # Restore before evaluation_context restores manager-owned state.
+                self.env.curriculum_manager = curriculum
 
     def get_info(self) -> EnvInfo:
         return self.env_info
@@ -276,6 +331,16 @@ class MjlabSingleEnv(SingleEnv):
             finally:
                 self._cached_reset = cached_reset
 
+    @contextmanager
+    def testing_context(self) -> Iterator[None]:
+        cached_reset = self._cached_reset
+        with self._vector.testing_context():
+            self._cached_reset = None
+            try:
+                yield
+            finally:
+                self._cached_reset = cached_reset if self._vector._reuse_for_eval else None
+
     def reset(
         self, *, seed: int | None = None, options: dict[str, Any] | None = None
     ) -> tuple[Observation, dict[str, Any]]:
@@ -305,9 +370,10 @@ class MjlabSingleEnv(SingleEnv):
         )
 
     def render(self):
-        if self._vector._frame is not None:
-            return self._vector._frame
-        return self._vector.env.render()
+        return self._vector.render()
+
+    def rendering_context(self):
+        return self._vector.rendering_context()
 
     def log_metrics(
         self,

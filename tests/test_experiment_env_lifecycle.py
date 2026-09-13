@@ -169,10 +169,12 @@ def test_run_family_closes_distinct_envs_and_selects_headless_callback(
     else:
         run_mod.run_family(runner, ["--algo", "DDPG", "--steps", "1"])
 
-    assert events[0] == ("learn", record_test_fn)
+    assert events[0][0] == "learn"
+    assert events[0][1].func is record_test_fn
+    assert events[0][1].keywords == {"existing_env": evaluation, "training_env": train}
     assert events.count("close") == 2
     if failure != "learn":
-        assert events.index("test") > events.index("close")
+        assert events.index("test") < events.index("close")
 
 
 def test_run_family_deduplicates_shared_train_eval_identity(monkeypatch):
@@ -201,7 +203,7 @@ def test_run_family_deduplicates_shared_train_eval_identity(monkeypatch):
 
     run_mod.run_family(runner, ["--algo", "DDPG", "--steps", "1"])
 
-    assert events == ["close", "test"]
+    assert events == ["test", "close"]
 
 
 def test_close_agent_envs_attempts_both_after_close_failure():

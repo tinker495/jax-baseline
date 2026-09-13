@@ -118,7 +118,7 @@ def test_frame_replay_uses_supplied_next_observation_at_truncation():
     assert transition["terminateds"][0, 0] == 0
 
 
-def test_gym_vector_fast_path_honors_seed():
+def test_gym_vector_honors_seed():
     first = GymVectorizedEnv("CartPole-v1", worker_num=2, seed=123)
     second = GymVectorizedEnv("CartPole-v1", worker_num=2, seed=123)
     try:

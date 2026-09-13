@@ -392,7 +392,9 @@ def test_run_family_wires_agent_without_env_or_model(monkeypatch):
     assert captured["logger_factory"].func is TensorboardLogger
     assert captured["logger_factory"].keywords["run_metadata"] == {}
     assert captured["progress_factory"] is run_mod.make_progress
-    assert captured["record_test_fn"] is run_mod.record_and_test
+    assert captured["record_test_fn"].func is run_mod.record_and_test
+    assert isinstance(captured["record_test_fn"].keywords["existing_env"], _MetadataEnv)
+    assert isinstance(captured["record_test_fn"].keywords["training_env"], _MetadataEnv)
     assert captured["maker"] == "MAKER"
     assert captured["env"] == "ENVB"
     assert captured["kwargs"]["policy_kwargs"] == {"pk": 1}

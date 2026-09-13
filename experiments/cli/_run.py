@@ -4,6 +4,7 @@ import sys
 from argparse import ArgumentParser, Namespace
 from collections.abc import Callable
 from dataclasses import dataclass
+from functools import partial
 from importlib import import_module
 
 from env_builder.env_builder import get_env_info
@@ -104,11 +105,11 @@ def run_family(runner: FamilyRunner, argv=None):
                 args, policy_kwargs=agent.policy_kwargs, run_metadata=run_metadata
             ),
             progress_factory=make_progress,
-            record_test_fn=test_fn,
+            record_test_fn=partial(test_fn, existing_env=agent.eval_env, training_env=agent.env),
         )
+        agent.test()
     finally:
         _close_agent_envs(agent)
-    agent.test()
     return agent
 
 

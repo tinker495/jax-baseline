@@ -11,6 +11,7 @@ from gymnasium import spaces
 from gymnasium.vector.utils import concatenate, iterate
 from gymnasium.wrappers.utils import rescale_box
 
+from env_builder.gym_rendering import GymRenderingWrapper
 from env_builder.metrics import GymEnvMetrics, GymLoggingWrapper
 from env_builder.observations import (
     flatten_observation_space,
@@ -167,6 +168,7 @@ def get_env_builder(
                 worker_num=worker,
                 seed=seed,
                 observation_key=observation_key,
+                render_mode=render_mode,
             )
         if worker > 1:
             return GymVectorizedEnv(
@@ -175,6 +177,7 @@ def get_env_builder(
                 seed=seed,
                 observation_key=observation_key,
                 reuse_for_eval=reuse_for_eval and render_mode is None,
+                render_mode=render_mode,
             )
         from env_builder.atari_wrappers import get_env_type, make_wrap_atari
 
@@ -189,6 +192,7 @@ def get_env_builder(
             spaces.Dict(flatten_observation_space(env.observation_space, observation_key)),
         )
         env = _normalize_action_space(env)
+        env = GymRenderingWrapper(env, restore_state=reuse_for_eval and render_mode is None)
         if reuse_for_eval and render_mode is None:
             from env_builder.gym_state import GymStateWrapper
 
@@ -207,7 +211,17 @@ def get_env_builder(
         env = eval_env = None
         try:
             env = env_builder(num_workers, seed=seed)
-            eval_env = env if reuse_for_eval else env_builder(num_workers, seed=eval_seed)
+            eval_env = (
+                env
+                if reuse_for_eval
+                else env_builder(
+                    num_workers,
+                    seed=eval_seed,
+                    render_mode="rgb_array"
+                    if env_backend == "envpool" and num_workers > 1
+                    else None,
+                )
+            )
             return PreparedEnvSpec(
                 env=env,
                 eval_env=eval_env,
@@ -286,11 +300,13 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
     - High performance: Up to 1M FPS for Atari, 3M FPS for MuJoCo
     """
 
-    def __init__(self, env_id, worker_num=8, seed=None, observation_key=None):
+    def __init__(self, env_id, worker_num=8, seed=None, observation_key=None, *, render_mode=None):
         import envpool
 
         self.env_id = env_id
         self.worker_num = worker_num
+        self.render_mode = render_mode
+        self.metadata = {"render_modes": ["rgb_array", "human"]}
         self._observation_key = observation_key
 
         # Convert env_id to EnvPool format
@@ -302,14 +318,14 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
 
         # Create EnvPool environment
         # EnvPool uses 'gymnasium' env_type for gymnasium compatibility
-        env_kwargs = {
-            "env_type": "gymnasium",
+        env_kwargs: dict[str, Any] = {
             "num_envs": worker_num,
             # Lockstep async: with batch_size == num_envs every recv() waits for
             # all N envs, preserving the fixed-N-transitions-per-step contract
             # the algorithms rely on while still overlapping env stepping with
             # the caller's work between step() and get_result().
             "batch_size": worker_num,
+            "render_mode": render_mode,
         }
 
         if seed is not None:
@@ -329,7 +345,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
                 }
             )
 
-        self.env = envpool.make(envpool_env_id, **env_kwargs)
+        self.env = envpool.make(envpool_env_id, env_type="gymnasium", **env_kwargs)
 
         # Determine environment type for compatibility
         env_type = "atari_env" if self._is_atari else "envpool"
@@ -388,6 +404,14 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
     def current_obs(self):
         return self.obs
 
+    def render(self):
+        if self._awaiting_recv:
+            raise RuntimeError("render() called while a step is in flight")
+        frames = self.env.render(env_ids=[0])
+        if frames is None:
+            raise ValueError("EnvPool video recording requires render_mode='rgb_array'")
+        return frames[0]
+
     def reset(self, *, seed: int | None = None) -> tuple[Observation, dict[str, Any]]:
         if self._awaiting_recv:
             raise RuntimeError("reset() called while a step is in flight")
@@ -440,8 +464,8 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
             self.autoreset_mask(terminateds, truncateds, infos),
         )
 
-        # EnvPool handles auto-reset internally: after a done flag, next_obs
-        # already holds the new episode's first observation.
+        # NEXT_STEP autoreset leaves the terminal state available for rendering
+        # until the next send() resets that worker.
         self.obs = next_obs
 
         return next_obs, rewards, terminateds, truncateds, infos
@@ -483,8 +507,7 @@ class EnvPoolVectorizedEnv(VectorizedEnv):
 
     def close(self):
         """Close the environment."""
-        if hasattr(self, "env") and self.env is not None:
-            self.env.close()
+        self.env.close()
 
     def _process_observations(self, obs, order):
         """Convert EnvPool outputs to channel-last format expected by models."""
@@ -514,7 +537,14 @@ class GymVectorizedEnv(VectorizedEnv):
     """
 
     def __init__(
-        self, env_id, worker_num=8, seed=None, observation_key=None, *, reuse_for_eval=False
+        self,
+        env_id,
+        worker_num=8,
+        seed=None,
+        observation_key=None,
+        *,
+        reuse_for_eval=False,
+        render_mode=None,
     ):
         self.env_id = env_id
         self.worker_num = worker_num
@@ -532,13 +562,18 @@ class GymVectorizedEnv(VectorizedEnv):
         self._is_atari = env_type == "atari_env"
         spec = gym.spec(env_id)
 
-        def make_env():
+        def make_env(worker_index):
             def _make():
                 if self._is_atari:
                     env = make_wrap_atari(env_id, clip_rewards=True)
                 else:
-                    env = gym.make(spec)
+                    env = gym.make(spec, render_mode=render_mode)
                 env = _normalize_action_space(env)
+                env = GymRenderingWrapper(
+                    env,
+                    restore_state=reuse_for_eval,
+                    recording_worker=worker_index == 0,
+                )
                 if reuse_for_eval:
                     from env_builder.gym_state import GymStateWrapper
 
@@ -551,38 +586,17 @@ class GymVectorizedEnv(VectorizedEnv):
 
             return _make
 
-        if reuse_for_eval:
-            # Keep NEXT_STEP reset state inside a wrapper that can be snapshotted.
-            vector_env = gym.vector.AsyncVectorEnv(
-                [make_env() for _ in range(worker_num)],
-                context="spawn",
-                autoreset_mode=gym.vector.AutoresetMode.DISABLED,
-            )
-        elif env_type != "atari_env":
-            # Non-Atari: prefer the registry's efficient make_vec, falling back to
-            # explicit AsyncVectorEnv if the env has no vectorized entry point.
-            try:
-                vector_env = gym.make_vec(
-                    env_id,
-                    num_envs=worker_num,
-                    vectorization_mode="async",
-                    vector_kwargs={"context": "spawn"},
-                    wrappers=(_normalize_action_space,),
-                )
-            except Exception:
-                vector_env = gym.vector.AsyncVectorEnv(
-                    [make_env() for _ in range(worker_num)], context="spawn"
-                )
-        else:
-            # Atari needs the custom wrappers, so build AsyncVectorEnv from the
-            # explicit per-env constructors.
-            vector_env = gym.vector.AsyncVectorEnv(
-                [make_env() for _ in range(worker_num)], context="spawn"
-            )
-
-        if not isinstance(vector_env, gym.vector.AsyncVectorEnv):
-            raise TypeError("GymVectorizedEnv requires an AsyncVectorEnv")
-        self.env = vector_env
+        # Shared evaluation keeps NEXT_STEP reset state in the snapshotted wrapper.
+        self.env = gym.vector.AsyncVectorEnv(
+            [make_env(index) for index in range(worker_num)],
+            context="spawn",
+            autoreset_mode=(
+                gym.vector.AutoresetMode.DISABLED
+                if reuse_for_eval
+                else gym.vector.AutoresetMode.NEXT_STEP
+            ),
+        )
+        self.supports_rendering = self.env.call("supports_rendering")[0]
 
         # Store environment info
         action_size, action_type = _action_meta(self.env.single_action_space)
@@ -620,6 +634,29 @@ class GymVectorizedEnv(VectorizedEnv):
 
     def current_obs(self):
         return self.obs
+
+    @property
+    def render_mode(self):
+        return self.env.call("render_mode")[0]
+
+    @property
+    def metadata(self):
+        return self.env.metadata
+
+    def render(self):
+        if self._awaiting_result:
+            raise RuntimeError("render() called while a step is in flight")
+        return self.env.call("render")[0]
+
+    @contextmanager
+    def rendering_context(self) -> Iterator[None]:
+        try:
+            self.env.call("start_rendering")
+            yield
+        finally:
+            if self._awaiting_result:
+                self.get_result()
+            self.env.call("stop_rendering")
 
     def reset(self, *, seed: int | None = None) -> tuple[Observation, dict[str, Any]]:
         if self._awaiting_result:
@@ -725,5 +762,4 @@ class GymVectorizedEnv(VectorizedEnv):
         return _autoreset_mask(terminateds, truncateds)
 
     def close(self):
-        if hasattr(self, "env") and self.env is not None:
-            self.env.close()
+        self.env.close()

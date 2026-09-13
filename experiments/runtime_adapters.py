@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import os
-from contextlib import closing
+from contextlib import ExitStack, closing, nullcontext
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from tensorboardX import SummaryWriter
 from tensorboardX.summary import hparams
 from tqdm.auto import trange
 
 from experiments.run_metadata import write_run_metadata
+from jax_baselines.core.env_protocols import EvaluationContextEnv, VectorizedEvalEnv
 from jax_baselines.core.eval import run_test_episodes
 from jax_baselines.core.hparams import add_hparams
 
@@ -120,12 +122,13 @@ def make_progress(*args, **kwargs):
     return trange(*args, **kwargs)
 
 
-class _MjlabVideoRecorder:
+class _VideoRecorder:
     def __init__(self, env, directory):
         from imageio_ffmpeg import write_frames
 
         self.env = env
         self.directory = Path(directory)
+        self.fps = {"render_fps": 30, **env.metadata}["render_fps"]
         self._write_frames = write_frames
         self._writer = None
         self._episode = 0
@@ -136,13 +139,13 @@ class _MjlabVideoRecorder:
             writer.close()
 
     def _write_frame(self):
-        frame = self.env.render()
+        frame = np.ascontiguousarray(self.env.render())
         if self._writer is None:
             height, width = frame.shape[:2]
             self._writer = self._write_frames(
                 self.directory / f"rl-video-episode-{self._episode}.mp4",
                 (width, height),
-                fps=self.env.metadata["render_fps"],
+                fps=self.fps,
             )
             self._episode += 1
             self._writer.send(None)
@@ -162,43 +165,84 @@ class _MjlabVideoRecorder:
         return result
 
     def close(self):
-        try:
+        self._close_writer()
+
+
+class _VectorVideoRecorder(_VideoRecorder, VectorizedEvalEnv):
+    def get_info(self):
+        return self.env.get_info()
+
+    def current_obs(self):
+        return self.env.current_obs()
+
+    def step(self, action):
+        self.env.step(action)
+
+    def get_result(self):
+        result = self.env.get_result()
+        self._write_frame()
+        if result[2][0] or result[3][0]:
             self._close_writer()
-        finally:
-            self.env.close()
+        return result
 
 
-def record_and_test(env_builder, logger_run, actions_eval_fn, episode, conv_action=None):
-    directory = logger_run.get_local_path("video")
-    os.makedirs(directory, exist_ok=True)
-    test_env = env_builder(1, render_mode="rgb_array")
-    from env_builder.mjlab_env import MjlabSingleEnv
+def record_and_test(
+    env_builder,
+    logger_run,
+    actions_eval_fn,
+    episode,
+    conv_action=None,
+    *,
+    existing_env=None,
+    training_env=None,
+):
+    import gymnasium as gym
 
-    if isinstance(test_env, MjlabSingleEnv):
-        try:
-            render_env = _MjlabVideoRecorder(test_env, directory)
-        except Exception:
-            test_env.close()
-            raise
-        with closing(render_env):
-            return run_test_episodes(
-                render_env,
-                actions_eval_fn,
-                episode,
-                conv_action,
-                logger_run=logger_run,
-                logging_env=test_env,
-            )
+    from env_builder.env_builder import EnvPoolVectorizedEnv, GymVectorizedEnv
+    from env_builder.gym_rendering import GymRenderingWrapper
+    from env_builder.mjlab_env import MjlabSingleEnv, MjlabVectorizedEnv
 
-    from gymnasium.wrappers import RecordEpisodeStatistics, RecordVideo
-
-    try:
-        render_env = RecordVideo(test_env, directory, episode_trigger=lambda x: True)
-        render_env = RecordEpisodeStatistics(render_env)
-    except Exception:
-        test_env.close()
-        raise
-    with render_env:
+    if episode < 1:
+        raise ValueError("episode must be positive")
+    if isinstance(training_env, (MjlabSingleEnv, MjlabVectorizedEnv)):
+        existing_env = training_env
+    directory = Path(logger_run.get_local_path("video"))
+    directory.mkdir(parents=True, exist_ok=True)
+    rendering_env = existing_env
+    while isinstance(rendering_env, gym.Wrapper) and not isinstance(
+        rendering_env, GymRenderingWrapper
+    ):
+        rendering_env = rendering_env.env
+    with ExitStack() as stack:
+        if isinstance(existing_env, (MjlabSingleEnv, MjlabVectorizedEnv)):
+            test_env = existing_env
+            stack.enter_context(test_env.testing_context())
+            stack.enter_context(test_env.rendering_context())
+        elif (
+            isinstance(rendering_env, (GymRenderingWrapper, GymVectorizedEnv))
+            and rendering_env.supports_rendering
+        ):
+            test_env = existing_env
+            if isinstance(test_env, EvaluationContextEnv):
+                stack.enter_context(test_env.evaluation_context())
+            stack.enter_context(rendering_env.rendering_context())
+        elif (
+            isinstance(existing_env, (gym.Env, EnvPoolVectorizedEnv))
+            and existing_env.render_mode == "rgb_array"
+        ):
+            test_env = existing_env
+            if isinstance(test_env, EvaluationContextEnv):
+                stack.enter_context(test_env.evaluation_context())
+        else:
+            test_env = stack.enter_context(closing(env_builder(1, render_mode="rgb_array")))
+        print(
+            f"Video environment: {'reused' if test_env is existing_env else 'created'}; "
+            f"recording worker 0 to {directory}"
+        )
+        recorder = (
+            _VectorVideoRecorder if isinstance(test_env, VectorizedEvalEnv) else _VideoRecorder
+        )
+        render_env = stack.enter_context(closing(recorder(test_env, directory)))
         return run_test_episodes(
             render_env,
             actions_eval_fn,
@@ -209,8 +253,30 @@ def record_and_test(env_builder, logger_run, actions_eval_fn, episode, conv_acti
         )
 
 
-def headless_test(env_builder, logger_run, actions_eval_fn, episode, conv_action=None):
-    with closing(env_builder(1)) as test_env:
+def headless_test(
+    env_builder,
+    logger_run,
+    actions_eval_fn,
+    episode,
+    conv_action=None,
+    *,
+    existing_env=None,
+    training_env=None,
+):
+    from env_builder.mjlab_env import MjlabSingleEnv, MjlabVectorizedEnv
+
+    if isinstance(training_env, (MjlabSingleEnv, MjlabVectorizedEnv)):
+        existing_env = training_env
+    with (
+        closing(env_builder(1)) if existing_env is None else nullcontext(existing_env) as test_env,
+        (
+            test_env.testing_context()
+            if isinstance(test_env, (MjlabSingleEnv, MjlabVectorizedEnv))
+            else test_env.evaluation_context()
+            if existing_env is not None and isinstance(test_env, EvaluationContextEnv)
+            else nullcontext()
+        ),
+    ):
         return run_test_episodes(
             test_env, actions_eval_fn, episode, conv_action, logger_run=logger_run
         )
