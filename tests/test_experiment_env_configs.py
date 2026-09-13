@@ -29,7 +29,8 @@ def test_adapter_configs_preserve_actor_and_critic_observations(filename, runner
     }
     assert config["category"] == "mjlab"
     assert config["runner"] == runner
-    assert config["variants"] == [{"algo": algo, "enabled": True} for algo in algorithms]
+    assert [variant["algo"] for variant in config["variants"]] == algorithms
+    assert all(variant["enabled"] for variant in config["variants"])
     assert config["base"] | expected == config["base"]
     assert config["base"]["obs_rms_norm"] is True
     assert "env_episode_length" not in config["base"]

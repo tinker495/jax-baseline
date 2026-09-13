@@ -8,20 +8,29 @@
 
 A2C·PPO·SPO·TPPO에 적용한다. 표의 키는 `loss/` 접두사를 생략했다.
 
-| 키                                                     | 정의와 측정 시점                                                                                                          |
-| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `critic_loss`, `actor_loss`, `entropy_loss`            | 기존 손실 정의를 유지한다. `entropy_loss`는 음의 entropy다.                                                               |
-| `actor_objective`                                      | 실제 미분한 actor 목적함수. Entropy advantage shaping을 켜면 additive entropy 항을 다시 더하지 않는다.                    |
-| `explained_variance`                                   | 업데이트 전 rollout의 `1 - Var(target - value) / Var(target)`. Target 분산이 0이면 `NaN`이다.                             |
-| `value_mean`, `value_std`, `mean_target`, `target_std` | 업데이트 전 rollout의 value와 return 통계.                                                                                |
-| `advantage_mean`, `advantage_std`                      | 정규화와 entropy advantage shaping 전 advantage 통계.                                                                     |
-| `approx_kl`                                            | PPO·SPO에서 `l = log_pi_new - log_pi_old`일 때 `mean(exp(l) - 1 - l)`. Old policy 표본으로 `KL(old \|\| new)`를 추정한다. |
-| `clip_fraction`                                        | PPO·SPO의 `mean(abs(exp(l) - 1) > ppo_eps)`. 실제 objective가 clipped branch를 선택한 비율과는 다르다.                    |
-| `kl_divergence`                                        | TPPO의 기존 exact KL. PPO의 ratio clipping 통계로 대체하지 않는다.                                                        |
-| `policy_std_mean/min/max`, `log_std_mean/min/max`      | 연속 정책 Gaussian 파라미터의 표준편차와 log 표준편차. Bounded action 표본의 표준편차는 아니다.                           |
+| 키                                                     | 정의와 측정 시점                                                                                                                                                        |
+| ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `critic_loss`, `actor_loss`, `entropy_loss`            | 기존 손실 정의를 유지한다. `entropy_loss`는 음의 entropy다.                                                                                                             |
+| `actor_objective`                                      | 실제 미분한 actor 목적함수. Entropy advantage shaping을 켜면 additive entropy 항을 다시 더하지 않는다.                                                                  |
+| `explained_variance`                                   | 업데이트 전 rollout의 `1 - Var(target - value) / Var(target)`. Target 분산이 0이면 `NaN`이다.                                                                           |
+| `value_mean`, `value_std`, `mean_target`, `target_std` | 업데이트 전 rollout의 value와 return 통계.                                                                                                                              |
+| `advantage_mean`, `advantage_std`                      | 정규화와 entropy advantage shaping 전 advantage 통계.                                                                                                                   |
+| `approx_kl`                                            | PPO·SPO에서 `l = log_pi_new - log_pi_old`일 때 `mean(exp(l) - 1 - l)`. Old policy 표본으로 `KL(old \|\| new)`를 추정한다.                                               |
+| `clip_fraction`                                        | PPO·SPO의 `mean(abs(exp(l) - 1) > ppo_eps)`. 실제 objective가 clipped branch를 선택한 비율과는 다르다.                                                                  |
+| `kl_divergence`                                        | PPO·SPO의 exact `KL(old \|\| new)`. 연속 정책은 Gaussian KL의 행동 차원 합을 상태별로 평균하고, 이산 정책은 categorical KL을 사용한다. TPPO의 기존 exact KL도 유지한다. |
+| `policy_std_mean/min/max`, `log_std_mean/min/max`      | 연속 정책 Gaussian 파라미터의 표준편차와 log 표준편차. Bounded action 표본의 표준편차는 아니다.                                                                         |
 
 Rollout 통계는 rollout마다 한 번 측정한다. Surrogate 목적함수, KL, clip fraction,
 정책 scale, optimizer 지표는 각 minibatch의 업데이트 시점에서 계산한 뒤 epoch 전체를 평균한다.
+
+PPO에서 `--desired_kl 0.01`을 지정하면 rsl-rl 방식으로 매 minibatch 업데이트 전에
+`loss/kl_divergence`와 같은 exact KL을 기준으로 actor·critic 학습률을 조절한다.
+KL이 목표의 2배를 넘으면 학습률을 1.5로 나누고(하한 `1e-5`), 0보다 크면서 목표의
+절반보다 작으면 1.5배로 늘린다(상한 `1e-2`). 나머지 구간에서는 유지한다.
+`loss/approx_kl`은 표본 기반 비교 지표로 계속 기록하며 학습률 조절에는 사용하지 않는다.
+`--desired_kl`을 생략하면 이 조절은 꺼지고, `--lr_annealing`과는 함께 사용할 수 없다.
+Mjlab Go1·G1 설정의 PPO variant에는 `desired_kl: 0.01`이 적용되어 있다.
+실제 업데이트의 학습률 평균은 `optim/actor_learning_rate`, `optim/critic_learning_rate`에서 확인한다.
 
 ## DPG
 

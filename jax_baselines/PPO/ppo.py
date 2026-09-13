@@ -3,12 +3,17 @@ import jax.numpy as jnp
 
 from jax_baselines.A2C.surrogate_base import SurrogatePolicyGradient
 from jax_baselines.math.metrics import gaussian_metrics, policy_ratio_metrics
+from jax_baselines.math.policy_math import (
+    kl_divergence_continuous,
+    kl_divergence_discrete,
+)
 
 
 class PPO(SurrogatePolicyGradient):
     _run_name = "PPO"
 
-    def _actor_loss_discrete(self, actor_params, obses, actions, old_prob, adv, key):
+    def _actor_loss_discrete(self, actor_params, obses, actions, old_policy, adv, key):
+        old_prob, old_distribution = old_policy
         prob, log_prob = self.get_logprob(
             self.actor(actor_params, key, obses), actions, key, out_prob=True
         )
@@ -34,10 +39,14 @@ class PPO(SurrogatePolicyGradient):
         return actor_objective, {
             "loss/actor_loss": actor_loss,
             "loss/entropy_loss": entropy_loss,
+            "loss/kl_divergence": jnp.mean(
+                jax.vmap(kl_divergence_discrete, in_axes=(0, 0, None))(old_distribution, prob, 0.0)
+            ),
             **policy_ratio_metrics(log_prob, old_prob, self.ppo_eps),
         }
 
-    def _actor_loss_continuous(self, actor_params, obses, actions, old_prob, adv, key):
+    def _actor_loss_continuous(self, actor_params, obses, actions, old_policy, adv, key):
+        old_prob, old_distribution = old_policy
         prob, log_prob = self.get_logprob(
             self.actor(actor_params, key, obses), actions, key, out_prob=True
         )
@@ -68,6 +77,9 @@ class PPO(SurrogatePolicyGradient):
         return actor_objective, {
             "loss/actor_loss": actor_loss,
             "loss/entropy_loss": entropy_loss,
+            "loss/kl_divergence": jnp.mean(
+                kl_divergence_continuous(old_distribution, (mu, jnp.exp(log_std)))
+            ),
             **policy_ratio_metrics(log_prob, old_prob, self.ppo_eps),
             **gaussian_metrics(log_std),
         }

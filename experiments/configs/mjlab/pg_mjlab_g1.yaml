@@ -29,5 +29,5 @@ base:
   optimizer: adam
   optimizer_eps: 1.0e-8
 variants:
-  - {algo: PPO, enabled: true}
+  - {algo: PPO, desired_kl: 0.01, enabled: true}
   - {algo: SPO, enabled: true}
