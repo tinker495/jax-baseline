@@ -40,7 +40,7 @@ def _compress_config(obsdict, nextobsdict, compress_memory, n_step):
     env_dict declaration is pruned, because ``next_of`` makes cpprb recreate the
     compressed ``next_obs`` automatically.
 
-    Verified cpprb behaviour (cpprb 10.x, see tests/test_cpprb_compress.py):
+    cpprb behaviour (cpprb 10.x):
       * ``next_of`` shares next-observation memory with the observation but is
         incompatible with ``Nstep`` (the moved ``next_*`` field disappears from
         ``sample``), so it is only used on the single-step path.
