@@ -56,39 +56,39 @@ python -m pip install -e '.[all]'
 
 #### Q-Net bases
 
-| **Name**      | `Double`[^DOUBLE]  | `Dueling`[^DUELING] | `Per`[^PER]        | `N-step`[^NSTEP][^RAINBOW] | `NoisyNet`[^NOISY] | `Munchausen`[^MUNCHAUSEN] | `Ape-X`[^APEX]     | `HL-Gauss`[^HL_GAUSS] |
-| ------------- | ------------------ | ------------------- | ------------------ | -------------------------- | ------------------ | ------------------------- | ------------------ | --------------------- |
-| DQN[^DQN]     | :heavy_check_mark: | :heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark:        | :heavy_check_mark: | :x:                   |
-| C51[^C51]     | :heavy_check_mark: | :heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark:        | :heavy_check_mark: | :heavy_check_mark:    |
-| QRDQN[^QRDQN] | :heavy_check_mark: | :heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark:        | :heavy_check_mark: | :x:                   |
-| IQN[^IQN]     | :heavy_check_mark: | :heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark:        | :x:                | :x:                   |
-| FQF[^FQF]     | :heavy_check_mark: | :heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark:        | :x:                | :x:                   |
-| SPR[^SPR]     | :white_check_mark: | :white_check_mark:  | :white_check_mark: | :white_check_mark:         | :white_check_mark: | :heavy_check_mark:        | :x:                | :heavy_check_mark:    |
-| BBF[^BBF]     | :white_check_mark: | :white_check_mark:  | :white_check_mark: | :white_check_mark:         | :heavy_check_mark: | :heavy_check_mark:        | :x:                | :heavy_check_mark:    |
+| **Name**      | `Double`[^DOUBLE]  | `Dueling`[^DUELING] | `Per`[^PER]        | `N-step`[^RAINBOW] | `NoisyNet`[^NOISY] | `Munchausen`[^MUNCHAUSEN] | `Ape-X`[^APEX]     | `HL-Gauss`\_GAUSS[^HL_GAUSS] |
+| ------------- | ------------------ | ------------------- | ------------------ | ------------------ | ------------------ | ------------------------- | ------------------ | ---------------------------- |
+| DQN[^DQN]     | :heavy_check_mark: | :heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:        | :heavy_check_mark: | :x:                          |
+| C51[^C51]     | :heavy_check_mark: | :heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:        | :heavy_check_mark: | :heavy_check_mark:           |
+| QRDQN[^QRDQN] | :heavy_check_mark: | :heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:        | :heavy_check_mark: | :x:                          |
+| IQN[^IQN]     | :heavy_check_mark: | :heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:        | :x:                | :x:                          |
+| FQF[^FQF]     | :heavy_check_mark: | :heavy_check_mark:  | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:        | :x:                | :x:                          |
+| SPR[^SPR]     | :white_check_mark: | :white_check_mark:  | :white_check_mark: | :white_check_mark: | :white_check_mark: | :heavy_check_mark:        | :x:                | :heavy_check_mark:           |
+| BBF[^BBF]     | :white_check_mark: | :white_check_mark:  | :white_check_mark: | :white_check_mark: | :heavy_check_mark: | :heavy_check_mark:        | :x:                | :heavy_check_mark:           |
 
 #### Actor-Critic based
 
-| **Name**               | `Box`              | `Discrete`         | `IMPALA`[^IMPALA]         |
-| ---------------------- | ------------------ | ------------------ | ------------------------- |
-| A2C[^A3C]              | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:        |
-| PPO[^PPO]              | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:[^APPO] |
-| Truly PPO(TPPO)[^TPPO] | :heavy_check_mark: | :heavy_check_mark: | :x:                       |
-| SPO[^SPO]              | :heavy_check_mark: | :heavy_check_mark: | :x:                       |
+| **Name**               | `Box`              | `Discrete`         | `IMPALA`[^IMPALA]                  |
+| ---------------------- | ------------------ | ------------------ | ---------------------------------- |
+| A2C[^A3C]              | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:                 |
+| PPO[^PPO]              | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:[^APPO][^IMPACT] |
+| Truly PPO(TPPO)[^TPPO] | :heavy_check_mark: | :heavy_check_mark: | :x:                                |
+| SPO[^SPO]              | :heavy_check_mark: | :heavy_check_mark: | :x:                                |
 
 #### DPG bases
 
-| **Name**            | `Per`[^PER]                   | `N-step`[^NSTEP][^RAINBOW] | `Ape-X`[^APEX]     | `Simba`[^SIMBA]    | `Simba-v2`[^SIMBAv2] |
-| ------------------- | ----------------------------- | -------------------------- | ------------------ | ------------------ | -------------------- |
-| DDPG[^DDPG]         | :heavy_check_mark:            | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:   |
-| TD3[^TD3]           | :heavy_check_mark:            | :heavy_check_mark:         | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:   |
-| SAC[^SAC]           | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
-| DAC[^DAC]:x:        | :x:                           | :x:                        | :x:                | :x:                | :x:                  |
-| TQC[^TQC]           | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
-| TD7[^TD7]           | :white_check_mark:(LAP[^LaP]) | :x:                        | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
-| CrossQ[^CrossQ]     | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
-| XQC[^XQC]           | :heavy_check_mark:            | :heavy_check_mark:         | :x:                | :x:                | :x:                  |
-| FlashSAC[^FlashSAC] | :x:                           | :heavy_check_mark:         | :x:                | :x:                | :x:                  |
-| BRO[^BRO]:x:        | :x:                           | :x:                        | :x:                | :x:                | :x:                  |
+| **Name**            | `Per`[^PER]                   | `N-step`[^RAINBOW] | `Ape-X`[^APEX]     | `Simba`[^SIMBA]    | `Simba-v2`[^SIMBAv2] |
+| ------------------- | ----------------------------- | ------------------ | ------------------ | ------------------ | -------------------- |
+| DDPG[^DDPG]         | :heavy_check_mark:            | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:   |
+| TD3[^TD3]           | :heavy_check_mark:            | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark: | :heavy_check_mark:   |
+| SAC[^SAC]           | :heavy_check_mark:            | :heavy_check_mark: | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
+| DAC[^DAC]:x:        | :x:                           | :x:                | :x:                | :x:                | :x:                  |
+| TQC[^TQC]           | :heavy_check_mark:            | :heavy_check_mark: | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
+| TD7[^TD7]           | :white_check_mark:(LAP[^LaP]) | :x:                | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
+| CrossQ[^CrossQ]     | :heavy_check_mark:            | :heavy_check_mark: | :x:                | :heavy_check_mark: | :heavy_check_mark:   |
+| XQC[^XQC]           | :heavy_check_mark:            | :heavy_check_mark: | :x:                | :x:                | :x:                  |
+| FlashSAC[^FlashSAC] | :x:                           | :heavy_check_mark: | :x:                | :x:                | :x:                  |
+| BRO[^BRO]:x:        | :x:                           | :x:                | :x:                | :x:                | :x:                  |
 
 ## Performance Compariton
 
@@ -125,8 +125,6 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 
 [^PER]: [PER](https://arxiv.org/abs/1511.05952)
 
-[^NSTEP]: [N-step TD](https://link.springer.com/article/10.1007/BF00115009)
-
 [^RAINBOW]: [RAINBOW DQN](https://arxiv.org/abs/1710.02298)
 
 [^NOISY]: [Noisy network](https://arxiv.org/abs/1706.10295)
@@ -158,6 +156,8 @@ score : 9.600, epsilon : 0.010, loss : 0.181 |: 100%|███████| 5000
 [^PPO]: [PPO](https://arxiv.org/abs/1707.06347)
 
 [^APPO]: [IMPALA + PPO, APPO](https://docs.ray.io/en/latest/rllib/rllib-algorithms.html#appo)
+
+[^IMPACT]: [IMPACT](https://arxiv.org/pdf/1912.00167)
 
 [^TPPO]: [Truly PPO](https://arxiv.org/abs/1903.07940)
 
