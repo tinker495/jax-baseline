@@ -75,9 +75,6 @@ dev = [
     "pytest",
 ]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-
 [tool.setuptools.packages.find]
 include = ["jax_baselines*", "env_builder*", "experiments*", "model_builder*", "replay_memory*"]
 
