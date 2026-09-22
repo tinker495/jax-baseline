@@ -19,6 +19,10 @@ def _split_key(key: jax.Array) -> tuple[jax.Array, jax.Array]:
     return keys[0], keys[1]
 
 
+# Bulk learners split one key per scanned update; compiled splits avoid eager dispatches.
+split_keys = jax.jit(jax.random.split, static_argnums=1)
+
+
 def key_gen(seed):
     key = jax.random.PRNGKey(seed)
     while True:

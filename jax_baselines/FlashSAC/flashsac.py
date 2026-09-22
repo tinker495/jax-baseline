@@ -14,6 +14,7 @@ import optax
 from flax import struct
 
 from jax_baselines.core.normalization import FlashSACRewardNormalizer
+from jax_baselines.core.seeding import split_keys
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.metrics import critic_metrics, stochastic_actor_metrics
 from jax_baselines.DDPG.training import DPGTrainReport
@@ -218,7 +219,7 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
                 self.opt_ent_coef_state,
                 self.log_ent_coef,
             ),
-            jax.random.split(next(self.key_seq), len(contexts)),
+            split_keys(next(self.key_seq), len(contexts)),
             jnp.asarray([context.train_steps_count for context in contexts]),
             data,
         )

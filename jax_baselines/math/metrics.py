@@ -26,6 +26,12 @@ def reduce_metrics(metrics, metric_counts):
     return means, counts
 
 
+@jax.jit
+def reduce_bulk_metrics(means, metrics, metric_counts):
+    """Reduce plain bulk means and count-weighted metrics in one compiled call."""
+    return mean_metrics(means), reduce_metrics(metrics, metric_counts)
+
+
 def array_metrics(values: jax.Array, prefix: str) -> dict[str, jax.Array]:
     return {
         f"{prefix}_mean": jnp.mean(values),

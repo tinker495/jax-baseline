@@ -27,7 +27,7 @@ from jax_baselines.core.rollout import (
     RolloutSpec,
 )
 from jax_baselines.core.rollout_stats import EpisodeTracker
-from jax_baselines.core.seeding import key_gen, set_global_seeds
+from jax_baselines.core.seeding import key_gen, set_global_seeds, split_keys
 from jax_baselines.core.training_session import TrainingSession, off_policy_loop
 from jax_baselines.DQN.training import (
     QNetTrainingLifecycle,
@@ -297,7 +297,7 @@ class Q_Network_Family:
 
     def _train_on_bulk(self, data, contexts):
         steps = jnp.asarray([context.train_steps_count for context in contexts])
-        keys = jax.random.split(next(self.key_seq), len(contexts)) if self.param_noise else None
+        keys = split_keys(next(self.key_seq), len(contexts)) if self.param_noise else None
         carry = (self.params, self.target_params, self.opt_state)
         (
             (self.params, self.target_params, self.opt_state),
@@ -341,14 +341,19 @@ class Q_Network_Family:
     def _aggregate_train_reports(self, reports):
         if len(reports) == 1:
             return reports[-1]
-        counts = jnp.array([report.update_count for report in reports])
-        total = sum(report.update_count for report in reports)
+        update_counts = [report.update_count for report in reports]
+        # One host-to-device copy; Python-int weights would each be copied separately.
+        device_counts = jnp.asarray(update_counts)
         metric_values = {}
         metric_weights = {}
         for name in dict.fromkeys(name for report in reports for name in report.metrics):
             observations = [report for report in reports if name in report.metrics]
             metric_values[name] = tuple(report.metrics[name] for report in observations)
-            metric_weights[name] = tuple(report.update_count for report in observations)
+            metric_weights[name] = (
+                device_counts
+                if len(observations) == len(reports)
+                else np.asarray([report.update_count for report in observations])
+            )
         metrics, _ = reduce_metrics(metric_values, metric_weights)
         histogram_values = {
             name: tuple(report.histograms[name] for report in reports)
@@ -356,18 +361,19 @@ class Q_Network_Family:
             if all(name in report.histograms for report in reports)
         }
         histograms, _ = reduce_metrics(
-            histogram_values,
-            dict.fromkeys(histogram_values, tuple(report.update_count for report in reports)),
+            histogram_values, dict.fromkeys(histogram_values, device_counts)
         )
-        target = None
-        if all(report.target is not None for report in reports):
-            target = jnp.sum(jnp.array([report.target for report in reports]) * counts) / total
+        # Reports mirror loss/target into metrics, so the compiled reduction covers them.
         return QNetTrainReport(
-            loss=jnp.sum(jnp.array([report.loss for report in reports]) * counts) / total,
-            target=target,
+            loss=metrics["loss/qloss"],
+            target=(
+                metrics["loss/targets"]
+                if all(report.target is not None for report in reports)
+                else None
+            ),
             metrics=metrics,
             histograms=histograms,
-            update_count=total,
+            update_count=sum(update_counts),
         )
 
     def _compile_common_functions(self):

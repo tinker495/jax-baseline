@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from jax_baselines.core.seeding import split_keys
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import QNetTrainResult
 from jax_baselines.math.jax_utils import convert_normalized_obs
@@ -103,7 +104,7 @@ class QRDQN(Q_Network_Family):
 
     def _train_on_bulk(self, data, contexts):
         steps = jnp.asarray([context.train_steps_count for context in contexts])
-        keys = jax.random.split(next(self.key_seq), len(contexts)) if self.param_noise else None
+        keys = split_keys(next(self.key_seq), len(contexts)) if self.param_noise else None
         carry = (self.params, self.target_params, self.opt_state)
         (
             (self.params, self.target_params, self.opt_state),

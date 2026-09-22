@@ -383,21 +383,26 @@ class Deteministic_Policy_Gradient_Family:
     def _aggregate_train_reports(self, reports):
         if len(reports) == 1:
             return reports[-1]
-        counts = jnp.array([report.update_count for report in reports])
         total = sum(report.update_count for report in reports)
         metric_values = {}
         metric_weights = {}
         for name in dict.fromkeys(name for report in reports for name in report.metrics):
             observations = [report for report in reports if name in report.metrics]
             metric_values[name] = tuple(report.metrics[name] for report in observations)
-            metric_weights[name] = tuple(report.metric_counts[name] for report in observations)
+            weights = tuple(report.metric_counts[name] for report in observations)
+            # Python-int counts would each be copied to the device separately inside the jit call.
+            metric_weights[name] = (
+                np.asarray(weights) if all(isinstance(w, int) for w in weights) else weights
+            )
         metrics, metric_counts = reduce_metrics(metric_values, metric_weights)
-        target = None
-        if all(report.target is not None for report in reports):
-            target = jnp.sum(jnp.array([report.target for report in reports]) * counts) / total
+        # Reports mirror loss/target into metrics, so the compiled reduction covers them.
         return DPGTrainReport(
-            loss=jnp.sum(jnp.array([report.loss for report in reports]) * counts) / total,
-            target=target,
+            loss=metrics["loss/qloss"],
+            target=(
+                metrics["loss/targets"]
+                if all(report.target is not None for report in reports)
+                else None
+            ),
             metrics=metrics,
             metric_counts=metric_counts,
             update_count=total,
