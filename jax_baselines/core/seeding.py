@@ -12,10 +12,17 @@ import jax
 import numpy as np
 
 
+@jax.jit
+def _split_key(key: jax.Array) -> tuple[jax.Array, jax.Array]:
+    # Keep unpacking inside the compiled call to avoid separate slice dispatches.
+    keys = jax.random.split(key)
+    return keys[0], keys[1]
+
+
 def key_gen(seed):
     key = jax.random.PRNGKey(seed)
     while True:
-        key, subkey = jax.random.split(key)
+        key, subkey = _split_key(key)
         yield subkey
 
 
