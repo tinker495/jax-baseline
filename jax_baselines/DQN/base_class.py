@@ -34,6 +34,7 @@ from jax_baselines.DQN.training import (
     QNetTrainReport,
     QNetTrainResult,
 )
+from jax_baselines.math.metrics import mean_metrics, reduce_metrics
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
@@ -307,11 +308,12 @@ class Q_Network_Family:
                 metrics,
             ),
         ) = self._compiled_bulk_scan(carry, keys, steps, data)
+        loss, target, metrics = mean_metrics((losses, targets, metrics))
         return QNetTrainResult.from_values(
-            loss=jnp.mean(losses),
-            target=jnp.mean(targets),
+            loss=loss,
+            target=target,
             replay_priorities=priorities,
-            metrics=jax.tree.map(jnp.mean, metrics),
+            metrics=metrics,
             update_count=len(contexts),
         )
 
@@ -341,25 +343,22 @@ class Q_Network_Family:
             return reports[-1]
         counts = jnp.array([report.update_count for report in reports])
         total = sum(report.update_count for report in reports)
-        metrics = {
-            name: sum(
-                report.metrics[name] * report.update_count
-                for report in reports
-                if name in report.metrics
-            )
-            / sum(report.update_count for report in reports if name in report.metrics)
-            for name in set().union(*(report.metrics for report in reports))
-        }
-        histograms = {
-            name: jnp.sum(
-                jnp.stack([report.histograms[name] for report in reports])
-                * counts.reshape((-1, *([1] * len(reports[-1].histograms[name].shape)))),
-                axis=0,
-            )
-            / total
+        metric_values = {}
+        metric_weights = {}
+        for name in dict.fromkeys(name for report in reports for name in report.metrics):
+            observations = [report for report in reports if name in report.metrics]
+            metric_values[name] = tuple(report.metrics[name] for report in observations)
+            metric_weights[name] = tuple(report.update_count for report in observations)
+        metrics, _ = reduce_metrics(metric_values, metric_weights)
+        histogram_values = {
+            name: tuple(report.histograms[name] for report in reports)
             for name in reports[-1].histograms
             if all(name in report.histograms for report in reports)
         }
+        histograms, _ = reduce_metrics(
+            histogram_values,
+            dict.fromkeys(histogram_values, tuple(report.update_count for report in reports)),
+        )
         target = None
         if all(report.target is not None for report in reports):
             target = jnp.sum(jnp.array([report.target for report in reports]) * counts) / total

@@ -10,6 +10,7 @@ from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.losses import QuantileHuberLosses
 from jax_baselines.math.metrics import (
     array_metrics,
+    mean_metrics,
     quantile_metrics,
     replay_metrics,
     td_metrics,
@@ -119,11 +120,14 @@ class IQN(Q_Network_Family):
                 metrics,
             ),
         ) = self._compiled_bulk_scan(carry, keys, steps, data)
+        loss, target, metrics = mean_metrics(
+            (losses, targets, {**metrics, "loss/target_stds": target_stds})
+        )
         return QNetTrainResult.from_values(
-            loss=jnp.mean(losses),
-            target=jnp.mean(targets),
+            loss=loss,
+            target=target,
             replay_priorities=priorities,
-            metrics={**jax.tree.map(jnp.mean, metrics), "loss/target_stds": jnp.mean(target_stds)},
+            metrics=metrics,
             update_count=len(contexts),
         )
 

@@ -9,13 +9,10 @@ import optax
 from flax import struct
 
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from jax_baselines.DDPG.metrics import (
-    critic_metrics,
-    reduce_metrics,
-    stochastic_actor_metrics,
-)
+from jax_baselines.DDPG.metrics import critic_metrics, stochastic_actor_metrics
 from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.jax_utils import convert_normalized_obs
+from jax_baselines.math.metrics import reduce_metrics
 from jax_baselines.math.param_updates import scaled_by_reset, soft_update
 from jax_baselines.math.policy_math import entropy_target_from_sigma
 from jax_baselines.optim import optimizer_metrics

@@ -88,7 +88,7 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         )
 
         if logger_run:
-            for name, value in metrics.items():
+            for name, value in jax.device_get(metrics).items():
                 logger_run.log_metric(name, value, steps)
 
         return metrics["loss/critic_loss"]
