@@ -32,6 +32,7 @@ from jax_baselines.core.rollout_stats import EpisodeTracker
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.training_session import TrainingSession, off_policy_loop
 from jax_baselines.DDPG.training import DPGTrainingLifecycle, DPGTrainReport
+from jax_baselines.math.metrics import reduce_metrics
 from jax_baselines.optim import (
     OptimizerFactory,
     optimizer_metrics,
@@ -382,27 +383,26 @@ class Deteministic_Policy_Gradient_Family:
     def _aggregate_train_reports(self, reports):
         if len(reports) == 1:
             return reports[-1]
-        counts = jnp.array([report.update_count for report in reports])
         total = sum(report.update_count for report in reports)
-        metrics = {}
-        metric_counts = {}
+        metric_values = {}
+        metric_weights = {}
         for name in dict.fromkeys(name for report in reports for name in report.metrics):
             observations = [report for report in reports if name in report.metrics]
-            weights = jnp.asarray([report.metric_counts[name] for report in observations])
-            metric_counts[name] = jnp.sum(weights)
-            metrics[name] = jnp.sum(
-                jnp.where(
-                    weights > 0,
-                    jnp.asarray([report.metrics[name] for report in observations]) * weights,
-                    0,
-                )
-            ) / jnp.maximum(metric_counts[name], 1)
-        target = None
-        if all(report.target is not None for report in reports):
-            target = jnp.sum(jnp.array([report.target for report in reports]) * counts) / total
+            metric_values[name] = tuple(report.metrics[name] for report in observations)
+            weights = tuple(report.metric_counts[name] for report in observations)
+            # Python-int counts would each be copied to the device separately inside the jit call.
+            metric_weights[name] = (
+                np.asarray(weights) if all(isinstance(w, int) for w in weights) else weights
+            )
+        metrics, metric_counts = reduce_metrics(metric_values, metric_weights)
+        # Reports mirror loss/target into metrics, so the compiled reduction covers them.
         return DPGTrainReport(
-            loss=jnp.sum(jnp.array([report.loss for report in reports]) * counts) / total,
-            target=target,
+            loss=metrics["loss/qloss"],
+            target=(
+                metrics["loss/targets"]
+                if all(report.target is not None for report in reports)
+                else None
+            ),
             metrics=metrics,
             metric_counts=metric_counts,
             update_count=total,

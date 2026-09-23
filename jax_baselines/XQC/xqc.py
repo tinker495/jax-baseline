@@ -8,16 +8,17 @@ import numpy as np
 import optax
 from flax import struct
 
+from jax_baselines.core.seeding import split_keys
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from jax_baselines.DDPG.metrics import (
-    critic_metrics,
-    reduce_metrics,
-    stochastic_actor_metrics,
-)
+from jax_baselines.DDPG.metrics import critic_metrics, stochastic_actor_metrics
 from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.distributional import categorical_projection
 from jax_baselines.math.jax_utils import convert_normalized_obs
-from jax_baselines.math.metrics import categorical_metrics, support_metrics
+from jax_baselines.math.metrics import (
+    categorical_metrics,
+    reduce_bulk_metrics,
+    support_metrics,
+)
 from jax_baselines.math.param_updates import (
     project_dense_kernels,
     scaled_by_reset,
@@ -178,13 +179,13 @@ class XQC(Deteministic_Policy_Gradient_Family):
             loss=loss,
             target=t_mean,
             new_priorities=new_priorities,
-            metrics={**metrics, "loss/ent_coef": jnp.exp(self.log_ent_coef)},
+            metrics=metrics,
             metric_counts=metric_counts,
         )
 
     def _train_on_bulk(self, data, contexts):
         steps = jnp.asarray([context.train_steps_count for context in contexts])
-        keys = jax.random.split(next(self.key_seq), len(contexts))
+        keys = split_keys(next(self.key_seq), len(contexts))
         carry = (
             self.policy_params,
             self.critic_params,
@@ -204,14 +205,16 @@ class XQC(Deteministic_Policy_Gradient_Family):
                 self.opt_ent_coef_state,
                 self.log_ent_coef,
             ),
-            (losses, targets, ent_coefs, priorities, metrics, metric_counts),
+            (losses, targets, priorities, metrics, metric_counts),
         ) = self._bulk_scan(carry, keys, steps, data)
-        metrics, metric_counts = reduce_metrics(metrics, metric_counts)
+        (loss, target), (metrics, metric_counts) = reduce_bulk_metrics(
+            (losses, targets), metrics, metric_counts
+        )
         return DPGTrainReport(
-            loss=jnp.mean(losses),
-            target=jnp.mean(targets),
+            loss=loss,
+            target=target,
             new_priorities=priorities,
-            metrics={**metrics, "loss/ent_coef": jnp.mean(jnp.exp(ent_coefs))},
+            metrics=metrics,
             metric_counts=metric_counts,
             update_count=len(contexts),
         )
@@ -261,7 +264,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
                 opt_critic_state,
                 opt_ent_coef_state,
                 log_ent_coef,
-            ), (loss, t_mean, log_ent_coef, priorities, metrics, metric_counts)
+            ), (loss, t_mean, priorities, metrics, metric_counts)
 
         return jax.lax.scan(train_one, carry, (keys, steps, data))
 
@@ -404,6 +407,7 @@ class XQC(Deteministic_Policy_Gradient_Family):
                 key,
             ),
         )
+        metrics["loss/ent_coef"] = jnp.exp(log_ent_coef)
         metric_counts = {name: jnp.asarray(1) for name in metrics}
         metrics.update(actor_metrics)
         metric_counts.update(

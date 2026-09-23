@@ -58,13 +58,18 @@ def _categorical_log_prob(prob, action):
     return jnp.log(jnp.take_along_axis(prob, action.astype(jnp.int32), axis=1))
 
 
-def _continuous_log_prob(prob, action):
+def _continuous_log_prob(prob, action, *, array_module=jnp):
     mu, log_std = prob
-    std = jnp.exp(log_std)
+    std = array_module.exp(log_std)
     return -(
-        0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True)
-        + jnp.sum(log_std, axis=-1, keepdims=True)
-        + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
+        0.5
+        * array_module.sum(
+            array_module.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True
+        )
+        + array_module.sum(log_std, axis=-1, keepdims=True)
+        + 0.5
+        * array_module.log(2 * np.pi)
+        * array_module.asarray(action.shape[-1], dtype=array_module.float32)
     )
 
 
@@ -304,15 +309,20 @@ class Actor_Critic_Policy_Gradient_Family:
             return self.actions(obs), None
         if self.memory_backend == "gpu":
             return self._sample_actions_gpu(self.actor_params, obs, next(self.key_seq))
-        policy = self._get_actions(self.actor_params, obs)
+        # CPU rollouts already sample on the host; keep the policy snapshot there too.
+        policy = jax.device_get(self._get_actions(self.actor_params, obs))
         if self.action_type == "discrete":
             actions = self._action_from_discrete(policy)
-            old_policy = (_categorical_log_prob(policy, actions), policy)
-        else:
-            mu, std, _ = policy
-            actions = self._action_from_continuous(mu, std)
-            old_policy = _continuous_old_policy(policy, actions)
-        return actions, jax.tree.map(np.asarray, old_policy)
+            return actions, (np.log(np.take_along_axis(policy, actions, axis=1)), policy)
+        mu, std, log_std = policy
+        actions = self._action_from_continuous(mu, std)
+        old_policy = (mu, np.broadcast_to(log_std, mu.shape))
+        return actions, (
+            _continuous_log_prob(old_policy, actions, array_module=np).astype(
+                np.result_type(mu, log_std, actions)
+            ),
+            old_policy,
+        )
 
     @jax.jit(static_argnums=0)
     def _sample_actions_gpu(self, actor_params, obs, key):

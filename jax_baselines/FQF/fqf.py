@@ -4,12 +4,14 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from jax_baselines.core.seeding import split_keys
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import QNetTrainResult
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.losses import FQFQuantileLosses, QuantileHuberLosses
 from jax_baselines.math.metrics import (
     array_metrics,
+    mean_metrics,
     quantile_metrics,
     replay_metrics,
     td_metrics,
@@ -136,7 +138,7 @@ class FQF(Q_Network_Family):
 
     def _train_on_bulk(self, data, contexts):
         steps = jnp.asarray([context.train_steps_count for context in contexts])
-        keys = jax.random.split(next(self.key_seq), len(contexts))
+        keys = split_keys(next(self.key_seq), len(contexts))
         carry = (
             self.params,
             self.fqf_params,
@@ -157,21 +159,24 @@ class FQF(Q_Network_Family):
                 fqf_losses,
                 targets,
                 target_stds,
-                taus,
+                tau,
                 priorities,
                 metrics,
             ),
         ) = self._compiled_bulk_scan(carry, keys, steps, data)
+        loss, target, metrics = mean_metrics(
+            (
+                losses,
+                targets,
+                {**metrics, "loss/fqf_loss": fqf_losses, "loss/target_stds": target_stds},
+            )
+        )
         return QNetTrainResult.from_values(
-            loss=jnp.mean(losses),
-            target=jnp.mean(targets),
+            loss=loss,
+            target=target,
             replay_priorities=priorities,
-            metrics={
-                **jax.tree.map(jnp.mean, metrics),
-                "loss/fqf_loss": jnp.mean(fqf_losses),
-                "loss/target_stds": jnp.mean(target_stds),
-            },
-            histograms={"loss/tau": jnp.mean(taus, axis=0)},
+            metrics=metrics,
+            histograms={"loss/tau": tau},
             update_count=len(contexts),
         )
 
@@ -210,7 +215,19 @@ class FQF(Q_Network_Family):
                 fqf_opt_state,
             ), (loss, fqf_loss, t_mean, t_std, tau, priorities, metrics)
 
-        return jax.lax.scan(train_one, carry, (steps, keys, data))
+        carry, (losses, fqf_losses, targets, target_stds, taus, priorities, metrics) = jax.lax.scan(
+            train_one, carry, (steps, keys, data)
+        )
+        # Reduce the tau histogram inside the compiled scan instead of eagerly afterwards.
+        return carry, (
+            losses,
+            fqf_losses,
+            targets,
+            target_stds,
+            jnp.mean(taus, axis=0),
+            priorities,
+            metrics,
+        )
 
     def _train_step(
         self,

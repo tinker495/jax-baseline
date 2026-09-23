@@ -40,13 +40,3 @@ def stochastic_actor_metrics(log_prob, log_std, q_value, ent_coef, target_entrop
         "loss/actor_entropy_term": jnp.mean(ent_coef * log_prob),
         **gaussian_metrics(log_std),
     }
-
-
-def reduce_metrics(metrics, metric_counts):
-    """Average observations; a skipped optimizer update contributes no observation."""
-    counts = {name: jnp.sum(metric_counts[name]) for name in metrics}
-    return {
-        name: jnp.sum(jnp.where(metric_counts[name] > 0, value * metric_counts[name], 0))
-        / jnp.maximum(counts[name], 1)
-        for name, value in metrics.items()
-    }, counts

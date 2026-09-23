@@ -8,11 +8,13 @@ import numpy as np
 import optax
 from flax import struct
 
+from jax_baselines.core.seeding import split_keys
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
-from jax_baselines.DDPG.metrics import critic_metrics, reduce_metrics
+from jax_baselines.DDPG.metrics import critic_metrics
 from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.losses import hubberloss
+from jax_baselines.math.metrics import reduce_bulk_metrics
 from jax_baselines.math.param_updates import hard_update, scaled_by_reset
 from jax_baselines.optim import optimizer_metrics
 
@@ -218,7 +220,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
 
     def _train_on_bulk(self, data, contexts):
         steps = jnp.asarray([context.train_steps_count for context in contexts])
-        keys = jax.random.split(next(self.key_seq), len(contexts))
+        keys = split_keys(next(self.key_seq), len(contexts))
         carry = (
             self.actor_encoder_params,
             self.critic_encoder_params,
@@ -254,12 +256,14 @@ class TD7(Deteministic_Policy_Gradient_Family):
             ),
             (repr_losses, losses, targets, priorities, metrics, metric_counts),
         ) = self._compiled_bulk_scan(carry, keys, steps, data)
-        metrics, metric_counts = reduce_metrics(metrics, metric_counts)
+        (loss, target, encoder_loss), (metrics, metric_counts) = reduce_bulk_metrics(
+            (losses, targets, repr_losses), metrics, metric_counts
+        )
         return DPGTrainReport(
-            loss=jnp.mean(losses),
-            target=jnp.mean(targets),
+            loss=loss,
+            target=target,
             new_priorities=priorities,
-            metrics={**metrics, "loss/encoder_loss": jnp.mean(repr_losses)},
+            metrics={**metrics, "loss/encoder_loss": encoder_loss},
             metric_counts=metric_counts,
             update_count=len(contexts),
         )
