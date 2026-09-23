@@ -39,6 +39,19 @@ def visual_embedding(mode="normal"):
     )
 
 
+def critic_ensemble(make_critic, size, *inputs):
+    """Run ``size`` independently initialized critics as one vmapped stack.
+
+    Params are lifted with a leading ``size`` axis; every input is shared and the
+    output gains a leading ``size`` axis.
+    """
+    init, apply = hk.transform(lambda *xs: make_critic()(*xs))
+    keys = hk.next_rng_keys(size) if hk.running_init() else None
+    unmapped = (None,) * len(inputs)
+    params = hk.lift(jax.vmap(init, in_axes=(0, *unmapped)), name="critic_ensemble")(keys, *inputs)
+    return jax.vmap(apply, in_axes=(0, None, *unmapped))(params, None, *inputs)
+
+
 class PreProcess(hk.Module):
     @hk.name_like("__call__")
     def __init__(self, state_size, embedding_mode="normal", *, role="actor"):

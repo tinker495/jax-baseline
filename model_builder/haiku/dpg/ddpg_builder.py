@@ -3,7 +3,7 @@ import jax
 import numpy as np
 
 from model_builder.haiku.dpg.ddpg_td3_blocks import Actor, Critic
-from model_builder.haiku.Module import PreProcess
+from model_builder.haiku.Module import PreProcess, critic_ensemble
 from model_builder.utils import (
     dummy_observation,
     get_critic_apply_fn,
@@ -40,10 +40,7 @@ def _make_model_builder(observation_space, action_size, policy_kwargs, *, twin_c
                 role="critic",
             )(observation, shared_features)
             if twin_critic:
-                return (
-                    Critic(**critic_kwargs)(feature, action),
-                    Critic(**critic_kwargs)(feature, action),
-                )
+                return critic_ensemble(lambda: Critic(**critic_kwargs), 2, feature, action)
             return Critic(**critic_kwargs)(feature, action)
 
         actor = hk.transform(actor_forward)

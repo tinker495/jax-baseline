@@ -112,14 +112,17 @@ def soft_update(new_tensors: PyTree, old_tensors: PyTree, tau: float):
 
 
 def project_dense_kernels(tensors: PyTree, epsilon: float = 1e-8):
-    """Project every Dense kernel column in a Flax variable tree to unit norm."""
+    """Project every Dense kernel column in a Flax variable tree to unit norm.
+
+    Input features sit on axis -2, so stacked ensemble kernels project per member.
+    """
 
     def project(path, value):
         keys = [getattr(entry, "key", None) for entry in path]
         if keys[-1] == "kernel" and any(
             isinstance(key, str) and key.startswith("Dense_") for key in keys[:-1]
         ):
-            return value / jnp.maximum(jnp.linalg.norm(value, axis=0, keepdims=True), epsilon)
+            return value / jnp.maximum(jnp.linalg.norm(value, axis=-2, keepdims=True), epsilon)
         return value
 
     return jax.tree_util.tree_map_with_path(project, tensors)
@@ -128,7 +131,8 @@ def project_dense_kernels(tensors: PyTree, epsilon: float = 1e-8):
 def project_unit_norm_params(params: Params) -> Params:
     """Normalize dense kernels and affine normalization weights.
 
-    Dense kernels store input features on axis 0. Normalization layers use
+    Dense kernels store input features on axis -2 and normalization weights reduce
+    over the last axis, so stacked ensemble members project independently. Normalization layers use
     ``scale`` and, for BatchNorm, ``bias`` in the same parameter mapping.
     Predictor biases remain unconstrained. Pass trainable parameters only;
     batch statistics are separate state.
@@ -140,14 +144,14 @@ def project_unit_norm_params(params: Params) -> Params:
             raise TypeError("Unit-normalized parameters must use named dictionary leaves")
         name = path[-1].key
         if name == "kernel":
-            return value / jnp.maximum(jnp.linalg.norm(value, axis=0, keepdims=True), 1e-8)
+            return value / jnp.maximum(jnp.linalg.norm(value, axis=-2, keepdims=True), 1e-8)
         scale_path = (*path[:-1], jax.tree_util.DictKey("scale"))
         if name not in ("scale", "bias") or scale_path not in leaves:
             return value
-        squared_norm = jnp.sum(jnp.square(leaves[scale_path]))
+        squared_norm = jnp.sum(jnp.square(leaves[scale_path]), axis=-1, keepdims=True)
         bias_path = (*path[:-1], jax.tree_util.DictKey("bias"))
         if bias_path in leaves:
-            squared_norm += jnp.sum(jnp.square(leaves[bias_path]))
+            squared_norm += jnp.sum(jnp.square(leaves[bias_path]), axis=-1, keepdims=True)
         return value * jnp.sqrt(value.shape[-1]) * jax.lax.rsqrt(squared_norm + 1e-8)
 
     return jax.tree_util.tree_map_with_path(project, params)

@@ -8,7 +8,7 @@ import numpy as np
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense, SimbaV2Head, avgl1norm, network_body
-from model_builder.flax.Module import PreProcess
+from model_builder.flax.Module import PreProcess, critic_ensemble
 from model_builder.model_config import (
     LayerConfig,
     MLPConfig,
@@ -132,11 +132,10 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
 
         class TwinCritic(nn.Module):
             def setup(self):
-                self.crit1 = Critic(**critic_kwargs)
-                self.crit2 = Critic(**critic_kwargs)
+                self.critics = critic_ensemble(Critic, 2, **critic_kwargs)
 
             def __call__(self, feature, zs, zsa, actions):
-                return self.crit1(feature, zs, zsa, actions), self.crit2(feature, zs, zsa, actions)
+                return self.critics(feature, zs, zsa, actions)
 
         actor_encoder_model = RoleEncoder("actor", actor_kwargs["network"])
         critic_encoder_model = RoleEncoder("critic", critic_kwargs["network"])

@@ -7,7 +7,7 @@ from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.dpg.gaussian_blocks import Actor
 from model_builder.flax.initializers import clip_factorized_uniform
 from model_builder.flax.layers import Dense, SimbaV2Head, network_body
-from model_builder.flax.Module import PreProcess
+from model_builder.flax.Module import PreProcess, critic_ensemble
 from model_builder.model_config import DEFAULT_MLP, ModelConfig, ResidualConfig
 from model_builder.utils import (
     dummy_observation,
@@ -62,12 +62,10 @@ def model_builder_maker(observation_space, action_size, support_n, policy_kwargs
                     embedding_mode=critic_kwargs["network"].embedding_mode,
                     role="critic",
                 )
-                self.crit1 = Critic(support_n=support_n, **critic_kwargs)
-                self.crit2 = Critic(support_n=support_n, **critic_kwargs)
+                self.critics = critic_ensemble(Critic, 2, support_n=support_n, **critic_kwargs)
 
             def __call__(self, observation, shared_features, action):
-                feature = self.preproc(observation, shared_features)
-                return self.crit1(feature, action), self.crit2(feature, action)
+                return self.critics(self.preproc(observation, shared_features), action)
 
         actor_model = Merged_Actor()
         critic_model = Merged_Critic()

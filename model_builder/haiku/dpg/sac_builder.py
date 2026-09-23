@@ -3,7 +3,7 @@ import jax
 import numpy as np
 
 from model_builder.haiku.dpg.ddpg_td3_blocks import Critic, GaussianActor
-from model_builder.haiku.Module import PreProcess
+from model_builder.haiku.Module import PreProcess, critic_ensemble
 from model_builder.utils import (
     dummy_observation,
     get_critic_apply_fn,
@@ -39,10 +39,7 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                 embedding_mode=critic_kwargs["network"].embedding_mode,
                 role="critic",
             )(observation, shared_features)
-            return (
-                Critic(**critic_kwargs)(feature, action),
-                Critic(**critic_kwargs)(feature, action),
-            )
+            return critic_ensemble(lambda: Critic(**critic_kwargs), 2, feature, action)
 
         actor = hk.transform(actor_forward)
         critic = hk.transform(critic_forward)

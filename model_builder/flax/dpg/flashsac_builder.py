@@ -6,7 +6,7 @@ import jax.numpy as jnp
 
 from jax_baselines.math.param_updates import project_unit_norm_params
 from model_builder.flax.apply import get_apply_fn_flax_module
-from model_builder.flax.Module import PreProcess
+from model_builder.flax.Module import PreProcess, critic_ensemble
 from model_builder.model_config import ACTIVATIONS, ResidualConfig
 from model_builder.utils import (
     dummy_observation,
@@ -163,14 +163,10 @@ def model_builder_maker(
                     embedding_mode=critic_kwargs["network"].embedding_mode,
                     role="critic",
                 )
-                self.crit1 = Critic(n_atoms=n_atoms, **critic_kwargs)
-                self.crit2 = Critic(n_atoms=n_atoms, **critic_kwargs)
+                self.critics = critic_ensemble(Critic, 2, n_atoms=n_atoms, **critic_kwargs)
 
             def __call__(self, observation, shared_features, actions, training: bool = False):
-                feature = self.preproc(observation, shared_features)
-                return self.crit1(feature, actions, training), self.crit2(
-                    feature, actions, training
-                )
+                return self.critics(self.preproc(observation, shared_features), actions, training)
 
         actor_model = Merged_Actor()
         critic_model = Merged_Critic()

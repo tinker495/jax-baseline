@@ -4,7 +4,7 @@ import numpy as np
 
 from model_builder.flax.apply import get_apply_fn_flax_module
 from model_builder.flax.dpg.ddpg_td3_blocks import Actor, Critic
-from model_builder.flax.Module import PreProcess
+from model_builder.flax.Module import PreProcess, critic_ensemble
 from model_builder.utils import (
     dummy_observation,
     get_critic_apply_fn,
@@ -41,15 +41,14 @@ def _make_model_builder(observation_space, action_size, policy_kwargs, *, twin_c
                     embedding_mode=critic_kwargs["network"].embedding_mode,
                     role="critic",
                 )
-                self.crit1 = Critic(**critic_kwargs)
-                if twin_critic:
-                    self.crit2 = Critic(**critic_kwargs)
+                self.critic = (
+                    critic_ensemble(Critic, 2, **critic_kwargs)
+                    if twin_critic
+                    else Critic(**critic_kwargs)
+                )
 
             def __call__(self, x, shared_features, a):
-                feature = self.preproc(x, shared_features)
-                if twin_critic:
-                    return self.crit1(feature, a), self.crit2(feature, a)
-                return self.crit1(feature, a)
+                return self.critic(self.preproc(x, shared_features), a)
 
         actor_model = Merged_Actor()
         critic_model = Merged_Critic()

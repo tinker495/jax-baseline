@@ -12,7 +12,7 @@ from model_builder.flax.layers import (
     SimbaV2Head,
     network_body,
 )
-from model_builder.flax.Module import BatchReNorm, PreProcess
+from model_builder.flax.Module import BatchReNorm, PreProcess, critic_ensemble
 from model_builder.model_config import (
     ACTIVATIONS,
     LayerConfig,
@@ -109,12 +109,10 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
                     embedding_mode=critic_kwargs["network"].embedding_mode,
                     role="critic",
                 )
-                self.crit1 = Critic(**critic_kwargs)
-                self.crit2 = Critic(**critic_kwargs)
+                self.critics = critic_ensemble(Critic, 2, **critic_kwargs)
 
             def __call__(self, observation, shared_features, action, training: bool = True):
-                feature = self.preproc(observation, shared_features)
-                return self.crit1(feature, action, training), self.crit2(feature, action, training)
+                return self.critics(self.preproc(observation, shared_features), action, training)
 
         actor_model = Merged_Actor()
         critic_model = Merged_Critic()

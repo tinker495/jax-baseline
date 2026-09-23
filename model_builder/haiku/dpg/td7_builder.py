@@ -3,7 +3,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from model_builder.haiku.Module import PreProcess
+from model_builder.haiku.Module import PreProcess, critic_ensemble
 from model_builder.model_config import ACTIVATIONS, DEFAULT_MLP, LayerConfig, MLPConfig
 from model_builder.utils import (
     dummy_observation,
@@ -149,9 +149,8 @@ def model_builder_maker(observation_space, action_size, policy_kwargs):
         )
         actor = hk.transform(lambda feature, zs: Actor(action_size, **actor_kwargs)(feature, zs))
         critic = hk.transform(
-            lambda feature, zs, zsa, actions: (
-                Critic(**critic_kwargs)(feature, zs, zsa, actions),
-                Critic(**critic_kwargs)(feature, zs, zsa, actions),
+            lambda feature, zs, zsa, actions: critic_ensemble(
+                lambda: Critic(**critic_kwargs), 2, feature, zs, zsa, actions
             )
         )
         functions = (

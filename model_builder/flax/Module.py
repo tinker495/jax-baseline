@@ -158,6 +158,23 @@ Shape = tuple[int, ...]
 Dtype = Any  # this could be a real type?
 
 
+def critic_ensemble(critic: type[nn.Module], size: int, **kwargs: Any) -> nn.Module:
+    """Stack ``size`` independently initialized critics into one vmapped module.
+
+    The members run as batched matmuls instead of separate calls. Outputs and
+    ``params``/``batch_stats`` leaves gain a leading ``size`` axis, and every
+    positional input is shared across members.
+    """
+    return nn.vmap(
+        critic,
+        variable_axes={"params": 0, "batch_stats": 0},
+        split_rngs={"params": True},
+        in_axes=None,
+        out_axes=0,
+        axis_size=size,
+    )(**kwargs)
+
+
 class BatchReNorm(Module):
     """Batch Renormalization (https://arxiv.org/abs/1702.03275).
 

@@ -1,8 +1,6 @@
 # translated from test/test_dpg_walker2d.sh
 category: mujoco
 runner: dpg
-runtime:
-  device: 2
 base:
   # 20 evaluations over the whole run (was hardcoded ~100)
   eval_num: 20
