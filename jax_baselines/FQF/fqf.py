@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.core.seeding import split_keys
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import QNetTrainResult
@@ -216,7 +217,7 @@ class FQF(Q_Network_Family):
             ), (loss, fqf_loss, t_mean, t_std, tau, priorities, metrics)
 
         carry, (losses, fqf_losses, targets, target_stds, taus, priorities, metrics) = jax.lax.scan(
-            train_one, carry, (steps, keys, data)
+            train_one, carry, (steps, keys, data), unroll=SCAN_UNROLL
         )
         # Reduce the tau histogram inside the compiled scan instead of eagerly afterwards.
         return carry, (

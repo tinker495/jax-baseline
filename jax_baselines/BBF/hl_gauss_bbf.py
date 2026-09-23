@@ -3,6 +3,7 @@ import jax.numpy as jnp
 import optax
 
 from jax_baselines.BBF.bbf import BBF
+from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.math.distributional import (
     HLGaussBackend,
     HLGaussTransform,
@@ -235,6 +236,7 @@ class HL_GAUSS_BBF(BBF):
                 batched_weights,
                 batched_steps,
             ),
+            unroll=SCAN_UNROLL,
         )
         centropy, qloss, rprloss, target_q, metrics = outputs
         qloss = jnp.mean(qloss)

@@ -5,6 +5,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.core.checkpoint import make_checkpoint_scaffold, snapshot_pytree
 from jax_baselines.core.checkpoint_state import QNetCheckpointState
 from jax_baselines.core.checkpoint_store import (
@@ -336,7 +337,7 @@ class Q_Network_Family:
             return (params, target_params, opt_state), (loss, target, priorities, metrics)
 
         xs = (steps, keys, data) if self.param_noise else (steps, data)
-        return jax.lax.scan(train_one, carry, xs)
+        return jax.lax.scan(train_one, carry, xs, unroll=SCAN_UNROLL)
 
     def _aggregate_train_reports(self, reports):
         if len(reports) == 1:
@@ -564,6 +565,7 @@ class Q_Network_Family:
         pulse = CheckpointTrainPulse(
             train_freq=self.train_freq,
             gradient_steps=self.gradient_steps,
+            worker_size=self.worker_size,
             train=train,
             record_loss=lambda loss: self.lossque.append(loss),
             read_residual=lambda: self._ckpt_update_residual,

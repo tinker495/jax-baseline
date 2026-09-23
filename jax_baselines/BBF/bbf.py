@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.metrics import replay_metrics
 from jax_baselines.math.param_updates import (
@@ -248,6 +249,7 @@ class BBF(SPR):
                 batched_weights,
                 batched_steps,
             ),
+            unroll=SCAN_UNROLL,
         )
         centropy, qloss, rprloss, target_q, metrics = outputs
         qloss = jnp.mean(qloss)

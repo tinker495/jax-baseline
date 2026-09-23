@@ -4,6 +4,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.core.seeding import split_keys
 from jax_baselines.DQN.base_class import Q_Network_Family
 from jax_baselines.DQN.training import QNetTrainResult
@@ -155,7 +156,7 @@ class QRDQN(Q_Network_Family):
             return (params, target_params, opt_state), (loss, t_mean, t_std, priorities, metrics)
 
         xs = (steps, keys, data) if self.param_noise else (steps, data)
-        return jax.lax.scan(train_one, carry, xs)
+        return jax.lax.scan(train_one, carry, xs, unroll=SCAN_UNROLL)
 
     def _train_step(
         self,

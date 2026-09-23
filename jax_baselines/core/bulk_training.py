@@ -5,6 +5,12 @@ from functools import lru_cache
 import jax
 import numpy as np
 
+# Update-loop scans unroll this many iterations per while-loop step: a rolled scan pays a
+# host sync per iteration (RLPD Walker2d: ~2.3x faster at 20 updates), while fully unrolling
+# a worker-32 group (640 updates) stalled for 12+ minutes at 14 GB RSS, likely compiling.
+# ponytail: one cap for every algorithm; tune per model if compile time or speed demands it.
+SCAN_UNROLL = 8
+
 
 def bulk_train_hook(agent):
     if not getattr(agent, "supports_bulk_training", False):
@@ -12,29 +18,50 @@ def bulk_train_hook(agent):
     return getattr(agent, "_train_on_bulk", None)
 
 
+def update_group_iters(worker_size, train_freq):
+    """Update iterations in one train pulse: a whole vector step's worth, at least one.
+
+    Rollouts only train in whole groups (carrying the remainder), so every pulse is
+    a multiple of the group and never splits into ragged chunks.
+    """
+    return max(1, worker_size // train_freq)
+
+
+def bulk_group_size(agent):
+    """Gradient updates in one whole group (gradient_steps x worker_size / train_freq)."""
+    return agent.gradient_steps * update_group_iters(agent.worker_size, agent.train_freq)
+
+
 def bulk_chunk_size(agent):
+    """Largest chunk: max_bulk_updates_per_pulse rounded down to whole groups.
+
+    A group is never split: when it exceeds the cap, the chunk is one whole group.
+    """
     max_chunk = int(agent.max_bulk_updates_per_pulse)
     if max_chunk <= 0:
         raise ValueError("max_bulk_updates_per_pulse must be greater than 0")
-    return max_chunk
+    group = bulk_group_size(agent)
+    return group * max(1, max_chunk // group)
 
 
 def uses_bulk_pulse(agent, gradient_steps):
     if bulk_train_hook(agent) is None or gradient_steps <= 1:
         return False
-    max_chunk = bulk_chunk_size(agent)
-    return max_chunk > 1
+    return bulk_chunk_size(agent) > 1
 
 
 def bulk_chunk_schedule(agent, gradient_steps):
-    max_chunk = bulk_chunk_size(agent)
-    return tuple(iter_bulk_chunk_sizes(gradient_steps, max_chunk))
-
-
-def iter_bulk_chunk_sizes(gradient_steps, max_chunk):
-    """Yield bounded bulk chunk sizes, avoiding scalar leftovers when supported."""
-    buckets = bulk_chunk_buckets(max_chunk)
-    yield from bulk_chunk_plan(int(gradient_steps), buckets)
+    """Split a pulse into chunks made of whole update groups (e.g. 20 -> (20,), not 16 + 4)."""
+    group = bulk_group_size(agent)
+    groups, ragged = divmod(int(gradient_steps), group)
+    if ragged:
+        raise ValueError(
+            f"Pulse of {gradient_steps} updates is not a multiple of the update group ({group})"
+        )
+    chunks = bulk_chunk_plan(groups, bulk_chunk_buckets(bulk_chunk_size(agent) // group))
+    # Leftover groups stay bulk chunks; single-update leftovers go to the scalar path.
+    leftover = (1,) * (groups - sum(chunks)) if group > 1 else ()
+    return tuple(group * chunk for chunk in chunks + leftover)
 
 
 @lru_cache(maxsize=128)

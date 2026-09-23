@@ -13,6 +13,7 @@ import jax.numpy as jnp
 import optax
 from flax import struct
 
+from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.core.normalization import FlashSACRewardNormalizer
 from jax_baselines.core.seeding import split_keys
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
@@ -242,7 +243,7 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
         )
 
     def _bulk_scan(self, carry, keys, steps, data):
-        return jax.lax.scan(self._train_step, carry, (keys, steps, data))
+        return jax.lax.scan(self._train_step, carry, (keys, steps, data), unroll=SCAN_UNROLL)
 
     def _train_step(self, carry, sample):
         policy, critic, target, actor_opt, critic_opt, alpha_opt, log_alpha = carry

@@ -8,6 +8,7 @@ import numpy as np
 import optax
 
 from jax_baselines.APE_X.dpg_base_class import Ape_X_Deteministic_Policy_Gradient_Family
+from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.DDPG.ou_noise import OUNoise
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.param_updates import soft_update
@@ -130,16 +131,17 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
                 not_terminateds,
                 subkeys[0],
             )
-            (_, (critic_loss, actor_loss, abs_error)), (actor_grad, critic_grad) = (
-                jax.value_and_grad(self._loss, argnums=(0, 1), has_aux=True)(
-                    policy_params,
-                    critic_params,
-                    obses,
-                    actions,
-                    targets,
-                    weights,
-                    subkeys[1],
-                )
+            (_, (critic_loss, actor_loss, abs_error)), (
+                actor_grad,
+                critic_grad,
+            ) = jax.value_and_grad(self._loss, argnums=(0, 1), has_aux=True)(
+                policy_params,
+                critic_params,
+                obses,
+                actions,
+                targets,
+                weights,
+                subkeys[1],
             )
             actor_updates, opt_policy_state = self.optimizer.update(
                 actor_grad, opt_policy_state, params=policy_params
@@ -175,6 +177,7 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
                 not_terminateds_batch,
                 weights_batch,
             ),
+            unroll=SCAN_UNROLL,
         )
         target_policy_params = soft_update(
             policy_params, target_policy_params, self.target_network_update_tau

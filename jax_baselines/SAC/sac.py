@@ -8,6 +8,7 @@ import numpy as np
 import optax
 from flax import struct
 
+from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.core.seeding import split_keys
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.metrics import critic_metrics, stochastic_actor_metrics
@@ -238,7 +239,7 @@ class SAC(Deteministic_Policy_Gradient_Family):
                 log_ent_coef,
             ), (loss, t_mean, priorities, metrics, metric_counts)
 
-        return jax.lax.scan(train_one, carry, (keys, steps, data))
+        return jax.lax.scan(train_one, carry, (keys, steps, data), unroll=SCAN_UNROLL)
 
     def _train_step(
         self,

@@ -2,6 +2,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
+from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.IMPALA.base_class import IMPALA_Family
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.policy_math import (
@@ -280,6 +281,7 @@ class IMPALA_TPPO(IMPALA_Family):
                     old_act_prob_batch,
                     adv_batch,
                 ),
+                unroll=SCAN_UNROLL,
             )
             actor_params, critic_params, actor_opt_state, critic_opt_state, key = updates
             cl, al, el = losses

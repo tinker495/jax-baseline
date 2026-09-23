@@ -8,6 +8,7 @@ import numpy as np
 import optax
 from flax import struct
 
+from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.core.seeding import split_keys
 from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
 from jax_baselines.DDPG.metrics import critic_metrics
@@ -344,7 +345,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
                 opt_critic_state,
             ), (repr_loss, loss, t_mean, priorities, metrics, metric_counts)
 
-        return jax.lax.scan(train_one, carry, (keys, steps, data))
+        return jax.lax.scan(train_one, carry, (keys, steps, data), unroll=SCAN_UNROLL)
 
     def _aggregate_train_reports(self, reports):
         report = super()._aggregate_train_reports(reports)

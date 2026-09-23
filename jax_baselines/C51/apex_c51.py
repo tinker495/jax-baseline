@@ -7,6 +7,7 @@ import numpy as np
 import optax
 
 from jax_baselines.APE_X.base_class import Ape_X_Family
+from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.core.seeding import key_gen
 from jax_baselines.math.distributional import (
     CategoricalBackend,
@@ -274,6 +275,7 @@ class APE_X_C51(Ape_X_Family):
                 not_terminateds_batch,
                 weights_batch,
             ),
+            unroll=SCAN_UNROLL,
         )
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = jnp.reshape(abs_error, (-1,))

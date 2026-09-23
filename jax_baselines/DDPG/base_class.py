@@ -565,6 +565,7 @@ class Deteministic_Policy_Gradient_Family:
         pulse = CheckpointTrainPulse(
             train_freq=self.train_freq,
             gradient_steps=self.gradient_steps,
+            worker_size=self.worker_size,
             train=train,
             record_loss=lambda loss: self.lossque.append(loss),
             read_residual=lambda: self._ckpt_update_residual,

@@ -29,6 +29,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from jax_baselines.core.bulk_training import update_group_iters
 from jax_baselines.core.env_protocols import (
     VectorizedEnv,
     batch_observation,
@@ -56,10 +57,11 @@ class ActionSelection:
 class CheckpointTrainPulse:
     """Episode-boundary training pulse shared by the local families.
 
-    Converts accumulated episode timesteps into ``train_freq``-aligned gradient
-    pulses (TD7-style checkpoint training). The residual counter lives on the
-    agent and is reached through ``read_residual`` / ``write_residual`` because
-    the DPG family persists it in its serialized checkpoint state.
+    Converts accumulated episode timesteps into gradient pulses of whole update
+    groups (see ``update_group_iters``; TD7-style checkpoint training). The
+    residual counter lives on the agent and is reached through ``read_residual`` /
+    ``write_residual`` because the DPG family persists it in its serialized
+    checkpoint state.
     """
 
     def __init__(
@@ -67,6 +69,7 @@ class CheckpointTrainPulse:
         *,
         train_freq: int,
         gradient_steps: int,
+        worker_size: int,
         train: Callable[[int, int], object],
         record_loss: Callable[[object], None],
         read_residual: Callable[[], int],
@@ -75,6 +78,7 @@ class CheckpointTrainPulse:
     ):
         self._train_freq = train_freq
         self._gradient_steps = gradient_steps
+        self._group_iters = update_group_iters(worker_size, train_freq)
         self._train = train
         self._record_loss = record_loss
         self._read_residual = read_residual
@@ -82,11 +86,11 @@ class CheckpointTrainPulse:
         self._post_pulse = post_pulse
 
     def __call__(self, steps, accumulated_timesteps):
-        residual = self._read_residual() + int(accumulated_timesteps)
-        num_update_iters = 0
-        while residual >= self._train_freq:
-            residual -= self._train_freq
-            num_update_iters += 1
+        groups, residual = divmod(
+            self._read_residual() + int(accumulated_timesteps),
+            self._train_freq * self._group_iters,
+        )
+        num_update_iters = groups * self._group_iters
         self._write_residual(residual)
 
         if num_update_iters > 0:
@@ -210,6 +214,7 @@ class RolloutEngine:
         # Only adapters know which done rows are followed by an autoreset dummy.
         prev_done = None
         train_residual = 0
+        group_iters = update_group_iters(spec.worker_size, spec.train_freq)
         steps = 0
         last_log_step = 0
 
@@ -235,9 +240,9 @@ class RolloutEngine:
 
             if steps > spec.learning_starts:
                 train_residual += int(active.sum())
-                update_iters, train_residual = divmod(train_residual, spec.train_freq)
-                if update_iters > 0:
-                    loss = spec.train(steps, update_iters * spec.gradient_steps)
+                groups, train_residual = divmod(train_residual, spec.train_freq * group_iters)
+                if groups > 0:
+                    loss = spec.train(steps, groups * group_iters * spec.gradient_steps)
                     lossque.append(loss)
 
             store_mask = None if prev_done is None or not prev_done.any() else ~prev_done
@@ -471,6 +476,7 @@ class RolloutEngine:
         lossque = self._begin()
         eval_result = None
         train_residual = 0
+        group_iters = update_group_iters(spec.worker_size, spec.train_freq)
         with jax.default_device(spec.memory_device):
             false = jnp.zeros(spec.worker_size, dtype=bool)
             state = (
@@ -530,9 +536,9 @@ class RolloutEngine:
             )
             if not checkpointing and steps > spec.learning_starts:
                 train_residual += spec.worker_size
-                update_iters, train_residual = divmod(train_residual, spec.train_freq)
-                if update_iters:
-                    lossque.append(spec.train(steps, update_iters * spec.gradient_steps))
+                groups, train_residual = divmod(train_residual, spec.train_freq * group_iters)
+                if groups:
+                    lossque.append(spec.train(steps, groups * group_iters * spec.gradient_steps))
             spec.replay_buffer.add(obs, sel.store_action, rewards, next_obs, terminated, truncated)
 
             if checkpointing and steps > spec.learning_starts:

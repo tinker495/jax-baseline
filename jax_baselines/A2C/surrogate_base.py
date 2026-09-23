@@ -4,6 +4,7 @@ import numpy as np
 import optax
 
 from jax_baselines.A2C.base_class import Actor_Critic_Policy_Gradient_Family
+from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.metrics import rollout_metrics
 from jax_baselines.math.returns import (
@@ -259,6 +260,7 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
                     old_policy_batch,
                     adv_batch,
                 ),
+                unroll=SCAN_UNROLL,
             )
             return updates, jax.tree.map(jnp.mean, losses)
 
@@ -267,6 +269,7 @@ class SurrogatePolicyGradient(Actor_Critic_Policy_Gradient_Family):
             (actor_params, critic_params, actor_opt_state, critic_opt_state, key),
             None,
             length=self.epoch_num,
+            unroll=SCAN_UNROLL,
         )
         actor_params, critic_params, actor_opt_state, critic_opt_state, key = updates
         metrics.update(jax.tree.map(jnp.mean, epoch_metrics))

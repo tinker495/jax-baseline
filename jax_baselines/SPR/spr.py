@@ -6,7 +6,7 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.core.bulk_training import flatten_bulk_batch
+from jax_baselines.core.bulk_training import SCAN_UNROLL, flatten_bulk_batch
 from jax_baselines.core.replay_protocol import (
     PriorityNeed,
     SelfPredictionReplayNeed,
@@ -431,6 +431,7 @@ class SPR(Q_Network_Family):
                 batched_weights,
                 batched_steps,
             ),
+            unroll=SCAN_UNROLL,
         )
         centropy, qloss, rprloss, target_q, metrics = outputs
         qloss = jnp.mean(qloss)
