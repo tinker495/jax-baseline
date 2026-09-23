@@ -159,7 +159,7 @@ class FQF(Q_Network_Family):
                 fqf_losses,
                 targets,
                 target_stds,
-                taus,
+                tau,
                 priorities,
                 metrics,
             ),
@@ -176,7 +176,7 @@ class FQF(Q_Network_Family):
             target=target,
             replay_priorities=priorities,
             metrics=metrics,
-            histograms={"loss/tau": jnp.mean(taus, axis=0)},
+            histograms={"loss/tau": tau},
             update_count=len(contexts),
         )
 
@@ -215,7 +215,19 @@ class FQF(Q_Network_Family):
                 fqf_opt_state,
             ), (loss, fqf_loss, t_mean, t_std, tau, priorities, metrics)
 
-        return jax.lax.scan(train_one, carry, (steps, keys, data))
+        carry, (losses, fqf_losses, targets, target_stds, taus, priorities, metrics) = jax.lax.scan(
+            train_one, carry, (steps, keys, data)
+        )
+        # Reduce the tau histogram inside the compiled scan instead of eagerly afterwards.
+        return carry, (
+            losses,
+            fqf_losses,
+            targets,
+            target_stds,
+            jnp.mean(taus, axis=0),
+            priorities,
+            metrics,
+        )
 
     def _train_step(
         self,
