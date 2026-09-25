@@ -1,19 +1,22 @@
 from collections.abc import Callable
+from dataclasses import replace
+from functools import partial
 from typing import Any
 
 import dm_pix as pix
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 
-from jax_baselines.core.bulk_training import SCAN_UNROLL, flatten_bulk_batch
+from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.core.replay_protocol import (
     PriorityNeed,
     SelfPredictionReplayNeed,
     require_replay_factory,
 )
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.DQN.training import QNetTrainContext, QNetTrainResult
+from jax_baselines.DQN.training import QNetTrainResult
 from jax_baselines.math.distributional import (
     CategoricalBackend,
     MunchausenSpec,
@@ -35,9 +38,31 @@ from jax_baselines.math.param_updates import (
 from jax_baselines.optim import optimizer_metrics
 
 
+def scan_with_resets(body, carry, xs, resets):
+    """``lax.scan`` whose body receives a static per-step ``reset`` flag.
+
+    ``resets`` lists the host-scheduled step indexes that shrink-and-perturb. Each maximal
+    run of equal flags becomes its own scan inside the same compiled call, so the periodic
+    reset never reads a device predicate: a GPU conditional copies it to the host every step.
+    """
+    length = jax.tree.leaves(xs)[0].shape[0]
+    flags = [step in resets for step in range(length)]
+    starts = [step for step in range(length) if step == 0 or flags[step] != flags[step - 1]]
+    outputs = []
+    for start, stop in zip(starts, starts[1:] + [length]):
+        run = xs if stop - start == length else jax.tree.map(lambda x: x[start:stop], xs)
+        carry, ys = jax.lax.scan(partial(body, reset=flags[start]), carry, run, unroll=SCAN_UNROLL)
+        outputs.append(ys)
+    if len(outputs) == 1:
+        return carry, outputs[0]
+    return carry, jax.tree.map(lambda *ys: jnp.concatenate(ys), *outputs)
+
+
 class SPR(Q_Network_Family):
     _run_name = "SPR"
     supports_bulk_training = True
+    flat_bulk_batches = True
+    _uses_rng = True
 
     def __init__(
         self,
@@ -79,7 +104,8 @@ class SPR(Q_Network_Family):
 
         super().__init__(env_builder, model_builder_maker, **spr_kwargs)
 
-        self._gamma = jnp.power(self.gamma, jnp.arange(self.n_step))
+        # Host constants: a captured device array is copied back to the host at every compile.
+        self._gamma = np.asarray(jnp.power(self.gamma, jnp.arange(self.n_step)))
 
     def get_memory_setup(self):
         replay_factory = require_replay_factory(self.replay_factory, "ReplayBufferFactory")
@@ -132,15 +158,16 @@ class SPR(Q_Network_Family):
             self.soft_reset_freq = 40000
         self.opt_state = self.optimizer.init(self.params)
 
-        self.categorial_bar = jnp.expand_dims(
-            jnp.linspace(self.categorial_min, self.categorial_max, self.categorial_bar_n),
-            axis=0,
+        # Host constants: a captured device array is copied back to the host at every compile.
+        self.categorial_bar = np.asarray(
+            jnp.expand_dims(
+                jnp.linspace(self.categorial_min, self.categorial_max, self.categorial_bar_n),
+                axis=0,
+            )
         )  # [1, 51]
-        self._categorial_bar = jnp.expand_dims(self.categorial_bar, axis=0)  # [1, 1, 51]
+        self._categorial_bar = np.expand_dims(self.categorial_bar, axis=0)  # [1, 1, 51]
         self.value_support = self.categorial_bar[0]
-        self.delta_bar = jax.device_put(
-            (self.categorial_max - self.categorial_min) / (self.categorial_bar_n - 1)
-        )
+        self.delta_bar = (self.categorial_max - self.categorial_min) / (self.categorial_bar_n - 1)
 
         # Use common JIT compilation
         self._compile_common_functions()
@@ -164,61 +191,72 @@ class SPR(Q_Network_Family):
             axis=1,
         )
 
+    @property
+    def _reset_period(self):
+        """Shrink-and-perturb period; plain SPR resets only with ``scaled_by_reset``."""
+        return self.soft_reset_freq if self.scaled_by_reset else None
+
+    def _scheduled_resets(self, first_update, updates):
+        """Indexes, within updates numbered ``first_update...``, that shrink-and-perturb."""
+        period = self._reset_period
+        return tuple(
+            index for index in range(updates) if period and (first_update + index) % period == 0
+        )
+
+    def _compile_common_functions(self):
+        super()._compile_common_functions()
+        # One call scans a whole chunk; its reset positions are part of the executable.
+        self._compiled_update = jax.jit(self._update, static_argnames=("diagnostics", "resets"))
+        self._compiled_action_churn = jax.jit(self._action_churn)
+
+    def _updates_in(self, data):
+        # `_train_step` scans every batch_size slice of `data` as its own update.
+        return data["actions"].shape[0] // self.batch_size
+
     def _train_on_batch(self, data, context):
         if context.collect_diagnostics:
-            diagnostic_obs = jax.tree.map(lambda value: value[:32, 0], data["obses"])
-            diagnostic_key = jax.random.PRNGKey(0)
-            online_before = self._get_actions(self.params, diagnostic_obs, diagnostic_key)
-            target_before = self._get_actions(self.target_params, diagnostic_obs, diagnostic_key)
-        (
-            self.params,
-            self.target_params,
-            self.opt_state,
-            loss,
-            t_mean,
-            new_priorities,
-            rprloss,
-            metrics,
-        ) = self._train_step(
-            self.params,
-            self.target_params,
-            self.opt_state,
-            context.train_steps_count,
-            next(self.key_seq),
-            **data,
-        )
-
-        if context.collect_diagnostics:
-            online_after = self._get_actions(self.params, diagnostic_obs, diagnostic_key)
-            target_after = self._get_actions(self.target_params, diagnostic_obs, diagnostic_key)
-            metrics.update(
-                {
-                    "loss/online_action_churn": jnp.mean(online_before != online_after),
-                    "loss/target_action_churn": jnp.mean(target_before != target_after),
-                    "loss/online_target_action_agreement": jnp.mean(online_after == target_after),
-                    "loss/action_churn_updates_spanned": data["actions"].shape[0]
-                    // self.batch_size,
-                }
+            # The churn probe reuses the device copy of the observations the update consumes.
+            data = {**data, "obses": jax.device_put(data["obses"])}
+        online_before, target_before = self.params, self.target_params
+        result = QNetTrainResult.from_values(
+            *self._run_update(
+                self._compiled_update,
+                data,
+                diagnostics=context.diagnostics,
+                resets=self._scheduled_resets(context.train_steps_count, self._updates_in(data)),
             )
-        return QNetTrainResult.from_values(
-            loss=loss,
-            target=t_mean,
-            replay_priorities=new_priorities,
-            metrics={**metrics, "loss/rprloss": rprloss},
         )
+        if context.collect_diagnostics:
+            result.report.metrics.update(
+                self._compiled_action_churn(
+                    online_before, target_before, self.params, self.target_params, data["obses"]
+                )
+            )
+        return result
 
     def _train_on_bulk(self, data, contexts):
-        result = self._train_on_batch(
-            flatten_bulk_batch(data),
-            QNetTrainContext(
-                steps=contexts[0].steps,
-                train_steps_count=contexts[0].train_steps_count,
-                gradient_steps=len(contexts),
-                collect_diagnostics=contexts[-1].collect_diagnostics,
-            ),
-        )
+        # One call runs the whole chunk: schedule from its first update, probe on its last.
+        context = replace(contexts[0], collect_diagnostics=contexts[-1].collect_diagnostics)
+        result = self._train_on_batch(data, context)
         result.report.update_count = len(contexts)
         return result
+
+    def _action_churn(self, online_before, target_before, online_after, target_after, obses):
+        """Greedy-action drift across one train call, on the first 32 sampled observations."""
+        first_obses = jax.tree.map(lambda value: value[:32, 0], obses)
+        key = jax.random.PRNGKey(0)
+        online_before, target_before, online_after, target_after = (
+            self._get_actions(params, first_obses, key)
+            for params in (online_before, target_before, online_after, target_after)
+        )
+        return {
+            "loss/online_action_churn": jnp.mean(online_before != online_after),
+            "loss/target_action_churn": jnp.mean(target_before != target_after),
+            "loss/online_target_action_agreement": jnp.mean(online_after == target_after),
+            "loss/action_churn_updates_spanned": jnp.asarray(
+                next(iter(obses.values())).shape[0] // self.batch_size
+            ),
+        }
 
     def _image_augmentation(self, obs, key):
         """Random shift + intensity augmentation for B x K x H x W x C images."""
@@ -308,17 +346,16 @@ class SPR(Q_Network_Family):
         terminateds,
         filled,
         weights=1,
-        indexes=None,
+        *,
+        resets,
+        diagnostics,
     ):
         obses = convert_normalized_obs(obses)
         actions = actions.astype(jnp.int32)
         not_terminateds = 1.0 - terminateds
+        # Only image leaves (B x K x H x W x C) are augmented; the rank is static.
         obses = jax.tree.map(
-            lambda value: jax.lax.cond(
-                len(value.shape) >= 5,
-                lambda: self._image_augmentation(value, key),
-                lambda: value,
-            ),
+            lambda value: self._image_augmentation(value, key) if value.ndim >= 5 else value,
             obses,
         )
 
@@ -331,12 +368,10 @@ class SPR(Q_Network_Family):
         batched_not_terminateds = not_terminateds[batch_idxes]
         batched_filled = filled[batch_idxes]
         batched_weights = weights[batch_idxes] if self.prioritized_replay else 1
-        gradient_steps = batch_idxes.shape[0]
-        batched_steps = steps + jnp.arange(gradient_steps)
 
-        def f(updates, input):
+        def f(updates, input, reset):
             params, target_params, opt_state, key = updates
-            obses, actions, rewards, not_terminateds, filled, weights, steps = input
+            obses, actions, rewards, not_terminateds, filled, weights = input
             key, subkey = jax.random.split(key)
             parsed_obses = jax.tree.map(
                 lambda value: jnp.reshape(value[:, 0], (-1, *value.shape[2:])), obses
@@ -389,23 +424,22 @@ class SPR(Q_Network_Family):
                 target_distribution,
                 weights,
                 key,
+                diagnostics=diagnostics,
             )
-            updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-            metrics.update(target_metrics)
-            metrics.update(optimizer_metrics(opt_state, "q"))
-            if self.prioritized_replay:
-                metrics.update(replay_metrics(weights, centropy))
+            updates, opt_state = self.optimizer.update(
+                grad, opt_state, params=params, diagnostics=diagnostics
+            )
+            if diagnostics:
+                metrics.update(target_metrics)
+                metrics.update(optimizer_metrics(opt_state, "q"))
+                if self.prioritized_replay:
+                    metrics.update(replay_metrics(weights, centropy))
             params = optax.apply_updates(params, updates)
             target_params = soft_update(params, target_params, 0.005)
-            if self.scaled_by_reset:
+            if reset:
+                # Shrink-and-perturb on a host-scheduled update (see `_reset_period`).
                 params, opt_state = scaled_by_reset_with_filter(
-                    params,
-                    opt_state,
-                    self.optimizer,
-                    key,
-                    steps,
-                    self.soft_reset_freq,
-                    self.reset_hardsoft,
+                    params, opt_state, self.optimizer, key, True, self.reset_hardsoft
                 )
             target_q = jnp.sum(
                 target_distribution * self.categorial_bar,
@@ -419,7 +453,7 @@ class SPR(Q_Network_Family):
                 metrics,
             )
 
-        (params, target_params, opt_state, _), outputs = jax.lax.scan(
+        (params, target_params, opt_state, _), outputs = scan_with_resets(
             f,
             (params, target_params, opt_state, key),
             (
@@ -429,9 +463,8 @@ class SPR(Q_Network_Family):
                 batched_not_terminateds,
                 batched_filled,
                 batched_weights,
-                batched_steps,
             ),
-            unroll=SCAN_UNROLL,
+            resets,
         )
         centropy, qloss, rprloss, target_q, metrics = outputs
         qloss = jnp.mean(qloss)
@@ -448,8 +481,8 @@ class SPR(Q_Network_Family):
             qloss,
             target_q,
             new_priorities,
-            rprloss,
-            jax.tree.map(jnp.mean, metrics),
+            {**jax.tree.map(jnp.mean, metrics), "loss/rprloss": rprloss} if diagnostics else {},
+            {},
         )
 
     def _loss(
@@ -464,6 +497,7 @@ class SPR(Q_Network_Family):
         target_distribution,
         weights,
         key,
+        diagnostics,
     ):
         rprloss = self._represetation_loss(params, target_params, obses, actions, filled, key)
         distribution = jnp.take_along_axis(
@@ -472,6 +506,8 @@ class SPR(Q_Network_Family):
         centropy = -jnp.sum(target_distribution * jnp.log(distribution + 1e-6), axis=1)
         mean_centropy = jnp.mean(centropy * weights)
         total_loss = mean_centropy + self.spr_weight * rprloss
+        if not diagnostics:
+            return total_loss, (centropy, mean_centropy, rprloss, {})
         q_values = jnp.sum(distribution * self.value_support, axis=1)
         target_values = jnp.sum(target_distribution * self.value_support, axis=1)
         return total_loss, (

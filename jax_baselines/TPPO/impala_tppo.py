@@ -35,7 +35,7 @@ class IMPALA_TPPO(IMPALA_Family):
         use_entropy_adv_shaping=True,
         entropy_adv_shaping_kappa=2.0,
         rho_max=1.0,
-        log_interval=1,
+        log_interval=100,
         log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
@@ -97,47 +97,6 @@ class IMPALA_TPPO(IMPALA_Family):
             if self.action_type == "discrete"
             else jax.jit(self._actor_loss_continuous)
         )
-
-    def train_step(self, steps):
-        data = self.buffer.sample()
-
-        (
-            self.actor_params,
-            self.critic_params,
-            self.actor_opt_state,
-            self.critic_opt_state,
-            critic_loss,
-            actor_loss,
-            entropy_loss,
-            rho,
-            targets,
-        ) = self._train_step(
-            self.actor_params,
-            self.critic_params,
-            self.actor_opt_state,
-            self.critic_opt_state,
-            next(self.key_seq),
-            data[0],
-            data[1],
-            data[2],
-            data[3],
-            data[4],
-            data[5],
-            data[6],
-        )
-
-        if steps % self.log_interval == 0:
-            log_dict = {
-                "loss/critic_loss": critic_loss,
-                "loss/actor_loss": actor_loss,
-                "loss/entropy_loss": entropy_loss,
-                "loss/mean_rho": rho,
-                "loss/mean_target": targets,
-            }
-            self.logger_server.log_trainer(
-                steps, {key: float(value) for key, value in jax.device_get(log_dict).items()}
-            )
-        return critic_loss, rho
 
     def preprocess(
         self,
@@ -256,11 +215,12 @@ class IMPALA_TPPO(IMPALA_Family):
                 critic_loss, critic_grad = jax.value_and_grad(self._critic_loss)(
                     critic_params, actor_params, obs, vs, use_key
                 )
+                # IMPALA never logs optimizer norms, so updates skip those reductions.
                 actor_updates, actor_opt_state = self.optimizer.update(
-                    actor_grad, actor_opt_state, params=actor_params
+                    actor_grad, actor_opt_state, params=actor_params, diagnostics=False
                 )
                 critic_updates, critic_opt_state = self.optimizer.update(
-                    critic_grad, critic_opt_state, params=critic_params
+                    critic_grad, critic_opt_state, params=critic_params, diagnostics=False
                 )
                 actor_params = optax.apply_updates(actor_params, actor_updates)
                 critic_params = optax.apply_updates(critic_params, critic_updates)
@@ -320,6 +280,7 @@ class IMPALA_TPPO(IMPALA_Family):
             critic_params,
             actor_opt_state,
             critic_opt_state,
+            key,
             critic_loss / self.epoch_num,
             actor_loss / self.epoch_num,
             entropy_loss / self.epoch_num,

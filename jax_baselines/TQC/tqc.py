@@ -1,7 +1,6 @@
 from collections.abc import Callable
 from copy import deepcopy
 
-import jax
 import jax.numpy as jnp
 import numpy as np
 
@@ -16,7 +15,6 @@ TQCCheckpointParams = SACCheckpointParams
 
 class TQC(SAC):
     _run_name = "TQC"
-    supports_bulk_training = True
 
     def __init__(
         self,
@@ -66,17 +64,14 @@ class TQC(SAC):
             jnp.linspace(0.0, 1.0, self.n_support + 1, dtype=jnp.float32)[1:]
             + jnp.linspace(0.0, 1.0, self.n_support + 1, dtype=jnp.float32)[:-1]
         ) / 2.0  # [support]
-        self.quantile = jax.device_put(jnp.expand_dims(self.quantile, axis=(0, 1))).astype(
-            jnp.float32
+        # Host constants: a captured device array is copied back to the host at every compile.
+        self.quantile = np.asarray(
+            jnp.expand_dims(self.quantile, axis=(0, 1)), dtype=np.float32
         )  # [1 x 1 x support]
 
-        self._get_actions = jax.jit(self._get_actions)
-        self._get_eval_actions = jax.jit(self._get_eval_actions)
-        self._train_step = jax.jit(self._train_step)
-        self._train_ent_coef = jax.jit(self._train_ent_coef)
-        self._bulk_scan = jax.jit(self._bulk_scan)
-
-    def _critic_loss(self, critic_params, policy_params, obses, actions, targets, weights, key):
+    def _critic_loss(
+        self, critic_params, policy_params, obses, actions, targets, weights, key, diagnostics
+    ):
         qnets = self.critic(critic_params, policy_params, key, obses, actions)
         logit_valid_tile = jnp.expand_dims(targets, axis=2)  # batch x support x 1
         huber0 = QuantileHuberLosses(
@@ -97,6 +92,8 @@ class TQC(SAC):
                 )
             )
             critic_loss += jnp.mean(weights * losses[-1])
+        if not diagnostics:
+            return critic_loss, (huber0, {})
         metrics = critic_metrics(
             [jnp.mean(q, axis=-1) for q in qnets],
             jnp.mean(targets, axis=-1),
@@ -108,12 +105,14 @@ class TQC(SAC):
             metrics.update(quantile_metrics(q, prefix=f"loss/critic{index}"))
         return critic_loss, (huber0, metrics)
 
-    def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
+    def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef, diagnostics):
         policy, log_prob, log_std = self._get_pi_log_prob(policy_params, obses, key)
         qnets_pi = self.critic(critic_params, policy_params, key, obses, policy)
         actor_loss = jnp.mean(
             ent_coef * log_prob - jnp.mean(jnp.concatenate(qnets_pi, axis=1), axis=1)
         )
+        if not diagnostics:
+            return actor_loss, (log_prob, {})
         return actor_loss, (
             log_prob,
             stochastic_actor_metrics(

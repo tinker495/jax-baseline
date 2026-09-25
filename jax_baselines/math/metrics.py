@@ -5,12 +5,6 @@ import jax.numpy as jnp
 
 
 @jax.jit
-def mean_metrics(metrics):
-    """Reduce a bulk update's diagnostics in one compiled call."""
-    return jax.tree.map(jnp.mean, metrics)
-
-
-@jax.jit
 def reduce_metrics(metrics, metric_counts):
     """Average along the update axis, excluding zero-count observations."""
     means = {}
@@ -24,12 +18,6 @@ def reduce_metrics(metrics, metric_counts):
             counts[name], 1
         )
     return means, counts
-
-
-@jax.jit
-def reduce_bulk_metrics(means, metrics, metric_counts):
-    """Reduce plain bulk means and count-weighted metrics in one compiled call."""
-    return mean_metrics(means), reduce_metrics(metrics, metric_counts)
 
 
 def array_metrics(values: jax.Array, prefix: str) -> dict[str, jax.Array]:

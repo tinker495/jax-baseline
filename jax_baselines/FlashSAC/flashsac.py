@@ -10,22 +10,19 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 from flax import struct
 
-from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.core.normalization import FlashSACRewardNormalizer
-from jax_baselines.core.seeding import split_keys
-from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
+from jax_baselines.DDPG.base_class import (
+    Deteministic_Policy_Gradient_Family,
+    merge_actor_metrics,
+)
 from jax_baselines.DDPG.metrics import critic_metrics, stochastic_actor_metrics
-from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.distributional import categorical_projection
 from jax_baselines.math.jax_utils import convert_normalized_obs
-from jax_baselines.math.metrics import (
-    categorical_metrics,
-    reduce_metrics,
-    support_metrics,
-)
+from jax_baselines.math.metrics import categorical_metrics, support_metrics
 from jax_baselines.math.param_updates import project_unit_norm_params
 from jax_baselines.math.policy_math import entropy_target_from_sigma
 from jax_baselines.optim import optimizer_metrics
@@ -49,7 +46,10 @@ def sample_policy(mean: jax.Array, log_std: jax.Array, key: jax.Array):
 
 class FlashSAC(Deteministic_Policy_Gradient_Family):
     _run_name = "FlashSAC"
-    supports_bulk_training = True
+
+    @property
+    def _actor_schedule(self):
+        return self.actor_update_period, 1
 
     def __init__(
         self,
@@ -106,9 +106,11 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
         self.value_min = -normalized_G_max
         self.value_max = normalized_G_max
         self.support_delta = 2 * normalized_G_max / (n_atoms - 1)
-        self.value_support = jnp.linspace(self.value_min, self.value_max, n_atoms)
-        self.noise_logits = -actor_noise_zeta_mu * jnp.log(
-            jnp.arange(1, actor_noise_zeta_max + 1, dtype=jnp.float32)
+        # Host constants: a captured device array is copied back to the host at every compile.
+        self.value_support = np.asarray(jnp.linspace(self.value_min, self.value_max, n_atoms))
+        self.noise_logits = np.asarray(
+            -actor_noise_zeta_mu
+            * jnp.log(jnp.arange(1, actor_noise_zeta_max + 1, dtype=jnp.float32))
         )
         model_options = {} if policy_kwargs is None else dict(policy_kwargs)
         if "n_atoms" in model_options and model_options["n_atoms"] != n_atoms:
@@ -156,9 +158,6 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
         self._noise = jnp.zeros((self.worker_size, math.prod(self.action_size)))
         self._noise_count = jnp.asarray(0, dtype=jnp.int32)
         self._noise_period = jnp.asarray(0, dtype=jnp.int32)
-        self._compiled_actions = jax.jit(self._get_actions)
-        self._compiled_eval = jax.jit(self._get_eval_actions)
-        self._compiled_updates = jax.jit(self._bulk_scan)
 
     def checkpoint_params(self):
         return FlashSACCheckpointParams(
@@ -180,50 +179,52 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
 
     def _policy_action_from_state(self, state, obs, eval, steps):
         if eval:
-            return self._compiled_eval(state["policy"], obs)
-        actions, self._noise, self._noise_count, self._noise_period = self._compiled_actions(
-            state["policy"],
+            return self._compiled_eval_actions(state, obs)
+        (
+            actions,
+            self._action_key,
+            self._noise,
+            self._noise_count,
+            self._noise_period,
+        ) = self._compiled_actions(
+            state,
             obs,
-            next(self.key_seq),
+            self._action_key,
             self._noise,
             self._noise_count,
             self._noise_period,
         )
         return actions
 
-    def _get_actions(self, params, obses, key, noise, count, period):
-        (mean, log_std), _ = self.actor(params, None, convert_normalized_obs(obses), False)
-        noise_key, period_key = jax.random.split(key)
+    def _get_actions(self, state, obses, key, noise, count, period):
+        (mean, log_std), _ = self.actor(state["policy"], None, convert_normalized_obs(obses), False)
+        key, noise_key, period_key = jax.random.split(key, 3)
         refresh = (count == 0) | (count >= period)
         noise = jnp.where(refresh, jax.random.normal(noise_key, mean.shape), noise)
         period = jnp.where(
             refresh, jax.random.categorical(period_key, self.noise_logits) + 1, period
         )
         count = jnp.where(refresh, 0, count) + 1
-        return jnp.tanh(mean + jnp.exp(log_std) * noise), noise, count, period
+        return jnp.tanh(mean + jnp.exp(log_std) * noise), key, noise, count, period
 
-    def _get_eval_actions(self, params, obses):
-        (mean, _), _ = self.actor(params, None, convert_normalized_obs(obses), False)
+    def _get_eval_actions(self, state, obses):
+        (mean, _), _ = self.actor(state["policy"], None, convert_normalized_obs(obses), False)
         return jnp.tanh(mean)
 
-    def _train_on_batch(self, data, context):
-        return self._train_on_bulk(jax.tree.map(lambda x: jnp.expand_dims(x, 0), data), [context])
-
-    def _train_on_bulk(self, data, contexts):
-        carry, (metrics, metric_counts) = self._compiled_updates(
-            (
-                self.policy_params,
-                self.critic_params,
-                self.target_critic_params,
-                self.opt_policy_state,
-                self.opt_critic_state,
-                self.opt_ent_coef_state,
-                self.log_ent_coef,
-            ),
-            split_keys(next(self.key_seq), len(contexts)),
-            jnp.asarray([context.train_steps_count for context in contexts]),
-            data,
+    @property
+    def _train_state(self):
+        return (
+            self.policy_params,
+            self.critic_params,
+            self.target_critic_params,
+            self.opt_policy_state,
+            self.opt_critic_state,
+            self.opt_ent_coef_state,
+            self.log_ent_coef,
         )
+
+    @_train_state.setter
+    def _train_state(self, state):
         (
             self.policy_params,
             self.critic_params,
@@ -232,51 +233,18 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
             self.opt_critic_state,
             self.opt_ent_coef_state,
             self.log_ent_coef,
-        ) = carry
-        metrics, metric_counts = reduce_metrics(metrics, metric_counts)
-        return DPGTrainReport(
-            loss=metrics["loss/qloss"],
-            target=metrics["loss/targets"],
-            metrics=metrics,
-            metric_counts=metric_counts,
-            update_count=len(contexts),
-        )
+        ) = state
 
-    def _bulk_scan(self, carry, keys, steps, data):
-        return jax.lax.scan(self._train_step, carry, (keys, steps, data), unroll=SCAN_UNROLL)
-
-    def _train_step(self, carry, sample):
-        policy, critic, target, actor_opt, critic_opt, alpha_opt, log_alpha = carry
-        key, step, data = sample
+    def _train_step(self, state, key, step, flags, obses, actions, rewards, nxtobses, terminateds):
+        policy, critic, target, actor_opt, critic_opt, alpha_opt, log_alpha = state
         actor_key, target_key = jax.random.split(key)
-        obs = convert_normalized_obs(data["obses"])
-        next_obs = convert_normalized_obs(data["nxtobses"])
+        obs = convert_normalized_obs(obses)
+        next_obs = convert_normalized_obs(nxtobses)
         joint_obs = {name: jnp.concatenate((value, next_obs[name])) for name, value in obs.items()}
-        batch_size = data["actions"].shape[0]
-        empty_actor_metrics = dict.fromkeys(
-            (
-                "loss/actor_loss",
-                *stochastic_actor_metrics(
-                    jnp.zeros(1),
-                    jnp.zeros(1),
-                    0.0,
-                    jnp.exp(log_alpha),
-                    self.target_entropy,
-                ),
-                *optimizer_metrics(actor_opt, "actor"),
-            ),
-            jnp.asarray(0.0),
-        )
-        if self.auto_entropy:
-            empty_actor_metrics.update(
-                dict.fromkeys(
-                    ("loss/ent_coef_loss", *optimizer_metrics(alpha_opt, "ent_coef")),
-                    jnp.asarray(0.0),
-                )
-            )
+        batch_size = actions.shape[0]
 
-        def update_actor(state):
-            policy, actor_opt, log_alpha, alpha_opt = state
+        actor_metrics = {}
+        if flags.actor:
             (loss, (log_prob, stats, actor_metrics)), grad = jax.value_and_grad(
                 self._actor_loss, has_aux=True
             )(
@@ -286,29 +254,29 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
                 joint_obs,
                 actor_key,
                 jnp.exp(log_alpha),
+                flags.diagnostics,
             )
-            updates, actor_opt = self.optimizer.update(grad, actor_opt, policy["params"])
+            updates, actor_opt = self.optimizer.update(
+                grad, actor_opt, policy["params"], diagnostics=flags.diagnostics
+            )
             policy = {
                 "params": project_unit_norm_params(optax.apply_updates(policy["params"], updates)),
                 "batch_stats": stats,
             }
-            actor_metrics.update({"loss/actor_loss": loss, **optimizer_metrics(actor_opt, "actor")})
+            if flags.diagnostics:
+                actor_metrics.update(
+                    {"loss/actor_loss": loss, **optimizer_metrics(actor_opt, "actor")}
+                )
             if self.auto_entropy:
                 log_alpha, alpha_opt, entropy_metrics = self._train_ent_coef(
-                    log_alpha, alpha_opt, log_prob
+                    log_alpha, alpha_opt, log_prob, flags.diagnostics
                 )
                 actor_metrics.update(entropy_metrics)
-            return policy, actor_opt, log_alpha, alpha_opt, actor_metrics
-
-        policy, actor_opt, log_alpha, alpha_opt, actor_metrics = jax.lax.cond(
-            (step - 1) % self.actor_update_period == 0,
-            update_actor,
-            lambda state: (*state, empty_actor_metrics),
-            (policy, actor_opt, log_alpha, alpha_opt),
-        )
+        elif flags.diagnostics:
+            actor_metrics = self._skipped_actor_metrics(jnp.exp(log_alpha), actor_opt, alpha_opt)
         (mean, log_std), _ = self.actor(policy, None, next_obs, False)
         next_actions, log_prob = sample_policy(mean, log_std, target_key)
-        joint_actions = jnp.concatenate((data["actions"], next_actions))
+        joint_actions = jnp.concatenate((actions, next_actions))
         (target_logits1, target_logits2), target_updates = self.critic(
             target, policy, None, joint_obs, joint_actions, True
         )
@@ -318,9 +286,9 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
             target_probs2 * self.value_support, axis=-1
         )
         next_probs = jnp.where(select_first[:, None], target_probs1, target_probs2)
-        target_atoms = data["rewards"].reshape(-1, 1) + (
-            1 - data["terminateds"].reshape(-1, 1)
-        ) * self._gamma * (self.value_support - jnp.exp(log_alpha) * log_prob)
+        target_atoms = rewards.reshape(-1, 1) + (1 - terminateds.reshape(-1, 1)) * self._gamma * (
+            self.value_support - jnp.exp(log_alpha) * log_prob
+        )
         target_probs = categorical_projection(
             next_probs,
             target_atoms,
@@ -337,10 +305,11 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
             joint_obs,
             joint_actions,
             target_probs,
+            flags.diagnostics,
         )
-        updates, critic_opt = self.optimizer.update(grad, critic_opt, critic["params"])
-        metrics.update(optimizer_metrics(critic_opt, "critic"))
-        metrics.update(support_metrics(next_probs, target_atoms, self.value_min, self.value_max))
+        updates, critic_opt = self.optimizer.update(
+            grad, critic_opt, critic["params"], diagnostics=flags.diagnostics
+        )
         critic = {
             "params": project_unit_norm_params(optax.apply_updates(critic["params"], updates)),
             "batch_stats": stats,
@@ -351,27 +320,22 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
             ),
             "batch_stats": target_updates["batch_stats"],
         }
-        metrics.update(
-            {
-                "loss/qloss": critic_loss,
-                "loss/targets": jnp.mean(jnp.sum(target_probs * self.value_support, axis=-1)),
-                "loss/ent_coef": jnp.exp(log_alpha),
-            }
-        )
-        metric_counts = {name: jnp.asarray(1) for name in metrics}
-        metrics.update(actor_metrics)
-        metric_counts.update(
-            {
-                name: jnp.asarray((step - 1) % self.actor_update_period == 0, dtype=jnp.int32)
-                for name in actor_metrics
-            }
-        )
+        metrics["loss/qloss"] = critic_loss
+        if flags.diagnostics:
+            metrics.update(optimizer_metrics(critic_opt, "critic"))
+            metrics.update(
+                support_metrics(next_probs, target_atoms, self.value_min, self.value_max)
+            )
+            metrics["loss/targets"] = jnp.mean(jnp.sum(target_probs * self.value_support, axis=-1))
+            metrics["loss/ent_coef"] = jnp.exp(log_alpha)
+        metrics, metric_counts = merge_actor_metrics(metrics, actor_metrics, flags.actor)
         return (policy, critic, target, actor_opt, critic_opt, alpha_opt, log_alpha), (
+            None,
             metrics,
             metric_counts,
         )
 
-    def _actor_loss(self, params, stats, critic, joint_obs, key, alpha):
+    def _actor_loss(self, params, stats, critic, joint_obs, key, alpha, diagnostics):
         variables = {"params": params, "batch_stats": stats}
         (mean, log_std), updates = self.actor(variables, None, joint_obs, True)
         actions, log_prob = sample_policy(mean, log_std, key)
@@ -391,12 +355,16 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
         return jnp.mean(alpha * log_prob[:size, 0] - minimum), (
             log_prob[:size],
             updates["batch_stats"],
-            stochastic_actor_metrics(
-                log_prob[:size], log_std[:size], minimum, alpha, self.target_entropy
+            (
+                stochastic_actor_metrics(
+                    log_prob[:size], log_std[:size], minimum, alpha, self.target_entropy
+                )
+                if diagnostics
+                else {}
             ),
         )
 
-    def _critic_loss(self, params, stats, policy, obses, actions, target_probs):
+    def _critic_loss(self, params, stats, policy, obses, actions, target_probs, diagnostics):
         (logits1, logits2), updates = self.critic(
             {"params": params, "batch_stats": stats}, policy, None, obses, actions, True
         )
@@ -409,6 +377,8 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
                 axis=-1,
             )
         )
+        if not diagnostics:
+            return loss, (updates["batch_stats"], {})
         probabilities = (jax.nn.softmax(logits1[:size]), jax.nn.softmax(logits2[:size]))
         metrics = critic_metrics(
             [jnp.sum(probs * self.value_support, axis=-1) for probs in probabilities],

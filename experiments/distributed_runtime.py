@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import multiprocessing as mp
+import os
 import random
 from collections import deque
 from importlib import import_module
@@ -14,6 +15,10 @@ from jax_baselines.core.seeding import seed_prngs
 
 
 def _ray():
+    # Under `uv run`, Ray relaunches workers with `uv run` from a temporary working directory,
+    # which resolves a fresh environment without the project's extras (ray itself included).
+    # Workers must use the driver's environment instead.
+    os.environ.setdefault("RAY_ENABLE_UV_RUN_RUNTIME_ENV", "0")
     return import_module("ray")
 
 

@@ -1,6 +1,4 @@
-import jax
 import jax.numpy as jnp
-import numpy as np
 
 from jax_baselines.core.env_protocols import (
     EnvInfo,
@@ -24,15 +22,9 @@ REQUIRED_ENV_INFO_KEYS = (
 )
 
 
-# Action-space converters (defined at module scope to avoid lambda-based E731 lint issues)
-def _discrete_action_conv(a):
-    return a[0]
-
-
 def _continuous_action_conv(a):
-    if isinstance(a, jax.Array):
-        return jnp.clip(a, -5.0, 5.0)
-    return np.clip(a, -5.0, 5.0)
+    # Traced inside the compiled action stage; host arrays never reach it.
+    return jnp.clip(a, -5.0, 5.0)
 
 
 def _require_env_info(env_info: EnvInfo | None) -> EnvInfo:
@@ -181,9 +173,13 @@ def get_worker_env_info(workers, worker_info, include_action_type=False):
 
 
 def infer_action_meta(action_type):
-    """Return (action_type, conv_action) for adapter-normalized action metadata."""
+    """Return (action_type, conv_action) for adapter-normalized action metadata.
+
+    ``conv_action`` is the continuous clip applied inside the compiled action stage;
+    discrete indices reach the env unchanged, so they have none.
+    """
     if action_type == "discrete":
-        return action_type, _discrete_action_conv
+        return action_type, None
     if action_type == "continuous":
         return action_type, _continuous_action_conv
     raise ValueError(f"Unsupported action type: {action_type!r}")

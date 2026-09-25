@@ -1,15 +1,12 @@
-from collections.abc import Callable
 from copy import deepcopy
-from itertools import repeat
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import optax
 
 from jax_baselines.APE_X.dpg_base_class import Ape_X_Deteministic_Policy_Gradient_Family
 from jax_baselines.core.bulk_training import SCAN_UNROLL
-from jax_baselines.DDPG.ou_noise import OUNoise
+from jax_baselines.DDPG.ou_noise import ou_step
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.param_updates import soft_update
 
@@ -33,17 +30,11 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
 
         self.opt_policy_state = self.optimizer.init(self.policy_params)
         self.opt_critic_state = self.optimizer.init(self.critic_params)
-        self._get_actions: Callable = jax.jit(self._get_actions)
-        self._compiled_train_step: Callable = jax.jit(self._train_step)
 
     def get_actor_builder(self):
         gamma = self._gamma
-        action_size = self.action_size[0]
 
         def builder():
-            noise = OUNoise(action_size=action_size, worker_size=1)
-            key_seq = repeat(None)
-
             def get_abs_td_error(
                 actor,
                 critic,
@@ -65,31 +56,16 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
                 td_error = q_values - target
                 return jnp.squeeze(jnp.abs(td_error))
 
-            def actor(actor, params, obses, key):
-                return actor(params["policy"], key, convert_normalized_obs(obses))
+            def noise_step(noise, key, reset):
+                # OU exploration noise; a new episode restarts it from a fresh N(0, 0.2) draw.
+                if reset:
+                    key, reset_key = jax.random.split(key)
+                    noise = 0.2 * jax.random.normal(reset_key, noise.shape)
+                return ou_step(noise, key)
 
-            def get_action(actor, params, obs, noise, epsilon, key):
-                actions = np.clip(np.asarray(actor(params, obs, key)) + noise() * epsilon, -1, 1)[0]
-                return actions
-
-            def random_action(params, obs, noise, epsilon, key):
-                return np.random.uniform(-1.0, 1.0, size=(action_size))
-
-            return get_abs_td_error, actor, get_action, random_action, noise, key_seq
+            return get_abs_td_error, noise_step
 
         return builder
-
-    def _invoke_train_step(self, steps, data):
-        return self._compiled_train_step(
-            self.policy_params,
-            self.critic_params,
-            self.target_policy_params,
-            self.target_critic_params,
-            self.opt_policy_state,
-            self.opt_critic_state,
-            next(self.key_seq),
-            **data,
-        )
 
     def _train_step(
         self,
@@ -99,6 +75,7 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
         target_critic_params,
         opt_policy_state,
         opt_critic_state,
+        step,
         key,
         obses,
         actions,
@@ -108,6 +85,7 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
         weights=1,
         indexes=None,
     ):
+        del step  # DDPG has no step-dependent schedule.
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
         not_terminateds = 1.0 - terminateds
@@ -144,10 +122,10 @@ class APE_X_DDPG(Ape_X_Deteministic_Policy_Gradient_Family):
                 subkeys[1],
             )
             actor_updates, opt_policy_state = self.optimizer.update(
-                actor_grad, opt_policy_state, params=policy_params
+                actor_grad, opt_policy_state, params=policy_params, diagnostics=False
             )
             critic_updates, opt_critic_state = self.optimizer.update(
-                critic_grad, opt_critic_state, params=critic_params
+                critic_grad, opt_critic_state, params=critic_params, diagnostics=False
             )
             return (
                 optax.apply_updates(policy_params, actor_updates),

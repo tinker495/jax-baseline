@@ -26,6 +26,21 @@ from jax_baselines.core.runtime_adapters import MetricLogger
 Array: TypeAlias = np.ndarray | jax.Array
 
 
+def _merge_reset_rows(successor, current, terminated, truncated, xp=jnp):
+    """Take reset rows from ``current``; a partial reset may recompute noisy observations."""
+    done = terminated | truncated
+    return {
+        key: xp.where(done.reshape(done.shape + (1,) * (value.ndim - 1)), current[key], value)
+        for key, value in successor.items()
+    }
+
+
+_merge_reset_rows_compiled = jax.jit(_merge_reset_rows)
+_done_flags_compiled = jax.jit(
+    lambda terminated, truncated: (terminated.astype(bool), truncated.astype(bool))
+)
+
+
 class MjlabVectorizedEnv(VectorizedEnv):
     env_info: EnvInfo
 
@@ -45,6 +60,7 @@ class MjlabVectorizedEnv(VectorizedEnv):
         self.jax_arrays = jax_arrays
         self._reuse_for_eval = reuse_for_eval
         self.worker_num = env.num_envs
+        self._no_autoreset = jnp.zeros(self.worker_num, dtype=bool) if jax_arrays else None
         self._observation_key = observation_key
         self._pending: tuple[Observation, Array, Array, Array, dict[str, Any]] | None = None
         self._closed = False
@@ -232,25 +248,23 @@ class MjlabVectorizedEnv(VectorizedEnv):
         successor = self._selected(observation)
         done_ids = self._torch.nonzero(terminated | truncated, as_tuple=False).flatten()
         reward = self._array(reward)
-        terminated = self._array(terminated).astype(bool)
-        truncated = self._array(truncated).astype(bool)
+        terminated, truncated = self._array(terminated), self._array(truncated)
+        terminated, truncated = (
+            _done_flags_compiled(terminated, truncated)
+            if self.jax_arrays
+            else (terminated.astype(bool), truncated.astype(bool))
+        )
         info = self._snapshot({key: value for key, value in info.items() if key != "log"})
         self._obs = successor
         if done_ids.numel():
             current, reset_info = self.env.reset(env_ids=done_ids)
             self._record_metrics(reset_info["log"])
-            # Only replace reset rows: a partial reset may recompute noisy observations.
             current = self._selected(current)
-            array_module = jnp if self.jax_arrays else np
-            done = terminated | truncated
-            self._obs = {
-                key: array_module.where(
-                    done.reshape((self.worker_num,) + (1,) * (value.ndim - 1)),
-                    current[key],
-                    value,
-                )
-                for key, value in successor.items()
-            }
+            self._obs = (
+                _merge_reset_rows_compiled(successor, current, terminated, truncated)
+                if self.jax_arrays
+                else _merge_reset_rows(successor, current, terminated, truncated, xp=np)
+            )
         self._pending = successor, reward, terminated, truncated, info
 
     def get_result(self) -> tuple[Observation, Array, Array, Array, dict[str, Any]]:
@@ -297,7 +311,9 @@ class MjlabVectorizedEnv(VectorizedEnv):
 
     def autoreset_mask(self, terminateds, truncateds, infos):
         del truncateds, infos
-        return (jnp if self.jax_arrays else np).zeros_like(terminateds, dtype=bool)
+        if self.jax_arrays:
+            return self._no_autoreset
+        return np.zeros_like(terminateds, dtype=bool)
 
     def close(self) -> None:
         if not self._closed:

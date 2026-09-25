@@ -1,9 +1,12 @@
+import itertools
 from collections.abc import Callable
+from functools import lru_cache
 from typing import Literal
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+import optax
 
 from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.core.checkpoint import make_checkpoint_scaffold, snapshot_pytree
@@ -28,23 +31,35 @@ from jax_baselines.core.rollout import (
     RolloutSpec,
 )
 from jax_baselines.core.rollout_stats import EpisodeTracker
-from jax_baselines.core.seeding import key_gen, set_global_seeds, split_keys
+from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.training_session import TrainingSession, off_policy_loop
 from jax_baselines.DQN.training import (
     QNetTrainingLifecycle,
     QNetTrainReport,
     QNetTrainResult,
 )
-from jax_baselines.math.metrics import mean_metrics, reduce_metrics
+from jax_baselines.math.metrics import reduce_metrics
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
+
+
+@lru_cache(maxsize=64)
+def _device_update_counts(counts):
+    """Pulse schedules repeat, so each distinct weight vector crosses to the device once."""
+    return jax.device_put(np.asarray(counts))
 
 
 class Q_Network_Family:
     _run_name = "Q_network"
     _get_actions: Callable[..., jax.Array]
-    _compiled_bulk_scan: Callable[..., tuple[tuple, tuple]]
+    # One update: `(*state, step, key, **batch, **static) -> (*state, loss, target,
+    # priorities, metrics, histograms)`.
+    _train_step: Callable[..., tuple]
 
     supports_bulk_training = False
+    # Bulk samples arrive as (chunk, batch, ...) unless the learner slices a flat chunk itself.
+    flat_bulk_batches = False
+    # IQN/FQF/SPR consume a PRNG key in every forward pass; the others only with param noise.
+    _uses_rng = False
 
     def __init__(
         self,
@@ -160,9 +175,7 @@ class Q_Network_Family:
         print("memory backend : ", self.memory_backend)
         with jax.default_device(self.memory_device):
             self.reward_normalizer = (
-                RewardNormalizer(
-                    self.worker_size, self.gamma, on_device=self.memory_backend == "gpu"
-                )
+                RewardNormalizer(self.worker_size, self.gamma)
                 if self.reward_normalization
                 else None
             )
@@ -270,81 +283,83 @@ class Q_Network_Family:
         pass
 
     def _make_optimizer(self, learning_rate):
-        return self.optimizer_factory(learning_rate)
+        # Updates pass ``diagnostics=``; plain optax transforms simply ignore it.
+        return optax.with_extra_args_support(self.optimizer_factory(learning_rate))
 
     def train_step(self, steps, gradient_steps, logger_run=None, log_interval=None):
         return self.training_lifecycle.train(steps, gradient_steps, logger_run, log_interval)
 
+    @property
+    def _train_state(self):
+        """Pytrees one update reads and returns, in `_train_step` argument order."""
+        return self.params, self.target_params, self.opt_state
+
+    @_train_state.setter
+    def _train_state(self, state):
+        self.params, self.target_params, self.opt_state = state
+
     def _train_on_batch(self, data, context):
-        (
-            self.params,
-            self.target_params,
-            self.opt_state,
-            loss,
-            target,
-            priorities,
-            metrics,
-        ) = self._train_step(
-            self.params,
-            self.target_params,
-            self.opt_state,
-            context.train_steps_count,
-            next(self.key_seq) if self.param_noise else None,
-            **data,
-        )
         return QNetTrainResult.from_values(
-            loss=loss, target=target, replay_priorities=priorities, metrics=metrics
+            *self._run_update(self._compiled_update, data, diagnostics=context.diagnostics)
         )
 
     def _train_on_bulk(self, data, contexts):
-        steps = jnp.asarray([context.train_steps_count for context in contexts])
-        keys = split_keys(next(self.key_seq), len(contexts)) if self.param_noise else None
-        carry = (self.params, self.target_params, self.opt_state)
-        (
-            (self.params, self.target_params, self.opt_state),
-            (
-                losses,
-                targets,
-                priorities,
-                metrics,
-            ),
-        ) = self._compiled_bulk_scan(carry, keys, steps, data)
-        loss, target, metrics = mean_metrics((losses, targets, metrics))
         return QNetTrainResult.from_values(
-            loss=loss,
-            target=target,
-            replay_priorities=priorities,
-            metrics=metrics,
+            *self._run_update(self._compiled_bulk_scan, data, diagnostics=contexts[0].diagnostics),
             update_count=len(contexts),
         )
 
-    def _bulk_scan(self, carry, keys, steps, data):
-        def train_one(carry, xs):
-            params, target_params, opt_state = carry
-            if self.param_noise:
-                step, key, batch = xs
-            else:
-                step, batch = xs
-                key = None
-            params, target_params, opt_state, loss, target, priorities, metrics = self._train_step(
-                params,
-                target_params,
-                opt_state,
-                step,
-                key,
-                **batch,
-            )
-            return (params, target_params, opt_state), (loss, target, priorities, metrics)
+    def _run_update(self, update, data, **static):
+        # The lifecycle already placed the batch on device; PER indexes stay where the
+        # replay produced them for the priority write-back.
+        batch = {key: value for key, value in data.items() if key != "indexes"}
+        self._train_state, self._train_key, self._update_count, outputs = update(
+            self._train_state, self._train_key, self._update_count, batch, **static
+        )
+        return outputs
 
-        xs = (steps, keys, data) if self.param_noise else (steps, data)
-        return jax.lax.scan(train_one, carry, xs, unroll=SCAN_UNROLL)
+    def _update(self, state, key, count, data, **static):
+        """One `_train_step` with its PRNG key and update counter carried on device.
+
+        `count` mirrors the host `train_steps_count`; the step sees `count + 1`,
+        exactly the value the host lifecycle assigns to this update. `static` holds the
+        compile-time flags (``diagnostics``, plus SPR-family ``resets``).
+        `_train_step` returns ``(*state, loss, target, priorities, metrics, histograms)``.
+        """
+        key, subkey = jax.random.split(key)
+        outputs = self._train_step(*state, count + 1, self._forward_key(subkey), **data, **static)
+        return outputs[: len(state)], key, count + self._updates_in(data), outputs[len(state) :]
+
+    def _updates_in(self, data):
+        """Gradient updates one `_train_step` call performs on `data`."""
+        return 1
+
+    def _forward_key(self, key):
+        return key if self.param_noise or self._uses_rng else None
+
+    def _bulk_scan(self, state, key, count, data, diagnostics):
+        def train_one(carry, batch):
+            state, key, count = carry
+            state, key, count, outputs = self._update(
+                state, key, count, batch, diagnostics=diagnostics
+            )
+            return (state, key, count), outputs
+
+        (state, key, count), (losses, targets, priorities, metrics, histograms) = jax.lax.scan(
+            train_one, (state, key, count), data, unroll=SCAN_UNROLL
+        )
+        # Diagnostics reduce inside this compiled call; PER priorities flatten in sample order.
+        loss, target, metrics, histograms = jax.tree.map(
+            lambda value: jnp.mean(value, axis=0), (losses, targets, metrics, histograms)
+        )
+        priorities = jax.tree.map(lambda value: value.reshape(-1), priorities)
+        return state, key, count, (loss, target, priorities, metrics, histograms)
 
     def _aggregate_train_reports(self, reports):
         if len(reports) == 1:
             return reports[-1]
-        update_counts = [report.update_count for report in reports]
-        # One host-to-device copy; Python-int weights would each be copied separately.
-        device_counts = jnp.asarray(update_counts)
+        update_counts = tuple(report.update_count for report in reports)
+        device_counts = _device_update_counts(update_counts)
         metric_values = {}
         metric_weights = {}
         for name in dict.fromkeys(name for report in reports for name in report.metrics):
@@ -353,7 +368,7 @@ class Q_Network_Family:
             metric_weights[name] = (
                 device_counts
                 if len(observations) == len(reports)
-                else np.asarray([report.update_count for report in observations])
+                else _device_update_counts(tuple(report.update_count for report in observations))
             )
         metrics, _ = reduce_metrics(metric_values, metric_weights)
         histogram_values = {
@@ -378,12 +393,17 @@ class Q_Network_Family:
         )
 
     def _compile_common_functions(self):
-        """Common JIT compilation for Q-Network family algorithms."""
+        """JIT compilation and device-resident carries shared by the Q-Network family."""
         self.get_q = jax.jit(self.get_q)
         self._get_actions = jax.jit(self._get_actions)
-        self._loss = jax.jit(self._loss)
-        self._target = jax.jit(self._target)
-        self._train_step = jax.jit(self._train_step)
+        self._compiled_behavior = jax.jit(self._behavior_step)
+        self._compiled_greedy = jax.jit(self._greedy_step)
+        self._compiled_update = jax.jit(self._update, static_argnames="diagnostics")
+        self._compiled_bulk_scan = jax.jit(self._bulk_scan, static_argnames="diagnostics")
+        # Acting, evaluation and updates each carry their own device PRNG key, so the
+        # training stream does not depend on how often evaluation runs.
+        self._action_key, self._eval_key, self._train_key = (next(self.key_seq) for _ in range(3))
+        self._update_count = jnp.asarray(self.train_steps_count, dtype=jnp.int32)
 
     def _sample_batch(self, batch_size=None):
         """Common batch sampling logic for Q-Network family algorithms."""
@@ -402,44 +422,44 @@ class Q_Network_Family:
         """Get parameters to use for evaluation (eval-time actions)."""
         return self.get_behavior_params()
 
-    def _random_actions(self, shape=None):
-        if shape is None:
-            shape = (self.worker_size, 1)
-        if self.memory_backend == "gpu":
-            with jax.default_device(self.memory_device):
-                return jax.random.randint(next(self.key_seq), shape, 0, self.action_size[0])
-        return np.random.choice(self.action_size[0], shape)
+    def _acting_params(self, params):
+        """Arguments `_get_actions` takes as its params (FQF adds its fraction network)."""
+        return params
 
-    def _epsilon_greedy_actions(self, greedy_actions, epsilon):
-        if self.memory_backend == "cpu":
-            greedy_actions = np.asarray(greedy_actions)
-        if epsilon <= 0:
-            return greedy_actions
-        random_actions = self._random_actions(greedy_actions.shape)
-        if epsilon >= 1:
-            return random_actions
-        random_mask = (
-            jax.random.uniform(next(self.key_seq), greedy_actions.shape)
-            if self.memory_backend == "gpu"
-            else np.random.uniform(size=greedy_actions.shape)
-        ) < epsilon
-        return (jnp if self.memory_backend == "gpu" else np).where(
-            random_mask, random_actions, greedy_actions
+    def _behavior_step(self, params, obses, key, behavior_steps, epsilon_table):
+        """Epsilon lookup, greedy inference and exploration in one compiled call."""
+        index = jnp.minimum(self._epsilon_index(behavior_steps), epsilon_table.shape[0] - 1)
+        epsilon = epsilon_table[index]
+        key, net_key, explore_key, random_key = jax.random.split(key, 4)
+        greedy = self._get_actions(params, obses, self._forward_key(net_key))
+        explore = jax.random.uniform(explore_key, greedy.shape) < epsilon
+        random_actions = jax.random.randint(random_key, greedy.shape, 0, self.action_size[0])
+        return jnp.where(explore, random_actions, greedy), key, behavior_steps + 1, epsilon
+
+    def _greedy_step(self, params, obses, key):
+        key, net_key = jax.random.split(key)
+        return self._get_actions(params, obses, self._forward_key(net_key)), key
+
+    def _behavior_actions(self, obs):
+        # Env boundary: one explicit copy of the observation in and the actions out.
+        actions, self._action_key, self._behavior_steps, self._epsilon = self._compiled_behavior(
+            self._acting_params(self.get_behavior_params()),
+            jax.device_put(obs),
+            self._action_key,
+            self._behavior_steps,
+            self._epsilon_table,
         )
+        return jax.device_get(actions)
 
-    def actions(self, obs, epsilon, eval_mode=False):
-        # Select params: during eval with checkpointing prefer snapshot
-        params_to_use = self.get_behavior_params()
+    def actions(self, obs, eval_mode=False):
+        """Greedy actions for evaluation and testing."""
+        params = self.get_behavior_params()
         if eval_mode and self.use_checkpointing and self.ckpt.enabled:
-            params_to_use = self.checkpoint_params
-
-        if epsilon >= 1:
-            return self._random_actions()
-
-        greedy_actions = self._get_actions(
-            params_to_use, obs, next(self.key_seq) if self.param_noise else None
+            params = self.checkpoint_params
+        actions, self._eval_key = self._compiled_greedy(
+            self._acting_params(params), jax.device_put(obs), self._eval_key
         )
-        return self._epsilon_greedy_actions(greedy_actions, epsilon)
+        return jax.device_get(actions)
 
     def description(self, eval_result=None):
         description = ""
@@ -447,11 +467,11 @@ class Q_Network_Family:
             for k, v in eval_result.items():
                 description += f"{k} : {v:8.2f}, "
 
-        array_module = jnp if any(isinstance(loss, jax.Array) for loss in self.lossque) else np
-        description += f"loss : {array_module.mean(array_module.asarray(tuple(self.lossque))):.3f}"
+        losses, epsilon = jax.device_get((tuple(self.lossque), self._epsilon))
+        description += f"loss : {np.mean(losses):.3f}"
 
         if not self.param_noise:
-            description += f", epsilon : {self.update_eps:.3f}"
+            description += f", epsilon : {epsilon:.3f}"
 
         if self.use_checkpointing and (self.ckpt.last_update_step is not None):
             description += f", ckpt_upd_step : {int(self.ckpt.last_update_step)}"
@@ -522,7 +542,50 @@ class Q_Network_Family:
 
     def prepare_run(self, total_timesteps):
         self._exploration_steps = int(self.exploration_fraction * total_timesteps)
-        self.update_eps = 1.0
+        # The whole exploration schedule crosses to the device once; acting indexes it with a
+        # device count of behavior steps instead of uploading epsilon every step.
+        table = np.asarray(self._epsilon_schedule(), dtype=np.float32)
+        self._epsilon_table = jax.device_put(table)
+        self._epsilon = jax.device_put(table[0])
+        self._behavior_steps = jax.device_put(np.int32(0))
+
+    def _scheduled_epsilon(self, steps):
+        if self.param_noise:
+            return 0.0
+        epsilon = self.exploration_initial_eps
+        if self._exploration_steps > 0:
+            epsilon += min(max(steps / self._exploration_steps, 0.0), 1.0) * (
+                self.exploration_final_eps - self.exploration_initial_eps
+            )
+        return epsilon
+
+    def _epsilon_schedule(self):
+        """Epsilon at each refresh point of the rollout loop, until it stops changing.
+
+        Vectorized loops refresh before every action, at steps ``i * worker_size``. The
+        single-env loops start from 1.0 and refresh after the action, only at steps past
+        ``learning_starts`` that are multiples of ``train_freq``.
+        """
+        if self.env_type == "SingleEnv":
+            first = self.learning_starts // self.train_freq + 1
+            points = (self.train_freq * (first + index) for index in itertools.count())
+            table = [1.0]
+        else:
+            points = (self.worker_size * index for index in itertools.count())
+            table = []
+        for steps in points:
+            table.append(self._scheduled_epsilon(steps))
+            if self.param_noise or steps >= self._exploration_steps:
+                return table
+
+    def _epsilon_index(self, behavior_steps):
+        """Refresh points the rollout loop has passed before this behavior step."""
+        if self.env_type == "SingleEnv":
+            return jnp.maximum(
+                (behavior_steps - 1) // self.train_freq - self.learning_starts // self.train_freq,
+                0,
+            )
+        return behavior_steps
 
     def run_training_loop(self, ctx):
         off_policy_loop(self, ctx)
@@ -534,22 +597,12 @@ class Q_Network_Family:
         self.lossque = window
 
     def _single_action_selection(self, obs, steps):
-        actions = self.actions(obs, self.update_eps)
+        actions = self._behavior_actions(obs)
         return ActionSelection(env_action=actions[0][0].item(), store_action=actions[0])
 
     def _vector_action_selection(self, obs, steps):
-        actions = self.actions(obs, self.update_eps)
+        actions = self._behavior_actions(obs)
         return ActionSelection(env_action=actions, store_action=actions)
-
-    def _refresh_exploration(self, steps):
-        if self.param_noise:
-            self.update_eps = 0.0
-            return
-        self.update_eps = self.exploration_initial_eps
-        if self._exploration_steps > 0:
-            self.update_eps += min(max(steps / self._exploration_steps, 0.0), 1.0) * (
-                self.exploration_final_eps - self.exploration_initial_eps
-            )
 
     def _write_ckpt_residual(self, value):
         self._ckpt_update_residual = value
@@ -583,7 +636,7 @@ class Q_Network_Family:
             worker_size=self.worker_size,
             single_action=self._single_action_selection,
             vector_action=self._vector_action_selection,
-            refresh_exploration=self._refresh_exploration,
+            # Epsilon follows the device behavior-step count (see _epsilon_schedule).
             force_reset=None,
             train=train,
             evaluate=lambda steps: self.eval(ctx, steps),
@@ -609,7 +662,7 @@ class Q_Network_Family:
         return evaluate_policy(
             self.eval_env,
             self.eval_eps,
-            lambda obs: self.actions(obs, 0.0, eval_mode=True),
+            lambda obs: self.actions(obs, eval_mode=True),
             logger_run=ctx.logger_run,
             steps=steps,
         )
@@ -624,7 +677,7 @@ class Q_Network_Family:
         return record_test_fn(
             self.env_builder,
             logger_run,
-            lambda obs: self.actions(obs, 0.0),
+            self.actions,
             episode,
             conv_action=None,
         )

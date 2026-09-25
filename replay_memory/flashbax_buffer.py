@@ -1,13 +1,55 @@
 """Device-resident replay with Flashbax storage, sampling and priority trees."""
 
+import dataclasses
 from math import prod
 
 import flashbax
 import jax
 import jax.numpy as jnp
+import numpy as np
 from flashbax.buffers import prioritised_trajectory_buffer, sum_tree, trajectory_buffer
 
 from jax_baselines.core.replay_protocol import LocalReplayNeed, SelfPredictionReplayNeed
+
+
+def _resum_paths(tree, leaf_indexes, valid):
+    """Rewrite the ancestors of written leaves as exact sums of their children.
+
+    Flashbax propagates priority *deltas* up the sum tree in float32, so internal sums drift
+    from their leaves. A root above the true total lets sampling land on empty
+    (zero-priority) slots, whose importance weight is infinite. Recomputing every touched
+    path after each write keeps all internal nodes equal to the sum of their children.
+    """
+    nodes = tree.nodes
+    first_leaf = 2**tree.tree_depth - 1
+    node = jnp.where(valid, leaf_indexes, 0) + first_leaf
+    for _ in range(tree.tree_depth):
+        node = (node - 1) // 2
+        nodes = nodes.at[node].set(nodes[2 * node + 1] + nodes[2 * node + 2])
+    return tree.replace(nodes=nodes)
+
+
+def _stratified_indexes(tree, key, batch_size):
+    """Flashbax's stratified sum-tree sampling (same query values), never reaching empty leaves.
+
+    Float rounding can leave a query at or past a node's left sum when the right subtree is
+    empty; descending left there keeps every sample on a positive-priority leaf.
+    """
+    query_keys = jax.random.split(key, batch_size)
+    bounds = jnp.linspace(0.0, 1.0, batch_size + 1)
+    query = jax.vmap(jax.random.uniform, in_axes=(0, None, None, 0, 0))(
+        query_keys, (), jnp.float32, bounds[:-1], bounds[1:]
+    )
+    nodes = tree.nodes
+    query = query * nodes[0]
+    node = jnp.zeros(batch_size, dtype=jnp.int32)
+    for _ in range(tree.tree_depth):
+        left = 2 * node + 1
+        left_sum = nodes[left]
+        go_left = (query < left_sum) | (nodes[left + 1] <= 0)
+        query = jnp.where(go_left, query, query - left_sum)
+        node = jnp.where(go_left, left, left + 1)
+    return node - (2**tree.tree_depth - 1)
 
 
 class FlashbaxReplayBuffer:
@@ -59,6 +101,25 @@ class FlashbaxReplayBuffer:
                 priority_exponent=self.priority.alpha,
                 device=self.device.platform,
             )
+        observation_specs = {
+            key: jax.ShapeDtypeStruct(
+                (self.worker_size, *shape), jnp.uint8 if len(shape) >= 3 else jnp.float32
+            )
+            for key, shape in self.observation_space.items()
+        }
+        self._input_specs = (
+            {
+                "obses": observation_specs,
+                "actions": jax.ShapeDtypeStruct(
+                    (self.worker_size, *self.action_shape), jnp.float32
+                ),
+                "rewards": jax.ShapeDtypeStruct((self.worker_size, 1), jnp.float32),
+                "nxtobses": observation_specs,
+                "terminateds": jax.ShapeDtypeStruct((self.worker_size, 1), jnp.float32),
+            },
+            jax.ShapeDtypeStruct((self.worker_size,), bool),
+            jax.ShapeDtypeStruct((self.worker_size,), bool),
+        )
         self._add_compiled = jax.jit(self._add, donate_argnums=(0, 1))
         self._sample_compiled = jax.jit(self._sample, static_argnums=(2, 3))
         self._update_compiled = jax.jit(self._update_priorities, donate_argnums=(0,))
@@ -99,7 +160,8 @@ class FlashbaxReplayBuffer:
 
     def __len__(self):
         """Explicit host query; add/sample never poll the device's write pointer."""
-        return int(jnp.where(self.state.is_full, self.max_size, self.state.current_index))
+        is_full, current_index = jax.device_get((self.state.is_full, self.state.current_index))
+        return self.max_size if is_full else int(current_index)
 
     def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False, store_mask=None):
         if (
@@ -110,53 +172,33 @@ class FlashbaxReplayBuffer:
         ):
             raise ValueError("Observation keys must match observation_space")
 
-        # Placement happens at this boundary; JAX inputs already on this device stay there.
-        def array(value, shape, dtype):
-            result = (
-                value
-                if isinstance(value, jax.Array)
-                and value.dtype == dtype
-                and value.devices() == {self.device}
-                else jnp.asarray(value, dtype=dtype, device=self.device)
-            )
-            if result.size != prod(shape):
-                raise ValueError(f"Replay input shape {result.shape} does not match {shape}")
-            return result if result.shape == shape else result.reshape(shape)
-
         batch = {
-            "obses": {
-                key: array(
-                    obs_t[key],
-                    (self.worker_size, *shape),
-                    jnp.uint8 if len(shape) >= 3 else jnp.float32,
-                )
-                for key, shape in self.observation_space.items()
-            },
-            "actions": array(action, (self.worker_size, *self.action_shape), jnp.float32),
-            "rewards": array(reward, (self.worker_size, 1), jnp.float32),
-            "nxtobses": {
-                key: array(
-                    nxtobs_t[key],
-                    (self.worker_size, *shape),
-                    jnp.uint8 if len(shape) >= 3 else jnp.float32,
-                )
-                for key, shape in self.observation_space.items()
-            },
-            "terminateds": array(terminated, (self.worker_size, 1), jnp.float32),
+            "obses": dict(obs_t),
+            "actions": action,
+            "rewards": reward,
+            "nxtobses": dict(nxtobs_t),
+            "terminateds": terminated,
         }
-        mask = (
-            self._all_active if store_mask is None else array(store_mask, (self.worker_size,), bool)
-        )
-        truncations = (
-            self._not_truncated
-            if truncated is False
-            else array(truncated, (self.worker_size,), bool)
-        )
+        mask = self._all_active if store_mask is None else store_mask
+        truncations = self._not_truncated if truncated is False else truncated
+        inputs = (batch, truncations, mask)
+        for value, spec in zip(jax.tree.leaves(inputs), jax.tree.leaves(self._input_specs)):
+            if prod(np.shape(value)) != prod(spec.shape):
+                raise ValueError(
+                    f"Replay input shape {np.shape(value)} does not match {spec.shape}"
+                )
+        # Placement happens at this boundary (a no-op for inputs already on the device);
+        # dtype casts and reshapes run inside the compiled add.
         self.state, self._pending = self._add_compiled(
-            self.state, self._pending, batch, truncations, mask
+            self.state, self._pending, *jax.device_put(inputs, self.device)
         )
 
     def _add(self, state, pending, batch, truncated, active):
+        batch, truncated, active = jax.tree.map(
+            lambda value, spec: jnp.asarray(value, spec.dtype).reshape(spec.shape),
+            (batch, truncated, active),
+            self._input_specs,
+        )
         if self.prediction_depth is not None:
             batch = {
                 **batch,
@@ -230,12 +272,13 @@ class FlashbaxReplayBuffer:
         )
         if self.priority is not None:
             tree = state.sum_tree_state
+            tree = sum_tree.set_batch_bincount(
+                tree,
+                jnp.where(keep, indexes, tree.nodes.size + 1),
+                jnp.where(keep, tree.max_recorded_priority, 0),
+            )
             state = state.replace(
-                sum_tree_state=sum_tree.set_batch_bincount(
-                    tree,
-                    jnp.where(keep, indexes, tree.nodes.size + 1),
-                    jnp.where(keep, tree.max_recorded_priority, 0),
-                ),
+                sum_tree_state=_resum_paths(tree, indexes, keep),
                 running_index=state.running_index + count,
             )
         return state.replace(
@@ -262,11 +305,10 @@ class FlashbaxReplayBuffer:
             if self.prediction_depth is not None:
                 batch = self._sample_sequence(state, batch)
             return key, batch
-        sample = prioritised_trajectory_buffer.prioritised_sample(
-            state, sample_key, batch_size, 1, 1
-        )
-        batch = jax.tree.map(lambda value: value[:, 0], sample.experience)
-        sampled_priorities = sum_tree.get_batch(state.sum_tree_state, sample.indices)
+        # One add batch and period 1: a sum-tree leaf index is the storage time index.
+        indexes = _stratified_indexes(state.sum_tree_state, sample_key, batch_size)
+        batch = jax.tree.map(lambda value: value[0, indexes], state.experience)
+        sampled_priorities = sum_tree.get_batch(state.sum_tree_state, indexes)
         if self.prediction_depth is not None:
             batch = self._sample_sequence(state, batch)
             minimum = jnp.min(sampled_priorities)
@@ -280,7 +322,7 @@ class FlashbaxReplayBuffer:
         return key, {
             **batch,
             "weights": (minimum / sampled_priorities) ** beta,
-            "indexes": sample.indices,
+            "indexes": indexes,
         }
 
     def _sample_sequence(self, state, starts):
@@ -318,18 +360,25 @@ class FlashbaxReplayBuffer:
     def update_priorities(self, indexes, priorities):
         if self.priority is None:
             raise ValueError("Priority updates require prioritized replay")
-        indexes = jnp.asarray(indexes, dtype=jnp.int32, device=self.device).reshape(-1)
-        priorities = jnp.asarray(priorities, dtype=jnp.float32, device=self.device).reshape(-1)
-        if indexes.shape != priorities.shape or not indexes.size:
+        if prod(np.shape(indexes)) != prod(np.shape(priorities)) or not prod(np.shape(indexes)):
             raise ValueError("Priority indexes and values must have matching non-empty shapes")
-        self.state = self._update_compiled(self.state, indexes, priorities)
+        self.state = self._update_compiled(
+            self.state, *jax.device_put((indexes, priorities), self.device)
+        )
 
     def _update_priorities(self, state, indexes, priorities):
         assert self.priority is not None
-        return prioritised_trajectory_buffer.set_priorities(
+        indexes = indexes.reshape(-1).astype(jnp.int32)
+        state = prioritised_trajectory_buffer.set_priorities(
             state,
             indexes,
-            jnp.abs(priorities) + self.priority.eps,
+            jnp.abs(priorities.reshape(-1).astype(jnp.float32)) + self.priority.eps,
             self.priority.alpha,
             self.device.platform,
+        )
+        return dataclasses.replace(
+            state,
+            sum_tree_state=_resum_paths(
+                state.sum_tree_state, indexes, jnp.ones(indexes.shape, dtype=bool)
+            ),
         )

@@ -26,11 +26,10 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         self.actor_opt_state = self.optimizer.init(self.actor_params)
         self.critic_opt_state = self.optimizer.init(self.critic_params)
         self._get_actions = jax.jit(self._get_actions)
-        self._train_step = jax.jit(self._train_step)
+        self._train_step = jax.jit(self._train_step, static_argnames="diagnostics")
 
-    def train_step(self, steps, logger_run=None):
-        data = self.buffer.get_buffer()
-
+    def train_step(self, steps, logger_run=None, log_interval=None):
+        diagnostics = self._metrics_due(steps, logger_run, log_interval)
         (
             self.actor_params,
             self.critic_params,
@@ -43,13 +42,11 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             self.actor_opt_state,
             self.critic_opt_state,
             None,
-            **data,
+            diagnostics=diagnostics,
+            **jax.device_put(self.buffer.get_buffer(), self.memory_device),
         )
-
-        if logger_run:
-            for name, value in jax.device_get(metrics).items():
-                logger_run.log_metric(name, value, steps)
-
+        if diagnostics:
+            self._log_train_metrics(metrics, steps, logger_run)
         return metrics["loss/critic_loss"]
 
     def _train_step(
@@ -65,6 +62,8 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
         nxtobses,
         terminateds,
         truncateds,
+        *,
+        diagnostics,
     ):
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
@@ -89,13 +88,16 @@ class A2C(Actor_Critic_Policy_Gradient_Family):
             critic_params, actor_params, obses, targets, key
         )
         actor_updates, actor_opt_state = self.optimizer.update(
-            actor_grad, actor_opt_state, params=actor_params
+            actor_grad, actor_opt_state, params=actor_params, diagnostics=diagnostics
         )
         critic_updates, critic_opt_state = self.optimizer.update(
-            critic_grad, critic_opt_state, params=critic_params
+            critic_grad, critic_opt_state, params=critic_params, diagnostics=diagnostics
         )
         actor_params = optax.apply_updates(actor_params, actor_updates)
         critic_params = optax.apply_updates(critic_params, critic_updates)
+        if not diagnostics:
+            metrics = {"loss/critic_loss": critic_loss}
+            return actor_params, critic_params, actor_opt_state, critic_opt_state, metrics
         metrics.update(rollout_metrics(value, targets, adv))
         metrics.update(optimizer_metrics(actor_opt_state, "actor"))
         metrics.update(optimizer_metrics(critic_opt_state, "critic"))

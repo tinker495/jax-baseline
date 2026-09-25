@@ -4,17 +4,15 @@ from typing import Any
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import optax
 from flax import struct
 
-from jax_baselines.core.bulk_training import SCAN_UNROLL
-from jax_baselines.core.seeding import split_keys
-from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
+from jax_baselines.DDPG.base_class import (
+    Deteministic_Policy_Gradient_Family,
+    merge_actor_metrics,
+)
 from jax_baselines.DDPG.metrics import critic_metrics
-from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.jax_utils import convert_normalized_obs
-from jax_baselines.math.metrics import reduce_bulk_metrics
 from jax_baselines.math.param_updates import scaled_by_reset, soft_update
 from jax_baselines.optim import optimizer_metrics
 
@@ -29,7 +27,10 @@ class TD3CheckpointParams:
 
 class TD3(Deteministic_Policy_Gradient_Family):
     _run_name = "TD3"
-    supports_bulk_training = True
+
+    @property
+    def _actor_schedule(self):
+        return self.policy_delay, 0
 
     def __init__(
         self,
@@ -65,9 +66,6 @@ class TD3(Deteministic_Policy_Gradient_Family):
 
         self.opt_policy_state = self.optimizer.init(self.policy_params)
         self.opt_critic_state = self.optimizer.init(self.critic_params)
-        self._get_actions = jax.jit(self._get_actions)
-        self._train_step = jax.jit(self._train_step)
-        self._bulk_scan = jax.jit(self._bulk_scan)
 
     def checkpoint_params(self):
         return TD3CheckpointParams(
@@ -83,30 +81,28 @@ class TD3(Deteministic_Policy_Gradient_Family):
         self.target_policy_params = bundle.target_policy_params
         self.target_critic_params = bundle.target_critic_params
 
-    def _get_actions(self, policy_params, obses, key=None) -> jnp.ndarray:
-        return self.actor(policy_params, key, convert_normalized_obs(obses))
+    def _get_actions(self, state, obses, key):
+        key, noise_key = jax.random.split(key)
+        actions = self._get_eval_actions(state, obses)
+        noise = self.action_noise * jax.random.normal(noise_key, actions.shape)
+        return jnp.clip(actions + noise, -1, 1), key
 
-    def _policy_action_from_state(self, state, obs, eval, steps):
-        return self._get_actions(state["policy"], obs, None)
+    def _get_eval_actions(self, state, obses):
+        return self.actor(state["policy"], None, convert_normalized_obs(obses))
 
-    def _apply_action_noise(self, actions, steps, eval):
-        if eval:
-            return actions
-        if self.memory_backend == "gpu":
-            return jnp.clip(
-                actions + self.action_noise * jax.random.normal(next(self.key_seq), actions.shape),
-                -1,
-                1,
-            )
-        return np.clip(
-            actions
-            + self.action_noise
-            * np.random.normal(0, 1, size=(self.worker_size, self.action_size[0])),
-            -1,
-            1,
+    @property
+    def _train_state(self):
+        return (
+            self.policy_params,
+            self.critic_params,
+            self.target_policy_params,
+            self.target_critic_params,
+            self.opt_policy_state,
+            self.opt_critic_state,
         )
 
-    def _train_on_batch(self, data, context):
+    @_train_state.setter
+    def _train_state(self, state):
         (
             self.policy_params,
             self.critic_params,
@@ -114,127 +110,19 @@ class TD3(Deteministic_Policy_Gradient_Family):
             self.target_critic_params,
             self.opt_policy_state,
             self.opt_critic_state,
-            loss,
-            t_mean,
-            new_priorities,
-            metrics,
-            metric_counts,
-        ) = self._train_step(
-            self.policy_params,
-            self.critic_params,
-            self.target_policy_params,
-            self.target_critic_params,
-            self.opt_policy_state,
-            self.opt_critic_state,
-            next(self.key_seq),
-            context.train_steps_count,
-            **data,
-        )
-        return DPGTrainReport(
-            loss=loss,
-            target=t_mean,
-            new_priorities=new_priorities,
-            metrics=metrics,
-            metric_counts=metric_counts,
-        )
-
-    def _train_on_bulk(self, data, contexts):
-        steps = jnp.asarray([context.train_steps_count for context in contexts])
-        keys = split_keys(next(self.key_seq), len(contexts))
-        carry = (
-            self.policy_params,
-            self.critic_params,
-            self.target_policy_params,
-            self.target_critic_params,
-            self.opt_policy_state,
-            self.opt_critic_state,
-        )
-        (
-            (
-                self.policy_params,
-                self.critic_params,
-                self.target_policy_params,
-                self.target_critic_params,
-                self.opt_policy_state,
-                self.opt_critic_state,
-            ),
-            (losses, targets, priorities, metrics, metric_counts),
-        ) = self._bulk_scan(carry, keys, steps, data)
-        (loss, target), (metrics, metric_counts) = reduce_bulk_metrics(
-            (losses, targets), metrics, metric_counts
-        )
-        return DPGTrainReport(
-            loss=loss,
-            target=target,
-            new_priorities=priorities,
-            metrics=metrics,
-            metric_counts=metric_counts,
-            update_count=len(contexts),
-        )
-
-    def _bulk_scan(self, carry, keys, steps, data):
-        def train_one(carry, xs):
-            (
-                policy_params,
-                critic_params,
-                target_policy_params,
-                target_critic_params,
-                opt_policy_state,
-                opt_critic_state,
-            ) = carry
-            key, step, batch = xs
-            (
-                policy_params,
-                critic_params,
-                target_policy_params,
-                target_critic_params,
-                opt_policy_state,
-                opt_critic_state,
-                loss,
-                t_mean,
-                priorities,
-                metrics,
-                metric_counts,
-            ) = self._train_step(
-                policy_params,
-                critic_params,
-                target_policy_params,
-                target_critic_params,
-                opt_policy_state,
-                opt_critic_state,
-                key,
-                step,
-                **batch,
-            )
-            return (
-                policy_params,
-                critic_params,
-                target_policy_params,
-                target_critic_params,
-                opt_policy_state,
-                opt_critic_state,
-            ), (loss, t_mean, priorities, metrics, metric_counts)
-
-        return jax.lax.scan(train_one, carry, (keys, steps, data), unroll=SCAN_UNROLL)
+        ) = state
 
     def _train_step(
-        self,
-        policy_params,
-        critic_params,
-        target_policy_params,
-        target_critic_params,
-        opt_policy_state,
-        opt_critic_state,
-        key,
-        step,
-        obses,
-        actions,
-        rewards,
-        nxtobses,
-        terminateds,
-        weights=1,
-        indexes=None,
+        self, state, key, step, flags, obses, actions, rewards, nxtobses, terminateds, weights=1
     ):
+        (
+            policy_params,
+            critic_params,
+            target_policy_params,
+            target_critic_params,
+            opt_policy_state,
+            opt_critic_state,
+        ) = state
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
         not_terminateds = 1.0 - terminateds
@@ -248,34 +136,19 @@ class TD3(Deteministic_Policy_Gradient_Family):
         )
         (critic_loss, (abs_error, metrics)), grad = jax.value_and_grad(
             self._critic_loss, has_aux=True
-        )(critic_params, policy_params, obses, actions, targets, weights, key)
+        )(critic_params, policy_params, obses, actions, targets, weights, key, flags.diagnostics)
         updates, opt_critic_state = self.optimizer.update(
-            grad, opt_critic_state, params=critic_params
+            grad, opt_critic_state, params=critic_params, diagnostics=flags.diagnostics
         )
-        metrics.update(optimizer_metrics(opt_critic_state, "critic"))
         critic_params = optax.apply_updates(critic_params, updates)
-        empty_actor_metrics = dict.fromkeys(
-            (
-                "loss/actor_loss",
-                "loss/actor_q_mean",
-                *optimizer_metrics(opt_policy_state, "actor"),
-            ),
-            jnp.asarray(0.0),
-        )
 
-        def _opt_actor(
-            policy_params,
-            critic_params,
-            target_policy_params,
-            target_critic_params,
-            opt_policy_state,
-            key,
-        ):
+        actor_metrics = {}
+        if flags.actor:
             actor_loss, grad = jax.value_and_grad(self._actor_loss)(
                 policy_params, critic_params, obses, key
             )
             updates, opt_policy_state = self.optimizer.update(
-                grad, opt_policy_state, params=policy_params
+                grad, opt_policy_state, params=policy_params, diagnostics=flags.diagnostics
             )
             policy_params = optax.apply_updates(policy_params, updates)
             target_policy_params = soft_update(
@@ -284,72 +157,44 @@ class TD3(Deteministic_Policy_Gradient_Family):
             target_critic_params = soft_update(
                 critic_params, target_critic_params, self.target_network_update_tau
             )
-            return (
-                policy_params,
-                critic_params,
-                target_policy_params,
-                target_critic_params,
-                opt_policy_state,
-                key,
-                {
+            if flags.diagnostics:
+                actor_metrics = {
                     "loss/actor_loss": actor_loss,
                     "loss/actor_q_mean": -actor_loss,
                     **optimizer_metrics(opt_policy_state, "actor"),
-                },
+                }
+        elif flags.diagnostics:
+            actor_metrics = dict.fromkeys(
+                (
+                    "loss/actor_loss",
+                    "loss/actor_q_mean",
+                    *optimizer_metrics(opt_policy_state, "actor"),
+                ),
+                jnp.asarray(0.0),
             )
+        if flags.diagnostics:
+            metrics.update(optimizer_metrics(opt_critic_state, "critic"))
+            metrics["loss/targets"] = jnp.mean(targets)
+        metrics, metric_counts = merge_actor_metrics(
+            {**metrics, "loss/qloss": critic_loss}, actor_metrics, flags.actor
+        )
 
-        (
+        policy_params, opt_policy_state = scaled_by_reset(
             policy_params,
-            critic_params,
-            target_policy_params,
-            target_critic_params,
             opt_policy_state,
+            self.optimizer,
             key,
-            actor_metrics,
-        ) = jax.lax.cond(
-            step % self.policy_delay == 0,
-            lambda x: _opt_actor(*x),
-            lambda x: (*x, empty_actor_metrics),
-            (
-                policy_params,
-                critic_params,
-                target_policy_params,
-                target_critic_params,
-                opt_policy_state,
-                key,
-            ),
+            flags.reset,
+            0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
         )
-        metric_counts = {name: jnp.asarray(1) for name in metrics}
-        metrics.update(actor_metrics)
-        metric_counts.update(
-            {
-                name: jnp.asarray(step % self.policy_delay == 0, dtype=jnp.int32)
-                for name in actor_metrics
-            }
+        critic_params, opt_critic_state = scaled_by_reset(
+            critic_params,
+            opt_critic_state,
+            self.optimizer,
+            key,
+            flags.reset,
+            0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
         )
-
-        new_priorities = None
-        if self.prioritized_replay:
-            new_priorities = abs_error
-        if self.scaled_by_reset:
-            policy_params, opt_policy_state = scaled_by_reset(
-                policy_params,
-                opt_policy_state,
-                self.optimizer,
-                key,
-                step,
-                self.reset_freq,
-                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
-            )
-            critic_params, opt_critic_state = scaled_by_reset(
-                critic_params,
-                opt_critic_state,
-                self.optimizer,
-                key,
-                step,
-                self.reset_freq,
-                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
-            )
         return (
             policy_params,
             critic_params,
@@ -357,30 +202,29 @@ class TD3(Deteministic_Policy_Gradient_Family):
             target_critic_params,
             opt_policy_state,
             opt_critic_state,
-            critic_loss,
-            jnp.mean(targets),
-            new_priorities,
-            metrics,
-            metric_counts,
-        )
+        ), (abs_error if self.prioritized_replay else None, metrics, metric_counts)
 
-    def _critic_loss(self, critic_params, policy_params, obses, actions, targets, weights, key):
+    def _critic_loss(
+        self, critic_params, policy_params, obses, actions, targets, weights, key, diagnostics
+    ):
         q1, q2 = self.critic(critic_params, policy_params, key, obses, actions)
         error1 = jnp.squeeze(q1 - targets)
         error2 = jnp.squeeze(q2 - targets)
         critic_loss = jnp.mean(weights * jnp.square(error1)) + jnp.mean(
             weights * jnp.square(error2)
         )
-        return critic_loss, (
-            jnp.abs(error1),
+        metrics = (
             critic_metrics(
                 (q1, q2),
                 targets,
                 (jnp.square(error1), jnp.square(error2)),
                 weights,
                 jnp.abs(error1) if self.prioritized_replay else None,
-            ),
+            )
+            if diagnostics
+            else {}
         )
+        return critic_loss, (jnp.abs(error1), metrics)
 
     def _actor_loss(self, policy_params, critic_params, obses, key):
         actions = self.actor(policy_params, key, obses)

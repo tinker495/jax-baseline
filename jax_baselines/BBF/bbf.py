@@ -1,8 +1,8 @@
 import jax
 import jax.numpy as jnp
+import numpy as np
 import optax
 
-from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.metrics import replay_metrics
 from jax_baselines.math.param_updates import (
@@ -12,7 +12,7 @@ from jax_baselines.math.param_updates import (
     tree_random_normal_like,
 )
 from jax_baselines.optim import optimizer_metrics
-from jax_baselines.SPR.spr import SPR
+from jax_baselines.SPR.spr import SPR, scan_with_resets
 
 
 class BBF(SPR):
@@ -76,18 +76,24 @@ class BBF(SPR):
         self.optimizer = self._make_optimizer(self.learning_rate)
         self.opt_state = self.optimizer.init(self.params)
 
-        self.categorial_bar = jnp.expand_dims(
-            jnp.linspace(self.categorial_min, self.categorial_max, self.categorial_bar_n),
-            axis=0,
+        # Host constants: a captured device array is copied back to the host at every compile.
+        self.categorial_bar = np.asarray(
+            jnp.expand_dims(
+                jnp.linspace(self.categorial_min, self.categorial_max, self.categorial_bar_n),
+                axis=0,
+            )
         )  # [1, 51]
-        self._categorial_bar = jnp.expand_dims(self.categorial_bar, axis=0)  # [1, 1, 51]
+        self._categorial_bar = np.expand_dims(self.categorial_bar, axis=0)  # [1, 1, 51]
         self.value_support = self.categorial_bar[0]
-        self.delta_bar = jax.device_put(
-            (self.categorial_max - self.categorial_min) / (self.categorial_bar_n - 1)
-        )
+        self.delta_bar = (self.categorial_max - self.categorial_min) / (self.categorial_bar_n - 1)
 
         # Use common JIT compilation
         self._compile_common_functions()
+
+    @property
+    def _reset_period(self):
+        """BBF always shrinks-and-perturbs on this period."""
+        return self.soft_reset_freq
 
     def get_behavior_params(self):
         """BBF uses target_params for behavior (training-time actions)."""
@@ -126,17 +132,16 @@ class BBF(SPR):
         terminateds,
         filled,
         weights=1,
-        indexes=None,
+        *,
+        resets,
+        diagnostics,
     ):
         obses = convert_normalized_obs(obses)
         actions = actions.astype(jnp.int32)
         not_terminateds = 1.0 - terminateds
+        # Only image leaves (B x K x H x W x C) are augmented; the rank is static.
         obses = jax.tree.map(
-            lambda value: jax.lax.cond(
-                len(value.shape) >= 5,
-                lambda: self._image_augmentation(value, key),
-                lambda: value,
-            ),
+            lambda value: self._image_augmentation(value, key) if value.ndim >= 5 else value,
             obses,
         )
 
@@ -149,14 +154,12 @@ class BBF(SPR):
         batched_not_terminateds = not_terminateds[batch_idxes]
         batched_filled = filled[batch_idxes]
         batched_weights = weights[batch_idxes] if self.prioritized_replay else 1
-        gradient_steps = batch_idxes.shape[0]
-        batched_steps = steps + jnp.arange(gradient_steps)
         n_step, gamma = self.get_scheduled_gamma_nstep(steps)
         _gamma = jnp.power(gamma, jnp.arange(self.n_step))
 
-        def f(updates, input):
+        def f(updates, input, reset):
             params, target_params, opt_state, key = updates
-            obses, actions, rewards, not_terminateds, filled, weights, steps = input
+            obses, actions, rewards, not_terminateds, filled, weights = input
             key, subkey = jax.random.split(key)
             parsed_obses = jax.tree.map(
                 lambda value: jnp.reshape(value[:, 0], (-1, *value.shape[2:])), obses
@@ -208,23 +211,23 @@ class BBF(SPR):
                 target_distribution,
                 weights,
                 key,
+                diagnostics=diagnostics,
             )
-            updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-            metrics.update(target_metrics)
-            metrics.update(optimizer_metrics(opt_state, "q"))
-            if self.prioritized_replay:
-                metrics.update(replay_metrics(weights, centropy))
+            updates, opt_state = self.optimizer.update(
+                grad, opt_state, params=params, diagnostics=diagnostics
+            )
+            if diagnostics:
+                metrics.update(target_metrics)
+                metrics.update(optimizer_metrics(opt_state, "q"))
+                if self.prioritized_replay:
+                    metrics.update(replay_metrics(weights, centropy))
             params = optax.apply_updates(params, updates)
             target_params = soft_update(params, target_params, 0.005)
-            params, opt_state = scaled_by_reset_with_filter(
-                params,
-                opt_state,
-                self.optimizer,
-                key,
-                steps,
-                self.soft_reset_freq,
-                self.reset_hardsoft,
-            )
+            if reset:
+                # Shrink-and-perturb on a host-scheduled update (see `_reset_period`).
+                params, opt_state = scaled_by_reset_with_filter(
+                    params, opt_state, self.optimizer, key, True, self.reset_hardsoft
+                )
             target_q = jnp.sum(
                 target_distribution * self.categorial_bar,
                 axis=1,
@@ -237,7 +240,7 @@ class BBF(SPR):
                 metrics,
             )
 
-        (params, target_params, opt_state, _), outputs = jax.lax.scan(
+        (params, target_params, opt_state, _), outputs = scan_with_resets(
             f,
             (params, target_params, opt_state, key),
             (
@@ -247,9 +250,8 @@ class BBF(SPR):
                 batched_not_terminateds,
                 batched_filled,
                 batched_weights,
-                batched_steps,
             ),
-            unroll=SCAN_UNROLL,
+            resets,
         )
         centropy, qloss, rprloss, target_q, metrics = outputs
         qloss = jnp.mean(qloss)
@@ -266,8 +268,8 @@ class BBF(SPR):
             qloss,
             target_q,
             new_priorities,
-            rprloss,
-            jax.tree.map(jnp.mean, metrics),
+            {**jax.tree.map(jnp.mean, metrics), "loss/rprloss": rprloss} if diagnostics else {},
+            {},
         )
 
     def run_name_update(self, run_name):

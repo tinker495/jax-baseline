@@ -22,6 +22,12 @@ class EpochBatch(TypedDict):
     old_policy: NotRequired[OldPolicy]
 
 
+def _per_worker(value, dtype, worker_size):
+    """One value per worker; free for device arrays that are already canonical."""
+    xp = jnp if isinstance(value, jax.Array) else np
+    return xp.asarray(value, dtype).reshape(worker_size)
+
+
 @jax.jit
 def _stack_transitions(transitions: list[EpochBatch]) -> EpochBatch:
     return jax.tree.map(lambda *values: jnp.stack(values, axis=1), *transitions)
@@ -85,31 +91,6 @@ class EpochBuffer:
             or nxtobs_t.keys() != obs_t.keys()
         ):
             raise ValueError("Observation keys must match observation_space")
-        transition: EpochBatch
-        if self.memory_backend == "cpu":
-            transition = {
-                "obses": {key: np.array(value, copy=True) for key, value in obs_t.items()},
-                "actions": np.array(action, copy=True),
-                "rewards": np.array(reward, copy=True),
-                "nxtobses": {key: np.array(value, copy=True) for key, value in nxtobs_t.items()},
-                "terminateds": np.array(terminated, dtype=bool, copy=True),
-                "truncateds": np.array(truncated, dtype=bool, copy=True),
-            }
-        else:
-            transition = jax.tree.map(
-                lambda value: jnp.array(
-                    value, copy=not isinstance(value, jax.Array), device=self._device
-                ),
-                {
-                    "obses": obs_t,
-                    "actions": action,
-                    "rewards": reward,
-                    "nxtobses": nxtobs_t,
-                    "terminateds": terminated,
-                    "truncateds": truncated,
-                },
-                is_leaf=lambda value: isinstance(value, (list, tuple)),
-            )
         if old_policy is not None:
             log_prob, distribution = old_policy
             if log_prob.shape != (self.worker_size, 1):
@@ -127,24 +108,22 @@ class EpochBuffer:
                 or distribution.shape[1] < 1
             ):
                 raise ValueError("Expected old-policy probabilities with shape (workers, actions)")
-            transition["old_policy"] = (
-                jax.tree.map(lambda value: np.array(value, copy=True), old_policy)
-                if self.memory_backend == "cpu"
-                else jax.tree.map(
-                    lambda value: jnp.array(
-                        value,
-                        copy=not isinstance(value, jax.Array),
-                        device=self._device,
-                    ),
-                    old_policy,
-                )
-            )
-        transition["rewards"] = transition["rewards"].reshape(self.worker_size)
-        transition["terminateds"] = (
-            transition["terminateds"].astype(bool, copy=False).reshape(self.worker_size)
-        )
-        transition["truncateds"] = (
-            transition["truncateds"].astype(bool, copy=False).reshape(self.worker_size)
+        transition: EpochBatch = {
+            "obses": obs_t,
+            "actions": action,
+            "rewards": _per_worker(reward, None, self.worker_size),
+            "nxtobses": nxtobs_t,
+            "terminateds": _per_worker(terminated, bool, self.worker_size),
+            "truncateds": _per_worker(truncated, bool, self.worker_size),
+        }
+        if old_policy is not None:
+            transition["old_policy"] = old_policy
+        # One explicit transfer to the memory device (device leaves download to a CPU buffer,
+        # host leaves upload to a GPU buffer); leaves already there stay in place.
+        transition = (
+            jax.tree.map(lambda value: np.array(value, copy=True), jax.device_get(transition))
+            if self.memory_backend == "cpu"
+            else jax.device_put(transition, self._device)
         )
         for key, shape in self.observation_space.items():
             expected = (self.worker_size, *shape)
