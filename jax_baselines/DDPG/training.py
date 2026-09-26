@@ -9,7 +9,7 @@ diagnostics are computed only for pulses whose report will be logged. Environmen
 rollout and the checkpoint training pulse live in `jax_baselines.core.rollout`.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import jax
 
@@ -171,7 +171,9 @@ class DPGTrainingLifecycle:
         reports = []
         remaining = int(gradient_steps)
         for chunk_size in bulk_chunk_schedule(self.agent, gradient_steps):
-            reports.append(self._train_one_bulk_chunk(chunk_size, diagnostics))
+            report = self._train_one_bulk_chunk(chunk_size, diagnostics)
+            # Priorities are already written back; drop them so a long pulse does not hold them.
+            reports.append(replace(report, new_priorities=None))
             remaining -= chunk_size
 
         while remaining > 0:

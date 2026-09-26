@@ -38,14 +38,14 @@ from jax_baselines.DQN.training import (
     QNetTrainReport,
     QNetTrainResult,
 )
-from jax_baselines.math.metrics import reduce_metrics
+from jax_baselines.math.metrics import MetricTotals
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 @lru_cache(maxsize=64)
-def _device_update_counts(counts):
-    """Pulse schedules repeat, so each distinct weight vector crosses to the device once."""
-    return jax.device_put(np.asarray(counts))
+def _device_update_count(count):
+    """Chunk sizes repeat, so each distinct update count crosses to the device once."""
+    return jax.device_put(np.asarray(count))
 
 
 class Q_Network_Family:
@@ -98,11 +98,12 @@ class Q_Network_Family:
         replay_factory: ReplayBufferFactory | None = None,
         # Checkpointing options (opt-in by default for base class)
         use_checkpointing=True,
-        steps_before_checkpointing=500000,
+        checkpoint_start_fraction=0.15,
         max_eps_before_checkpointing=10,
         initial_checkpoint_window=1,
-        ckpt_baseline_mode="median",
-        ckpt_baseline_q=None,
+        # Half the window may fall below the baseline: the order-statistic form of a median.
+        ckpt_baseline_mode="quantile",
+        ckpt_baseline_q=0.5,
         checkpoint_store: CheckpointStore | None = None,
         reward_normalization=False,
         memory_backend: Literal["auto", "cpu", "gpu"] = "auto",
@@ -183,7 +184,7 @@ class Q_Network_Family:
 
         # Generic checkpointing scaffolding (used by algorithms that opt-in)
         self.use_checkpointing = use_checkpointing
-        self.steps_before_checkpointing = min(int(steps_before_checkpointing), learning_starts * 2)
+        self.checkpoint_start_fraction = float(checkpoint_start_fraction)
         self.max_eps_before_checkpointing = int(max_eps_before_checkpointing)
         self.initial_checkpoint_window = int(initial_checkpoint_window)
 
@@ -191,7 +192,7 @@ class Q_Network_Family:
         self._ckpt_update_residual = 0
         self.ckpt = make_checkpoint_scaffold(
             use_checkpointing=self.use_checkpointing,
-            steps_before_checkpointing=self.steps_before_checkpointing,
+            checkpoint_start_fraction=self.checkpoint_start_fraction,
             max_eps_before_checkpointing=self.max_eps_before_checkpointing,
             initial_checkpoint_window=self.initial_checkpoint_window,
             ckpt_baseline_mode=ckpt_baseline_mode,
@@ -358,28 +359,21 @@ class Q_Network_Family:
     def _aggregate_train_reports(self, reports):
         if len(reports) == 1:
             return reports[-1]
-        update_counts = tuple(report.update_count for report in reports)
-        device_counts = _device_update_counts(update_counts)
-        metric_values = {}
-        metric_weights = {}
-        for name in dict.fromkeys(name for report in reports for name in report.metrics):
-            observations = [report for report in reports if name in report.metrics]
-            metric_values[name] = tuple(report.metrics[name] for report in observations)
-            metric_weights[name] = (
-                device_counts
-                if len(observations) == len(reports)
-                else _device_update_counts(tuple(report.update_count for report in observations))
-            )
-        metrics, _ = reduce_metrics(metric_values, metric_weights)
-        histogram_values = {
-            name: tuple(report.histograms[name] for report in reports)
-            for name in reports[-1].histograms
-            if all(name in report.histograms for report in reports)
+        # Each report weighs its metrics by its update count; a metric only some reports carry
+        # averages over those, and only histograms every report carries survive.
+        metric_totals, histogram_totals = MetricTotals(), MetricTotals()
+        shared_histograms = set(reports[-1].histograms)
+        for report in reports:
+            weight = _device_update_count(report.update_count)
+            metric_totals.add(report.metrics, dict.fromkeys(report.metrics, weight))
+            histogram_totals.add(report.histograms, dict.fromkeys(report.histograms, weight))
+            shared_histograms &= report.histograms.keys()
+        metrics, _ = metric_totals.means()
+        histograms, _ = histogram_totals.means()
+        histograms = {
+            name: histograms[name] for name in reports[-1].histograms if name in shared_histograms
         }
-        histograms, _ = reduce_metrics(
-            histogram_values, dict.fromkeys(histogram_values, device_counts)
-        )
-        # Reports mirror loss/target into metrics, so the compiled reduction covers them.
+        # Reports mirror loss/target into metrics, so the fold above covers them.
         return QNetTrainReport(
             loss=metrics["loss/qloss"],
             target=(
@@ -389,7 +383,7 @@ class Q_Network_Family:
             ),
             metrics=metrics,
             histograms=histograms,
-            update_count=sum(update_counts),
+            update_count=sum(report.update_count for report in reports),
         )
 
     def _compile_common_functions(self):
@@ -541,6 +535,7 @@ class Q_Network_Family:
         )
 
     def prepare_run(self, total_timesteps):
+        self.ckpt.schedule(total_timesteps)
         self._exploration_steps = int(self.exploration_fraction * total_timesteps)
         # The whole exploration schedule crosses to the device once; acting indexes it with a
         # device count of behavior steps instead of uploading epsilon every step.

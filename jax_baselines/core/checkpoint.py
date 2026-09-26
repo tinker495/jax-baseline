@@ -7,11 +7,9 @@ only at the :class:`RolloutSpec` checkpoint seam — the engine calls
 ``spec.checkpoint_on_episode_end`` (bound to :meth:`CheckpointController.on_episode_end`)
 and never sees the schedule's internals.
 
-The schedule was previously copy-pasted into the Q-Net and DPG base classes and
-had drifted (the DPG copy fell through its warmup branch into a second training
-pulse, and disagreed on the return contract). It now lives here once, with the
-Q-Net warmup semantics adopted as canonical: during warmup the controller
-snapshots, fires a single pulse, and returns immediately.
+The schedule lives here once for the Q-Net and DPG base classes and follows TD7
+(Fujimoto et al. 2023): short windows with a tracked baseline from the start, long
+windows plus a one-time baseline relaxation later in the run.
 
 Everything family-specific is injected:
 
@@ -26,13 +24,11 @@ save/load). The training-cadence residual is *not* owned here — it belongs to
 :class:`~jax_baselines.core.rollout.CheckpointTrainPulse`.
 """
 
+from collections.abc import Callable
 from copy import deepcopy
-from typing import Callable, Optional
 
 import jax
 import numpy as np
-
-from jax_baselines.math.statistics import compute_ckpt_window_stat
 
 _JAX_ARRAY_TYPE = getattr(jax, "Array", ())
 
@@ -56,74 +52,82 @@ def _snapshot_leaf(leaf):
 def make_checkpoint_scaffold(
     *,
     use_checkpointing: bool,
-    steps_before_checkpointing: int,
+    checkpoint_start_fraction: float,
     max_eps_before_checkpointing: int,
     initial_checkpoint_window: int,
     ckpt_baseline_mode: str,
-    ckpt_baseline_q: Optional[float],
+    ckpt_baseline_q: float | None,
     snapshot: Callable[[], None],
 ) -> "CheckpointController":
     """Resolve checkpoint config and build its controller.
 
-    ``quantile`` (0.2) and ``use_return_standardization`` (False) are hardcoded
-    constants local to this factory: ``quantile`` is the default for
-    ``baseline_q`` and ``use_return_standardization`` is forwarded to the
-    controller.
+    ``reset_weight`` (0.9, TD7's value) and the default quantile (0.2) are constants local to
+    this factory.
 
     Args:
         use_checkpointing: Enable the TD7-style checkpoint schedule.
-        steps_before_checkpointing: Warm-up steps before checkpointing
-            activates (already clamped to ``learning_starts * 2`` by the
-            caller).
-        max_eps_before_checkpointing: Episode budget per checkpoint window.
-        initial_checkpoint_window: Initial window size before the first enable.
-        ckpt_baseline_mode: Statistic used to build the rolling baseline.
-        ckpt_baseline_q: Quantile for baseline computation; defaults to the
-            canonical ``quantile`` (0.2) when ``None``.
+        checkpoint_start_fraction: Fraction of the run after which long windows begin (TD7
+            starts them at 750k of 5M steps, 15%). Resolved to steps by
+            :meth:`CheckpointController.schedule`.
+        max_eps_before_checkpointing: Episodes per window once long windows begin.
+        initial_checkpoint_window: Episodes per window before that.
+        ckpt_baseline_mode: ``"min"`` (TD7: every episode must reach the baseline) or
+            ``"quantile"`` (up to ``floor(q * window)`` episodes may fall below it).
+        ckpt_baseline_q: Quantile ``q``; defaults to 0.2 when ``None``.
         snapshot: Callable that captures the current policy parameters.
 
     Returns:
         The :class:`CheckpointController` the base holds as ``self.ckpt``.
     """
-    quantile: float = 0.2
-    use_return_standardization: bool = False
-
-    resolved_baseline_q: float = ckpt_baseline_q if ckpt_baseline_q is not None else quantile
-
+    if ckpt_baseline_mode not in ("min", "quantile"):
+        raise ValueError(
+            f"ckpt_baseline_mode must be 'min' or 'quantile', got {ckpt_baseline_mode!r}"
+        )
+    if not 0.0 <= checkpoint_start_fraction <= 1.0:
+        raise ValueError("checkpoint_start_fraction must be in [0, 1]")
     return CheckpointController(
         use_checkpointing=use_checkpointing,
-        steps_before_checkpointing=steps_before_checkpointing,
+        start_fraction=checkpoint_start_fraction,
         max_eps_before_checkpointing=max_eps_before_checkpointing,
         initial_window=initial_checkpoint_window,
-        baseline_q=resolved_baseline_q,
+        baseline_q=0.2 if ckpt_baseline_q is None else ckpt_baseline_q,
         baseline_mode=ckpt_baseline_mode,
-        use_return_standardization=use_return_standardization,
+        reset_weight=0.9,
         snapshot=snapshot,
     )
 
 
 class CheckpointController:
-    """Per-episode checkpoint schedule shared by the off-policy local families."""
+    """Per-episode checkpoint schedule shared by the off-policy local families (TD7).
+
+    Episodes form windows. A window fails, and trains without a checkpoint, once more than
+    ``floor(q * window)`` of its episodes fall below the baseline (``q = 0`` for ``"min"``);
+    a full window that holds checkpoints the policy, raises the baseline to its
+    ``floor(q * window) + 1``-th lowest return, and trains. Windows start at
+    ``initial_window`` episodes and grow to ``max_eps_before_checkpointing`` once
+    ``start_fraction`` of the run has passed, when the baseline is relaxed by ``reset_weight``.
+    """
 
     def __init__(
         self,
         *,
         use_checkpointing: bool,
-        steps_before_checkpointing: int,
+        start_fraction: float,
         max_eps_before_checkpointing: int,
         initial_window: int,
         baseline_q: float,
         baseline_mode: str,
-        use_return_standardization: bool,
+        reset_weight: float,
         snapshot: Callable[[], None],
     ):
         # Configuration
         self.use_checkpointing = use_checkpointing
-        self.steps_before_checkpointing = int(steps_before_checkpointing)
+        self.start_fraction = float(start_fraction)
+        self.steps_before_checkpointing: int | None = None
         self.max_eps_before_checkpointing = int(max_eps_before_checkpointing)
         self.baseline_q = baseline_q
         self.baseline_mode = baseline_mode
-        self.use_return_standardization = use_return_standardization
+        self.reset_weight = float(reset_weight)
         self._snapshot = snapshot
 
         # Schedule runtime state (owned here; serialized for the DPG family)
@@ -133,7 +137,7 @@ class CheckpointController:
         self._max_eps_before_update = int(initial_window)
         self._returns_window: list = []
         self._baseline = -1e8
-        self._last_update_step: Optional[int] = None
+        self._last_update_step: int | None = None
         self._update_count = 0
 
     # -- read-only views the agent needs (eval gating, progress description) --
@@ -143,20 +147,28 @@ class CheckpointController:
         return self._enabled
 
     @property
-    def last_update_step(self) -> Optional[int]:
+    def last_update_step(self) -> int | None:
         return self._last_update_step
 
     # -- schedule --
 
+    def schedule(self, total_timesteps):
+        """Resolve the long-window start for a run of ``total_timesteps`` env steps."""
+        self.steps_before_checkpointing = int(self.start_fraction * total_timesteps)
+
     def _maybe_enable(self, steps):
-        if (
-            self.use_checkpointing
-            and (not self._enabled)
-            and steps > self.steps_before_checkpointing
-        ):
-            # Relax the threshold slightly when entering checkpointing mode
+        if self.steps_before_checkpointing is None:
+            raise RuntimeError("CheckpointController.schedule() must run before episodes end")
+        if self.use_checkpointing and not self._enabled and steps > self.steps_before_checkpointing:
+            # TD7 relaxes the baseline once as long windows begin.
+            self._baseline *= self.reset_weight
             self._max_eps_before_update = self.max_eps_before_checkpointing
             self._enabled = True
+
+    def _allowed_below(self):
+        if self.baseline_mode == "min":
+            return 0
+        return int(self.baseline_q * self._max_eps_before_update)
 
     def _reset_window(self):
         self._eps_since_update = 0
@@ -181,9 +193,8 @@ class CheckpointController:
     ):
         """Advance the checkpoint schedule at an episode boundary.
 
-        Returns True when the episode did not trigger a checkpoint failure, and
-        False when the window fell below the baseline (the rollout spec may use
-        this to invoke an adapter-supplied forced reset).
+        Returns True when the episode did not fail the window, and False when it did (the
+        rollout spec may use this to invoke an adapter-supplied forced reset).
 
         ``advance_criterion=False`` records the episode's timesteps toward the
         training pulse volume but leaves the assessment criterion untouched. The
@@ -201,41 +212,28 @@ class CheckpointController:
         self._eps_since_update += 1
         self._returns_window.append(float(episode_return))
 
-        self._maybe_enable(steps)
-
-        window_stat = compute_ckpt_window_stat(
-            self._returns_window,
-            self.baseline_q,
-            self.use_return_standardization,
-            self.baseline_mode,
-        )
-        if window_stat is None:
-            return True
+        allowed = self._allowed_below()
+        ordered = sorted(self._returns_window)
         if log_metric is not None:
-            log_metric("ckpt/window_stat", float(window_stat), int(steps))
+            log_metric("ckpt/window_stat", ordered[min(allowed, len(ordered) - 1)], int(steps))
 
-        # Warmup phase: snapshot a baseline, fire one pulse, return.
-        if not self._enabled:
-            self._snapshot()
-            self._fire(train_and_reset_callback, steps)
-            self._reset_window()
-            return True
-
-        if window_stat < self._baseline:
-            # Below baseline: signal failure to the rollout reset policy.
-            self._fire(train_and_reset_callback, steps)
-            self._reset_window()
+        if sum(value < self._baseline for value in ordered) > allowed:
+            self._train_and_reset(train_and_reset_callback, steps)
             return False
 
-        # Enabled phase: end-of-window refresh with a training pulse.
         if self._eps_since_update >= self._max_eps_before_update:
             self._snapshot()
-            self._baseline = window_stat
+            self._baseline = ordered[allowed]
             self._log_snapshot_update(steps, log_metric)
-            self._fire(train_and_reset_callback, steps)
-            self._reset_window()
+            self._train_and_reset(train_and_reset_callback, steps)
 
         return True
+
+    def _train_and_reset(self, callback, steps):
+        self._fire(callback, steps)
+        self._reset_window()
+        # As in TD7, the pulse that crosses the start switches the windows that follow it.
+        self._maybe_enable(steps)
 
     def _fire(self, callback, steps):
         if callable(callback):

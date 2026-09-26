@@ -72,7 +72,7 @@ class CheckpointTrainPulse:
         record_loss: Callable[[object], None],
         read_residual: Callable[[], int],
         write_residual: Callable[[int], None],
-        post_pulse: Callable[[], None] | None = None,
+        pre_pulse: Callable[[], None] | None = None,
     ):
         self._train_freq = train_freq
         self._gradient_steps = gradient_steps
@@ -81,7 +81,7 @@ class CheckpointTrainPulse:
         self._record_loss = record_loss
         self._read_residual = read_residual
         self._write_residual = write_residual
-        self._post_pulse = post_pulse
+        self._pre_pulse = pre_pulse
 
     def __call__(self, steps, accumulated_timesteps):
         groups, residual = divmod(
@@ -92,11 +92,11 @@ class CheckpointTrainPulse:
         self._write_residual(residual)
 
         if num_update_iters > 0:
+            # Runs first so the pulse trains on the state the next window will act with.
+            if self._pre_pulse is not None:
+                self._pre_pulse()
             loss = self._train(steps, num_update_iters * self._gradient_steps)
             self._record_loss(loss)
-
-        if num_update_iters > 0 and self._post_pulse is not None:
-            self._post_pulse()
 
 
 @dataclass
@@ -519,8 +519,10 @@ class RolloutEngine:
                 groups, train_residual = divmod(train_residual, spec.train_freq * group_iters)
                 if groups:
                     lossque.append(spec.train(steps, groups * group_iters * spec.gradient_steps))
-            env.step(sel.env_action)
+            # Checkpoint pulses queued at the last episode ends go out here for the same
+            # overlap; this step's action was chosen before them, as when they ran after it.
             flush_checkpoint_pulses()
+            env.step(sel.env_action)
             next_obs, rewards, terminated, truncated, _ = env.get_result()
             spec.progress.env_steps += spec.worker_size
             log_due = steps - last_log_step >= log_interval

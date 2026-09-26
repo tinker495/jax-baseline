@@ -58,6 +58,9 @@ class TD7(Deteministic_Policy_Gradient_Family):
             "prioritized_replay_beta0": 0,
             "prioritized_replay_eps": 0,
             "use_checkpointing": True,  # TD7 always uses checkpointing
+            # The paper's window: 20 episodes, every one at or above the baseline.
+            "max_eps_before_checkpointing": 20,
+            "ckpt_baseline_mode": "min",
             **kwargs,
         }
 

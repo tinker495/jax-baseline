@@ -107,6 +107,18 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         description += self._rollout_pbar_suffix()
         return description
 
+    def _move_action_carries(self, device):
+        super()._move_action_carries(device)
+        (
+            self._ou_noise,
+            self._exploration_step,
+            self._exploration_steps,
+            self.epsilon,
+        ) = jax.device_put(
+            (self._ou_noise, self._exploration_step, self._exploration_steps, self.epsilon),
+            device,
+        )
+
     def _policy_action_from_state(self, state, obs, eval, steps):
         if eval:
             return self._compiled_eval_actions(state, obs)
@@ -127,6 +139,7 @@ class DDPG(Deteministic_Policy_Gradient_Family):
         return actions
 
     def prepare_run(self, total_timesteps):
+        super().prepare_run(total_timesteps)
         # Rollouts advance `steps` by worker_size per action call and act from the policy
         # after learning_starts, so the schedule step is carried on device from here.
         self._exploration_steps, self._exploration_step = jax.device_put(
