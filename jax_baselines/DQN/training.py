@@ -14,11 +14,9 @@ import jax
 from jax_baselines.core.bulk_training import (
     bulk_chunk_schedule,
     bulk_train_hook,
-    flatten_priority_values,
     host_priority_values,
     make_train_contexts,
-    normalize_bulk_weights,
-    reshape_bulk_batch,
+    prepare_replay_batch,
     uses_bulk_pulse,
 )
 
@@ -30,6 +28,10 @@ class QNetTrainContext:
     steps: int
     train_steps_count: int
     gradient_steps: int
+    # True for every update of a pulse whose report is logged: diagnostic-only metrics are
+    # compiled out of the others.
+    diagnostics: bool = False
+    # True only for the last train call of a logged pulse (SPR action-churn probe).
     collect_diagnostics: bool = False
 
 
@@ -97,15 +99,16 @@ class QNetTrainingLifecycle:
             raise ValueError("gradient_steps must be greater than 0")
 
         interval = self.agent.log_interval if log_interval is None else log_interval
-        collect_diagnostics = bool(logger_run and steps - self.agent._last_log_step >= interval)
+        # Same gate as _log_report, decided once per pulse before any update runs.
+        log_due = bool(logger_run and steps - self.agent._last_log_step >= interval)
         if self._uses_bulk_pulse(gradient_steps):
-            report = self._train_one_pulse(steps, gradient_steps, collect_diagnostics)
+            report = self._train_one_pulse(steps, gradient_steps, log_due)
         else:
             reports = []
             for index in range(gradient_steps):
                 reports.append(
                     self._train_one_batch(
-                        steps, gradient_steps, collect_diagnostics and index == gradient_steps - 1
+                        steps, gradient_steps, log_due, log_due and index == gradient_steps - 1
                     )
                 )
 
@@ -117,21 +120,21 @@ class QNetTrainingLifecycle:
     def _uses_bulk_pulse(self, gradient_steps):
         return uses_bulk_pulse(self.agent, gradient_steps)
 
-    def _train_one_batch(self, steps, gradient_steps, collect_diagnostics=False):
+    def _train_one_batch(self, steps, gradient_steps, diagnostics, collect_diagnostics):
         self.agent.train_steps_count += 1
-        data = self.agent._sample_batch()
-        self._normalize_batch(data)
+        data = self._prepare_batch(self.agent._sample_batch())
         context = QNetTrainContext(
             steps=steps,
             train_steps_count=self.agent.train_steps_count,
             gradient_steps=gradient_steps,
+            diagnostics=diagnostics,
             collect_diagnostics=collect_diagnostics,
         )
         result = self._normalise_train_result(self.agent._train_on_batch(data, context))
         self._update_priorities(data, result)
         return result.report
 
-    def _train_one_pulse(self, steps, gradient_steps, collect_diagnostics=False):
+    def _train_one_pulse(self, steps, gradient_steps, log_due):
         """Run chunked bulk updates.
 
         Bulk mode is a throughput path: one replay sample is split into mini-updates,
@@ -148,18 +151,15 @@ class QNetTrainingLifecycle:
                 steps,
                 chunk_size,
                 gradient_steps=chunk_size,
+                diagnostics=log_due,
             )
             contexts = (
                 *contexts[:-1],
-                replace(
-                    contexts[-1],
-                    collect_diagnostics=collect_diagnostics and remaining == chunk_size,
-                ),
+                replace(contexts[-1], collect_diagnostics=log_due and remaining == chunk_size),
             )
-            data = self.agent._sample_batch(chunk_size * self.agent.batch_size)
-            data = self._reshape_bulk_batch(data, chunk_size)
-            data = normalize_bulk_weights(data)
-            self._normalize_batch(data)
+            data = self._prepare_batch(
+                self.agent._sample_batch(chunk_size * self.agent.batch_size), chunk_size
+            )
             result = self._normalise_train_result(train_on_bulk(data, contexts))
             self._update_priorities(data, result)
             reports.append(result.report)
@@ -167,18 +167,20 @@ class QNetTrainingLifecycle:
 
         while remaining > 0:
             reports.append(
-                self._train_one_batch(steps, gradient_steps, collect_diagnostics and remaining == 1)
+                self._train_one_batch(steps, gradient_steps, log_due, log_due and remaining == 1)
             )
             remaining -= 1
 
         return self.agent._aggregate_train_reports(reports)
 
-    def _reshape_bulk_batch(self, data, chunk_size):
-        return reshape_bulk_batch(data, chunk_size, self.agent.batch_size)
-
-    def _normalize_batch(self, data):
-        if self.agent.reward_normalizer is not None:
-            data["rewards"] = self.agent.reward_normalizer.normalize(data["rewards"])
+    def _prepare_batch(self, data, chunk_size=None):
+        return prepare_replay_batch(
+            data,
+            chunk_size=chunk_size,
+            batch_size=self.agent.batch_size,
+            flat=self.agent.flat_bulk_batches,
+            rewards=self.agent.reward_normalizer,
+        )
 
     def _normalise_train_result(self, result):
         if isinstance(result, QNetTrainResult):
@@ -204,14 +206,10 @@ class QNetTrainingLifecycle:
                 "when prioritized_replay is enabled"
             )
 
-        convert = (
-            flatten_priority_values
-            if isinstance(data["indexes"], jax.Array)
-            else host_priority_values
-        )
-        indexes = convert(data["indexes"])
-        priorities = convert(result.replay_priorities)
-        self.agent.replay_buffer.update_priorities(indexes, priorities)
+        priorities = result.replay_priorities
+        if not isinstance(data["indexes"], jax.Array):
+            priorities = host_priority_values(priorities)
+        self.agent.replay_buffer.update_priorities(data["indexes"], priorities)
 
     def _log_report(self, report, steps, logger_run, log_interval):
         interval = self.agent.log_interval if log_interval is None else log_interval

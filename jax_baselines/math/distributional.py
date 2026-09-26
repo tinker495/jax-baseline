@@ -21,6 +21,7 @@ from typing import Literal, Protocol, overload
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 from jax_baselines.math.metrics import support_metrics
 from jax_baselines.math.policy_math import q_log_pi
@@ -36,14 +37,14 @@ class HLGaussTransform:
     representation shared by the HL-Gauss variants of C51, BBF and SPR.
 
     Build once via :meth:`build` and access through a held instance; ``support``
-    and ``sigma`` are concrete arrays that bake in as constants under ``jax.jit``.
+    and ``sigma`` are host arrays that bake in as constants under ``jax.jit``.
 
     support: shape ``[n_bins + 1]`` — the bin edges.
     sigma:   smoothing width, already scaled by the bin width.
     """
 
-    support: jax.Array
-    sigma: jax.Array
+    support: np.ndarray
+    sigma: np.ndarray
 
     @classmethod
     def build(cls, categorial_min, categorial_max, categorial_bar_n, sigma_ratio=0.75):
@@ -54,7 +55,7 @@ class HLGaussTransform:
             dtype=jnp.float32,
         )
         bin_width = support[1] - support[0]
-        return cls(support=support, sigma=sigma_ratio * bin_width)
+        return cls(support=np.asarray(support), sigma=np.asarray(sigma_ratio * bin_width))
 
     def to_probs(self, target: jax.Array) -> jax.Array:
         # target: [batch, 1] -> probs: [batch, n_bins]
@@ -166,7 +167,7 @@ class DistributionalBackend(Protocol):
 class CategoricalBackend:
     """Fixed-atom C51 backend. Mixes Munchausen targets in *distribution space*."""
 
-    support: jax.Array
+    support: np.ndarray
     support_min: float
     support_max: float
     delta: float

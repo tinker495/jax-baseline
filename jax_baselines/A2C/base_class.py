@@ -29,6 +29,7 @@ from jax_baselines.core.eval import (
 from jax_baselines.core.normalization import (
     RunningMeanStd,
     normalize_empirical_observation,
+    observe_empirical_observations,
 )
 from jax_baselines.core.replay_protocol import select_replay_device
 from jax_baselines.core.rollout_stats import EpisodeTracker, device_episode_step
@@ -58,18 +59,13 @@ def _categorical_log_prob(prob, action):
     return jnp.log(jnp.take_along_axis(prob, action.astype(jnp.int32), axis=1))
 
 
-def _continuous_log_prob(prob, action, *, array_module=jnp):
+def _continuous_log_prob(prob, action):
     mu, log_std = prob
-    std = array_module.exp(log_std)
+    std = jnp.exp(log_std)
     return -(
-        0.5
-        * array_module.sum(
-            array_module.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True
-        )
-        + array_module.sum(log_std, axis=-1, keepdims=True)
-        + 0.5
-        * array_module.log(2 * np.pi)
-        * array_module.asarray(action.shape[-1], dtype=array_module.float32)
+        0.5 * jnp.sum(jnp.square((action - mu) / (std + 1e-7)), axis=-1, keepdims=True)
+        + jnp.sum(log_std, axis=-1, keepdims=True)
+        + 0.5 * jnp.log(2 * np.pi) * jnp.asarray(action.shape[-1], dtype=jnp.float32)
     )
 
 
@@ -80,11 +76,22 @@ def _continuous_old_policy(policy, actions):
     return _continuous_log_prob(old_policy, actions), old_policy
 
 
+@jax.jit
+def _device_rollout_step(state, transitions, rewards, terminateds, truncateds, autoreset):
+    """Episode stats and live-transition count for one device vector step, compiled once."""
+    transitions = transitions + jnp.count_nonzero(~state[2])
+    state, rewards, terminateds, completed = device_episode_step(
+        state, rewards, terminateds, truncateds, autoreset
+    )
+    return state, transitions, rewards, terminateds, completed
+
+
 class Actor_Critic_Policy_Gradient_Family:
     _run_name = "A2C"
     _store_old_policy = False
     actor: Callable
     _get_actions: Callable
+    _train_step: Callable[..., tuple]
     logger: AbstractContextManager
 
     def __init__(
@@ -123,6 +130,7 @@ class Actor_Critic_Policy_Gradient_Family:
         self.num_workers = num_workers
         self.eval_eps = eval_eps
         self.log_interval = log_interval
+        self._last_log_step = 0
         self.policy_kwargs = policy_kwargs
         self.seed = 42 if seed is None else seed
         set_global_seeds(self.seed)
@@ -161,20 +169,15 @@ class Actor_Critic_Policy_Gradient_Family:
         self.obs_rms_norm = obs_rms_norm
         with jax.default_device(self.memory_device):
             self.obs_rms = (
-                RunningMeanStd(
-                    epsilon=0.0,
-                    shapes=self.observation_space,
-                    dtype=np.float32,
-                    on_device=self.memory_backend == "gpu",
-                )
-                if obs_rms_norm
-                else None
+                RunningMeanStd(epsilon=0.0, shapes=self.observation_space) if obs_rms_norm else None
             )
         # Control model initialization timing across children
         self._init_setup_model = _init_setup_model
-        if self._init_setup_model:
-            with jax.default_device(self.memory_device):
+        with jax.default_device(self.memory_device):
+            if self._init_setup_model:
                 self.setup_model()
+            # Behavior-policy PRNG carry; drawn after model init so initial params are unchanged.
+            self._action_key = next(self.key_seq)
 
     def save_params(self, path):
         self.checkpoint_store.save(
@@ -192,9 +195,7 @@ class Actor_Critic_Policy_Gradient_Family:
             raise TypeError("Expected ACCheckpointState with observation-normalization state")
         with jax.default_device(self.memory_device):
             obs_rms = (
-                RunningMeanStd.from_state(
-                    state.obs_rms_state, on_device=self.memory_backend == "gpu"
-                )
+                RunningMeanStd.from_state(state.obs_rms_state)
                 if state.obs_rms_state is not None
                 else None
             )
@@ -248,21 +249,30 @@ class Actor_Critic_Policy_Gradient_Family:
             self._get_actions = self._get_actions_discrete
             self.get_logprob = self.get_logprob_discrete
             self._actor_loss = self._actor_loss_discrete
-            self.actions = self.action_discrete
         elif self.action_type == "continuous":
             self._get_actions = self._get_actions_continuous
             self.get_logprob = self.get_logprob_continuous
             self._actor_loss = self._actor_loss_continuous
-            self.actions = self.action_continuous
 
     def setup_model(self):
         pass
 
-    def _train_step(self, steps):
-        pass
-
-    def train_step(self, steps, logger_run=None):
+    def train_step(self, steps, logger_run=None, log_interval=None):
         raise NotImplementedError
+
+    def _metrics_due(self, steps, logger_run, log_interval):
+        """Host-side schedule for the static ``diagnostics`` flag of the next update.
+
+        Only updates whose metrics are logged compute diagnostics; the others return
+        just the critic loss the progress bar reads.
+        """
+        interval = self.log_interval if log_interval is None else log_interval
+        return bool(logger_run) and steps - self._last_log_step >= interval
+
+    def _log_train_metrics(self, metrics, steps, logger_run):
+        self._last_log_step = steps
+        for name, value in jax.device_get(metrics).items():
+            logger_run.log_metric(name, value, steps)
 
     def _get_actions_discrete(self, actor_params, obses, key=None) -> jnp.ndarray:
         return _categorical_policy(self.actor(actor_params, key, convert_normalized_obs(obses)))
@@ -273,66 +283,55 @@ class Actor_Critic_Policy_Gradient_Family:
         mu, log_std = self.actor(actor_params, key, convert_normalized_obs(obses))
         return mu, jnp.exp(log_std), log_std
 
-    def action_discrete(self, obs, eval=False):
-        return self._action_from_discrete(self._get_actions(self.actor_params, obs), eval)
+    def sample_actions(self, obs, device_env):
+        """Run the compiled behavior-action stage once for one env step.
 
-    def _action_from_discrete(self, prob, eval=False):
+        Returns ``(actions, step_actions, old_policy)``: unclipped actions and the
+        old-policy snapshot for the rollout buffer, and the env-ready actions. The
+        observation enters with one ``device_put``; results leave with one
+        ``device_get`` unless both buffer and env keep device arrays.
+        """
+        actions, step_actions, old_policy, self._action_key = self._sample_actions(
+            self.actor_params, jax.device_put(obs, self.memory_device), self._action_key
+        )
         if self.memory_backend == "cpu":
-            prob = np.asarray(prob)
-            if eval:
-                return np.argmax(prob, axis=1, keepdims=True)
-            cumulative = np.cumsum(prob, axis=1)
-            cumulative[:, -1] = 1.0
-            return np.argmax(np.random.uniform(size=(prob.shape[0], 1)) < cumulative, axis=1)[
-                :, None
-            ]
-        if eval:
-            return jnp.argmax(prob, axis=1, keepdims=True)
-        return _sample_discrete(prob, next(self.key_seq))
+            return jax.device_get((actions, step_actions, old_policy))
+        return actions, step_actions if device_env else jax.device_get(step_actions), old_policy
 
-    def action_continuous(self, obs, eval=False):
-        mu, std, _ = self._get_actions(self.actor_params, obs)
-        return self._action_from_continuous(mu, std, eval)
-
-    def _action_from_continuous(self, mu, std, eval=False):
-        if self.memory_backend == "cpu":
-            if eval:
-                return np.asarray(mu)
-            mu, std = jax.device_get((mu, std))
-            return np.random.normal(mu, std).astype(np.float32)
-        if eval:
-            return mu
-        return _sample_continuous(mu, std, next(self.key_seq))
-
-    def sample_actions(self, obs):
-        if not self._store_old_policy:
-            return self.actions(obs), None
-        if self.memory_backend == "gpu":
-            return self._sample_actions_gpu(self.actor_params, obs, next(self.key_seq))
-        # CPU rollouts already sample on the host; keep the policy snapshot there too.
-        policy = jax.device_get(self._get_actions(self.actor_params, obs))
+    @jax.jit(static_argnums=0)
+    def _sample_actions(self, actor_params, obs, key):
+        key, sample_key = jax.random.split(key)
+        policy = self._get_actions(actor_params, obs)
         if self.action_type == "discrete":
-            actions = self._action_from_discrete(policy)
-            return actions, (np.log(np.take_along_axis(policy, actions, axis=1)), policy)
-        mu, std, log_std = policy
-        actions = self._action_from_continuous(mu, std)
-        old_policy = (mu, np.broadcast_to(log_std, mu.shape))
-        return actions, (
-            _continuous_log_prob(old_policy, actions, array_module=np).astype(
-                np.result_type(mu, log_std, actions)
-            ),
-            old_policy,
+            actions = _sample_discrete(policy, sample_key)
+            old_policy = (_categorical_log_prob(policy, actions), policy)
+            step_actions = actions
+        else:
+            mu, std, _ = policy
+            actions = _sample_continuous(mu, std, sample_key)
+            old_policy = _continuous_old_policy(policy, actions)
+            step_actions = self.conv_action(actions)
+        return actions, step_actions, old_policy if self._store_old_policy else None, key
+
+    def _policy_actions(self, obs):
+        """Deterministic env-ready actions for evaluation and testing.
+
+        Actions stay on device only for envs that return device observations.
+        """
+        model_obs = normalize_empirical_observation(obs, self.obs_rms)
+        actions = self._eval_actions(
+            self.actor_params, jax.device_put(model_obs, self.memory_device)
+        )
+        return (
+            actions if isinstance(next(iter(obs.values())), jax.Array) else jax.device_get(actions)
         )
 
     @jax.jit(static_argnums=0)
-    def _sample_actions_gpu(self, actor_params, obs, key):
+    def _eval_actions(self, actor_params, obs):
         policy = self._get_actions(actor_params, obs)
         if self.action_type == "discrete":
-            actions = _sample_discrete(policy, key)
-            return actions, (_categorical_log_prob(policy, actions), policy)
-        mu, std, _ = policy
-        actions = _sample_continuous(mu, std, key)
-        return actions, _continuous_old_policy(policy, actions)
+            return jnp.argmax(policy, axis=1, keepdims=True)
+        return self.conv_action(policy[0])
 
     def get_logprob_discrete(self, prob, action, key, out_prob=False):
         prob = _categorical_policy(prob)
@@ -355,8 +354,7 @@ class Actor_Critic_Policy_Gradient_Family:
             for k, v in eval_result.items():
                 description += f"{k} : {v:8.2f}, "
 
-        array_module = jnp if any(isinstance(loss, jax.Array) for loss in self.lossque) else np
-        description += f"loss : {array_module.mean(array_module.asarray(tuple(self.lossque))):.3f}"
+        description += f"loss : {np.mean(jax.device_get(tuple(self.lossque))):.3f}"
 
         description += self._rollout_pbar_suffix()
 
@@ -446,9 +444,8 @@ class Actor_Critic_Policy_Gradient_Family:
     def learn_SingleEnv(self, ctx):
         obs, _ = self.env.reset() if self._initial_reset is None else self._initial_reset
         self._initial_reset = None
-        obs = normalize_empirical_observation(
-            batch_observation(obs), self.obs_rms, on_device=self.memory_backend == "gpu"
-        )
+        device_env = isinstance(next(iter(obs.values())), jax.Array)
+        obs = normalize_empirical_observation(batch_observation(obs), self.obs_rms)
         self.lossque = deque(maxlen=10)
         self.rollout_tracker = EpisodeTracker(ctx.logger_run.log_metric, ctx.log_interval)
         eval_result = None
@@ -457,9 +454,10 @@ class Actor_Critic_Policy_Gradient_Family:
         steps = 0
         last_log_step = 0
         for steps in ctx.pbar:
-            actions, old_policy = self.sample_actions(obs)
-            step_action = _normalize_action_for_step(self.conv_action(actions))
-            next_obs, reward, terminated, truncated, _ = self.env.step(step_action)
+            actions, step_actions, old_policy = self.sample_actions(obs, device_env)
+            next_obs, reward, terminated, truncated, _ = self.env.step(
+                _normalize_action_for_step(step_actions)
+            )
             ctx.progress.env_steps += 1
             log_due = steps - last_log_step >= ctx.log_interval
             log_environment_metrics(self.env, ctx.logger_run, steps, flush=log_due)
@@ -473,11 +471,9 @@ class Actor_Critic_Policy_Gradient_Family:
             else:
                 action_observation = next_obs
             # Timeout bootstraps must not incorporate the next episode's reset sample.
-            next_obs = normalize_empirical_observation(
-                next_obs, self.obs_rms, on_device=self.memory_backend == "gpu"
+            next_obs, action_observation = observe_empirical_observations(
+                self.obs_rms, next_obs, action_observation
             )
-            if self.obs_rms is not None:
-                self.obs_rms.update(action_observation)
             self.buffer.add(
                 obs,
                 actions,
@@ -489,9 +485,7 @@ class Actor_Critic_Policy_Gradient_Family:
             )
             score += float(reward)
             eplen += 1
-            obs = normalize_empirical_observation(
-                action_observation, self.obs_rms, on_device=self.memory_backend == "gpu"
-            )
+            obs = action_observation
 
             if terminated or truncated:
                 self.rollout_tracker.record(
@@ -504,7 +498,9 @@ class Actor_Critic_Policy_Gradient_Family:
                 eplen = 0
 
             if (steps + 1) % self.batch_size == 0:
-                loss = self.train_step(steps, logger_run=ctx.logger_run)
+                loss = self.train_step(
+                    steps, logger_run=ctx.logger_run, log_interval=ctx.log_interval
+                )
                 ctx.progress.update_steps += self._optimizer_updates_per_train_step()
                 self.lossque.append(loss)
 
@@ -524,14 +520,21 @@ class Actor_Critic_Policy_Gradient_Family:
             next(iter(raw_obs.values())), jax.Array
         )
         if device_rollout:
-            device_state = (
-                jnp.zeros(self.worker_size),
-                jnp.zeros(self.worker_size, dtype=jnp.int32),
-                jnp.zeros(self.worker_size, dtype=bool),
+            # Episode state and the live-transition count stay on device between log downloads.
+            device_state, no_transitions = jax.device_put(
+                (
+                    (
+                        np.zeros(self.worker_size, dtype=np.float32),
+                        np.zeros(self.worker_size, dtype=np.int32),
+                        np.zeros(self.worker_size, dtype=bool),
+                    ),
+                    np.zeros((), dtype=np.int32),
+                ),
+                self.memory_device,
             )
+            transitions = no_transitions
         completed_steps = []
         completed_rows = []
-        transition_counts = []
         self.lossque = deque(maxlen=10)
         self.rollout_tracker = EpisodeTracker(ctx.logger_run.log_metric, ctx.log_interval)
         eval_result = None
@@ -544,26 +547,20 @@ class Actor_Critic_Policy_Gradient_Family:
         # two episodes in the return. prev_done chains off the *real* env dones,
         # and the same mask keeps the dummy out of the rollout episode stats.
         prev_done = np.zeros(self.worker_size, dtype=bool)
-        convert_action = self.conv_action if self.action_type == "continuous" else None
-
-        def send(actions):
-            self.env.step(convert_action(actions) if convert_action else actions)
 
         # Pipeline the async env between updates. At an update boundary, delay
         # the next send until train_step finishes so the new rollout cannot start
         # with an action sampled from the previous policy. Pair each step with its
         # successor so the final iteration does not leave an env result pending.
-        obs = normalize_empirical_observation(
-            raw_obs, self.obs_rms, on_device=self.memory_backend == "gpu"
-        )
-        actions, old_policy = self.sample_actions(obs)
+        obs = normalize_empirical_observation(raw_obs, self.obs_rms)
+        actions, step_actions, old_policy = self.sample_actions(obs, device_rollout)
         end = object()
         first = True
         steps = 0
         last_log_step = 0
         for steps, next_step in pairwise(chain(ctx.pbar, (end,))):
             if first:
-                send(actions)
+                self.env.step(step_actions)
                 first = False
             (
                 next_obses,
@@ -583,25 +580,22 @@ class Actor_Critic_Policy_Gradient_Family:
                 last_log_step = steps
             action_observation = self.env.current_obs()
             # Autoreset observations belong to the next action, not this successor.
-            next_obses = normalize_empirical_observation(
-                next_obses, self.obs_rms, on_device=self.memory_backend == "gpu"
-            )
-            if self.obs_rms is not None:
-                self.obs_rms.update(action_observation)
-            action_observation = normalize_empirical_observation(
-                action_observation, self.obs_rms, on_device=self.memory_backend == "gpu"
+            next_obses, action_observation = observe_empirical_observations(
+                self.obs_rms, next_obses, action_observation
             )
 
             train_due = (steps + self.worker_size) % (self.batch_size * self.worker_size) == 0
             if not train_due and next_step is not end:
                 # Keep the async overlap except when train_step changes the policy.
-                next_actions, next_old_policy = self.sample_actions(action_observation)
-                send(next_actions)
+                next_actions, next_step_actions, next_old_policy = self.sample_actions(
+                    action_observation, device_rollout
+                )
+                self.env.step(next_step_actions)
 
             if device_rollout:
-                transition_counts.append(jnp.count_nonzero(~device_state[2]))
-                device_state, rewards, terminateds, completed = device_episode_step(
+                device_state, transitions, rewards, terminateds, completed = _device_rollout_step(
                     device_state,
+                    transitions,
                     rewards,
                     terminateds,
                     truncateds,
@@ -618,12 +612,13 @@ class Actor_Critic_Policy_Gradient_Family:
                 )
                 completed_steps.append(steps)
                 completed_rows.append(completed)
-                if train_due or log_due or next_step is end:
-                    # Transfer logging payload once per rollout; training tensors stay on device.
+                if log_due or next_step is end:
+                    # Episode stats are only read when logging: one stack, one download.
                     with jax.profiler.TraceAnnotation("rollout.metrics"):
                         episode_rows, transition_count = jax.device_get(
-                            (jnp.stack(completed_rows), jnp.sum(jnp.stack(transition_counts)))
+                            (jnp.stack(completed_rows), transitions)
                         )
+                    transitions = no_transitions
                     ctx.progress.env_steps += int(transition_count)
                     for time_idx, worker_idx in np.argwhere(episode_rows[..., 0]):
                         row = episode_rows[time_idx, worker_idx]
@@ -635,7 +630,6 @@ class Actor_Critic_Policy_Gradient_Family:
                         )
                     completed_steps.clear()
                     completed_rows.clear()
-                    transition_counts.clear()
             else:
                 done = np.logical_or(terminateds, truncateds)
                 autoreset = vector_autoreset_mask(self.env, terminateds, truncateds, infos)
@@ -673,12 +667,16 @@ class Actor_Critic_Policy_Gradient_Family:
                 prev_done = done & autoreset & active
 
             if train_due:
-                loss = self.train_step(steps, logger_run=ctx.logger_run)
+                loss = self.train_step(
+                    steps, logger_run=ctx.logger_run, log_interval=ctx.log_interval
+                )
                 ctx.progress.update_steps += self._optimizer_updates_per_train_step()
                 self.lossque.append(loss)
                 if next_step is not end:
-                    next_actions, next_old_policy = self.sample_actions(action_observation)
-                    send(next_actions)
+                    next_actions, next_step_actions, next_old_policy = self.sample_actions(
+                        action_observation, device_rollout
+                    )
+                    self.env.step(next_step_actions)
 
             if next_step is not end:
                 # The successor stored in replay may be a terminal observation;
@@ -701,15 +699,9 @@ class Actor_Critic_Policy_Gradient_Family:
         return evaluate_policy(
             self.eval_env,
             self.eval_eps,
-            lambda obs: self.actions(
-                normalize_empirical_observation(
-                    obs, self.obs_rms, on_device=self.memory_backend == "gpu"
-                ),
-                eval=True,
-            ),
+            self._policy_actions,
             logger_run=ctx.logger_run,
             steps=steps,
-            conv_action=self.conv_action if self.action_type == "continuous" else None,
         )
 
     def test(self, episode=10):
@@ -721,12 +713,6 @@ class Actor_Critic_Policy_Gradient_Family:
         return record_test_fn(
             self.env_builder,
             logger_run,
-            lambda obs: self.actions(
-                normalize_empirical_observation(
-                    obs, self.obs_rms, on_device=self.memory_backend == "gpu"
-                ),
-                eval=True,
-            ),
+            self._policy_actions,
             episode,
-            conv_action=self.conv_action,
         )

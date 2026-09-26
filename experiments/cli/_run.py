@@ -3,9 +3,12 @@ from __future__ import annotations
 import sys
 from argparse import ArgumentParser, Namespace
 from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import dataclass
 from functools import partial
 from importlib import import_module
+
+import jax
 
 from env_builder.env_builder import get_env_info
 from experiments.checkpoint_store import FileCheckpointStore
@@ -70,6 +73,11 @@ def actor_critic_policy_kwargs(args: Namespace) -> dict[str, object]:
     return options
 
 
+def _transfer_guard(args: Namespace):
+    """Training-loop scope where implicit host<->device transfers raise (AGENTS.md hot path)."""
+    return jax.transfer_guard("disallow") if args.strict_transfers else nullcontext()
+
+
 def run_family(runner: FamilyRunner, argv=None):
     load_runtime_env()
     args = parse_runner_args(runner, argv)
@@ -97,16 +105,19 @@ def run_family(runner: FamilyRunner, argv=None):
             shared_evaluation_env=agent.env is agent.eval_env,
             algorithm_parameters=get_hyper_params(agent),
         )
-        agent.learn(
-            int(args.steps),
-            experiment_name=args.experiment_name,
-            eval_num=args.eval_num,
-            logger_factory=resolve_logger_factory(
-                args, policy_kwargs=agent.policy_kwargs, run_metadata=run_metadata
-            ),
-            progress_factory=make_progress,
-            record_test_fn=partial(test_fn, existing_env=agent.eval_env, training_env=agent.env),
-        )
+        with _transfer_guard(args):
+            agent.learn(
+                int(args.steps),
+                experiment_name=args.experiment_name,
+                eval_num=args.eval_num,
+                logger_factory=resolve_logger_factory(
+                    args, policy_kwargs=agent.policy_kwargs, run_metadata=run_metadata
+                ),
+                progress_factory=make_progress,
+                record_test_fn=partial(
+                    test_fn, existing_env=agent.eval_env, training_env=agent.env
+                ),
+            )
         agent.test()
     finally:
         _close_agent_envs(agent)
@@ -178,14 +189,15 @@ def run_distributed_family(runner: DistributedFamilyRunner, argv=None):
             shared_evaluation_env=False,
             algorithm_parameters=get_hyper_params(agent),
         )
-        agent.learn(
-            int(args.steps),
-            experiment_name=args.experiment_name,
-            logger_factory=resolve_logger_factory(
-                args, policy_kwargs=agent.policy_kwargs, run_metadata=run_metadata
-            ),
-            progress_factory=make_progress,
-        )
+        with _transfer_guard(args):
+            agent.learn(
+                int(args.steps),
+                experiment_name=args.experiment_name,
+                logger_factory=resolve_logger_factory(
+                    args, policy_kwargs=agent.policy_kwargs, run_metadata=run_metadata
+                ),
+                progress_factory=make_progress,
+            )
         return agent
     finally:
         runtime.shutdown()

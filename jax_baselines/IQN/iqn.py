@@ -4,15 +4,11 @@ import jax
 import jax.numpy as jnp
 import optax
 
-from jax_baselines.core.bulk_training import SCAN_UNROLL
-from jax_baselines.core.seeding import split_keys
 from jax_baselines.DQN.base_class import Q_Network_Family
-from jax_baselines.DQN.training import QNetTrainResult
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.losses import QuantileHuberLosses
 from jax_baselines.math.metrics import (
     array_metrics,
-    mean_metrics,
     quantile_metrics,
     replay_metrics,
     td_metrics,
@@ -25,6 +21,7 @@ from jax_baselines.optim import optimizer_metrics
 class IQN(Q_Network_Family):
     _run_name = "IQN"
     supports_bulk_training = True
+    _uses_rng = True
 
     def __init__(
         self,
@@ -57,19 +54,9 @@ class IQN(Q_Network_Family):
 
         # Use common JIT compilation
         self._compile_common_functions()
-        self._compiled_bulk_scan = jax.jit(self._bulk_scan)
 
     def get_q(self, params, obses, tau, key=None) -> jnp.ndarray:
         return self.model(params, key, self.preproc(params, key, obses), tau)
-
-    def actions(self, obs, epsilon, eval_mode=False):
-        params_to_use = self.get_behavior_params()
-        if eval_mode and self.use_checkpointing and self.ckpt.enabled:
-            params_to_use = self.checkpoint_params
-        if epsilon >= 1:
-            return self._random_actions()
-        greedy_actions = self._get_actions(params_to_use, obs, next(self.key_seq))
-        return self._epsilon_greedy_actions(greedy_actions, epsilon)
 
     def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
         conv_obses = convert_normalized_obs(obses)
@@ -82,81 +69,6 @@ class IQN(Q_Network_Family):
             ),
             axis=1,
         )
-
-    def _train_on_batch(self, data, context):
-        (
-            self.params,
-            self.target_params,
-            self.opt_state,
-            loss,
-            t_mean,
-            t_std,
-            new_priorities,
-            metrics,
-        ) = self._train_step(
-            self.params,
-            self.target_params,
-            self.opt_state,
-            context.train_steps_count,
-            next(self.key_seq),
-            **data,
-        )
-        return QNetTrainResult.from_values(
-            loss=loss,
-            target=t_mean,
-            replay_priorities=new_priorities,
-            metrics={**metrics, "loss/target_stds": t_std},
-        )
-
-    def _train_on_bulk(self, data, contexts):
-        steps = jnp.asarray([context.train_steps_count for context in contexts])
-        keys = split_keys(next(self.key_seq), len(contexts))
-        carry = (self.params, self.target_params, self.opt_state)
-        (
-            (self.params, self.target_params, self.opt_state),
-            (
-                losses,
-                targets,
-                target_stds,
-                priorities,
-                metrics,
-            ),
-        ) = self._compiled_bulk_scan(carry, keys, steps, data)
-        loss, target, metrics = mean_metrics(
-            (losses, targets, {**metrics, "loss/target_stds": target_stds})
-        )
-        return QNetTrainResult.from_values(
-            loss=loss,
-            target=target,
-            replay_priorities=priorities,
-            metrics=metrics,
-            update_count=len(contexts),
-        )
-
-    def _bulk_scan(self, carry, keys, steps, data):
-        def train_one(carry, xs):
-            params, target_params, opt_state = carry
-            step, key, batch = xs
-            (
-                params,
-                target_params,
-                opt_state,
-                loss,
-                t_mean,
-                t_std,
-                priorities,
-                metrics,
-            ) = self._train_step(
-                params,
-                target_params,
-                opt_state,
-                step,
-                key,
-                **batch,
-            )
-            return (params, target_params, opt_state), (loss, t_mean, t_std, priorities, metrics)
-
-        return jax.lax.scan(train_one, carry, (steps, keys, data), unroll=SCAN_UNROLL)
 
     def _train_step(
         self,
@@ -171,7 +83,8 @@ class IQN(Q_Network_Family):
         nxtobses,
         terminateds,
         weights=1,
-        indexes=None,
+        *,
+        diagnostics,
     ):
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
@@ -191,32 +104,40 @@ class IQN(Q_Network_Family):
         (loss, (abs_error, quantiles, tau)), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params, obses, actions, targets, weights, key2
         )
-        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+        updates, opt_state = self.optimizer.update(
+            grad, opt_state, params=params, diagnostics=diagnostics
+        )
         q_values = jnp.mean(quantiles, axis=1)
         target_values = jnp.mean(targets, axis=1)
-        metrics = {
-            **array_metrics(q_values, "loss/q"),
-            **array_metrics(target_values, "loss/target"),
-            **td_metrics(q_values, target_values),
-            **quantile_metrics(quantiles, taus=tau),
-            **optimizer_metrics(opt_state, "q"),
-            "loss/unweighted_loss": jnp.mean(abs_error),
-        }
+        metrics = (
+            {
+                **array_metrics(q_values, "loss/q"),
+                **array_metrics(target_values, "loss/target"),
+                **td_metrics(q_values, target_values),
+                **quantile_metrics(quantiles, taus=tau),
+                **optimizer_metrics(opt_state, "q"),
+                "loss/unweighted_loss": jnp.mean(abs_error),
+                "loss/target_stds": jnp.mean(jnp.std(targets, axis=1)),
+            }
+            if diagnostics
+            else {}
+        )
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
-            metrics.update(replay_metrics(weights, new_priorities))
+            if diagnostics:
+                metrics.update(replay_metrics(weights, new_priorities))
         return (
             params,
             target_params,
             opt_state,
             loss,
             jnp.mean(targets),
-            jnp.mean(jnp.std(targets, axis=1)),
             new_priorities,
             metrics,
+            {},
         )
 
     def _loss(self, params, obses, actions, targets, weights, key):

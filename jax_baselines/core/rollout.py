@@ -11,8 +11,6 @@ spec callbacks:
 
 - ``single_action`` / ``vector_action`` produce an :class:`ActionSelection`
   (the Q-Net family double-indexes discrete actions, the DPG family does not);
-- ``refresh_exploration`` updates epsilon for the Q-Net family and is a no-op
-  for the DPG family;
 - ``force_reset`` optionally supplies the adapter's checkpoint-failure reset.
 
 The per-episode checkpoint training pulse is shared via
@@ -115,7 +113,6 @@ class RolloutSpec:
     # policy seam (family-specific)
     single_action: Callable[[object, int], ActionSelection]
     vector_action: Callable[[object, int], ActionSelection]
-    refresh_exploration: Callable[[int], None]
     force_reset: Callable[[], object] | None
     # agent operations
     train: Callable[[int, int], object]
@@ -170,7 +167,7 @@ class RolloutEngine:
                 last_log_step = steps
             next_obs = batch_observation(next_obs)
             if spec.reward_normalization and spec.record_transition is not None:
-                spec.record_transition(reward, np.logical_or(terminated, truncated))
+                spec.record_transition(reward, terminated, truncated)
             spec.replay_buffer.add(obs, sel.store_action, reward, next_obs, terminated, truncated)
             score += float(reward)
             eplen += 1
@@ -189,7 +186,6 @@ class RolloutEngine:
                 obs = batch_observation(obs)
 
             if steps > spec.learning_starts and steps % spec.train_freq == 0:
-                spec.refresh_exploration(steps)
                 loss = spec.train(steps, spec.gradient_steps)
                 lossque.append(loss)
 
@@ -219,7 +215,6 @@ class RolloutEngine:
         last_log_step = 0
 
         for steps in pbar:
-            spec.refresh_exploration(steps)
             obs = spec.env.current_obs()
             sel = spec.vector_action(obs, steps)
             spec.env.step(sel.env_action)
@@ -233,7 +228,7 @@ class RolloutEngine:
             if log_due:
                 last_log_step = steps
             if spec.reward_normalization and spec.record_transition is not None:
-                spec.record_transition(rewards, done, active)
+                spec.record_transition(rewards, terminateds, truncateds, active)
             scores[active] += rewards[active]
             eplens[active] += 1
             autoreset = vector_autoreset_mask(spec.env, terminateds, truncateds, infos)
@@ -302,7 +297,7 @@ class RolloutEngine:
                 last_log_step = steps
             next_obs = batch_observation(next_obs)
             if spec.reward_normalization and spec.record_transition is not None:
-                spec.record_transition(reward, np.logical_or(terminated, truncated))
+                spec.record_transition(reward, terminated, truncated)
             spec.replay_buffer.add(obs, sel.store_action, reward, next_obs, terminated, truncated)
             score += float(reward)
             obs = next_obs
@@ -331,9 +326,6 @@ class RolloutEngine:
                 else:
                     obs, _ = spec.env.reset()
                 obs = batch_observation(obs)
-
-            if steps > spec.learning_starts and steps % spec.train_freq == 0:
-                spec.refresh_exploration(steps)
 
             if steps % spec.eval_freq == 0:
                 eval_result = spec.evaluate(steps)
@@ -384,7 +376,6 @@ class RolloutEngine:
                 spec.checkpoint_pulse(pulse_steps, accumulated_timesteps)
 
         for steps in pbar:
-            spec.refresh_exploration(steps)
             obs = spec.env.current_obs()
             sel = spec.vector_action(obs, steps)
             spec.env.step(sel.env_action)
@@ -401,7 +392,7 @@ class RolloutEngine:
             while pending_eval_steps:
                 run_eval(pending_eval_steps.popleft())
             if spec.reward_normalization and spec.record_transition is not None:
-                spec.record_transition(rewards, done, active)
+                spec.record_transition(rewards, terminateds, truncateds, active)
             scores[active] += rewards[active]
             eplens[active] += 1
             autoreset = vector_autoreset_mask(spec.env, terminateds, truncateds, infos)
@@ -477,13 +468,18 @@ class RolloutEngine:
         eval_result = None
         train_residual = 0
         group_iters = update_group_iters(spec.worker_size, spec.train_freq)
-        with jax.default_device(spec.memory_device):
-            false = jnp.zeros(spec.worker_size, dtype=bool)
-            state = (
-                jnp.zeros(spec.worker_size),
-                jnp.zeros(spec.worker_size, dtype=jnp.int32),
-                false,
-            )
+        # Episode state stays on device; it enters once, explicitly.
+        false, state = jax.device_put(
+            (
+                np.zeros(spec.worker_size, dtype=bool),
+                (
+                    np.zeros(spec.worker_size, dtype=np.float32),
+                    np.zeros(spec.worker_size, dtype=np.int32),
+                    np.zeros(spec.worker_size, dtype=bool),
+                ),
+            ),
+            spec.memory_device,
+        )
         completed_steps = []
         completed_rows = []
         pending_pulses = deque()
@@ -512,7 +508,6 @@ class RolloutEngine:
             completed_rows.clear()
 
         for steps in pbar:
-            spec.refresh_exploration(steps)
             obs = env.current_obs()
             sel = spec.vector_action(obs, steps)
             env.step(sel.env_action)
@@ -526,7 +521,7 @@ class RolloutEngine:
             while pending_evals:
                 eval_result = spec.evaluate(pending_evals.popleft())
             if spec.reward_normalization and spec.record_transition is not None:
-                spec.record_transition(rewards, jnp.logical_or(terminated, truncated))
+                spec.record_transition(rewards, terminated, truncated)
             state, _, _, completed = device_episode_step(
                 state,
                 rewards,

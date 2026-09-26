@@ -126,19 +126,6 @@ def make_train_contexts(agent, context_type, steps, chunk_size, **kwargs):
     return tuple(contexts)
 
 
-def reshape_bulk_batch(data, chunk_size, batch_size):
-    return jax.tree.map(lambda value: reshape_bulk_value(value, chunk_size, batch_size), data)
-
-
-def normalize_bulk_weights(data):
-    weights = data.get("weights")
-    if weights is None:
-        return data
-    data = dict(data)
-    data["weights"] = normalize_bulk_weight_value(weights)
-    return data
-
-
 def normalize_bulk_weight_value(value):
     shape = getattr(value, "shape", None)
     if shape is None or len(shape) < 2:
@@ -158,37 +145,53 @@ def reshape_bulk_value(value, chunk_size, batch_size):
     return value.reshape((chunk_size, batch_size, *shape[1:]))
 
 
-def iter_bulk_batches(data, contexts):
-    """Yield per-mini-update slices from a bulk replay sample."""
-    for index in range(len(contexts)):
-        yield jax.tree.map(lambda value: slice_bulk_value(value, index), data)
-
-
-def slice_bulk_value(value, index):
-    shape = getattr(value, "shape", None)
-    if shape is None or len(shape) == 0:
-        return value
-    return value[index]
-
-
-def flatten_bulk_batch(data):
-    """Collapse ``(chunk, batch, ...)`` bulk data into ``(chunk * batch, ...)``."""
-    return jax.tree.map(flatten_bulk_value, data)
-
-
-def flatten_bulk_value(value):
-    shape = getattr(value, "shape", None)
-    if shape is None or len(shape) < 2:
-        return value
-    return value.reshape((shape[0] * shape[1], *shape[2:]))
-
-
-def flatten_priority_values(values):
-    shape = getattr(values, "shape", None)
-    if shape is None or len(shape) <= 1:
-        return values
-    return values.reshape((-1,))
-
-
 def host_priority_values(values):
-    return np.asarray(jax.device_get(flatten_priority_values(values)))
+    """CPU PER write-back: one explicit device->host transfer, flattened on the host."""
+    return np.asarray(jax.device_get(values)).reshape(-1)
+
+
+@jax.jit(static_argnames=("chunk_size", "batch_size", "flat", "obs_apply", "reward_apply"))
+def _prepare_batch(
+    batch, obs_stats, reward_stats, chunk_size, batch_size, flat, obs_apply, reward_apply
+):
+    if chunk_size is not None and "weights" in batch:
+        # PER weights are max-normalized per update, as a single-update sample would be.
+        weights = normalize_bulk_weight_value(
+            reshape_bulk_value(batch["weights"], chunk_size, batch_size)
+        )
+        batch["weights"] = weights.reshape(batch["weights"].shape) if flat else weights
+    if chunk_size is not None and not flat:
+        batch = jax.tree.map(lambda value: reshape_bulk_value(value, chunk_size, batch_size), batch)
+    if obs_apply is not None:
+        batch["obses"] = obs_apply(batch["obses"], obs_stats)
+        batch["nxtobses"] = obs_apply(batch["nxtobses"], obs_stats)
+    if reward_apply is not None:
+        batch["rewards"] = reward_apply(batch["rewards"], reward_stats)
+    return batch
+
+
+def prepare_replay_batch(
+    data, *, chunk_size=None, batch_size=None, flat=False, obs_rms=None, rewards=None
+):
+    """Replay sample -> learner batch with one explicit transfer and one compiled call.
+
+    Bulk samples (``chunk_size`` updates of ``batch_size``) get PER weights normalized per
+    update and become ``(chunk, batch, ...)``, or stay flat for learners that slice the
+    chunk themselves (``flat``). Observations and rewards are normalized with the current
+    device statistics whatever the replay storage. ``indexes`` stays where the replay
+    produced it for the priority write-back.
+    """
+    batch = jax.device_put({name: value for name, value in data.items() if name != "indexes"})
+    batch = _prepare_batch(
+        batch,
+        None if obs_rms is None else obs_rms.stats,
+        None if rewards is None else rewards.stats,
+        chunk_size=chunk_size,
+        batch_size=batch_size,
+        flat=flat,
+        obs_apply=None if obs_rms is None else obs_rms.apply,
+        reward_apply=None if rewards is None else rewards.apply,
+    )
+    if "indexes" in data:
+        batch["indexes"] = data["indexes"]
+    return batch

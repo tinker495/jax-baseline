@@ -1,13 +1,10 @@
-import random
 from copy import deepcopy
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import optax
 
 from jax_baselines.APE_X.base_class import Ape_X_Family
-from jax_baselines.core.seeding import key_gen
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.losses import QuantileHuberLosses
 from jax_baselines.math.param_updates import hard_update
@@ -111,22 +108,17 @@ class APE_X_IQN(Ape_X_Family):
         self.get_q = jax.jit(self.get_q)
         self._loss = jax.jit(self._loss)
         self._target = jax.jit(self._target)
-        self._train_step = jax.jit(self._train_step)
 
     def get_q(self, params, obses, tau, key=None) -> jnp.ndarray:
         return self.model(params, key, self.preproc(params, key, obses), tau)
 
     def get_actor_builder(self):
         gamma = self._gamma
-        action_size = self.action_size[0]
-        param_noise = self.param_noise
         delta = self.delta
         n_support = self.n_support
         CVaR = self.CVaR
 
         def builder():
-            key_seq = key_gen(random.randint(0, 1000000))
-
             def get_abs_td_error(
                 model,
                 preproc,
@@ -158,7 +150,9 @@ class APE_X_IQN(Ape_X_Family):
                     jnp.take_along_axis(next_q, next_actions, axis=1)
                 )  # batch x support
                 target = rewards + gamma * (1.0 - terminateds) * next_vals
-                loss = QuantileHuberLosses(jnp.expand_dims(target, axis=2), q_values, tau, delta)
+                loss = QuantileHuberLosses(
+                    jnp.expand_dims(target, axis=2), q_values, jnp.expand_dims(tau, axis=1), delta
+                )
                 return jnp.squeeze(loss)
 
             def actor(model, preproc, params, obses, key):
@@ -171,36 +165,9 @@ class APE_X_IQN(Ape_X_Family):
                 )
                 return jnp.expand_dims(jnp.argmax(jnp.mean(q_values, axis=2), axis=1), axis=1)
 
-            if param_noise:
-
-                def get_action(actor, params, obs, epsilon, key):
-                    return int(np.asarray(actor(params, obs, key))[0])
-
-            else:
-
-                def get_action(actor, params, obs, epsilon, key):
-                    if epsilon <= np.random.uniform(0, 1):
-                        actions = int(np.asarray(actor(params, obs, key))[0])
-                    else:
-                        actions = np.random.choice(action_size)
-                    return actions
-
-            def random_action(params, obs, epsilon, key):
-                return np.random.choice(action_size)
-
-            return get_abs_td_error, actor, get_action, random_action, key_seq
+            return get_abs_td_error, actor
 
         return builder
-
-    def _invoke_train_step(self, steps, data):
-        return self._train_step(
-            self.params,
-            self.target_params,
-            self.opt_state,
-            steps,
-            next(self.key_seq) if self.param_noise else None,
-            **data,
-        )
 
     def _train_step(
         self,
@@ -235,7 +202,9 @@ class APE_X_IQN(Ape_X_Family):
         (loss, abs_error), grad = jax.value_and_grad(self._loss, has_aux=True)(
             params, obses, actions, targets, weights, key2
         )
-        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
+        updates, opt_state = self.optimizer.update(
+            grad, opt_state, params=params, diagnostics=False
+        )
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = abs_error

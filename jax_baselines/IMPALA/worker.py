@@ -1,6 +1,7 @@
 from functools import partial
 
 import jax
+import numpy as np
 
 from jax_baselines.APE_X.common_servers import WorkerMetricLogger
 from jax_baselines.core.env_info import prepare_worker_env
@@ -39,10 +40,10 @@ class Impala_Worker:
                 worker_replay_factory, local_size, env_dict, None
             )
             actor_model, _ = model_builder()
-            actor, get_action_prob, convert_action = actor_builder()
-
-            actor = jax.jit(partial(actor, actor_model))
-            get_action_prob = partial(get_action_prob, actor)
+            sample_action, convert_action = actor_builder()
+            sample_action = jax.jit(partial(sample_action, actor_model))
+            # Drawn from the NumPy stream seed_prngs just seeded (unseeded runs stay random).
+            key = jax.random.PRNGKey(jax.device_put(np.random.randint(np.iinfo(np.int32).max)))
 
             if seed is not None:
                 try:
@@ -70,7 +71,8 @@ class Impala_Worker:
                     update.clear()
                 for _ in range(local_size):
                     eplen += 1
-                    actions, log_prob = get_action_prob(actor_params, obs)
+                    actions, log_prob, key = sample_action(actor_params, jax.device_put(obs), key)
+                    actions, log_prob = jax.device_get((actions, log_prob))
                     next_obs, reward, terminated, truncated, _info = self.env.step(
                         convert_action(actions)
                     )

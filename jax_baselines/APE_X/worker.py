@@ -1,12 +1,32 @@
 from functools import partial
 
 import jax
+import jax.numpy as jnp
+import numpy as np
 
 from jax_baselines.APE_X.common_servers import WorkerMetricLogger
 from jax_baselines.core.env_info import prepare_worker_env
 from jax_baselines.core.env_protocols import batch_observation, log_environment_metrics
 from jax_baselines.core.replay_protocol import make_worker_local_replay_buffer
 from jax_baselines.core.seeding import seed_prngs
+
+
+def make_behavior_action(actor, action_size, epsilon):
+    """One worker's policy action as one compiled call with its PRNG key as a device carry.
+
+    The greedy ``actor(params, obs, key)`` action is replaced by a uniform random one with
+    probability ``epsilon``, or used as is under parameter noise (``epsilon=None``).
+    """
+
+    def act(params, obs, key):
+        key, net_key, explore_key, random_key = jax.random.split(key, 4)
+        greedy = jnp.reshape(actor(params, obs, net_key), ())
+        if epsilon is None:
+            return greedy, key
+        random_action = jax.random.randint(random_key, (), 0, action_size)
+        return jnp.where(jax.random.uniform(explore_key) < epsilon, random_action, greedy), key
+
+    return jax.jit(act)
 
 
 class Ape_X_Worker:
@@ -40,18 +60,19 @@ class Ape_X_Worker:
                 worker_replay_factory, local_size, env_dict, n_s
             )
             preproc, model = model_builder()
-            (
-                get_abs_td_error,
-                actor,
-                get_action,
-                random_action,
-                key_seq,
-            ) = actor_builder()
+            get_abs_td_error, actor = actor_builder()
+            get_abs_td_error = partial(get_abs_td_error, model, preproc)
 
-            get_abs_td_error = jax.jit(partial(get_abs_td_error, model, preproc))
-            actor = jax.jit(partial(actor, model, preproc))
-            _get_action = partial(get_action, actor)
-            get_action = random_action
+            @jax.jit
+            def td_error(params, batch, key):
+                key, subkey = jax.random.split(key)
+                return get_abs_td_error(params, **batch, key=subkey), key
+
+            action_size = self.env_info["action_size"][0]
+            act = make_behavior_action(partial(actor, model, preproc), action_size, eps)
+            # Drawn from the NumPy stream seed_prngs just seeded (unseeded runs stay random).
+            key = jax.random.PRNGKey(jax.device_put(np.random.randint(np.iinfo(np.int32).max)))
+            policy_ready = False
 
             if seed is not None:
                 try:
@@ -80,10 +101,16 @@ class Ape_X_Worker:
                 if update.is_set():
                     params = jax.device_put(param_server.get_params())
                     update.clear()
-                    get_action = _get_action
+                    policy_ready = True
 
                 eplen += 1
-                actions = get_action(params, obs, eps, next(key_seq))
+                if policy_ready:
+                    # Env boundary: one explicit upload of the observation, one download.
+                    action, key = act(params, jax.device_put(obs), key)
+                    actions = jax.device_get(action).item()
+                else:
+                    # Warmup actions need no device data: a host draw avoids the round trip.
+                    actions = np.random.randint(action_size)
                 next_obs, reward, terminated, truncated, _info = self.env.step(actions)
                 pending_steps += 1
                 next_obs = batch_observation(next_obs)
@@ -119,12 +146,10 @@ class Ape_X_Worker:
                 if len(local_buffer) >= local_size:
                     transition = local_buffer.get_buffer()
                     local_buffer.clear()
-                    abs_td_error = get_abs_td_error(
-                        params,
-                        **local_buffer.conv_transitions(transition),
-                        key=next(key_seq),
+                    abs_td_error, key = td_error(
+                        params, jax.device_put(local_buffer.conv_transitions(transition)), key
                     )
-                    global_buffer.add(**transition, priorities=abs_td_error)
+                    global_buffer.add(**transition, priorities=jax.device_get(abs_td_error))
                     if logger_server is not None and pending_steps:
                         logger_server.log_worker({}, episode, environment_steps=pending_steps)
                         pending_steps = 0

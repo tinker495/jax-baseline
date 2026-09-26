@@ -1,14 +1,11 @@
-from collections.abc import Callable
 from copy import deepcopy
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import optax
 
 from jax_baselines.APE_X.dpg_base_class import Ape_X_Deteministic_Policy_Gradient_Family
 from jax_baselines.core.bulk_training import SCAN_UNROLL
-from jax_baselines.core.seeding import key_gen
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.param_updates import soft_update
 
@@ -101,8 +98,6 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
 
         self.opt_policy_state = self.optimizer.init(self.policy_params)
         self.opt_critic_state = self.optimizer.init(self.critic_params)
-        self._get_actions: Callable = jax.jit(self._get_actions)
-        self._compiled_train_step: Callable = jax.jit(self._train_step)
 
     def get_actor_builder(self):
         gamma = self._gamma
@@ -110,20 +105,7 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
         action_noise_clamp = self.action_noise_clamp
         target_action_noise = self.target_action_noise
 
-        class Noise:
-            def __init__(self, action_size) -> None:
-                self.action_size = action_size
-
-            def __call__(self):
-                return np.random.normal(size=(1, self.action_size))
-
-            def reset(self, worker_id):
-                pass
-
         def builder():
-            noise = Noise(action_size)
-            key_seq = key_gen(42)
-
             def get_abs_td_error(
                 actor,
                 critic,
@@ -156,32 +138,13 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
                 td1_error = jnp.abs(q_values1 - target)
                 return jnp.squeeze(td1_error)
 
-            def actor(actor, params, obses, key):
-                return actor(params["policy"], key, convert_normalized_obs(obses))
+            def noise_step(noise, key, reset):
+                # Stateless Gaussian exploration noise: episode boundaries do not matter.
+                return jax.random.normal(key, noise.shape)
 
-            def get_action(actor, params, obs, noise, epsilon, key):
-                actions = np.clip(np.asarray(actor(params, obs, key)) + noise() * epsilon, -1, 1)[0]
-                return actions
-
-            def random_action(params, obs, noise, epsilon, key):
-                return np.random.uniform(-1.0, 1.0, size=(action_size))
-
-            return get_abs_td_error, actor, get_action, random_action, noise, key_seq
+            return get_abs_td_error, noise_step
 
         return builder
-
-    def _invoke_train_step(self, steps, data):
-        return self._compiled_train_step(
-            self.policy_params,
-            self.critic_params,
-            self.target_policy_params,
-            self.target_critic_params,
-            self.opt_policy_state,
-            self.opt_critic_state,
-            next(self.key_seq),
-            steps,
-            **data,
-        )
 
     def _train_step(
         self,
@@ -191,8 +154,8 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
         target_critic_params,
         opt_policy_state,
         opt_critic_state,
-        key,
         step,
+        key,
         obses,
         actions,
         rewards,
@@ -245,20 +208,17 @@ class APE_X_TD3(Ape_X_Deteministic_Policy_Gradient_Family):
                 step,
             )
             critic_updates, opt_critic_state = self.optimizer.update(
-                critic_grad, opt_critic_state, params=critic_params
+                critic_grad, opt_critic_state, params=critic_params, diagnostics=False
             )
 
-            def update_actor(state):
-                policy_params, opt_policy_state = state
-                updates, opt_policy_state = self.optimizer.update(
-                    actor_grad, opt_policy_state, params=policy_params
-                )
-                return optax.apply_updates(policy_params, updates), opt_policy_state
-
-            policy_params, opt_policy_state = jax.lax.cond(
-                step % self.policy_delay == 0,
-                update_actor,
-                lambda state: state,
+            actor_updates, updated_policy_state = self.optimizer.update(
+                actor_grad, opt_policy_state, params=policy_params, diagnostics=False
+            )
+            # A select, not lax.cond: a GPU conditional copies its predicate to the host on
+            # every mini-update, while the actor gradient is computed either way.
+            policy_params, opt_policy_state = jax.tree.map(
+                lambda updated, kept: jnp.where(step % self.policy_delay == 0, updated, kept),
+                (optax.apply_updates(policy_params, actor_updates), updated_policy_state),
                 (policy_params, opt_policy_state),
             )
             return (

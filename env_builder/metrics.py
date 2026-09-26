@@ -77,11 +77,13 @@ class EnvMetrics:
             raise ValueError("Environment metrics must be real numeric values")
         if not names:
             return
+        # Adapters record unit weights every step: skip the multiply kernel then.
+        scaled = values if weight == 1 else values * weight
         if names in self._sums:
-            self._sums[names] = self._sums[names] + values * weight
+            self._sums[names] = self._sums[names] + scaled
             self._weights[names] += weight
         else:
-            self._sums[names] = values * weight
+            self._sums[names] = scaled
             self._weights[names] = weight
 
     def log(self, logger: MetricLogger, steps: int | None, namespace: str) -> None:

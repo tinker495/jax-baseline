@@ -3,7 +3,6 @@ import jax.numpy as jnp
 import optax
 
 from jax_baselines.BBF.bbf import BBF
-from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.math.distributional import (
     HLGaussBackend,
     HLGaussTransform,
@@ -19,6 +18,7 @@ from jax_baselines.math.param_updates import (
     tree_random_normal_like,
 )
 from jax_baselines.optim import optimizer_metrics
+from jax_baselines.SPR.spr import scan_with_resets
 
 
 class HL_GAUSS_BBF(BBF):
@@ -116,17 +116,16 @@ class HL_GAUSS_BBF(BBF):
         terminateds,
         filled,
         weights=1,
-        indexes=None,
+        *,
+        resets,
+        diagnostics,
     ):
         obses = convert_normalized_obs(obses)
         actions = actions.astype(jnp.int32)
         not_terminateds = 1.0 - terminateds
+        # Only image leaves (B x K x H x W x C) are augmented; the rank is static.
         obses = jax.tree.map(
-            lambda value: jax.lax.cond(
-                len(value.shape) >= 5,
-                lambda: self._image_augmentation(value, key),
-                lambda: value,
-            ),
+            lambda value: self._image_augmentation(value, key) if value.ndim >= 5 else value,
             obses,
         )
 
@@ -139,14 +138,12 @@ class HL_GAUSS_BBF(BBF):
         batched_not_terminateds = not_terminateds[batch_idxes]
         batched_filled = filled[batch_idxes]
         batched_weights = weights[batch_idxes] if self.prioritized_replay else 1
-        gradient_steps = batch_idxes.shape[0]
-        batched_steps = steps + jnp.arange(gradient_steps)
         n_step, gamma = self.get_scheduled_gamma_nstep(steps)
         _gamma = jnp.power(gamma, jnp.arange(self.n_step))
 
-        def f(updates, input):
+        def f(updates, input, reset):
             params, target_params, opt_state, key = updates
-            obses, actions, rewards, not_terminateds, filled, weights, steps = input
+            obses, actions, rewards, not_terminateds, filled, weights = input
             key, subkey = jax.random.split(key)
             parsed_obses = jax.tree.map(
                 lambda value: jnp.reshape(value[:, 0], (-1, *value.shape[2:])), obses
@@ -198,23 +195,23 @@ class HL_GAUSS_BBF(BBF):
                 target_distribution,
                 weights,
                 key,
+                diagnostics=diagnostics,
             )
-            updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-            metrics.update(target_metrics)
-            metrics.update(optimizer_metrics(opt_state, "q"))
-            if self.prioritized_replay:
-                metrics.update(replay_metrics(weights, centropy))
+            updates, opt_state = self.optimizer.update(
+                grad, opt_state, params=params, diagnostics=diagnostics
+            )
+            if diagnostics:
+                metrics.update(target_metrics)
+                metrics.update(optimizer_metrics(opt_state, "q"))
+                if self.prioritized_replay:
+                    metrics.update(replay_metrics(weights, centropy))
             params = optax.apply_updates(params, updates)
             target_params = soft_update(params, target_params, 0.005)
-            params, opt_state = scaled_by_reset_with_filter(
-                params,
-                opt_state,
-                self.optimizer,
-                key,
-                steps,
-                self.soft_reset_freq,
-                self.reset_hardsoft,
-            )
+            if reset:
+                # Shrink-and-perturb on a host-scheduled update (see `_reset_period`).
+                params, opt_state = scaled_by_reset_with_filter(
+                    params, opt_state, self.optimizer, key, True, self.reset_hardsoft
+                )
             target_q = self.hl_gauss.to_scalar(jnp.expand_dims(target_distribution, 1)).mean()
             return (params, target_params, opt_state, subkey), (
                 centropy,
@@ -224,7 +221,7 @@ class HL_GAUSS_BBF(BBF):
                 metrics,
             )
 
-        (params, target_params, opt_state, _), outputs = jax.lax.scan(
+        (params, target_params, opt_state, _), outputs = scan_with_resets(
             f,
             (params, target_params, opt_state, key),
             (
@@ -234,9 +231,8 @@ class HL_GAUSS_BBF(BBF):
                 batched_not_terminateds,
                 batched_filled,
                 batched_weights,
-                batched_steps,
             ),
-            unroll=SCAN_UNROLL,
+            resets,
         )
         centropy, qloss, rprloss, target_q, metrics = outputs
         qloss = jnp.mean(qloss)
@@ -253,8 +249,8 @@ class HL_GAUSS_BBF(BBF):
             qloss,
             target_q,
             new_priorities,
-            rprloss,
-            jax.tree.map(jnp.mean, metrics),
+            {**jax.tree.map(jnp.mean, metrics), "loss/rprloss": rprloss} if diagnostics else {},
+            {},
         )
 
     def _target(

@@ -26,53 +26,45 @@ def tree_random_normal_like(rng_key: jax.Array, target: PyTree, mul=1.2):
 
 def scaled_by_reset(
     tensors: PyTree,
-    optimizer_state: optax.GradientTransformationExtraArgs,
+    optimizer_state: optax.OptState,
     optimizer: optax.GradientTransformation,
     key: jax.Array,
-    steps: int,
-    update_period: int,
+    reset: bool,
     tau: float,
 ):
-    update = steps % update_period == 0
+    """Shrink-and-perturb on a host-scheduled update.
 
-    def _soft_reset(old_tensors, old_optimizer_state, key):
-        new_tensors = tree_random_normal_like(key, tensors)
-        soft_reseted = jax.tree_util.tree_map(
-            lambda new, old: tau * new + (1.0 - tau) * old, new_tensors, old_tensors
-        )
-        return soft_reseted, optimizer.init(soft_reseted)
-
-    tensors, optimizer_state = jax.lax.cond(
-        update, _soft_reset, lambda p, os, k: (p, os), tensors, optimizer_state, key
+    ``reset`` is a static flag from the host update schedule: a device predicate would make
+    the GPU conditional copy it to the host on every update.
+    """
+    if not reset:
+        return tensors, optimizer_state
+    soft_reseted = jax.tree_util.tree_map(
+        lambda new, old: tau * new + (1.0 - tau) * old,
+        tree_random_normal_like(key, tensors),
+        tensors,
     )
-    return tensors, optimizer_state
+    return soft_reseted, optimizer.init(soft_reseted)
 
 
 def scaled_by_reset_with_filter(
     tensors: PyTree,
-    optimizer_state: optax.GradientTransformationExtraArgs,
+    optimizer_state: optax.OptState,
     optimizer: optax.GradientTransformation,
     key: jax.Array,
-    steps: int,
-    update_period: int,
+    reset: bool,
     taus: PyTree,
 ):
-    update = steps % update_period == 0
-
-    def _soft_reset(old_tensors, old_optimizer_state, key):
-        new_tensors = tree_random_normal_like(key, tensors)
-        soft_reseted = jax.tree_util.tree_map(
-            lambda new, old, tau: tau * new + (1.0 - tau) * old,
-            new_tensors,
-            old_tensors,
-            taus,
-        )
-        return soft_reseted, optimizer.init(soft_reseted)
-
-    tensors, optimizer_state = jax.lax.cond(
-        update, _soft_reset, lambda p, os, k: (p, os), tensors, optimizer_state, key
+    """Per-leaf shrink-and-perturb on a host-scheduled update (``reset`` is static)."""
+    if not reset:
+        return tensors, optimizer_state
+    soft_reseted = jax.tree_util.tree_map(
+        lambda new, old, tau: tau * new + (1.0 - tau) * old,
+        tree_random_normal_like(key, tensors),
+        tensors,
+        taus,
     )
-    return tensors, optimizer_state
+    return soft_reseted, optimizer.init(soft_reseted)
 
 
 def filter_like_tree(tensors: PyTree, name_filter: str, filter_fn: Callable):

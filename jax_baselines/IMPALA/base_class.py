@@ -28,6 +28,7 @@ from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 class IMPALA_Family:
     critic: Callable[..., Any]
+    _train_step: Callable[..., tuple]
     _run_name = "IMPALA"
     _learn_log_interval = 1000
 
@@ -47,7 +48,7 @@ class IMPALA_Family:
         use_entropy_adv_shaping=True,
         entropy_adv_shaping_kappa=2.0,
         rho_max=1.0,
-        log_interval=1,
+        log_interval=100,
         log_dir=None,
         _init_setup_model=True,
         policy_kwargs=None,
@@ -101,6 +102,8 @@ class IMPALA_Family:
         self._init_setup_model = _init_setup_model
         if self._init_setup_model:
             self.setup_model()
+        # Update PRNG carry; drawn after model init so initial params are unchanged.
+        self._train_key = next(self.key_seq)
 
     def save_params(self, path):
         self.checkpoint_store.save(
@@ -194,59 +197,92 @@ class IMPALA_Family:
     def setup_model(self):
         pass
 
-    def _train_step(self, steps):
-        pass
+    def train_step(self, steps):
+        (
+            self.actor_params,
+            self.critic_params,
+            self.actor_opt_state,
+            self.critic_opt_state,
+            self._train_key,
+            critic_loss,
+            actor_loss,
+            entropy_loss,
+            rho,
+            targets,
+        ) = self._train_step(
+            self.actor_params,
+            self.critic_params,
+            self.actor_opt_state,
+            self.critic_opt_state,
+            self._train_key,
+            *jax.device_put(self.buffer.sample()),
+        )
+
+        if steps % self.log_interval == 0:
+            log_dict = {
+                "loss/critic_loss": critic_loss,
+                "loss/actor_loss": actor_loss,
+                "loss/entropy_loss": entropy_loss,
+                "loss/mean_rho": rho,
+                "loss/mean_target": targets,
+            }
+            self.logger_server.log_trainer(
+                steps, {key: float(value) for key, value in jax.device_get(log_dict).items()}
+            )
+        return critic_loss
 
     def get_actor_builder(self):
+        """Return a worker-side factory for the compiled behavior-action stage.
+
+        ``sample_action(actor_model, actor_params, obses, key)`` runs inference,
+        sampling and the behavior log-prob in one call and returns the advanced key.
+        """
         action_type = self.action_type
-        action_size = self.action_size
 
         def builder():
             if action_type == "discrete":
 
-                def actor(actor_model, actor_params, obses, key=None):
-                    prob = actor_model(actor_params, key, convert_normalized_obs(obses))
-                    return jax.nn.softmax(prob)
-
-                def get_action_prob(actor, actor_params, obses):
-                    prob = np.asarray(actor(actor_params, obses))
-                    action = np.random.choice(action_size[0], p=prob[0])
-                    return action, np.log(prob[0][action])
+                def sample_action(actor_model, actor_params, obses, key):
+                    key, sample_key = jax.random.split(key)
+                    prob = jax.nn.softmax(
+                        actor_model(actor_params, None, convert_normalized_obs(obses))
+                    )[0]
+                    action = jax.random.categorical(sample_key, jnp.log(prob))
+                    return action, jnp.log(prob[action]), key
 
                 def convert_action(action):
                     return int(action)
 
             elif action_type == "continuous":
 
-                def actor(actor_model, actor_params, obses, key=None):
-                    mean, log_std = actor_model(actor_params, key, convert_normalized_obs(obses))
-                    return mean, log_std
-
-                def get_action_prob(actor, actor_params, obses):
-                    mean, log_std = jax.device_get(actor(actor_params, obses))
-                    std = np.exp(log_std)
-                    action = np.random.normal(mean, std)
-                    return action, -(
-                        0.5
-                        * np.sum(
-                            np.square((action - mean) / (std + 1e-7)),
-                            axis=-1,
-                            keepdims=True,
-                        )
-                        + np.sum(log_std, axis=-1, keepdims=True)
-                        + 0.5 * np.log(2 * np.pi) * np.asarray(action.shape[-1], dtype=np.float32)
+                def sample_action(actor_model, actor_params, obses, key):
+                    key, sample_key = jax.random.split(key)
+                    mean, log_std = actor_model(actor_params, None, convert_normalized_obs(obses))
+                    std = jnp.exp(log_std)
+                    action = mean + std * jax.random.normal(sample_key, mean.shape, mean.dtype)
+                    return (
+                        action,
+                        -(
+                            0.5
+                            * jnp.sum(
+                                jnp.square((action - mean) / (std + 1e-7)),
+                                axis=-1,
+                                keepdims=True,
+                            )
+                            + jnp.sum(log_std, axis=-1, keepdims=True)
+                            + 0.5
+                            * jnp.log(2 * jnp.pi)
+                            * jnp.asarray(action.shape[-1], dtype=jnp.float32)
+                        ),
+                        key,
                     )
 
                 def convert_action(action):
                     return action[0]
 
-            return actor, get_action_prob, convert_action
+            return sample_action, convert_action
 
         return builder
-
-    def description(self):
-        array_module = jnp if any(isinstance(loss, jax.Array) for loss in self.lossque) else np
-        return f"loss : {array_module.mean(array_module.asarray(tuple(self.lossque))):.3f} |"
 
     def run_name_update(self, run_name):
         return run_name
@@ -308,7 +344,8 @@ class IMPALA_Family:
             for u in update:
                 u.set()
 
-            cpu_param = jax.device_put(self.actor_params, jax.devices("cpu")[0])
+            # Workers receive host copies: one explicit download per broadcast.
+            cpu_param = jax.device_get(self.actor_params)
             param_server = self.runtime.create_param_server(cpu_param)
 
             worker_replay_factory = require_replay_factory(
@@ -341,10 +378,9 @@ class IMPALA_Family:
             for steps in pbar:
                 if stop.is_set():
                     raise RuntimeError("distributed worker stopped during training")
-                loss, _rho = self.train_step(steps)
+                self.lossque.append(self.train_step(steps))
                 completed_iterations = steps + 1
                 update_steps += self._optimizer_updates_per_train_step()
-                self.lossque.append(loss)
                 if steps % log_interval == 0:
                     self.logger_server.log_trainer(
                         steps,
@@ -353,10 +389,12 @@ class IMPALA_Family:
                             "time/elapsed_seconds": time.perf_counter() - started_at,
                         },
                     )
-                    pbar.set_description(self.description())
+                    pbar.set_description(
+                        f"loss : {np.mean(jax.device_get(tuple(self.lossque))):.3f} |"
+                    )
 
                 if steps % self.update_freq == 0:
-                    cpu_param = jax.device_put(self.actor_params, jax.devices("cpu")[0])
+                    cpu_param = jax.device_get(self.actor_params)
                     param_server.update_params(cpu_param)
                     for u in update:
                         u.set()

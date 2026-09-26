@@ -45,12 +45,16 @@ def track_optimizer(
     learning_rate: optax.ScalarOrSchedule,
     grad_max: float | None = None,
     reset_steps: int | None = None,
-) -> optax.GradientTransformation:
+) -> optax.GradientTransformationExtraArgs:
     """Observe optimizer inputs and updates without changing their values.
 
     Learning rate is the supplied scalar schedule, before any adaptive
     preconditioning. Parameter norm is measured before the update. A periodic
     inner-state reset also restarts the schedule's diagnostic counter.
+
+    The norms are diagnostics only: ``update(..., diagnostics=False)`` skips them and keeps
+    the previous values, so compiled updates specialised for non-logging steps do not pay
+    for three whole-tree reductions.
     """
     if reset_steps is not None and reset_steps <= 0:
         raise ValueError("optimizer reset_steps must be positive")
@@ -58,10 +62,14 @@ def track_optimizer(
     def rate(count):
         if reset_steps is not None:
             count = count % reset_steps
-        return jnp.asarray(learning_rate(count) if callable(learning_rate) else learning_rate)
+        # Strong float32 like the norms below: a weak-typed carry leaf would recompile every
+        # compiled update once its first output comes back strongly typed.
+        return jnp.asarray(
+            learning_rate(count) if callable(learning_rate) else learning_rate, dtype=jnp.float32
+        )
 
     def init_fn(params):
-        zero = jnp.asarray(0.0)
+        zero = jnp.zeros((), dtype=jnp.float32)
         return OptimizerMetricsState(
             optimizer.init(params),
             jnp.zeros((), dtype=jnp.int32),
@@ -72,22 +80,29 @@ def track_optimizer(
             zero,
         )
 
-    def update_fn(updates, state, params=None):
+    def update_fn(updates, state, params=None, *, diagnostics=True, **extra_args):
+        del extra_args
+        count = jnp.asarray(optax.safe_increment(state.count))
+        if not diagnostics:
+            updates, inner_state = optimizer.update(updates, state.inner_state, params)
+            return updates, state._replace(
+                inner_state=inner_state, count=count, learning_rate=rate(state.count)
+            )
         grad_norm = optax.tree.norm(updates)
         updates, inner_state = optimizer.update(updates, state.inner_state, params)
         return updates, OptimizerMetricsState(
             inner_state,
-            jnp.asarray(optax.safe_increment(state.count)),
+            count,
             grad_norm,
             optax.tree.norm(updates),
-            optax.tree.norm(params) if params is not None else jnp.asarray(jnp.nan),
+            optax.tree.norm(params) if params is not None else jnp.full((), jnp.nan, jnp.float32),
             rate(state.count),
             (grad_norm > grad_max).astype(jnp.float32)
             if grad_max is not None
-            else jnp.asarray(0.0),
+            else jnp.zeros((), dtype=jnp.float32),
         )
 
-    return optax.GradientTransformation(init_fn, update_fn)
+    return optax.GradientTransformationExtraArgs(init_fn, update_fn)
 
 
 def optimizer_metrics(opt_state: optax.OptState, prefix: str) -> dict[str, jax.Array]:
@@ -120,13 +135,12 @@ def optimizer_reset_by_period(
         opt_state, step_count = state
         updates, opt_state = optimizer.update(updates, opt_state, params)
 
-        def reset():
-            return optimizer.init(params)
-
-        def keep():
-            return opt_state
-
-        opt_state = jax.lax.cond((step_count + 1) % reset_steps == 0, reset, keep)
+        # A select, not lax.cond: a GPU conditional copies its predicate to the host every
+        # update, while re-initialising optimizer state is only a few zero fills.
+        reset = (step_count + 1) % reset_steps == 0
+        opt_state = jax.tree.map(
+            lambda fresh, kept: jnp.where(reset, fresh, kept), optimizer.init(params), opt_state
+        )
 
         return updates, (opt_state, step_count + 1)
 

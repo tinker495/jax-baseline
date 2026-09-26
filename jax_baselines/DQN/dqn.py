@@ -34,7 +34,6 @@ class DQN(Q_Network_Family):
 
         # Use common JIT compilation
         self._compile_common_functions()
-        self._compiled_bulk_scan = jax.jit(self._bulk_scan)
 
     def get_q(self, params, obses, key=None) -> jnp.ndarray:
         return self.model(params, key, self.preproc(params, key, obses))
@@ -57,7 +56,8 @@ class DQN(Q_Network_Family):
         nxtobses,
         terminateds,
         weights=1,
-        indexes=None,
+        *,
+        diagnostics,
     ):
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
@@ -74,22 +74,37 @@ class DQN(Q_Network_Family):
             key,
         )
         (loss, (abs_error, metrics)), grad = jax.value_and_grad(self._loss, has_aux=True)(
-            params, obses, actions, targets, weights, key
+            params, obses, actions, targets, weights, key, diagnostics=diagnostics
         )
-        updates, opt_state = self.optimizer.update(grad, opt_state, params=params)
-        metrics.update(optimizer_metrics(opt_state, "q"))
+        updates, opt_state = self.optimizer.update(
+            grad, opt_state, params=params, diagnostics=diagnostics
+        )
+        if diagnostics:
+            metrics.update(optimizer_metrics(opt_state, "q"))
         params = optax.apply_updates(params, updates)
         target_params = hard_update(params, target_params, steps, self.target_network_update_freq)
         new_priorities = None
         if self.prioritized_replay:
             new_priorities = abs_error
-            metrics.update(replay_metrics(weights, new_priorities))
-        return params, target_params, opt_state, loss, jnp.mean(targets), new_priorities, metrics
+            if diagnostics:
+                metrics.update(replay_metrics(weights, new_priorities))
+        return (
+            params,
+            target_params,
+            opt_state,
+            loss,
+            jnp.mean(targets),
+            new_priorities,
+            metrics,
+            {},
+        )
 
-    def _loss(self, params, obses, actions, targets, weights, key):
+    def _loss(self, params, obses, actions, targets, weights, key, diagnostics):
         vals = jnp.take_along_axis(self.get_q(params, obses, key), actions, axis=1)
         error = jnp.squeeze(vals - targets)
         loss = jnp.square(error)
+        if not diagnostics:
+            return jnp.mean(loss * weights), (jnp.abs(error), {})
         return jnp.mean(loss * weights), (
             jnp.abs(error),
             {

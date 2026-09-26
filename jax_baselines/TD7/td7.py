@@ -8,14 +8,13 @@ import numpy as np
 import optax
 from flax import struct
 
-from jax_baselines.core.bulk_training import SCAN_UNROLL
-from jax_baselines.core.seeding import split_keys
-from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
+from jax_baselines.DDPG.base_class import (
+    Deteministic_Policy_Gradient_Family,
+    merge_actor_metrics,
+)
 from jax_baselines.DDPG.metrics import critic_metrics
-from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.math.losses import hubberloss
-from jax_baselines.math.metrics import reduce_bulk_metrics
 from jax_baselines.math.param_updates import hard_update, scaled_by_reset
 from jax_baselines.optim import optimizer_metrics
 
@@ -36,7 +35,10 @@ class TD7CheckpointParams:
 
 class TD7(Deteministic_Policy_Gradient_Family):
     _run_name = "TD7"
-    supports_bulk_training = True
+
+    @property
+    def _actor_schedule(self):
+        return self.policy_delay, 0
 
     def __init__(
         self,
@@ -105,9 +107,6 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.critic_encoder_opt_state = self.optimizer.init(self.critic_encoder_params)
         self.opt_policy_state = self.optimizer.init(self.policy_params)
         self.opt_critic_state = self.optimizer.init(self.critic_params)
-        self._compiled_get_actions: Callable = jax.jit(self._get_actions)
-        self._compiled_train_step: Callable = jax.jit(self._train_step)
-        self._compiled_bulk_scan: Callable = jax.jit(self._bulk_scan)
 
     def checkpoint_params(self):
         return TD7CheckpointParams(
@@ -135,9 +134,17 @@ class TD7(Deteministic_Policy_Gradient_Family):
         self.target_policy_params = bundle.target_policy_params
         self.target_critic_params = bundle.target_critic_params
 
-    def _get_actions(self, actor_encoder_params, policy_params, obses, key=None):
-        feature, zs = self.actor_encoder(actor_encoder_params, key, convert_normalized_obs(obses))
-        return self.actor(policy_params, key, feature, zs)
+    def _get_eval_actions(self, state, obses):
+        feature, zs = self.actor_encoder(
+            state["actor_encoder"], None, convert_normalized_obs(obses)
+        )
+        return self.actor(state["policy"], None, feature, zs)
+
+    def _get_actions(self, state, obses, key):
+        key, noise_key = jax.random.split(key)
+        actions = self._get_eval_actions(state, obses)
+        noise = self.action_noise * jax.random.normal(noise_key, actions.shape)
+        return jnp.clip(actions + noise, -1, 1), key
 
     def get_behavior_state(self):
         return {
@@ -145,32 +152,27 @@ class TD7(Deteministic_Policy_Gradient_Family):
             "policy": self.policy_params,
         }
 
-    def _select_action_state(self, eval, steps):
-        if eval and self.use_checkpointing and self.ckpt.enabled and self.eval_snapshot is not None:
-            return self.eval_snapshot
-        return self.get_behavior_state()
-
-    def _policy_action_from_state(self, state, obs, eval, steps):
-        return self._compiled_get_actions(state["actor_encoder"], state["policy"], obs, None)
-
-    def _apply_action_noise(self, actions, steps, eval):
-        if eval:
-            return actions
-        if self.memory_backend == "gpu":
-            return jnp.clip(
-                actions + self.action_noise * jax.random.normal(next(self.key_seq), actions.shape),
-                -1,
-                1,
-            )
-        return np.clip(
-            actions
-            + self.action_noise
-            * np.random.normal(0, 1, size=(self.worker_size, self.action_size[0])),
-            -1,
-            1,
+    @property
+    def _train_state(self):
+        return (
+            self.actor_encoder_params,
+            self.critic_encoder_params,
+            self.policy_params,
+            self.critic_params,
+            self.fixed_actor_encoder_params,
+            self.fixed_critic_encoder_params,
+            self.fixed_actor_encoder_target_params,
+            self.fixed_critic_encoder_target_params,
+            self.target_policy_params,
+            self.target_critic_params,
+            self.actor_encoder_opt_state,
+            self.critic_encoder_opt_state,
+            self.opt_policy_state,
+            self.opt_critic_state,
         )
 
-    def _train_on_batch(self, data, context):
+    @_train_state.setter
+    def _train_state(self, state):
         (
             self.actor_encoder_params,
             self.critic_encoder_params,
@@ -186,166 +188,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             self.critic_encoder_opt_state,
             self.opt_policy_state,
             self.opt_critic_state,
-            repr_loss,
-            loss,
-            t_mean,
-            new_priorities,
-            metrics,
-            metric_counts,
-        ) = self._compiled_train_step(
-            self.actor_encoder_params,
-            self.critic_encoder_params,
-            self.policy_params,
-            self.critic_params,
-            self.fixed_actor_encoder_params,
-            self.fixed_critic_encoder_params,
-            self.fixed_actor_encoder_target_params,
-            self.fixed_critic_encoder_target_params,
-            self.target_policy_params,
-            self.target_critic_params,
-            self.actor_encoder_opt_state,
-            self.critic_encoder_opt_state,
-            self.opt_policy_state,
-            self.opt_critic_state,
-            next(self.key_seq),
-            context.train_steps_count,
-            **data,
-        )
-        return DPGTrainReport(
-            loss=loss,
-            target=t_mean,
-            new_priorities=new_priorities,
-            metrics={**metrics, "loss/encoder_loss": repr_loss},
-            metric_counts=metric_counts,
-        )
-
-    def _train_on_bulk(self, data, contexts):
-        steps = jnp.asarray([context.train_steps_count for context in contexts])
-        keys = split_keys(next(self.key_seq), len(contexts))
-        carry = (
-            self.actor_encoder_params,
-            self.critic_encoder_params,
-            self.policy_params,
-            self.critic_params,
-            self.fixed_actor_encoder_params,
-            self.fixed_critic_encoder_params,
-            self.fixed_actor_encoder_target_params,
-            self.fixed_critic_encoder_target_params,
-            self.target_policy_params,
-            self.target_critic_params,
-            self.actor_encoder_opt_state,
-            self.critic_encoder_opt_state,
-            self.opt_policy_state,
-            self.opt_critic_state,
-        )
-        (
-            (
-                self.actor_encoder_params,
-                self.critic_encoder_params,
-                self.policy_params,
-                self.critic_params,
-                self.fixed_actor_encoder_params,
-                self.fixed_critic_encoder_params,
-                self.fixed_actor_encoder_target_params,
-                self.fixed_critic_encoder_target_params,
-                self.target_policy_params,
-                self.target_critic_params,
-                self.actor_encoder_opt_state,
-                self.critic_encoder_opt_state,
-                self.opt_policy_state,
-                self.opt_critic_state,
-            ),
-            (repr_losses, losses, targets, priorities, metrics, metric_counts),
-        ) = self._compiled_bulk_scan(carry, keys, steps, data)
-        (loss, target, encoder_loss), (metrics, metric_counts) = reduce_bulk_metrics(
-            (losses, targets, repr_losses), metrics, metric_counts
-        )
-        return DPGTrainReport(
-            loss=loss,
-            target=target,
-            new_priorities=priorities,
-            metrics={**metrics, "loss/encoder_loss": encoder_loss},
-            metric_counts=metric_counts,
-            update_count=len(contexts),
-        )
-
-    def _bulk_scan(self, carry, keys, steps, data):
-        def train_one(carry, xs):
-            (
-                actor_encoder_params,
-                critic_encoder_params,
-                policy_params,
-                critic_params,
-                fixed_actor_encoder_params,
-                fixed_critic_encoder_params,
-                fixed_actor_encoder_target_params,
-                fixed_critic_encoder_target_params,
-                target_policy_params,
-                target_critic_params,
-                actor_encoder_opt_state,
-                critic_encoder_opt_state,
-                opt_policy_state,
-                opt_critic_state,
-            ) = carry
-            key, step, batch = xs
-            (
-                actor_encoder_params,
-                critic_encoder_params,
-                policy_params,
-                critic_params,
-                fixed_actor_encoder_params,
-                fixed_critic_encoder_params,
-                fixed_actor_encoder_target_params,
-                fixed_critic_encoder_target_params,
-                target_policy_params,
-                target_critic_params,
-                actor_encoder_opt_state,
-                critic_encoder_opt_state,
-                opt_policy_state,
-                opt_critic_state,
-                repr_loss,
-                loss,
-                t_mean,
-                priorities,
-                metrics,
-                metric_counts,
-            ) = self._train_step(
-                actor_encoder_params,
-                critic_encoder_params,
-                policy_params,
-                critic_params,
-                fixed_actor_encoder_params,
-                fixed_critic_encoder_params,
-                fixed_actor_encoder_target_params,
-                fixed_critic_encoder_target_params,
-                target_policy_params,
-                target_critic_params,
-                actor_encoder_opt_state,
-                critic_encoder_opt_state,
-                opt_policy_state,
-                opt_critic_state,
-                key,
-                step,
-                **batch,
-            )
-            return (
-                actor_encoder_params,
-                critic_encoder_params,
-                policy_params,
-                critic_params,
-                fixed_actor_encoder_params,
-                fixed_critic_encoder_params,
-                fixed_actor_encoder_target_params,
-                fixed_critic_encoder_target_params,
-                target_policy_params,
-                target_critic_params,
-                actor_encoder_opt_state,
-                critic_encoder_opt_state,
-                opt_policy_state,
-                opt_critic_state,
-            ), (repr_loss, loss, t_mean, priorities, metrics, metric_counts)
-
-        return jax.lax.scan(train_one, carry, (keys, steps, data), unroll=SCAN_UNROLL)
+        ) = state
 
     def _aggregate_train_reports(self, reports):
         report = super()._aggregate_train_reports(reports)
@@ -359,45 +202,42 @@ class TD7(Deteministic_Policy_Gradient_Family):
         return report
 
     def _train_step(
-        self,
-        actor_encoder_params,
-        critic_encoder_params,
-        policy_params,
-        critic_params,
-        fixed_actor_encoder_params,
-        fixed_critic_encoder_params,
-        fixed_actor_encoder_target_params,
-        fixed_critic_encoder_target_params,
-        target_policy_params,
-        target_critic_params,
-        actor_encoder_opt_state,
-        critic_encoder_opt_state,
-        opt_policy_state,
-        opt_critic_state,
-        key,
-        step,
-        obses,
-        actions,
-        rewards,
-        nxtobses,
-        terminateds,
-        weights=1,
-        indexes=None,
+        self, state, key, step, flags, obses, actions, rewards, nxtobses, terminateds, weights=1
     ):
+        (
+            actor_encoder_params,
+            critic_encoder_params,
+            policy_params,
+            critic_params,
+            fixed_actor_encoder_params,
+            fixed_critic_encoder_params,
+            fixed_actor_encoder_target_params,
+            fixed_critic_encoder_target_params,
+            target_policy_params,
+            target_critic_params,
+            actor_encoder_opt_state,
+            critic_encoder_opt_state,
+            opt_policy_state,
+            opt_critic_state,
+        ) = state
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
         repr_loss, (actor_encoder_grad, critic_encoder_grad) = jax.value_and_grad(
             self._encoder_loss, argnums=(0, 1)
         )(actor_encoder_params, critic_encoder_params, obses, nxtobses, actions, key)
         updates, actor_encoder_opt_state = self.optimizer.update(
-            actor_encoder_grad, actor_encoder_opt_state, params=actor_encoder_params
+            actor_encoder_grad,
+            actor_encoder_opt_state,
+            params=actor_encoder_params,
+            diagnostics=flags.diagnostics,
         )
-        encoder_metrics = optimizer_metrics(actor_encoder_opt_state, "actor_encoder")
         actor_encoder_params = optax.apply_updates(actor_encoder_params, updates)
         updates, critic_encoder_opt_state = self.optimizer.update(
-            critic_encoder_grad, critic_encoder_opt_state, params=critic_encoder_params
+            critic_encoder_grad,
+            critic_encoder_opt_state,
+            params=critic_encoder_params,
+            diagnostics=flags.diagnostics,
         )
-        encoder_metrics.update(optimizer_metrics(critic_encoder_opt_state, "critic_encoder"))
         critic_encoder_params = optax.apply_updates(critic_encoder_params, updates)
 
         targets = self._target(
@@ -430,24 +270,15 @@ class TD7(Deteministic_Policy_Gradient_Family):
             actions,
             targets,
             key,
+            flags.diagnostics,
         )
         updates, opt_critic_state = self.optimizer.update(
-            grad, opt_critic_state, params=critic_params
+            grad, opt_critic_state, params=critic_params, diagnostics=flags.diagnostics
         )
-        metrics.update(encoder_metrics)
-        metrics.update(optimizer_metrics(opt_critic_state, "critic"))
         critic_params = optax.apply_updates(critic_params, updates)
-        empty_actor_metrics = dict.fromkeys(
-            (
-                "loss/actor_loss",
-                "loss/actor_q_mean",
-                *optimizer_metrics(opt_policy_state, "actor"),
-            ),
-            jnp.asarray(0.0),
-        )
 
-        def update_actor(state):
-            policy_params, opt_policy_state = state
+        actor_metrics = {}
+        if flags.actor:
             actor_loss, grad = jax.value_and_grad(self._actor_loss)(
                 policy_params,
                 critic_params,
@@ -459,32 +290,34 @@ class TD7(Deteministic_Policy_Gradient_Family):
                 key,
             )
             updates, opt_policy_state = self.optimizer.update(
-                grad, opt_policy_state, params=policy_params
+                grad, opt_policy_state, params=policy_params, diagnostics=flags.diagnostics
             )
-            return (
-                optax.apply_updates(policy_params, updates),
-                opt_policy_state,
-                {
+            policy_params = optax.apply_updates(policy_params, updates)
+            if flags.diagnostics:
+                actor_metrics = {
                     "loss/actor_loss": actor_loss,
                     "loss/actor_q_mean": -actor_loss,
                     **optimizer_metrics(opt_policy_state, "actor"),
-                },
+                }
+        elif flags.diagnostics:
+            actor_metrics = dict.fromkeys(
+                (
+                    "loss/actor_loss",
+                    "loss/actor_q_mean",
+                    *optimizer_metrics(opt_policy_state, "actor"),
+                ),
+                jnp.asarray(0.0),
             )
-
-        policy_params, opt_policy_state, actor_metrics = jax.lax.cond(
-            step % self.policy_delay == 0,
-            update_actor,
-            lambda state: (*state, empty_actor_metrics),
-            (policy_params, opt_policy_state),
-        )
-        metric_counts = {name: jnp.asarray(1) for name in metrics}
-        metrics.update(actor_metrics)
-        metric_counts.update(
-            {
-                name: jnp.asarray(step % self.policy_delay == 0, dtype=jnp.int32)
-                for name in actor_metrics
-            }
-        )
+        metrics["loss/qloss"] = critic_loss
+        if flags.diagnostics:
+            metrics.update(optimizer_metrics(actor_encoder_opt_state, "actor_encoder"))
+            metrics.update(optimizer_metrics(critic_encoder_opt_state, "critic_encoder"))
+            metrics.update(optimizer_metrics(opt_critic_state, "critic"))
+            metrics["loss/targets"] = jnp.mean(targets)
+            metrics["loss/encoder_loss"] = repr_loss
+        metrics, metric_counts = merge_actor_metrics(metrics, actor_metrics, flags.actor)
+        # Target and fixed-encoder refreshes are a device-side select on the carried step,
+        # not a conditional, so they need no host flag.
         target_policy_params = hard_update(
             policy_params, target_policy_params, step, self.target_network_update_freq
         )
@@ -515,25 +348,12 @@ class TD7(Deteministic_Policy_Gradient_Family):
             step,
             self.target_network_update_freq,
         )
-        if self.scaled_by_reset:
-            policy_params, opt_policy_state = scaled_by_reset(
-                policy_params,
-                opt_policy_state,
-                self.optimizer,
-                key,
-                step,
-                self.reset_freq,
-                0.1,
-            )
-            critic_params, opt_critic_state = scaled_by_reset(
-                critic_params,
-                opt_critic_state,
-                self.optimizer,
-                key,
-                step,
-                self.reset_freq,
-                0.1,
-            )
+        policy_params, opt_policy_state = scaled_by_reset(
+            policy_params, opt_policy_state, self.optimizer, key, flags.reset, 0.1
+        )
+        critic_params, opt_critic_state = scaled_by_reset(
+            critic_params, opt_critic_state, self.optimizer, key, flags.reset, 0.1
+        )
         return (
             actor_encoder_params,
             critic_encoder_params,
@@ -549,13 +369,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             critic_encoder_opt_state,
             opt_policy_state,
             opt_critic_state,
-            repr_loss,
-            critic_loss,
-            jnp.mean(targets),
-            priority,
-            metrics,
-            metric_counts,
-        )
+        ), (priority, metrics, metric_counts)
 
     def _encoder_loss(
         self,
@@ -603,6 +417,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
         actions,
         targets,
         key,
+        diagnostics,
     ):
         zsa = self.critic_action_encoder(fixed_critic_encoder_params, key, zs, actions)
         q1, q2 = self.critic(critic_params, key, feature, zs, zsa, actions)
@@ -610,16 +425,18 @@ class TD7(Deteministic_Policy_Gradient_Family):
         error2 = jnp.squeeze(q2 - targets)
         critic_loss = jnp.mean(hubberloss(error1, 1.0)) + jnp.mean(hubberloss(error2, 1.0))
         priority = jnp.maximum(jnp.maximum(jnp.abs(error1), jnp.abs(error2)), 1.0)
-        return critic_loss, (
-            priority,
+        metrics = (
             critic_metrics(
                 (q1, q2),
                 targets,
                 (hubberloss(error1, 1.0), hubberloss(error2, 1.0)),
                 1,
                 priority,
-            ),
+            )
+            if diagnostics
+            else {}
         )
+        return critic_loss, (priority, metrics)
 
     def _target(
         self,
@@ -676,8 +493,7 @@ class TD7(Deteministic_Policy_Gradient_Family):
             for k, v in eval_result.items():
                 description += f"{k} : {v:8.2f}, "
 
-        array_module = jnp if any(isinstance(loss, jax.Array) for loss in self.lossque) else np
-        description += f"loss : {array_module.mean(array_module.asarray(tuple(self.lossque))):.3f}"
+        description += f"loss : {np.mean(jax.device_get(tuple(self.lossque))):.3f}"
         description += self._rollout_pbar_suffix()
         return description
 

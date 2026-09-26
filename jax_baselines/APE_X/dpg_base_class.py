@@ -3,8 +3,8 @@ from collections import deque
 from collections.abc import Callable
 
 import jax
-import jax.numpy as jnp
 import numpy as np
+import optax
 
 from jax_baselines.APE_X.exploration import worker_epsilons
 from jax_baselines.core.checkpoint_store import (
@@ -22,13 +22,15 @@ from jax_baselines.core.replay_protocol import (
 )
 from jax_baselines.core.runtime_adapters import make_progress
 from jax_baselines.core.seeding import key_gen, set_global_seeds
-from jax_baselines.math.jax_utils import convert_normalized_obs
 from jax_baselines.optim import OptimizerFactory, require_optimizer_factory
 
 
 class Ape_X_Deteministic_Policy_Gradient_Family:
     _run_name = "APE_X_DPG"
     actor: Callable
+    # One update: `(policy, critic, target_policy, target_critic, opt_policy, opt_critic, step,
+    # key, **batch) -> (*those six pytrees, critic loss, actor value, priorities)`.
+    _train_step: Callable[..., tuple]
 
     def __init__(
         self,
@@ -99,7 +101,6 @@ class Ape_X_Deteministic_Policy_Gradient_Family:
         self.optimizer = self._make_optimizer(self.learning_rate)
         self.model_builder = None
         self.actor_builder = None
-        self.train_steps_count = 0
 
         self.compress_memory = compress_memory
         self.param_broadcast_freq = param_broadcast_freq
@@ -111,6 +112,10 @@ class Ape_X_Deteministic_Policy_Gradient_Family:
         self._init_setup_model = _init_setup_model
         if self._init_setup_model:
             self.setup_model()
+        # Updates carry their PRNG key and count on device (see `_update`).
+        self._compiled_update = jax.jit(self._update)
+        self._train_key = next(self.key_seq)
+        self._update_count = jax.device_put(np.int32(0))
 
     def save_params(self, path):
         self.checkpoint_store.save(
@@ -133,7 +138,8 @@ class Ape_X_Deteministic_Policy_Gradient_Family:
         self.opt_critic_state = self.optimizer.init(self.critic_params)
 
     def _make_optimizer(self, learning_rate):
-        return self.optimizer_factory(learning_rate)
+        # Updates pass ``diagnostics=False``; plain optax transforms simply ignore it.
+        return optax.with_extra_args_support(self.optimizer_factory(learning_rate))
 
     def get_env_setup(self):
         self.observation_space, self.action_size, self.env_type = get_worker_env_info(
@@ -166,24 +172,45 @@ class Ape_X_Deteministic_Policy_Gradient_Family:
     def setup_model(self):
         pass
 
-    def _invoke_train_step(self, steps, data):
-        raise NotImplementedError
+    def _update(self, state, key, count, batch):
+        """One `_train_step` with its PRNG key and update count carried on device.
 
-    def _get_actions(self, params, obses, key=None):
-        return self.actor(params, key, convert_normalized_obs(obses))
+        The step is the progress iteration the learner loop is on: its `gradient_steps`
+        updates share it.
+        """
+        key, subkey = jax.random.split(key)
+        outputs = self._train_step(*state, count // self.gradient_steps, subkey, **batch)
+        return outputs[:6], key, count + 1, outputs[6:]
 
     def description(self):
-        array_module = jnp if any(isinstance(loss, jax.Array) for loss in self.lossque) else np
         return (
             f"buffer len : {len(self.replay_buffer)} "
-            f"loss : {array_module.mean(array_module.asarray(tuple(self.lossque))):.3f} |"
+            f"loss : {np.mean(jax.device_get(tuple(self.lossque))):.3f} |"
         )
 
     def train_step(self, steps, gradient_steps):
         for _ in range(gradient_steps):
-            self.train_steps_count += 1
             data = self.replay_buffer.sample(self.batch_size, self.prioritized_replay_beta0)
-
+            indexes = data.pop("indexes")
+            # Replay boundary: one explicit upload of the batch, one download of priorities.
+            (
+                state,
+                self._train_key,
+                self._update_count,
+                (loss, t_mean, new_priorities),
+            ) = self._compiled_update(
+                (
+                    self.policy_params,
+                    self.critic_params,
+                    self.target_policy_params,
+                    self.target_critic_params,
+                    self.opt_policy_state,
+                    self.opt_critic_state,
+                ),
+                self._train_key,
+                self._update_count,
+                jax.device_put(data),
+            )
             (
                 self.policy_params,
                 self.critic_params,
@@ -191,12 +218,8 @@ class Ape_X_Deteministic_Policy_Gradient_Family:
                 self.target_critic_params,
                 self.opt_policy_state,
                 self.opt_critic_state,
-                loss,
-                t_mean,
-                new_priorities,
-            ) = self._invoke_train_step(steps, data)
-
-            self.replay_buffer.update_priorities(data["indexes"], new_priorities)
+            ) = state
+            self.replay_buffer.update_priorities(indexes, jax.device_get(new_priorities))
 
         if steps % self.log_interval == 0:
             self.logger_server.log_trainer(
@@ -267,10 +290,8 @@ class Ape_X_Deteministic_Policy_Gradient_Family:
             for u in update:
                 u.clear()
 
-            cpu_param = jax.device_put(
-                {"policy": self.policy_params, "critic": self.critic_params},
-                jax.devices("cpu")[0],
-            )
+            # Workers receive host copies: one explicit download per broadcast.
+            cpu_param = jax.device_get({"policy": self.policy_params, "critic": self.critic_params})
             param_server = self.runtime.create_param_server(cpu_param)
 
             epsilons = worker_epsilons(
@@ -321,9 +342,8 @@ class Ape_X_Deteministic_Policy_Gradient_Family:
                     )
                     pbar.set_description(self.description())
                 if steps % self.param_broadcast_freq == 0:
-                    cpu_param = jax.device_put(
-                        {"policy": self.policy_params, "critic": self.critic_params},
-                        jax.devices("cpu")[0],
+                    cpu_param = jax.device_get(
+                        {"policy": self.policy_params, "critic": self.critic_params}
                     )
                     param_server.update_params(cpu_param)
                     for u in update:

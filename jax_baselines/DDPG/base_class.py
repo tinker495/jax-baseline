@@ -1,12 +1,13 @@
 from collections.abc import Callable
-from copy import deepcopy
-from typing import Literal
+from functools import partial
+from typing import Literal, NamedTuple
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import optax
 
+from jax_baselines.core.bulk_training import SCAN_UNROLL
 from jax_baselines.core.checkpoint import make_checkpoint_scaffold, snapshot_pytree
 from jax_baselines.core.checkpoint_state import CheckpointState
 from jax_baselines.core.checkpoint_store import (
@@ -31,6 +32,7 @@ from jax_baselines.core.rollout import (
 from jax_baselines.core.rollout_stats import EpisodeTracker
 from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.training_session import TrainingSession, off_policy_loop
+from jax_baselines.DDPG.metrics import stochastic_actor_metrics
 from jax_baselines.DDPG.training import DPGTrainingLifecycle, DPGTrainReport
 from jax_baselines.math.metrics import reduce_metrics
 from jax_baselines.optim import (
@@ -41,13 +43,48 @@ from jax_baselines.optim import (
 )
 
 
+class UpdateFlags(NamedTuple):
+    """Static switches of one compiled update, decided on the host from the update schedule.
+
+    A device predicate (`lax.cond`) would make the GPU copy it to the host every update.
+    """
+
+    actor: bool
+    reset: bool
+    diagnostics: bool
+
+
+def merge_actor_metrics(metrics, actor_metrics, actor_updated):
+    """Per-update metrics and counts; actor metrics count only on actor-update steps."""
+    counts = {name: jnp.asarray(1) for name in metrics}
+    counts.update(dict.fromkeys(actor_metrics, jnp.asarray(actor_updated, dtype=jnp.int32)))
+    return {**metrics, **actor_metrics}, counts
+
+
+@jax.jit(static_argnums=1)
+def _uniform_actions(key, shape):
+    key, sample_key = jax.random.split(key)
+    return jax.random.uniform(sample_key, shape, minval=-1.0, maxval=1.0), key
+
+
 class Deteministic_Policy_Gradient_Family:
     _ent_coef: str | float
     ent_coef_learning_rate: float | optax.Schedule
     target_entropy: float
     _run_name = "DPG_network"
+    # One pure update: `(state, key, step, flags, **batch) -> (state, (priorities, metrics,
+    # counts))`. `step` is the device 1-based update count and `flags` the static
+    # `UpdateFlags`; `metrics` always holds `loss/qloss`, diagnostics only when
+    # `flags.diagnostics`. Every update of a chunk must return the same output structure.
+    _train_step: Callable[..., tuple]
+    # Behavior actions `(state, obses, key, ...) -> (actions, key, ...)` and eval actions
+    # `(state, obses) -> actions`.
+    _get_actions: Callable[..., tuple]
+    _get_eval_actions: Callable[..., jax.Array]
 
-    supports_bulk_training = False
+    supports_bulk_training = True
+    # Actor updates on 1-based update steps where (step - offset) % period == 0.
+    _actor_schedule = (1, 0)
 
     def __init__(
         self,
@@ -123,7 +160,7 @@ class Deteministic_Policy_Gradient_Family:
         self.reset_freq = 500000
         self.obs_rms_norm = obs_rms_norm
         self.optimizer_factory = require_optimizer_factory(optimizer_factory)
-        self.optimizer = self._make_optimizer(self.learning_rate)
+        self.optimizer = optax.with_extra_args_support(self._make_optimizer(self.learning_rate))
         self.replay_factory = replay_factory
         self.checkpoint_store = checkpoint_store_or_default(checkpoint_store)
         self.reward_normalization = bool(reward_normalization)
@@ -144,9 +181,7 @@ class Deteministic_Policy_Gradient_Family:
         print("memory backend : ", self.memory_backend)
         with jax.default_device(self.memory_device):
             self.reward_normalizer = (
-                RewardNormalizer(
-                    self.worker_size, self.gamma, on_device=self.memory_backend == "gpu"
-                )
+                RewardNormalizer(self.worker_size, self.gamma)
                 if self.reward_normalization
                 else None
             )
@@ -157,15 +192,21 @@ class Deteministic_Policy_Gradient_Family:
         if self._init_setup_model:
             with jax.default_device(self.memory_device):
                 self.setup_model()
+        # Drawn after setup_model so model init keeps its key. Action/update PRNG keys and the
+        # update counter stay on device and are carried through the compiled calls.
+        with jax.default_device(self.memory_device):
+            self._action_key = next(self.key_seq)
+            self._train_key = next(self.key_seq)
+            self._update_count = jnp.zeros((), dtype=jnp.int32)
+        self._compiled_actions = jax.jit(self._get_actions)
+        self._compiled_eval_actions = jax.jit(self._get_eval_actions)
+        self._compiled_update = jax.jit(self._counted_update, static_argnums=2)
+        self._compiled_updates = jax.jit(self._planned_updates, static_argnums=2)
 
         self.eval_snapshot = None
         if self.obs_rms_norm:
             with jax.default_device(self.memory_device):
-                self.obs_rms = RunningMeanStd(
-                    shapes=self.observation_space,
-                    dtype=np.float64,
-                    on_device=self.memory_backend == "gpu",
-                )
+                self.obs_rms = RunningMeanStd(shapes=self.observation_space)
             self.action_obs_rms = None
             self.checkpoint_obs_rms = None
 
@@ -248,6 +289,7 @@ class Deteministic_Policy_Gradient_Family:
     def _restore_checkpoint_state(self, state: CheckpointState):
         self.load_checkpoint_params(jax.device_put(state.params, self.memory_device))
         self.train_steps_count = int(np.asarray(state.train_steps_count).item())
+        self._update_count = jax.device_put(np.int32(self.train_steps_count), self.memory_device)
         self._ckpt_update_residual = float(np.asarray(state.ckpt_residual).item())
         self.ckpt.from_state(state.controller_state)
         self.eval_snapshot = jax.device_put(state.eval_snapshot, self.memory_device)
@@ -255,20 +297,14 @@ class Deteministic_Policy_Gradient_Family:
         with jax.default_device(self.memory_device):
             if self.obs_rms_norm:
                 if state.obs_rms_state is not None:
-                    self.obs_rms = RunningMeanStd.from_state(
-                        state.obs_rms_state, on_device=self.memory_backend == "gpu"
-                    )
+                    self.obs_rms = RunningMeanStd.from_state(state.obs_rms_state)
                 self.action_obs_rms = (
-                    RunningMeanStd.from_state(
-                        state.action_obs_rms_state, on_device=self.memory_backend == "gpu"
-                    )
+                    RunningMeanStd.from_state(state.action_obs_rms_state)
                     if state.action_obs_rms_state is not None
                     else None
                 )
                 self.checkpoint_obs_rms = (
-                    RunningMeanStd.from_state(
-                        state.checkpoint_obs_rms_state, on_device=self.memory_backend == "gpu"
-                    )
+                    RunningMeanStd.from_state(state.checkpoint_obs_rms_state)
                     if state.checkpoint_obs_rms_state is not None
                     else None
                 )
@@ -352,21 +388,34 @@ class Deteministic_Policy_Gradient_Family:
         )
         self.opt_ent_coef_state = self.ent_coef_optimizer.init(self.log_ent_coef)
 
-    def _train_ent_coef(self, log_coef, opt_state, log_prob):
+    def _train_ent_coef(self, log_coef, opt_state, log_prob, diagnostics):
         def loss(log_ent_coef):
             entropy = -jax.lax.stop_gradient(log_prob)
             return jnp.mean(jnp.exp(log_ent_coef) * (entropy - self.target_entropy))
 
         ent_coef_loss, grad = jax.value_and_grad(loss)(log_coef)
-        updates, opt_state = self.ent_coef_optimizer.update(grad, opt_state, log_coef)
-        return (
-            optax.apply_updates(log_coef, updates),
-            opt_state,
-            {
-                "loss/ent_coef_loss": ent_coef_loss,
-                **optimizer_metrics(opt_state, "ent_coef"),
-            },
+        updates, opt_state = self.ent_coef_optimizer.update(
+            grad, opt_state, log_coef, diagnostics=diagnostics
         )
+        metrics = (
+            {"loss/ent_coef_loss": ent_coef_loss, **optimizer_metrics(opt_state, "ent_coef")}
+            if diagnostics
+            else {}
+        )
+        return optax.apply_updates(log_coef, updates), opt_state, metrics
+
+    def _skipped_actor_metrics(self, ent_coef, opt_policy_state, opt_ent_coef_state):
+        """Zero placeholders (count 0) so skipped actor steps keep the metric structure."""
+        names = (
+            "loss/actor_loss",
+            *stochastic_actor_metrics(
+                jnp.zeros(1), jnp.zeros(1), 0.0, ent_coef, self.target_entropy
+            ),
+            *optimizer_metrics(opt_policy_state, "actor"),
+        )
+        if self.auto_entropy:
+            names += ("loss/ent_coef_loss", *optimizer_metrics(opt_ent_coef_state, "ent_coef"))
+        return dict.fromkeys(names, jnp.asarray(0.0))
 
     def train_step(self, steps, gradient_steps, logger_run=None, log_interval=None):
         return self.training_lifecycle.train(steps, gradient_steps, logger_run, log_interval)
@@ -377,35 +426,108 @@ class Deteministic_Policy_Gradient_Family:
     def run_training_loop(self, ctx):
         off_policy_loop(self, ctx)
 
-    def _train_on_batch(self, data, context):
+    @property
+    def _train_state(self):
+        """Tuple of learner state threaded through `_train_step`; subclasses add a setter."""
         raise NotImplementedError
+
+    def _update_flags(self, step, diagnostics):
+        period, offset = self._actor_schedule
+        return UpdateFlags(
+            actor=(step - offset) % period == 0,
+            reset=self.scaled_by_reset and step % self.reset_freq == 0,
+            diagnostics=diagnostics,
+        )
+
+    def _update_plan(self, first_step, count, diagnostics):
+        """Run-length encode a chunk's per-update flags into `(pattern, repeats)` segments.
+
+        Patterns are one actor period long, so a chunk becomes a scan over the phase-rotated
+        pattern plus a tail of `count % period` updates; a reset is its own segment.
+        """
+        period, _ = self._actor_schedule
+        flags = [self._update_flags(first_step + index, diagnostics) for index in range(count)]
+        plan = []
+        for start in range(0, count, period):
+            pattern = tuple(flags[start : start + period])
+            if plan and plan[-1][0] == pattern:
+                plan[-1] = (pattern, plan[-1][1] + 1)
+            else:
+                plan.append((pattern, 1))
+        return tuple(plan)
+
+    def _counted_update(self, carry, batch, flags):
+        state, key, count = carry
+        key, update_key = jax.random.split(key)
+        count = count + 1
+        state, outputs = self._train_step(state, update_key, count, flags, **batch)
+        return (state, key, count), outputs
+
+    def _update_group(self, carry, batches, pattern):
+        outputs = []
+        for index, flags in enumerate(pattern):
+            carry, output = self._counted_update(
+                carry, jax.tree.map(lambda value: value[index], batches), flags
+            )
+            outputs.append(output)
+        return carry, jax.tree.map(lambda *values: jnp.stack(values), *outputs)
+
+    def _planned_updates(self, carry, batches, plan):
+        """Run a chunk in update order: each segment scans `repeats` groups of its pattern."""
+        outputs = []
+        start = 0
+        for pattern, repeats in plan:
+            size = len(pattern) * repeats
+            segment = jax.tree.map(
+                lambda value: value[start : start + size].reshape(
+                    repeats, len(pattern), *value.shape[1:]
+                ),
+                batches,
+            )
+            carry, output = jax.lax.scan(
+                partial(self._update_group, pattern=pattern),
+                carry,
+                segment,
+                unroll=min(repeats, max(1, SCAN_UNROLL // len(pattern))),
+            )
+            outputs.append(
+                jax.tree.map(lambda value: value.reshape(size, *value.shape[2:]), output)
+            )
+            start += size
+        priorities, metrics, metric_counts = jax.tree.map(
+            lambda *values: jnp.concatenate(values), *outputs
+        )
+        if priorities is not None:
+            priorities = priorities.reshape(-1)
+        return carry, (priorities, *reduce_metrics(metrics, metric_counts))
+
+    def _run_update(self, compiled, data, schedule):
+        # The lifecycle already placed the batch on device; `indexes` only feeds the
+        # host-side priority write-back.
+        batch = {name: value for name, value in data.items() if name != "indexes"}
+        (self._train_state, self._train_key, self._update_count), (
+            priorities,
+            metrics,
+            metric_counts,
+        ) = compiled((self._train_state, self._train_key, self._update_count), batch, schedule)
+        return DPGTrainReport(metrics, metric_counts, priorities)
+
+    def _train_on_batch(self, data, flags):
+        return self._run_update(self._compiled_update, data, flags)
+
+    def _train_on_bulk(self, data, plan):
+        return self._run_update(self._compiled_updates, data, plan)
 
     def _aggregate_train_reports(self, reports):
         if len(reports) == 1:
             return reports[-1]
-        total = sum(report.update_count for report in reports)
-        metric_values = {}
-        metric_weights = {}
-        for name in dict.fromkeys(name for report in reports for name in report.metrics):
-            observations = [report for report in reports if name in report.metrics]
-            metric_values[name] = tuple(report.metrics[name] for report in observations)
-            weights = tuple(report.metric_counts[name] for report in observations)
-            # Python-int counts would each be copied to the device separately inside the jit call.
-            metric_weights[name] = (
-                np.asarray(weights) if all(isinstance(w, int) for w in weights) else weights
-            )
-        metrics, metric_counts = reduce_metrics(metric_values, metric_weights)
-        # Reports mirror loss/target into metrics, so the compiled reduction covers them.
+        names = reports[0].metrics
+        # Every count is a device array, so the reduction is one compiled call with no transfer.
         return DPGTrainReport(
-            loss=metrics["loss/qloss"],
-            target=(
-                metrics["loss/targets"]
-                if all(report.target is not None for report in reports)
-                else None
-            ),
-            metrics=metrics,
-            metric_counts=metric_counts,
-            update_count=total,
+            *reduce_metrics(
+                {name: tuple(report.metrics[name] for report in reports) for name in names},
+                {name: tuple(report.metric_counts[name] for report in reports) for name in names},
+            )
         )
 
     def get_behavior_state(self):
@@ -424,22 +546,23 @@ class Deteministic_Policy_Gradient_Family:
         return self.get_behavior_state()
 
     def actions(self, obs, steps, eval=False):
+        # Actions stay on device only for envs that return device observations; a host env
+        # gets them through one explicit download.
+        device_env = isinstance(next(iter(obs.values())), jax.Array)
         obs = self._normalize_action_observation(obs, eval, steps)
         if not eval and steps <= self.learning_starts:
-            return self._random_warmup_actions(eval=eval)
-        state = self._select_action_state(eval, steps)
-        actions = self._policy_action_from_state(state, obs, eval, steps)
-        if self.memory_backend == "cpu":
-            actions = np.asarray(actions)
-        return self._apply_action_noise(actions, steps, eval)
+            actions = self._random_warmup_actions()
+        else:
+            state = self._select_action_state(eval, steps)
+            actions = self._policy_action_from_state(state, jax.device_put(obs), eval, steps)
+        return actions if device_env else jax.device_get(actions)
 
-    def _random_warmup_actions(self, eval=False):
-        worker_size = 1 if eval else self.worker_size
-        if self.memory_backend == "gpu":
-            return jax.random.uniform(
-                next(self.key_seq), (worker_size, self.action_size[0]), minval=-1.0, maxval=1.0
-            )
-        return np.random.uniform(-1.0, 1.0, size=(worker_size, self.action_size[0]))
+    def _random_warmup_actions(self):
+        shape = (self.worker_size, self.action_size[0])
+        if self.memory_backend == "cpu":
+            return np.random.uniform(-1.0, 1.0, size=shape)
+        actions, self._action_key = _uniform_actions(self._action_key, shape)
+        return actions
 
     def _select_action_state(self, eval, steps):
         if eval and self.use_checkpointing and self.ckpt.enabled and self.eval_snapshot is not None:
@@ -447,11 +570,10 @@ class Deteministic_Policy_Gradient_Family:
         return self.get_behavior_state()
 
     def _policy_action_from_state(self, state, obs, eval, steps):
+        """Final env action: inference, exploration noise and clipping in one compiled call."""
         if eval:
-            return self._get_eval_actions(state["policy"], obs)
-        return self._get_actions(state["policy"], obs, next(self.key_seq))
-
-    def _apply_action_noise(self, actions, steps, eval):
+            return self._compiled_eval_actions(state, obs)
+        actions, self._action_key = self._compiled_actions(state, obs, self._action_key)
         return actions
 
     def description(self, eval_result=None):
@@ -460,8 +582,7 @@ class Deteministic_Policy_Gradient_Family:
             for k, v in eval_result.items():
                 description += f"{k} : {v:8.2f}, "
 
-        array_module = jnp if any(isinstance(loss, jax.Array) for loss in self.lossque) else np
-        description += f"loss : {array_module.mean(array_module.asarray(tuple(self.lossque))):.3f}"
+        description += f"loss : {np.mean(jax.device_get(tuple(self.lossque))):.3f}"
         if self.use_checkpointing and (self.ckpt.last_update_step is not None):
             description += f", ckpt_upd_step : {int(self.ckpt.last_update_step)}"
         description += self._rollout_pbar_suffix()
@@ -497,9 +618,10 @@ class Deteministic_Policy_Gradient_Family:
             )
             else self._policy_update_obs_rms()
         )
-        if (not eval) and steps != np.inf:
-            self.obs_rms.update(obs)
-        return rms.normalize(obs)
+        if eval or steps == np.inf:
+            return rms.normalize(obs)
+        # Update and normalize in one compiled call; a snapshot keeps its frozen statistics.
+        return self.obs_rms.observe(obs, None if rms is self.obs_rms else rms)
 
     def _policy_update_obs_rms(self):
         return self.action_obs_rms if self.action_obs_rms is not None else self.obs_rms
@@ -549,7 +671,7 @@ class Deteministic_Policy_Gradient_Family:
 
     def _snapshot_action_normalizer(self):
         if self.obs_rms_norm:
-            self.action_obs_rms = deepcopy(self.obs_rms)
+            self.action_obs_rms = self.obs_rms.snapshot()
 
     def _write_ckpt_residual(self, value):
         self._ckpt_update_residual = value
@@ -584,7 +706,6 @@ class Deteministic_Policy_Gradient_Family:
             worker_size=self.worker_size,
             single_action=self._single_action_selection,
             vector_action=self._vector_action_selection,
-            refresh_exploration=lambda steps: None,
             force_reset=None,
             train=train,
             evaluate=lambda steps: self.eval(ctx, steps),
@@ -646,4 +767,4 @@ class Deteministic_Policy_Gradient_Family:
 
         # If using observation RMS normalization, snapshot obs_rms for eval-time consistency.
         if self.obs_rms_norm:
-            self.checkpoint_obs_rms = deepcopy(self._policy_update_obs_rms())
+            self.checkpoint_obs_rms = self._policy_update_obs_rms().snapshot()

@@ -26,6 +26,11 @@ def runner_parser(
     parser = ArgumentParser(prog=prog, allow_abbrev=False)
     runner.add_args(parser)
     add_logger_args(parser)
+    parser.add_argument(
+        "--strict_transfers",
+        action="store_true",
+        help="fail on any implicit host<->device transfer during training (AGENTS.md hot-path rule)",
+    )
     return parser
 
 

@@ -65,33 +65,33 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         )
         self.actor_opt_state = self.optimizer.init(self.actor_params)
         self.critic_opt_state = self.optimizer.init(self.critic_params)
+        # Update PRNG carry: each _train_step returns the key its scans left unused.
+        self._train_key = next(self.key_seq)
 
         self._get_actions = jax.jit(self._get_actions)
         self._preprocess = jax.jit(self._preprocess)
-        self._train_step = jax.jit(self._train_step)
+        self._train_step = jax.jit(self._train_step, static_argnames="diagnostics")
 
-    def train_step(self, steps, logger_run=None):
-        data = self.buffer.get_buffer()
-
+    def train_step(self, steps, logger_run=None, log_interval=None):
+        diagnostics = self._metrics_due(steps, logger_run, log_interval)
         (
             self.actor_params,
             self.critic_params,
             self.actor_opt_state,
             self.critic_opt_state,
+            self._train_key,
             metrics,
         ) = self._train_step(
             self.actor_params,
             self.critic_params,
             self.actor_opt_state,
             self.critic_opt_state,
-            next(self.key_seq),
-            **data,
+            self._train_key,
+            diagnostics=diagnostics,
+            **jax.device_put(self.buffer.get_buffer(), self.memory_device),
         )
-
-        if logger_run:
-            for name, value in jax.device_get(metrics).items():
-                logger_run.log_metric(name, value, steps)
-
+        if diagnostics:
+            self._log_train_metrics(metrics, steps, logger_run)
         return metrics["loss/critic_loss"]
 
     def _preprocess(
@@ -145,6 +145,8 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
         terminateds,
         truncateds,
         old_policy,
+        *,
+        diagnostics,
     ):
         obses, actions, old_value, targets, old_prob, old_act_prob, adv, metrics = self._preprocess(
             actor_params,
@@ -194,24 +196,21 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
                     critic_params, actor_params, obs, old_value, target, use_key
                 )
                 actor_updates, actor_opt_state = self.optimizer.update(
-                    actor_grad, actor_opt_state, params=actor_params
+                    actor_grad, actor_opt_state, params=actor_params, diagnostics=diagnostics
                 )
                 critic_updates, critic_opt_state = self.optimizer.update(
-                    critic_grad, critic_opt_state, params=critic_params
+                    critic_grad, critic_opt_state, params=critic_params, diagnostics=diagnostics
                 )
                 actor_params = optax.apply_updates(actor_params, actor_updates)
                 critic_params = optax.apply_updates(critic_params, critic_updates)
+                updates = (actor_params, critic_params, actor_opt_state, critic_opt_state, key)
+                if not diagnostics:
+                    return updates, {"loss/critic_loss": c_loss}
                 batch_metrics["loss/critic_loss"] = c_loss
                 batch_metrics["loss/actor_objective"] = actor_objective
                 batch_metrics.update(optimizer_metrics(actor_opt_state, "actor"))
                 batch_metrics.update(optimizer_metrics(critic_opt_state, "critic"))
-                return (
-                    actor_params,
-                    critic_params,
-                    actor_opt_state,
-                    critic_opt_state,
-                    key,
-                ), batch_metrics
+                return updates, batch_metrics
 
             updates, losses = jax.lax.scan(
                 f,
@@ -237,12 +236,15 @@ class TPPO(Actor_Critic_Policy_Gradient_Family):
             unroll=SCAN_UNROLL,
         )
         actor_params, critic_params, actor_opt_state, critic_opt_state, key = updates
+        if not diagnostics:
+            metrics = {}
         metrics.update(jax.tree.map(jnp.mean, epoch_metrics))
         return (
             actor_params,
             critic_params,
             actor_opt_state,
             critic_opt_state,
+            key,
             metrics,
         )
 

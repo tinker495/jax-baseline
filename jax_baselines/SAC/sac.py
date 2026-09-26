@@ -8,13 +8,12 @@ import numpy as np
 import optax
 from flax import struct
 
-from jax_baselines.core.bulk_training import SCAN_UNROLL
-from jax_baselines.core.seeding import split_keys
-from jax_baselines.DDPG.base_class import Deteministic_Policy_Gradient_Family
+from jax_baselines.DDPG.base_class import (
+    Deteministic_Policy_Gradient_Family,
+    merge_actor_metrics,
+)
 from jax_baselines.DDPG.metrics import critic_metrics, stochastic_actor_metrics
-from jax_baselines.DDPG.training import DPGTrainReport
 from jax_baselines.math.jax_utils import convert_normalized_obs
-from jax_baselines.math.metrics import reduce_bulk_metrics
 from jax_baselines.math.param_updates import scaled_by_reset, soft_update
 from jax_baselines.math.policy_math import entropy_target_from_sigma
 from jax_baselines.optim import optimizer_metrics
@@ -39,7 +38,10 @@ class SACCheckpointParams:
 
 class SAC(Deteministic_Policy_Gradient_Family):
     _run_name = "SAC"
-    supports_bulk_training = True
+
+    @property
+    def _actor_schedule(self):
+        return self.actor_update_period, 1
 
     def __init__(
         self,
@@ -81,12 +83,6 @@ class SAC(Deteministic_Policy_Gradient_Family):
 
         self._setup_entropy_coef()
 
-        self._get_actions = jax.jit(self._get_actions)
-        self._get_eval_actions = jax.jit(self._get_eval_actions)
-        self._train_step = jax.jit(self._train_step)
-        self._train_ent_coef = jax.jit(self._train_ent_coef)
-        self._bulk_scan = jax.jit(self._bulk_scan)
-
     def checkpoint_params(self):
         return SACCheckpointParams(
             policy_params=self.policy_params,
@@ -114,15 +110,29 @@ class SAC(Deteministic_Policy_Gradient_Family):
         )
         return pi, log_prob, log_std
 
-    def _get_actions(self, params, obses, key=None) -> jnp.ndarray:
-        mu, log_std = self.actor(params, None, convert_normalized_obs(obses))
-        return sample_action(mu, log_std, key)
+    def _get_actions(self, state, obses, key):
+        key, sample_key = jax.random.split(key)
+        mu, log_std = self.actor(state["policy"], None, convert_normalized_obs(obses))
+        return sample_action(mu, log_std, sample_key), key
 
-    def _get_eval_actions(self, params, obses) -> jnp.ndarray:
-        mu, _ = self.actor(params, None, convert_normalized_obs(obses))
+    def _get_eval_actions(self, state, obses):
+        mu, _ = self.actor(state["policy"], None, convert_normalized_obs(obses))
         return mode_action(mu)
 
-    def _train_on_batch(self, data, context):
+    @property
+    def _train_state(self):
+        return (
+            self.policy_params,
+            self.critic_params,
+            self.target_critic_params,
+            self.opt_policy_state,
+            self.opt_critic_state,
+            self.opt_ent_coef_state,
+            self.log_ent_coef,
+        )
+
+    @_train_state.setter
+    def _train_state(self, state):
         (
             self.policy_params,
             self.critic_params,
@@ -130,136 +140,21 @@ class SAC(Deteministic_Policy_Gradient_Family):
             self.opt_policy_state,
             self.opt_critic_state,
             self.opt_ent_coef_state,
-            loss,
-            t_mean,
             self.log_ent_coef,
-            new_priorities,
-            metrics,
-            metric_counts,
-        ) = self._train_step(
-            self.policy_params,
-            self.critic_params,
-            self.target_critic_params,
-            self.opt_policy_state,
-            self.opt_critic_state,
-            self.opt_ent_coef_state,
-            next(self.key_seq),
-            context.train_steps_count,
-            self.log_ent_coef,
-            **data,
-        )
-        return DPGTrainReport(
-            loss=loss,
-            target=t_mean,
-            new_priorities=new_priorities,
-            metrics=metrics,
-            metric_counts=metric_counts,
-        )
-
-    def _train_on_bulk(self, data, contexts):
-        steps = jnp.asarray([context.train_steps_count for context in contexts])
-        keys = split_keys(next(self.key_seq), len(contexts))
-        carry = (
-            self.policy_params,
-            self.critic_params,
-            self.target_critic_params,
-            self.opt_policy_state,
-            self.opt_critic_state,
-            self.opt_ent_coef_state,
-            self.log_ent_coef,
-        )
-        (
-            (
-                self.policy_params,
-                self.critic_params,
-                self.target_critic_params,
-                self.opt_policy_state,
-                self.opt_critic_state,
-                self.opt_ent_coef_state,
-                self.log_ent_coef,
-            ),
-            (losses, targets, priorities, metrics, metric_counts),
-        ) = self._bulk_scan(carry, keys, steps, data)
-        (loss, target), (metrics, metric_counts) = reduce_bulk_metrics(
-            (losses, targets), metrics, metric_counts
-        )
-        return DPGTrainReport(
-            loss=loss,
-            target=target,
-            new_priorities=priorities,
-            metrics=metrics,
-            metric_counts=metric_counts,
-            update_count=len(contexts),
-        )
-
-    def _bulk_scan(self, carry, keys, steps, data):
-        def train_one(carry, xs):
-            (
-                policy_params,
-                critic_params,
-                target_critic_params,
-                opt_policy_state,
-                opt_critic_state,
-                opt_ent_coef_state,
-                log_ent_coef,
-            ) = carry
-            key, step, batch = xs
-            (
-                policy_params,
-                critic_params,
-                target_critic_params,
-                opt_policy_state,
-                opt_critic_state,
-                opt_ent_coef_state,
-                loss,
-                t_mean,
-                log_ent_coef,
-                priorities,
-                metrics,
-                metric_counts,
-            ) = self._train_step(
-                policy_params,
-                critic_params,
-                target_critic_params,
-                opt_policy_state,
-                opt_critic_state,
-                opt_ent_coef_state,
-                key,
-                step,
-                log_ent_coef,
-                **batch,
-            )
-            return (
-                policy_params,
-                critic_params,
-                target_critic_params,
-                opt_policy_state,
-                opt_critic_state,
-                opt_ent_coef_state,
-                log_ent_coef,
-            ), (loss, t_mean, priorities, metrics, metric_counts)
-
-        return jax.lax.scan(train_one, carry, (keys, steps, data), unroll=SCAN_UNROLL)
+        ) = state
 
     def _train_step(
-        self,
-        policy_params,
-        critic_params,
-        target_critic_params,
-        opt_policy_state,
-        opt_critic_state,
-        opt_ent_coef_state,
-        key,
-        step,
-        log_ent_coef,
-        obses,
-        actions,
-        rewards,
-        nxtobses,
-        terminateds,
-        weights=1,
-        indexes=None,
+        self, state, key, step, flags, obses, actions, rewards, nxtobses, terminateds, weights=1
     ):
+        (
+            policy_params,
+            critic_params,
+            target_critic_params,
+            opt_policy_state,
+            opt_critic_state,
+            opt_ent_coef_state,
+            log_ent_coef,
+        ) = state
         obses = convert_normalized_obs(obses)
         nxtobses = convert_normalized_obs(nxtobses)
         not_terminateds = 1.0 - terminateds
@@ -277,109 +172,60 @@ class SAC(Deteministic_Policy_Gradient_Family):
 
         (critic_loss, (abs_error, metrics)), grad = jax.value_and_grad(
             self._critic_loss, has_aux=True
-        )(critic_params, policy_params, obses, actions, targets, weights, key2)
+        )(critic_params, policy_params, obses, actions, targets, weights, key2, flags.diagnostics)
         updates, opt_critic_state = self.optimizer.update(
-            grad, opt_critic_state, params=critic_params
+            grad, opt_critic_state, params=critic_params, diagnostics=flags.diagnostics
         )
-        metrics.update(optimizer_metrics(opt_critic_state, "critic"))
         critic_params = optax.apply_updates(critic_params, updates)
-        empty_actor_metrics = dict.fromkeys(
-            (
-                "loss/actor_loss",
-                *stochastic_actor_metrics(
-                    jnp.zeros(1), jnp.zeros(1), 0.0, ent_coef, self.target_entropy
-                ),
-                *optimizer_metrics(opt_policy_state, "actor"),
-            ),
-            jnp.asarray(0.0),
-        )
-        if self.auto_entropy:
-            empty_actor_metrics.update(
-                dict.fromkeys(
-                    (
-                        "loss/ent_coef_loss",
-                        *optimizer_metrics(opt_ent_coef_state, "ent_coef"),
-                    ),
-                    jnp.asarray(0.0),
-                )
-            )
 
-        def update_actor(state):
-            policy_params, opt_policy_state, log_ent_coef, opt_ent_coef_state = state
+        actor_metrics = {}
+        if flags.actor:
             (actor_loss, (log_prob, actor_metrics)), grad = jax.value_and_grad(
                 self._actor_loss, has_aux=True
-            )(policy_params, critic_params, obses, key3, ent_coef)
+            )(policy_params, critic_params, obses, key3, ent_coef, flags.diagnostics)
             updates, opt_policy_state = self.optimizer.update(
-                grad, opt_policy_state, params=policy_params
+                grad, opt_policy_state, params=policy_params, diagnostics=flags.diagnostics
             )
             policy_params = optax.apply_updates(policy_params, updates)
-            actor_metrics.update(
-                {
-                    "loss/actor_loss": actor_loss,
-                    **optimizer_metrics(opt_policy_state, "actor"),
-                }
-            )
+            if flags.diagnostics:
+                actor_metrics.update(
+                    {"loss/actor_loss": actor_loss, **optimizer_metrics(opt_policy_state, "actor")}
+                )
             if self.auto_entropy:
                 log_ent_coef, opt_ent_coef_state, entropy_metrics = self._train_ent_coef(
-                    log_ent_coef, opt_ent_coef_state, log_prob
+                    log_ent_coef, opt_ent_coef_state, log_prob, flags.diagnostics
                 )
                 actor_metrics.update(entropy_metrics)
-            return (
-                policy_params,
-                opt_policy_state,
-                log_ent_coef,
-                opt_ent_coef_state,
-                actor_metrics,
+        elif flags.diagnostics:
+            actor_metrics = self._skipped_actor_metrics(
+                ent_coef, opt_policy_state, opt_ent_coef_state
             )
-
-        (
-            policy_params,
-            opt_policy_state,
-            log_ent_coef,
-            opt_ent_coef_state,
-            actor_metrics,
-        ) = jax.lax.cond(
-            (step - 1) % self.actor_update_period == 0,
-            update_actor,
-            lambda state: (*state, empty_actor_metrics),
-            (policy_params, opt_policy_state, log_ent_coef, opt_ent_coef_state),
-        )
-        metrics["loss/ent_coef"] = jnp.exp(log_ent_coef)
-        metric_counts = {name: jnp.asarray(1) for name in metrics}
-        metrics.update(actor_metrics)
-        metric_counts.update(
-            {
-                name: jnp.asarray((step - 1) % self.actor_update_period == 0, dtype=jnp.int32)
-                for name in actor_metrics
-            }
-        )
+        metrics["loss/qloss"] = critic_loss
+        if flags.diagnostics:
+            metrics.update(optimizer_metrics(opt_critic_state, "critic"))
+            metrics["loss/ent_coef"] = jnp.exp(log_ent_coef)
+            metrics["loss/targets"] = jnp.mean(targets)
+        metrics, metric_counts = merge_actor_metrics(metrics, actor_metrics, flags.actor)
 
         target_critic_params = soft_update(
             critic_params, target_critic_params, self.target_network_update_tau
         )
-
-        new_priorities = None
-        if self.prioritized_replay:
-            new_priorities = abs_error
-        if self.scaled_by_reset:
-            policy_params, opt_policy_state = scaled_by_reset(
-                policy_params,
-                opt_policy_state,
-                self.optimizer,
-                key,
-                step,
-                self.reset_freq,
-                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
-            )
-            critic_params, opt_critic_state = scaled_by_reset(
-                critic_params,
-                opt_critic_state,
-                self.optimizer,
-                key,
-                step,
-                self.reset_freq,
-                0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
-            )
+        policy_params, opt_policy_state = scaled_by_reset(
+            policy_params,
+            opt_policy_state,
+            self.optimizer,
+            key,
+            flags.reset,
+            0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
+        )
+        critic_params, opt_critic_state = scaled_by_reset(
+            critic_params,
+            opt_critic_state,
+            self.optimizer,
+            key,
+            flags.reset,
+            0.1,  # tau = 0.1 is softreset, but original paper uses 1.0
+        )
         return (
             policy_params,
             critic_params,
@@ -387,46 +233,43 @@ class SAC(Deteministic_Policy_Gradient_Family):
             opt_policy_state,
             opt_critic_state,
             opt_ent_coef_state,
-            critic_loss,
-            jnp.mean(targets),
             log_ent_coef,
-            new_priorities,
-            metrics,
-            metric_counts,
-        )
+        ), (abs_error if self.prioritized_replay else None, metrics, metric_counts)
 
-    def _critic_loss(self, critic_params, policy_params, obses, actions, targets, weights, key):
+    def _critic_loss(
+        self, critic_params, policy_params, obses, actions, targets, weights, key, diagnostics
+    ):
         q1, q2 = self.critic(critic_params, policy_params, key, obses, actions)
         error1 = jnp.squeeze(q1 - targets)
         error2 = jnp.squeeze(q2 - targets)
         critic_loss = jnp.mean(weights * jnp.square(error1)) + jnp.mean(
             weights * jnp.square(error2)
         )
-        return critic_loss, (
-            jnp.abs(error1),
+        metrics = (
             critic_metrics(
                 (q1, q2),
                 targets,
                 (jnp.square(error1), jnp.square(error2)),
                 weights,
                 jnp.abs(error1) if self.prioritized_replay else None,
-            ),
+            )
+            if diagnostics
+            else {}
         )
+        return critic_loss, (jnp.abs(error1), metrics)
 
-    def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef):
+    def _actor_loss(self, policy_params, critic_params, obses, key, ent_coef, diagnostics):
         policy, log_prob, log_std = self._get_pi_log_prob(policy_params, obses, key)
         q1_pi, q2_pi = self.critic(critic_params, policy_params, key, obses, policy)
         actor_loss = jnp.mean(ent_coef * log_prob - jnp.minimum(q1_pi, q2_pi))
-        return actor_loss, (
-            log_prob,
+        metrics = (
             stochastic_actor_metrics(
-                log_prob,
-                log_std,
-                jnp.minimum(q1_pi, q2_pi),
-                ent_coef,
-                self.target_entropy,
-            ),
+                log_prob, log_std, jnp.minimum(q1_pi, q2_pi), ent_coef, self.target_entropy
+            )
+            if diagnostics
+            else {}
         )
+        return actor_loss, (log_prob, metrics)
 
     def _target(
         self,
