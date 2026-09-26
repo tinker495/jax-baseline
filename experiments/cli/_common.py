@@ -27,8 +27,14 @@ def load_runtime_env() -> None:
 
 
 def set_default_xla_flags() -> None:
-    """Apply the shared XLA GPU flags used by every runner entry point."""
+    """Apply the shared XLA GPU flags and the persistent compilation cache used by every
+    runner entry point. Both are environment defaults that JAX reads on import, so a
+    shell value still wins; repeated runs reuse compiled update steps instead of
+    recompiling them at startup."""
     os.environ.setdefault("XLA_FLAGS", XLA_FLAGS)
+    os.environ.setdefault(
+        "JAX_COMPILATION_CACHE_DIR", os.path.expanduser("~/.cache/jax_baselines/xla")
+    )
 
 
 def default_logdir(family: str) -> str:

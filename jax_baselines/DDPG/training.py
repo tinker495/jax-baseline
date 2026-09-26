@@ -14,11 +14,14 @@ from dataclasses import dataclass
 import jax
 
 from jax_baselines.core.bulk_training import (
+    _prepare_batch,
     bulk_chunk_schedule,
     host_priority_values,
     prepare_replay_batch,
     uses_bulk_pulse,
 )
+from jax_baselines.core.rollout_stats import device_episode_step
+from replay_memory.flashbax_buffer import FlashbaxReplayBuffer
 
 
 @dataclass
@@ -43,6 +46,101 @@ class DPGTrainingLifecycle:
 
     def __init__(self, agent):
         self.agent = agent
+        self._compiled_replay_update = jax.jit(
+            self._update_from_replay, static_argnums=(5, 6), donate_argnums=(1,)
+        )
+        self._compiled_record_step = jax.jit(
+            self._record_device_step, static_argnums=5, donate_argnums=(0, 1)
+        )
+
+    def _update_from_replay(
+        self, carry, replay_state, replay_key, obs_stats, reward_stats, plan, chunk_size
+    ):
+        agent = self.agent
+        replay = agent.replay_buffer
+        replay_key, data = replay._sample(
+            replay_state,
+            replay_key,
+            chunk_size * agent.batch_size,
+            agent.prioritized_replay_beta0,
+        )
+        batch = _prepare_batch(
+            {name: value for name, value in data.items() if name != "indexes"},
+            obs_stats,
+            reward_stats,
+            chunk_size=chunk_size,
+            batch_size=agent.batch_size,
+            flat=False,
+            obs_apply=agent.obs_rms.apply if agent.obs_rms_norm else None,
+            reward_apply=None if agent.reward_normalizer is None else agent.reward_normalizer.apply,
+        )
+        carry, outputs = agent._planned_updates(carry, batch, plan)
+        if agent.prioritized_replay:
+            replay_state = replay._update_priorities(replay_state, data["indexes"], outputs[0])
+        return carry, replay_state, replay_key, outputs
+
+    def _record_device_step(
+        self,
+        replay_state,
+        pending,
+        episode_state,
+        reward_state,
+        inputs,
+        track_terminations,
+    ):
+        batch, truncated, active = inputs
+        terminated = batch["terminateds"]
+        rewards = batch["rewards"]
+        if self.agent.reward_normalizer is not None:
+            reward_state = self.agent.reward_normalizer.record_state(
+                reward_state, (rewards, terminated, truncated, active)
+            )
+        episode_state, _, _, completed = device_episode_step(
+            episode_state,
+            rewards,
+            terminated if track_terminations else self.agent.replay_buffer._not_truncated,
+            truncated if track_terminations else self.agent.replay_buffer._not_truncated,
+            self.agent.replay_buffer._not_truncated,
+        )
+        replay_state, pending = self.agent.replay_buffer._add(
+            replay_state, pending, batch, truncated, active
+        )
+        return replay_state, pending, episode_state, reward_state, completed
+
+    def record_device_step(
+        self,
+        episode_state,
+        obs,
+        action,
+        rewards,
+        next_obs,
+        terminated,
+        truncated,
+        track_terminations,
+    ):
+        replay = self.agent.replay_buffer
+        normalizer = self.agent.reward_normalizer
+        if any(
+            value.shape != (self.agent.worker_size,) for value in (rewards, terminated, truncated)
+        ):
+            raise ValueError("Device rollout rewards and done flags must match the worker shape")
+        (
+            replay.state,
+            replay._pending,
+            episode_state,
+            reward_state,
+            completed,
+        ) = self._compiled_record_step(
+            replay.state,
+            replay._pending,
+            episode_state,
+            None if normalizer is None else normalizer.rollout_state,
+            replay.prepare_add(obs, action, rewards, next_obs, terminated, truncated),
+            track_terminations,
+        )
+        if normalizer is not None:
+            normalizer.rollout_state = reward_state
+        return episode_state, completed
 
     def train(self, steps, gradient_steps, logger_run=None, log_interval=None):
         if gradient_steps <= 0:
@@ -87,6 +185,35 @@ class DPGTrainingLifecycle:
     def _train_one_bulk_chunk(self, chunk_size, diagnostics):
         plan = self.agent._update_plan(self.agent.train_steps_count + 1, chunk_size, diagnostics)
         self.agent.train_steps_count += chunk_size
+        replay = self.agent.replay_buffer
+        # The first sample retains the replay boundary's empty-buffer/argument validation.
+        if isinstance(replay, FlashbaxReplayBuffer) and replay._sample_ready:
+            obs_rms = self.agent._policy_update_obs_rms() if self.agent.obs_rms_norm else None
+            (
+                (
+                    self.agent._train_state,
+                    self.agent._train_key,
+                    self.agent._update_count,
+                ),
+                replay.state,
+                replay._key,
+                (priorities, metrics, counts),
+            ) = self._compiled_replay_update(
+                (
+                    self.agent._train_state,
+                    self.agent._train_key,
+                    self.agent._update_count,
+                ),
+                replay.state,
+                replay._key,
+                None if obs_rms is None else obs_rms.stats,
+                None
+                if self.agent.reward_normalizer is None
+                else self.agent.reward_normalizer.stats,
+                plan,
+                chunk_size,
+            )
+            return DPGTrainReport(metrics, counts, priorities)
         data = self._prepare_batch(
             self._sample_batch(chunk_size * self.agent.batch_size), chunk_size
         )

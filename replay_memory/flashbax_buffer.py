@@ -88,7 +88,10 @@ class FlashbaxReplayBuffer:
         self.seed = need.seed
         if self.priority is None:
             self.buffer = flashbax.make_item_buffer(
-                max_length=self.max_size, min_length=1, sample_batch_size=1, add_batches=True
+                max_length=self.max_size,
+                min_length=1,
+                sample_batch_size=1,
+                add_batches=True,
             )
         else:
             self.buffer = flashbax.make_prioritised_trajectory_buffer(
@@ -103,7 +106,8 @@ class FlashbaxReplayBuffer:
             )
         observation_specs = {
             key: jax.ShapeDtypeStruct(
-                (self.worker_size, *shape), jnp.uint8 if len(shape) >= 3 else jnp.float32
+                (self.worker_size, *shape),
+                jnp.uint8 if len(shape) >= 3 else jnp.float32,
             )
             for key, shape in self.observation_space.items()
         }
@@ -163,7 +167,32 @@ class FlashbaxReplayBuffer:
         is_full, current_index = jax.device_get((self.state.is_full, self.state.current_index))
         return self.max_size if is_full else int(current_index)
 
-    def add(self, obs_t, action, reward, nxtobs_t, terminated, truncated=False, store_mask=None):
+    def add(
+        self,
+        obs_t,
+        action,
+        reward,
+        nxtobs_t,
+        terminated,
+        truncated=False,
+        store_mask=None,
+    ):
+        self.state, self._pending = self._add_compiled(
+            self.state,
+            self._pending,
+            *self.prepare_add(obs_t, action, reward, nxtobs_t, terminated, truncated, store_mask),
+        )
+
+    def prepare_add(
+        self,
+        obs_t,
+        action,
+        reward,
+        nxtobs_t,
+        terminated,
+        truncated=False,
+        store_mask=None,
+    ):
         if (
             not isinstance(obs_t, dict)
             or not isinstance(nxtobs_t, dict)
@@ -189,9 +218,7 @@ class FlashbaxReplayBuffer:
                 )
         # Placement happens at this boundary (a no-op for inputs already on the device);
         # dtype casts and reshapes run inside the compiled add.
-        self.state, self._pending = self._add_compiled(
-            self.state, self._pending, *jax.device_put(inputs, self.device)
-        )
+        return jax.device_put(inputs, self.device)
 
     def _add(self, state, pending, batch, truncated, active):
         batch, truncated, active = jax.tree.map(

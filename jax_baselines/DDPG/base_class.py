@@ -41,6 +41,7 @@ from jax_baselines.optim import (
     require_optimizer_factory,
     track_optimizer,
 )
+from replay_memory.flashbax_buffer import FlashbaxReplayBuffer
 
 
 class UpdateFlags(NamedTuple):
@@ -467,7 +468,7 @@ class Deteministic_Policy_Gradient_Family:
         outputs = []
         for index, flags in enumerate(pattern):
             carry, output = self._counted_update(
-                carry, jax.tree.map(lambda value: value[index], batches), flags
+                carry, jax.tree.map(lambda value, index=index: value[index], batches), flags
             )
             outputs.append(output)
         return carry, jax.tree.map(lambda *values: jnp.stack(values), *outputs)
@@ -479,9 +480,9 @@ class Deteministic_Policy_Gradient_Family:
         for pattern, repeats in plan:
             size = len(pattern) * repeats
             segment = jax.tree.map(
-                lambda value: value[start : start + size].reshape(
-                    repeats, len(pattern), *value.shape[1:]
-                ),
+                lambda value, start=start, size=size, repeats=repeats, pattern=pattern: value[
+                    start : start + size
+                ].reshape(repeats, len(pattern), *value.shape[1:]),
                 batches,
             )
             carry, output = jax.lax.scan(
@@ -491,7 +492,7 @@ class Deteministic_Policy_Gradient_Family:
                 unroll=min(repeats, max(1, SCAN_UNROLL // len(pattern))),
             )
             outputs.append(
-                jax.tree.map(lambda value: value.reshape(size, *value.shape[2:]), output)
+                jax.tree.map(lambda value, size=size: value.reshape(size, *value.shape[2:]), output)
             )
             start += size
         priorities, metrics, metric_counts = jax.tree.map(
@@ -505,10 +506,13 @@ class Deteministic_Policy_Gradient_Family:
         # The lifecycle already placed the batch on device; `indexes` only feeds the
         # host-side priority write-back.
         batch = {name: value for name, value in data.items() if name != "indexes"}
-        (self._train_state, self._train_key, self._update_count), (
-            priorities,
-            metrics,
-            metric_counts,
+        (
+            (self._train_state, self._train_key, self._update_count),
+            (
+                priorities,
+                metrics,
+                metric_counts,
+            ),
         ) = compiled((self._train_state, self._train_key, self._update_count), batch, schedule)
         return DPGTrainReport(metrics, metric_counts, priorities)
 
@@ -719,6 +723,11 @@ class Deteministic_Policy_Gradient_Family:
             reward_normalization=self.reward_normalization,
             record_transition=(
                 self.reward_normalizer.record if self.reward_normalizer is not None else None
+            ),
+            record_device_step=(
+                self.training_lifecycle.record_device_step
+                if isinstance(self.replay_buffer, FlashbaxReplayBuffer)
+                else None
             ),
             memory_device=self.memory_device,
             autoreset_steps=self.autoreset_steps,

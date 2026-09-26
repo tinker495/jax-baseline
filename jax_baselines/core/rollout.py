@@ -127,6 +127,7 @@ class RolloutSpec:
     checkpoint_monitor_worker: int = 0
     reward_normalization: bool = False
     record_transition: Callable[..., None] | None = None
+    record_device_step: Callable[..., tuple] | None = None
     memory_device: jax.Device | None = None
     autoreset_steps: bool = True
     initial_reset: tuple | None = None
@@ -510,6 +511,14 @@ class RolloutEngine:
         for steps in pbar:
             obs = env.current_obs()
             sel = spec.vector_action(obs, steps)
+            # The pulse reads only replay rows already added, so dispatching it between the
+            # action and the simulator step lets the GPU run both at once; the reward
+            # normalizer it reads therefore lags this step's rewards by one vector step.
+            if not checkpointing and steps > spec.learning_starts:
+                train_residual += spec.worker_size
+                groups, train_residual = divmod(train_residual, spec.train_freq * group_iters)
+                if groups:
+                    lossque.append(spec.train(steps, groups * group_iters * spec.gradient_steps))
             env.step(sel.env_action)
             flush_checkpoint_pulses()
             next_obs, rewards, terminated, truncated, _ = env.get_result()
@@ -520,21 +529,30 @@ class RolloutEngine:
                 last_log_step = steps
             while pending_evals:
                 eval_result = spec.evaluate(pending_evals.popleft())
-            if spec.reward_normalization and spec.record_transition is not None:
-                spec.record_transition(rewards, terminated, truncated)
-            state, _, _, completed = device_episode_step(
-                state,
-                rewards,
-                terminated if not checkpointing or steps > spec.learning_starts else false,
-                truncated if not checkpointing or steps > spec.learning_starts else false,
-                false,
-            )
-            if not checkpointing and steps > spec.learning_starts:
-                train_residual += spec.worker_size
-                groups, train_residual = divmod(train_residual, spec.train_freq * group_iters)
-                if groups:
-                    lossque.append(spec.train(steps, groups * group_iters * spec.gradient_steps))
-            spec.replay_buffer.add(obs, sel.store_action, rewards, next_obs, terminated, truncated)
+            if spec.record_device_step is not None:
+                state, completed = spec.record_device_step(
+                    state,
+                    obs,
+                    sel.store_action,
+                    rewards,
+                    next_obs,
+                    terminated,
+                    truncated,
+                    not checkpointing or steps > spec.learning_starts,
+                )
+            else:
+                if spec.reward_normalization and spec.record_transition is not None:
+                    spec.record_transition(rewards, terminated, truncated)
+                state, _, _, completed = device_episode_step(
+                    state,
+                    rewards,
+                    terminated if not checkpointing or steps > spec.learning_starts else false,
+                    truncated if not checkpointing or steps > spec.learning_starts else false,
+                    false,
+                )
+                spec.replay_buffer.add(
+                    obs, sel.store_action, rewards, next_obs, terminated, truncated
+                )
 
             if checkpointing and steps > spec.learning_starts:
                 # The checkpoint controller changes the policy at episode boundaries.

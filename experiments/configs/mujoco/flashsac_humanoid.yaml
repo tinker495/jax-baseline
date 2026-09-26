@@ -1,0 +1,37 @@
+category: mujoco
+runner: dpg
+# FlashSAC's Gym MuJoCo (CPU sim) recipe, for comparison with the paper's Humanoid-v4 curve.
+# https://github.com/Holiday-Robot/FlashSAC/blob/87edc9061150ae9e962dd84e6544e27a1554b3ab/scripts/run_mujoco.sh
+runtime:
+  device: 0
+base:
+  experiment_name: FlashSAC
+  env: Humanoid-v4
+  model_lib: flax
+  worker: 1
+  steps: 1e6
+  # Upstream evaluates 50 episodes every 100k env steps.
+  eval_num: 10
+  eval_eps: 50
+  # Bulk updates: every 32 env steps, 32 updates in one compiled scan (UTD stays 1).
+  # Upstream updates once per env step; the policy here acts up to 32 updates stale.
+  train_freq: 32
+  gradient_steps: 32
+  learning_rate: 0.0003
+  learning_rate_end: 0.00015
+  optimizer: adam
+  buffer_size: 1e6
+  batch: 512
+  learning_starts: 10000
+  gamma: 0.99
+  n_step: 1
+  actor_model: ../models/flashsac_128x2_relu.json
+  critic_model: ../models/flashsac_256x2_relu.json
+  reward_normalization: true
+  target_update_tau: 0.01
+  ent_coef: auto_0.01
+  sigma_target: 0.15
+  actor_update_period: 2
+  seed: 0
+variants:
+  - {algo: FlashSAC}

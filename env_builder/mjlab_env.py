@@ -99,9 +99,13 @@ class MjlabVectorizedEnv(VectorizedEnv):
             return _to_numpy(value).copy()
         if isinstance(value, self._torch.Tensor):
             # Copy on the producer stream before mjlab reuses its mutable buffers.
-            return jax.dlpack.from_dlpack(
-                value.detach().clone(memory_format=self._torch.contiguous_format)
-            )
+            clone = value.detach().clone(memory_format=self._torch.contiguous_format)
+            if clone.is_cuda:
+                # JAX consumers do not reliably wait for a busy torch stream behind a DLPack
+                # import: with the copy still queued, the reward normalizer read garbage
+                # (reward_scale inf/NaN). Finish the copy before JAX can see the buffer.
+                self._torch.cuda.current_stream(clone.device).synchronize()
+            return jax.dlpack.from_dlpack(clone)
         return jnp.array(value, copy=True)
 
     def _snapshot(self, value):
@@ -187,9 +191,20 @@ class MjlabVectorizedEnv(VectorizedEnv):
         return self._frame if self._frame is not None else self.env.render()
 
     @contextmanager
+    def _native_reset(self) -> Iterator[None]:
+        """Evaluation never stores terminal successors, so mjlab resets finished rows inside
+        step() and skips the adapter's separate reset call."""
+        self.env.cfg.auto_reset = True
+        try:
+            yield
+        finally:
+            self.env.cfg.auto_reset = False
+
+    @contextmanager
     def evaluation_context(self) -> Iterator[None]:
         if not self._reuse_for_eval:
-            yield
+            with self._native_reset():
+                yield
             return
         if self._closed:
             raise RuntimeError("Cannot evaluate a closed environment")
@@ -201,7 +216,8 @@ class MjlabVectorizedEnv(VectorizedEnv):
             self._pending = None
             self._metrics = EnvMetrics(array_converter=_to_numpy)
             try:
-                yield
+                with self._native_reset():
+                    yield
             finally:
                 self._obs, self._frame, self._pending = observation, frame, pending
                 self._metrics = metrics
@@ -246,7 +262,7 @@ class MjlabVectorizedEnv(VectorizedEnv):
             self._frame = np.array(self.env.render(), copy=True)
         # Snapshot terminal data before partial reset mutates simulator buffers.
         successor = self._selected(observation)
-        done_ids = self._torch.nonzero(terminated | truncated, as_tuple=False).flatten()
+        done = terminated | truncated
         reward = self._array(reward)
         terminated, truncated = self._array(terminated), self._array(truncated)
         terminated, truncated = (
@@ -256,6 +272,11 @@ class MjlabVectorizedEnv(VectorizedEnv):
         )
         info = self._snapshot({key: value for key, value in info.items() if key != "log"})
         self._obs = successor
+        # Native auto-reset (evaluation) already returned reset observations for done rows.
+        if self.env.cfg.auto_reset:
+            self._pending = successor, reward, terminated, truncated, info
+            return
+        done_ids = self._torch.nonzero(done, as_tuple=False).flatten()
         if done_ids.numel():
             current, reset_info = self.env.reset(env_ids=done_ids)
             self._record_metrics(reset_info["log"])
@@ -436,6 +457,10 @@ def make_mjlab_env(
         ) from exc
 
     cfg = load_env_cfg(env_id)
+    group = None if observation_key is None else observation_key.split(".")[0]
+    if group in cfg.observations:
+        # Groups the adapter never returns would still be computed on every step and reset.
+        cfg.observations = {group: cfg.observations[group]}
     cfg.scene.num_envs = worker_num
     cfg.seed = seed
     cfg.auto_reset = False

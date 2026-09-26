@@ -241,15 +241,27 @@ class RewardNormalizer:
         self._all_active = jnp.ones(int(worker_size), dtype=bool)
 
     def record(self, rewards, terminated, truncated, active=None):
-        self.discounted_returns, mean, variance, self.rms.count = _record_returns(
+        self.rollout_state = self.record_state(
+            self.rollout_state,
+            _record_inputs(self._all_active, rewards, terminated, truncated, active),
+        )
+
+    @property
+    def rollout_state(self):
+        return (
             self.discounted_returns,
             self.rms.means["return"],
             self.rms.vars["return"],
             self.rms.count,
-            _record_inputs(self._all_active, rewards, terminated, truncated, active),
-            gamma=self.gamma,
         )
+
+    @rollout_state.setter
+    def rollout_state(self, state):
+        self.discounted_returns, mean, variance, self.rms.count = state
         self.rms.means, self.rms.vars = {"return": mean}, {"return": variance}
+
+    def record_state(self, state, inputs):
+        return _record_returns(*state, inputs, gamma=self.gamma)
 
     @property
     def stats(self):
@@ -327,23 +339,23 @@ class FlashSACRewardNormalizer(RewardNormalizer):
         self._scale = jax.jit(partial(_flashsac_scale, normalized_G_max=self.normalized_G_max))
         self._normalize = jax.jit(self.apply)
 
-    def record(self, rewards, terminated, truncated, active=None):
+    @property
+    def rollout_state(self):
+        return (*super().rollout_state, self.max_abs_return)
+
+    @rollout_state.setter
+    def rollout_state(self, state):
         (
             self.discounted_returns,
             mean,
             variance,
             self.rms.count,
             self.max_abs_return,
-        ) = _record_flashsac_returns(
-            self.discounted_returns,
-            self.rms.means["return"],
-            self.rms.vars["return"],
-            self.rms.count,
-            self.max_abs_return,
-            _record_inputs(self._all_active, rewards, terminated, truncated, active),
-            gamma=self.gamma,
-        )
+        ) = state
         self.rms.means, self.rms.vars = {"return": mean}, {"return": variance}
+
+    def record_state(self, state, inputs):
+        return _record_flashsac_returns(*state, inputs, gamma=self.gamma)
 
     @property
     def stats(self):
