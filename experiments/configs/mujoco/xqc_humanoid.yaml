@@ -7,6 +7,10 @@ base:
   env: Humanoid-v5
   learning_rate: 0.0003
   steps: 1e6
+  # 20 evaluations (every 50k steps), the count dpg_humanoid.yaml uses. The implicit default was
+  # 100 x 20 episodes, up to 2M evaluation env steps; reduced evaluation is not training speed.
+  eval_num: 20
+  eval_eps: 20
   buffer_size: 1e6
   batch: 256
   gradient_steps: 2

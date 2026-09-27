@@ -13,6 +13,8 @@ base:
   optimizer: adamw
 variants:
   # Group 1: train_freq=4, gradient_steps=1
+  # Kept on single updates as the 1/4 replay-ratio baseline for Groups 2-3: bulk updates
+  # would add policy lag to this group only and confound the replay-ratio comparison.
   - algo: DQN
     steps: 1e5
     batch: 32

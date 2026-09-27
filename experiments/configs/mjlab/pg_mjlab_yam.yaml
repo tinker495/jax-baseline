@@ -14,6 +14,9 @@ base:
   # Local parallelism choice: 4096 workers * 24 steps * 5000 upstream iterations.
   steps: 491520000
   eval_num: 5
+  # Log every 10 rollouts (4096 workers * 24 steps each): log_interval counts transitions over
+  # all workers, and the 1000 default downloaded episode stats every vector step.
+  log_interval: 983040
   batch: 24
   actor_model: ../models/mlp_512_256_128_elu.json
   critic_model: ../models/mlp_512_256_128_elu.json

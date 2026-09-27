@@ -11,6 +11,9 @@ base:
   steps: 5e6
   batch: 32
   train_freq: 4
+  # Kept on the source script's single update every 4 env steps, without checkpointing.
+  # Bulk (train_freq 128, gradient_steps 32) keeps the ratio but acts up to 32 updates stale:
+  # adopt it only after a learning-curve A/B.
   final_eps: 0.01
   learning_starts: 20000
   gamma: 0.99
