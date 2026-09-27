@@ -66,8 +66,9 @@ class WandbLogger:
 
     ``__enter__`` is idempotent: the distributed Ray logger actor re-enters per
     call, and every entry returns the same live run, so the centralized actor
-    maps to a single W&B run. The run is finished on ``close`` / ``__del__`` (and
-    by W&B's own process-exit handler).
+    maps to a single W&B run. The run is finished on ``close`` or by W&B's own
+    process-exit handler; there is no ``__del__``, because a finish() during
+    interpreter shutdown blocks on the already torn-down W&B service.
     """
 
     def __init__(
@@ -133,12 +134,6 @@ class WandbLogger:
             self._run.finish()
             self._run = None
             self._logger_run = None
-
-    def __del__(self):
-        try:
-            self.close()
-        except Exception:
-            pass
 
 
 def make_wandb_logger_factory(

@@ -122,6 +122,9 @@ def run_family(runner: FamilyRunner, argv=None):
                 ),
             )
         agent.test()
+        # Finish the run before interpreter shutdown: W&B's exit hook tears its service
+        # down first, and a later finish() then waits forever.
+        agent.logger.close()
     finally:
         _close_agent_envs(agent)
     return agent
