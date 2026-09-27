@@ -13,7 +13,9 @@ variants: list of mappings; each is merged over ``base`` (variant wins).
           A variant may set ``enabled: false`` to keep it on record but skipped.
 runtime:  optional mapping:
             device: value for CUDA_VISIBLE_DEVICES
-            xvfb:   bool, wrap each command with ``xvfb-run -a``
+            xvfb:   bool, wrap each command with ``xvfb-run -a``. Omitted: wrap only
+                    when DISPLAY has no reachable X server and xvfb-run is installed
+                    (MUJOCO_GL=egl/osmesa renders without X, so it is left unwrapped).
 
 Argument encoding:
   bool true  -> ``--key``        (store_true flag)
@@ -36,7 +38,9 @@ import hashlib
 import json
 import os
 import shlex
+import shutil
 import signal
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -63,6 +67,27 @@ RUNNERS = {
     "apex_dpg": APEX_DPG_RUNNER,
 }
 MODEL_ARGUMENTS = ("model", "actor_model", "critic_model")
+
+
+def _display_reachable(display):
+    host, sep, screen = display.rpartition(":")
+    number = screen.split(".", 1)[0]
+    if not sep or not number.isdigit():
+        return False
+    if host in ("", "unix"):
+        return Path(f"/tmp/.X11-unix/X{number}").exists()
+    try:
+        socket.create_connection((host, 6000 + int(number)), timeout=0.5).close()
+    except OSError:
+        return False
+    return True
+
+
+def _xvfb_needed():
+    """Test-video rendering needs an X server; supply a virtual one when none answers."""
+    if os.environ.get("MUJOCO_GL") in ("egl", "osmesa") or shutil.which("xvfb-run") is None:
+        return False
+    return not _display_reachable(os.environ.get("DISPLAY", ""))
 
 
 def _build_args(merged):
@@ -100,7 +125,8 @@ def _iter_commands(config, cli_overrides=None, *, config_dir: Path | None = None
         raise TypeError("base and runtime must be mappings")
     if not isinstance(variants, list):
         raise TypeError("variants must be a list of argument mappings")
-    runtime = {"xvfb": False, **runtime}
+    if "xvfb" not in runtime:
+        runtime = {**runtime, "xvfb": _xvfb_needed()}
     if not isinstance(runtime["xvfb"], bool):
         raise TypeError("runtime.xvfb must be a boolean")
     for variant in variants:
