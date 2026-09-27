@@ -11,6 +11,12 @@ base:
   batch: 256
   target_update_tau: 1e-3
   learning_starts: 50000
+  # Bulk updates: every 32 env steps, 32 updates in one compiled scan (UTD stays 1); the
+  # policy acts up to 32 updates stale. 2-seed A/B vs single updates: 8x faster
+  # (125 -> 1005 env steps/s), 3000 reward at 550k vs 600k steps, but last-5 eval mean
+  # 4341 vs 4600 and final 10-episode test 4915 vs 5558.
+  train_freq: 32
+  gradient_steps: 32
   actor_model: ../models/mlp_512x2_relu.json
   critic_model: ../models/mlp_512x2_relu.json
   optimizer: adam
