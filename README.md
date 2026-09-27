@@ -95,6 +95,7 @@ python -m pip install -e '.[all]'
 - [DQN 5M](docs/dqn_5m.md)
 - [DQN 100K](docs/dqn_100k.md)
 - [DPG](docs/dpg_comparison.md)
+- [FlashSAC vs PyTorch reference (Humanoid-v4, mjlab G1)](docs/flash_sac_implement.md)
 
 ## Run experiments
 
