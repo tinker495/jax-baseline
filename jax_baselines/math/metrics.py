@@ -4,6 +4,69 @@ import jax
 import jax.numpy as jnp
 
 
+def _weighted(value, weight):
+    return jnp.where(weight > 0, jnp.asarray(value) * weight, 0)
+
+
+@jax.jit
+def _start_totals(metrics, metric_counts):
+    return (
+        {name: _weighted(value, metric_counts[name]) for name, value in metrics.items()},
+        {name: jnp.asarray(metric_counts[name]) for name in metrics},
+    )
+
+
+@jax.jit
+def _add_totals(totals, metrics, metric_counts):
+    sums, counts = totals
+    return (
+        {name: sums[name] + _weighted(metrics[name], metric_counts[name]) for name in sums},
+        {name: counts[name] + metric_counts[name] for name in counts},
+    )
+
+
+@jax.jit
+def _mean_totals(totals):
+    sums, counts = totals
+    return {name: sums[name] / jnp.maximum(counts[name], 1) for name in sums}, counts
+
+
+class MetricTotals:
+    """Count-weighted means of per-report metrics, weighted like :func:`reduce_metrics`.
+
+    Reports are folded in one at a time, so each compiled call sees a fixed input structure.
+    A pulse-sized tuple would recompile for every new report count: checkpoint pulses vary
+    from one to ~1000 chunks, and a diagnostic pulse spent up to 25 s compiling its reducer.
+    A metric missing from a report gets no contribution from that report.
+    """
+
+    def __init__(self):
+        self.sums = {}
+        self.counts = {}
+
+    def add(self, metrics, metric_counts):
+        shared = [name for name in metrics if name in self.sums]
+        if shared:
+            sums, counts = _add_totals(
+                ({name: self.sums[name] for name in shared}, {n: self.counts[n] for n in shared}),
+                {name: metrics[name] for name in shared},
+                {name: metric_counts[name] for name in shared},
+            )
+            self.sums.update(sums)
+            self.counts.update(counts)
+        new = [name for name in metrics if name not in self.sums]
+        if new:
+            sums, counts = _start_totals(
+                {name: metrics[name] for name in new}, {name: metric_counts[name] for name in new}
+            )
+            self.sums.update(sums)
+            self.counts.update(counts)
+
+    def means(self):
+        """Return ``(means, counts)`` like :func:`reduce_metrics`."""
+        return _mean_totals((self.sums, self.counts))
+
+
 @jax.jit
 def reduce_metrics(metrics, metric_counts):
     """Average along the update axis, excluding zero-count observations."""

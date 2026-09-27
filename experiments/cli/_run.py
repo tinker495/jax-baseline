@@ -81,6 +81,8 @@ def _transfer_guard(args: Namespace):
 def run_family(runner: FamilyRunner, argv=None):
     load_runtime_env()
     args = parse_runner_args(runner, argv)
+    if args.matmul_precision is not None:
+        jax.config.update("jax_default_matmul_precision", args.matmul_precision)
     spec = runner.algos[args.algo]
     maker = resolve_maker(runner, spec, args)
     env_builder, policy_kwargs = runner.build_env(args)
@@ -110,6 +112,7 @@ def run_family(runner: FamilyRunner, argv=None):
                 int(args.steps),
                 experiment_name=args.experiment_name,
                 eval_num=args.eval_num,
+                log_interval=args.log_interval,
                 logger_factory=resolve_logger_factory(
                     args, policy_kwargs=agent.policy_kwargs, run_metadata=run_metadata
                 ),
@@ -163,6 +166,8 @@ def run_distributed_family(runner: DistributedFamilyRunner, argv=None):
 
     load_runtime_env()
     args = parse_runner_args(runner, argv)
+    if args.matmul_precision is not None:
+        jax.config.update("jax_default_matmul_precision", args.matmul_precision)
     spec = runner.algos[args.algo]
     maker = resolve_maker(runner, spec, args)
     policy_kwargs = runner.policy_kwargs(args)

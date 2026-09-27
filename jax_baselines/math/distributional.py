@@ -106,27 +106,21 @@ def categorical_projection(
         ``[B, n_bins]`` projected probability mass.
     """
 
-    def project_row(p: jax.Array, target_values: jax.Array) -> jax.Array:
-        tz = jnp.clip(target_values, support_min, support_max)
-        b = ((tz - support_min) / delta).astype(jnp.float32)
-        lower = jnp.floor(b).astype(jnp.int32)
-        upper = jnp.ceil(b).astype(jnp.int32)
-
-        def project_one(p_i, b_i, l_i, u_i):
-            exact = l_i == u_i
-            m = jnp.zeros((n_bins,), dtype=p_i.dtype)
-            w_l = jnp.where(exact, p_i, p_i * (u_i.astype(jnp.float32) - b_i))
-            w_u = jnp.where(exact, jnp.zeros_like(p_i), p_i * (b_i - l_i.astype(jnp.float32)))
-            m = m.at[l_i].add(w_l)
-            m = m.at[u_i].add(w_u)
-            return m
-
-        return jnp.sum(
-            jax.vmap(project_one, in_axes=(0, 0, 0, 0))(p, b, lower, upper),
-            axis=0,
-        )
-
-    return jax.vmap(project_row, in_axes=(0, 0))(next_dist, shifted_atom_values)
+    b = ((jnp.clip(shifted_atom_values, support_min, support_max) - support_min) / delta).astype(
+        jnp.float32
+    )
+    lower = jnp.floor(b).astype(jnp.int32)
+    upper = jnp.ceil(b).astype(jnp.int32)
+    exact = lower == upper
+    w_l = jnp.where(exact, next_dist, next_dist * (upper.astype(jnp.float32) - b))
+    w_u = jnp.where(exact, jnp.zeros_like(next_dist), next_dist * (b - lower.astype(jnp.float32)))
+    # [B, source atom, fixed atom] one-hot mass, reduced over source atoms. The added zeros are
+    # exact, so the sums match the per-atom scatter form.
+    atoms = jnp.arange(n_bins)
+    mass = jnp.where(lower[..., None] == atoms, w_l[..., None], 0) + jnp.where(
+        upper[..., None] == atoms, w_u[..., None], 0
+    )
+    return mass.sum(axis=1)
 
 
 class DistributionalBackend(Protocol):

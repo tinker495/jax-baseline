@@ -31,6 +31,12 @@ def runner_parser(
         action="store_true",
         help="fail on any implicit host<->device transfer during training (AGENTS.md hot-path rule)",
     )
+    parser.add_argument(
+        "--matmul_precision",
+        choices=("bfloat16", "tensorfloat32", "float32"),
+        help="precision of float32 matmuls compiled in this process (default: JAX's); "
+        "bfloat16 trades accuracy for speed like mixed precision",
+    )
     return parser
 
 
@@ -74,6 +80,7 @@ def parse_runner_args(
         "critic_num",
         "actor_update_period",
         "eval_eps",
+        "log_interval",
         "target_update",
         "env_episode_length",
     } & values.keys():

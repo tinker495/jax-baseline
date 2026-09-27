@@ -179,25 +179,22 @@ def observe_empirical_observations(rms: RunningMeanStd | None, next_obs, obs):
     return next_obs, obs
 
 
-def _record_inputs(all_active, rewards, terminated, truncated, active):
-    """One step's rollout values on device.
-
-    Host rollouts pack them into one array, so a step costs a single upload instead of one
-    per value; device rollouts pass their arrays through.
-    """
-    expected = all_active.shape
-    values = (rewards, terminated, truncated, all_active if active is None else active)
+def _check_record_shapes(expected, values):
     if any((np.shape(value) or (1,)) != expected for value in values):
         raise ValueError(
             f"rewards, terminated, truncated and active must match the worker shape {expected}"
         )
-    if isinstance(rewards, jax.Array):
-        return jax.device_put(values)
-    if active is None:
-        values = (*values[:3], np.ones(expected, bool))
-    return jax.device_put(
-        np.stack([np.broadcast_to(np.asarray(value, np.float32), expected) for value in values])
-    )
+
+
+def _host_record_row(expected, rewards, terminated, truncated, active):
+    """Pack one host step as a ``(4, workers)`` float32 row: rewards, terminated, truncated, active."""
+    values = (rewards, terminated, truncated, np.ones(expected, bool) if active is None else active)
+    _check_record_shapes(expected, values)
+    return np.stack([np.broadcast_to(np.asarray(value, np.float32), expected) for value in values])
+
+
+# Host steps queued before one upload; the statistics are read at most once per update or log.
+_PENDING_ROWS = 256
 
 
 def _worker_flags(inputs):
@@ -239,20 +236,67 @@ class RewardNormalizer:
         self.rms = RunningMeanStd(shapes={"return": ()})
         self.discounted_returns = jnp.zeros(int(worker_size), dtype=jnp.float32)
         self._all_active = jnp.ones(int(worker_size), dtype=bool)
+        self._pending_rows = []
+        self._record_rows = jax.jit(self._scan_record_rows)
 
     def record(self, rewards, terminated, truncated, active=None):
-        self.discounted_returns, mean, variance, self.rms.count = _record_returns(
+        if isinstance(rewards, jax.Array):
+            values = (
+                rewards,
+                terminated,
+                truncated,
+                self._all_active if active is None else active,
+            )
+            _check_record_shapes(self._all_active.shape, values)
+            self.rollout_state = self.record_state(self.rollout_state, jax.device_put(values))
+            return
+        # Host rollouts queue steps on the host and apply them in one upload and one compiled
+        # scan when the statistics are next read (one upload + call per step cost 0.3 ms).
+        self._pending_rows.append(
+            _host_record_row(self._all_active.shape, rewards, terminated, truncated, active)
+        )
+        if len(self._pending_rows) == _PENDING_ROWS:
+            self._flush()
+
+    def _flush(self):
+        if not self._pending_rows:
+            return
+        rows, self._pending_rows = self._pending_rows, []
+        padded = np.zeros((_PENDING_ROWS, *rows[0].shape), np.float32)
+        padded[: len(rows)] = rows
+        self.rollout_state = self._record_rows(
+            self.rollout_state, *jax.device_put((padded, np.arange(_PENDING_ROWS) < len(rows)))
+        )
+
+    def _scan_record_rows(self, state, rows, valid):
+        def step(state, row_valid):
+            row, keep = row_valid
+            new = self.record_state(state, row)
+            return jax.tree.map(lambda n, o: jnp.where(keep, n, o), new, state), None
+
+        return jax.lax.scan(step, state, (rows, valid))[0]
+
+    @property
+    def rollout_state(self):
+        self._flush()
+        return (
             self.discounted_returns,
             self.rms.means["return"],
             self.rms.vars["return"],
             self.rms.count,
-            _record_inputs(self._all_active, rewards, terminated, truncated, active),
-            gamma=self.gamma,
         )
+
+    @rollout_state.setter
+    def rollout_state(self, state):
+        self.discounted_returns, mean, variance, self.rms.count = state
         self.rms.means, self.rms.vars = {"return": mean}, {"return": variance}
+
+    def record_state(self, state, inputs):
+        return _record_returns(*state, inputs, gamma=self.gamma)
 
     @property
     def stats(self):
+        self._flush()
         return self.rms.vars["return"]
 
     @staticmethod
@@ -268,12 +312,15 @@ class RewardNormalizer:
         return _normalize_rewards(jax.device_put(rewards), self.stats)
 
     def to_state(self):
+        self._flush()
         return self.rms.to_state()
 
     def reset(self):
+        self._flush()
         self.discounted_returns = _zeros_like(self.discounted_returns)
 
     def restore(self, state):
+        self._flush()
         self.rms = RunningMeanStd.from_state(state)
         self.reset()
 
@@ -327,26 +374,27 @@ class FlashSACRewardNormalizer(RewardNormalizer):
         self._scale = jax.jit(partial(_flashsac_scale, normalized_G_max=self.normalized_G_max))
         self._normalize = jax.jit(self.apply)
 
-    def record(self, rewards, terminated, truncated, active=None):
+    @property
+    def rollout_state(self):
+        return (*super().rollout_state, self.max_abs_return)
+
+    @rollout_state.setter
+    def rollout_state(self, state):
         (
             self.discounted_returns,
             mean,
             variance,
             self.rms.count,
             self.max_abs_return,
-        ) = _record_flashsac_returns(
-            self.discounted_returns,
-            self.rms.means["return"],
-            self.rms.vars["return"],
-            self.rms.count,
-            self.max_abs_return,
-            _record_inputs(self._all_active, rewards, terminated, truncated, active),
-            gamma=self.gamma,
-        )
+        ) = state
         self.rms.means, self.rms.vars = {"return": mean}, {"return": variance}
+
+    def record_state(self, state, inputs):
+        return _record_flashsac_returns(*state, inputs, gamma=self.gamma)
 
     @property
     def stats(self):
+        self._flush()
         return self.rms.vars["return"], self.max_abs_return
 
     def apply(self, rewards, stats):

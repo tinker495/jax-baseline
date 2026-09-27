@@ -37,6 +37,47 @@ Aim의 experiment와 W&B의 project도 `category`를 사용하므로 같은 카�
 `steps`의 의미는 실행 계열에 따라 다르므로 값만 보고 분류하지 않는다.
 예를 들어 `atari/impala_breakout_ppo.yaml`의 `steps: 1e5`는 learner 학습 횟수이다.
 
+## 학습 효율을 우선하는 YAML 설계
+
+이 디렉터리의 학습용 YAML은 **실험 목적과 학습 품질을 유지하면서, 지원되는 실행 경로에서
+학습 효율을 최대화하는 기본 설정**으로 설계해야 한다. 충분한 로그 간격, 벌크 학습,
+체크포인팅을 적극 활용해 반복적인 dispatch·CPU↔GPU 동기화·파일 I/O 비용을 줄인다.
+새 설정을 추가하거나 기존 설정을 수정할 때 다음 기준을 적용한다.
+
+- **로그 간격**: `log_interval`을 명시하고 worker 수와 실행 계열의 step 단위에 맞춘다.
+  일반 `dpg`·`qnet`의 vector rollout에서는 전체 worker의 transition 기준이다.
+  예를 들어 mjlab의 `worker: 1024`, `log_interval: 102400`은 100 vector steps마다 기록한다.
+  이 환경에서 `1000` 같은 작은 기본값은 매 vector step마다 로깅을 유발한다.
+  필요한 관측 해상도를 유지하는 충분한 간격을 선택해 상세 진단과 host 전송이
+  매번 발생하지 않도록 한다. 디버깅용 짧은 간격은 실행 override로 지정한다.
+- **벌크 학습**: 지원하는 알고리즘에서는 `train_freq`, `gradient_steps`,
+  `max_bulk_updates_per_pulse`를 함께 설계해 여러 update가 compiled pulse로 실행되게 한다.
+  환경 상호작용 대비 update 수, actor·target 갱신 주기와 메모리 한도를 확인한다.
+  update 비율이 같아도 학습을 모아서 실행하면 행동 정책이 갱신되는 시점은 달라질 수 있다.
+  따라서 chunk 크기를 무조건 키우지 않고 처리량·메모리·학습 성능으로 결정한다.
+- **체크포인팅**: 지원하는 `dpg`·`qnet` 설정에서는 `use_checkpointing: true`로
+  episode 단위 수집과 학습 pulse를 묶는 경로를 우선 검토한다.
+  여기서 체크포인팅은 TD7식 행동 정책 snapshot과 학습 스케줄이며, 모델 파일 저장 주기와는
+  별개다. 학습 시점과 행동 정책에 영향을 주므로 알고리즘·환경·비교 실험 조건에 맞춰 선택한다.
+  비활성화가 필요한 경우 YAML 주석에 이유를 남긴다.
+- **전송·평가 비용**: 환경과 replay를 가능한 한 소비 장치에 유지하도록 backend를 선택한다.
+  `eval_num`·`eval_eps`와 저장·진단 빈도는 실험 목적에 필요한 수준으로 정한다.
+  학습·평가 예산이나 평가 의미를 바꿔 얻은 시간 감소는 실행 최적화와 구분해 기록한다.
+- **측정 근거**: 컴파일·워밍업을 제외한 처리량과 시작·평가·저장을 포함한 전체 시간을
+  구분하고, 동일 환경·worker 수·update 예산에서 비교한다. 학습 곡선과 목표 성능 도달 시간도
+  함께 확인한다. 단일 환경의 최적값을 모든 YAML에 일괄 적용하지 않는다.
+
+현재 mjlab의 [FlashSAC G1 설정](mjlab/flashsac_mjlab_g1.yaml)은 충분한 로그 간격과 GPU replay,
+vector step당 두 update를 사용한다. [MuJoCo FlashSAC 설정](mujoco/flashsac_humanoid.yaml)은
+32-step 수집 후 32-update 벌크 학습을 사용하며, 정책 갱신 지연을 주석으로 명시한다.
+이 값들은 해당 실험의 예시이며 모든 환경에 대한 최적값을 보장하지 않는다.
+
+상속되는 `base`와 variant override를 포함한 최종 실행 인자를 `--dry-run`으로 확인한다.
+처리량·학습 성능 측정 기록은 Git에서 제외된 `runs/`에 보관한다.
+작성·변경 시 준수할 규칙은 [AGENTS.md](AGENTS.md)에 정리한다.
+
+## 실행과 기록
+
 저장소 루트에서 실행한다. `--dry-run`은 학습을 시작하지 않고 실행 명령과 모델 정의를 확인한다.
 
 ```bash

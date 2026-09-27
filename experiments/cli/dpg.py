@@ -71,6 +71,12 @@ def add_args(parser):
         default=100,
         help="number of evaluations over the whole training run (default 100)",
     )
+    parser.add_argument(
+        "--log_interval",
+        type=int,
+        default=1000,
+        help="env transitions (summed over workers) between metric logs",
+    )
     parser.add_argument("--eval_eps", type=int, default=20, help="episodes per evaluation")
     parser.add_argument("--logdir", type=str, default=default_logdir("dpg"), help="log file dir")
     parser.add_argument("--seed", type=int, default=42, help="random seed")

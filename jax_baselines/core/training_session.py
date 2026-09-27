@@ -42,15 +42,16 @@ class RunContext:
 
 def eval_freq_from_count(eval_num, total_timesteps, worker_size):
     """Convert a target number of evaluations over the whole run into an eval
-    cadence in env steps, snapped to a ``worker_size`` multiple so the
+    cadence in env steps, rounded up to a ``worker_size`` multiple so the
     vectorized step counter lands on it and floored at ``worker_size``.
 
-    The default of 100 evals reproduces the historical ``total_timesteps // 100``
-    cadence.
+    Rounding up keeps the last in-loop evaluation from landing just before the
+    final one: a run evaluates at step 0, ``eval_num - 1`` intervals, and the end.
+    The default of 100 evals keeps the ``total_timesteps // 100`` cadence when it
+    divides evenly.
     """
     eval_num = max(1, int(eval_num))
-    step = total_timesteps // eval_num
-    return max(worker_size, (step // worker_size) * worker_size)
+    return max(worker_size, -(-total_timesteps // (eval_num * worker_size)) * worker_size)
 
 
 class TrainingSession:
@@ -74,7 +75,13 @@ class TrainingSession:
         eval_freq = eval_freq_from_count(eval_num, total_timesteps, agent.worker_size)
         logger_factory = logger_factory or NoOpLogger
         progress_factory = progress_factory or make_progress
-        pbar = progress_factory(0, total_timesteps, agent.worker_size, miniters=log_interval)
+        # The bar iterates vector steps; log_interval counts transitions over all workers.
+        pbar = progress_factory(
+            0,
+            total_timesteps,
+            agent.worker_size,
+            miniters=max(1, log_interval // agent.worker_size),
+        )
         logger = logger_factory(run_name, experiment_name, agent.log_dir, agent)
         # ``test()`` is a separate entry point that re-enters the run's logger, so the
         # agent keeps a reference to it (matching the pre-refactor learn() contract).

@@ -196,6 +196,12 @@ class FlashSAC(Deteministic_Policy_Gradient_Family):
         )
         return actions
 
+    def _move_action_carries(self, device):
+        super()._move_action_carries(device)
+        self._noise, self._noise_count, self._noise_period = jax.device_put(
+            (self._noise, self._noise_count, self._noise_period), device
+        )
+
     def _get_actions(self, state, obses, key, noise, count, period):
         (mean, log_std), _ = self.actor(state["policy"], None, convert_normalized_obs(obses), False)
         key, noise_key, period_key = jax.random.split(key, 3)

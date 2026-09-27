@@ -34,13 +34,14 @@ from jax_baselines.core.seeding import key_gen, set_global_seeds
 from jax_baselines.core.training_session import TrainingSession, off_policy_loop
 from jax_baselines.DDPG.metrics import stochastic_actor_metrics
 from jax_baselines.DDPG.training import DPGTrainingLifecycle, DPGTrainReport
-from jax_baselines.math.metrics import reduce_metrics
+from jax_baselines.math.metrics import MetricTotals, reduce_metrics
 from jax_baselines.optim import (
     OptimizerFactory,
     optimizer_metrics,
     require_optimizer_factory,
     track_optimizer,
 )
+from replay_memory.flashbax_buffer import FlashbaxReplayBuffer
 
 
 class UpdateFlags(NamedTuple):
@@ -59,6 +60,14 @@ def merge_actor_metrics(metrics, actor_metrics, actor_updated):
     counts = {name: jnp.asarray(1) for name in metrics}
     counts.update(dict.fromkeys(actor_metrics, jnp.asarray(actor_updated, dtype=jnp.int32)))
     return {**metrics, **actor_metrics}, counts
+
+
+def _cpu_device():
+    """The CPU backend, or None when JAX_PLATFORMS excludes it (acting then stays on device)."""
+    try:
+        return jax.devices("cpu")[0]
+    except RuntimeError:
+        return None
 
 
 @jax.jit(static_argnums=1)
@@ -117,10 +126,10 @@ class Deteministic_Policy_Gradient_Family:
         replay_factory: ReplayBufferFactory | None = None,
         # Checkpointing options (opt-in by default for base class)
         use_checkpointing=True,
-        steps_before_checkpointing=500000,
-        max_eps_before_checkpointing=20,
+        checkpoint_start_fraction=0.15,
+        max_eps_before_checkpointing=10,
         initial_checkpoint_window=1,
-        ckpt_baseline_mode="min",
+        ckpt_baseline_mode="quantile",
         ckpt_baseline_q=None,
         checkpoint_store: CheckpointStore | None = None,
         reward_normalization=False,
@@ -128,6 +137,13 @@ class Deteministic_Policy_Gradient_Family:
     ):
         if memory_backend not in ("auto", "cpu", "gpu"):
             raise ValueError("memory_backend must be 'auto', 'cpu', or 'gpu'")
+        # Envs that return host observations act on the CPU backend: one small compiled call
+        # per step instead of an accelerator round trip (0.25 vs 2.0 ms for FlashSAC's actor on
+        # Humanoid under WSL2). Observation statistics live on the accelerator, so obs_rms_norm
+        # keeps the device path.
+        self._host_device = None if obs_rms_norm else _cpu_device()
+        self._host_state = None
+        self._host_state_source = None
         self.env_builder = env_builder
         self.model_builder_maker = model_builder_maker
         self.num_workers = num_workers
@@ -212,7 +228,7 @@ class Deteministic_Policy_Gradient_Family:
 
         # Generic checkpointing scaffolding (used by algorithms that opt-in)
         self.use_checkpointing = use_checkpointing
-        self.steps_before_checkpointing = min(int(steps_before_checkpointing), learning_starts * 2)
+        self.checkpoint_start_fraction = float(checkpoint_start_fraction)
         self.max_eps_before_checkpointing = int(max_eps_before_checkpointing)
         self.initial_checkpoint_window = int(initial_checkpoint_window)
 
@@ -220,7 +236,7 @@ class Deteministic_Policy_Gradient_Family:
         self._ckpt_update_residual = 0
         self.ckpt = make_checkpoint_scaffold(
             use_checkpointing=self.use_checkpointing,
-            steps_before_checkpointing=self.steps_before_checkpointing,
+            checkpoint_start_fraction=self.checkpoint_start_fraction,
             max_eps_before_checkpointing=self.max_eps_before_checkpointing,
             initial_checkpoint_window=self.initial_checkpoint_window,
             ckpt_baseline_mode=ckpt_baseline_mode,
@@ -421,7 +437,7 @@ class Deteministic_Policy_Gradient_Family:
         return self.training_lifecycle.train(steps, gradient_steps, logger_run, log_interval)
 
     def prepare_run(self, total_timesteps):
-        pass
+        self.ckpt.schedule(total_timesteps)
 
     def run_training_loop(self, ctx):
         off_policy_loop(self, ctx)
@@ -467,7 +483,7 @@ class Deteministic_Policy_Gradient_Family:
         outputs = []
         for index, flags in enumerate(pattern):
             carry, output = self._counted_update(
-                carry, jax.tree.map(lambda value: value[index], batches), flags
+                carry, jax.tree.map(lambda value, index=index: value[index], batches), flags
             )
             outputs.append(output)
         return carry, jax.tree.map(lambda *values: jnp.stack(values), *outputs)
@@ -479,9 +495,9 @@ class Deteministic_Policy_Gradient_Family:
         for pattern, repeats in plan:
             size = len(pattern) * repeats
             segment = jax.tree.map(
-                lambda value: value[start : start + size].reshape(
-                    repeats, len(pattern), *value.shape[1:]
-                ),
+                lambda value, start=start, size=size, repeats=repeats, pattern=pattern: value[
+                    start : start + size
+                ].reshape(repeats, len(pattern), *value.shape[1:]),
                 batches,
             )
             carry, output = jax.lax.scan(
@@ -491,7 +507,7 @@ class Deteministic_Policy_Gradient_Family:
                 unroll=min(repeats, max(1, SCAN_UNROLL // len(pattern))),
             )
             outputs.append(
-                jax.tree.map(lambda value: value.reshape(size, *value.shape[2:]), output)
+                jax.tree.map(lambda value, size=size: value.reshape(size, *value.shape[2:]), output)
             )
             start += size
         priorities, metrics, metric_counts = jax.tree.map(
@@ -505,10 +521,13 @@ class Deteministic_Policy_Gradient_Family:
         # The lifecycle already placed the batch on device; `indexes` only feeds the
         # host-side priority write-back.
         batch = {name: value for name, value in data.items() if name != "indexes"}
-        (self._train_state, self._train_key, self._update_count), (
-            priorities,
-            metrics,
-            metric_counts,
+        (
+            (self._train_state, self._train_key, self._update_count),
+            (
+                priorities,
+                metrics,
+                metric_counts,
+            ),
         ) = compiled((self._train_state, self._train_key, self._update_count), batch, schedule)
         return DPGTrainReport(metrics, metric_counts, priorities)
 
@@ -521,14 +540,11 @@ class Deteministic_Policy_Gradient_Family:
     def _aggregate_train_reports(self, reports):
         if len(reports) == 1:
             return reports[-1]
-        names = reports[0].metrics
-        # Every count is a device array, so the reduction is one compiled call with no transfer.
-        return DPGTrainReport(
-            *reduce_metrics(
-                {name: tuple(report.metrics[name] for report in reports) for name in names},
-                {name: tuple(report.metric_counts[name] for report in reports) for name in names},
-            )
-        )
+        # Counts are device arrays, so folding the reports needs no transfer.
+        totals = MetricTotals()
+        for report in reports:
+            totals.add(report.metrics, report.metric_counts)
+        return DPGTrainReport(*totals.means())
 
     def get_behavior_state(self):
         """Get state dict to use for behavior (training-time actions).
@@ -552,10 +568,39 @@ class Deteministic_Policy_Gradient_Family:
         obs = self._normalize_action_observation(obs, eval, steps)
         if not eval and steps <= self.learning_starts:
             actions = self._random_warmup_actions()
+        elif self._host_device is not None and not device_env:
+            return self._host_policy_actions(obs, eval, steps)
         else:
             state = self._select_action_state(eval, steps)
             actions = self._policy_action_from_state(state, jax.device_put(obs), eval, steps)
         return actions if device_env else jax.device_get(actions)
+
+    def _host_policy_actions(self, obs, eval, steps):
+        """Act on the CPU backend from a mirror of the acting parameters.
+
+        The mirror is refreshed only when the parameters change (after an update or on a
+        snapshot switch), and the action carries move to the CPU once, so each step costs
+        one host-side compiled call. The PRNG stream is unchanged; CPU float32 matmuls
+        differ slightly from the accelerator's default precision.
+        """
+        state = self._select_action_state(eval, steps)
+        leaves = jax.tree.leaves(state)
+        source = self._host_state_source
+        if (
+            source is None
+            or len(source) != len(leaves)
+            or any(new is not old for new, old in zip(leaves, source))
+        ):
+            self._host_state = jax.device_put(state, self._host_device)
+            self._host_state_source = leaves
+        if self._action_key.devices() != {self._host_device}:
+            self._move_action_carries(self._host_device)
+        obs = jax.device_put(obs, self._host_device)
+        return np.asarray(self._policy_action_from_state(self._host_state, obs, eval, steps))
+
+    def _move_action_carries(self, device):
+        """Place every array ``_policy_action_from_state`` carries between calls on ``device``."""
+        self._action_key = jax.device_put(self._action_key, device)
 
     def _random_warmup_actions(self):
         shape = (self.worker_size, self.action_size[0])
@@ -670,6 +715,11 @@ class Deteministic_Policy_Gradient_Family:
         return ActionSelection(env_action=actions, store_action=actions)
 
     def _snapshot_action_normalizer(self):
+        """Freeze the live observation statistics before a pulse.
+
+        The pulse normalizes replay batches with this snapshot and the next window acts with
+        it, so the parameters always meet inputs normalized the way they were trained on.
+        """
         if self.obs_rms_norm:
             self.action_obs_rms = self.obs_rms.snapshot()
 
@@ -692,7 +742,7 @@ class Deteministic_Policy_Gradient_Family:
             record_loss=lambda loss: self.lossque.append(loss),
             read_residual=lambda: self._ckpt_update_residual,
             write_residual=self._write_ckpt_residual,
-            post_pulse=self._snapshot_action_normalizer,
+            pre_pulse=self._snapshot_action_normalizer,
         )
         spec = RolloutSpec(
             env=self.env,
@@ -719,6 +769,11 @@ class Deteministic_Policy_Gradient_Family:
             reward_normalization=self.reward_normalization,
             record_transition=(
                 self.reward_normalizer.record if self.reward_normalizer is not None else None
+            ),
+            record_device_step=(
+                self.training_lifecycle.record_device_step
+                if isinstance(self.replay_buffer, FlashbaxReplayBuffer)
+                else None
             ),
             memory_device=self.memory_device,
             autoreset_steps=self.autoreset_steps,

@@ -17,6 +17,8 @@ base:
   gradient_steps: 2
   steps: 50000896
   eval_num: 10
+  # Log every 100 vector steps: log_interval counts transitions over all workers.
+  log_interval: 102400
   learning_rate: 0.0003
   learning_rate_end: 0.00015
   optimizer: adam

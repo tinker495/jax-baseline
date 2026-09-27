@@ -16,6 +16,8 @@ base:
   gradient_steps: 2
   steps: 50000896
   eval_num: 5
+  # Log every 100 vector steps: log_interval counts transitions over all workers.
+  log_interval: 102400
   learning_rate: 0.0003
   buffer_size: 5e6
   batch: 2048
