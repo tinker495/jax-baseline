@@ -19,6 +19,9 @@ base:
   learning_starts: 20000
   gamma: 0.99
   buffer_size: 5e5
+  # Per-worker frame rings store one frame per row: ~3.4 GiB instead of ~26.3 GiB raw
+  # for 5e5 rows (measured 7.3 vs 56.5 KB/row).
+  compress_memory: true
   exploration_fraction: 0.2
   model: ../models/mlp_512x1_relu.json
   optimizer: adam

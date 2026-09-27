@@ -29,13 +29,11 @@ from replay_memory.transition_buffers import (
 
 
 def _frame_compress_applicable(observation_space, worker_size, n_step, n_frames):
-    """Frame-level n-step compaction needs a single frame-stacked image modality,
-    a single worker (contiguous transition stream), and a real n-step horizon.
-    cpprb's stack_compress cannot compact the n-step next_obs, so this is the only
-    way to get the full ~8x saving for n-step image replay."""
+    """Frame-level compaction needs a single frame-stacked image modality. cpprb's
+    stack_compress covers only a single-worker single-step stream: it cannot compact
+    the n-step next_obs, and interleaved vector-env rows share no frames."""
     return (
-        worker_size == 1
-        and n_step > 1
+        (worker_size > 1 or n_step > 1)
         and len(observation_space) == 1
         and len(next(iter(observation_space.values()))) >= 3
         and next(iter(observation_space.values()))[-1] % n_frames == 0
@@ -62,11 +60,12 @@ def _validate_self_prediction_replay_need(need: SelfPredictionReplayNeed) -> Non
 def make_replay_buffer(need: LocalReplayNeed):
     """Create an appropriate replay buffer based on flags.
 
-    - compress_memory + n_step + single-worker image -> Frame(Prioritized)StackReplayBuffer
-      (stores one frame per observation; reconstructs the stack and the n-step
-      next_obs by index, so 1e6 Atari n-step replay costs ~7GB instead of ~35GB)
-    - compress_memory + single-step + multi-worker image -> NstepReplayBuffer with n_step=1
-      (reuses worker-local staging so cpprb stack compression sees per-worker episode streams)
+    - compress_memory + (n_step or multi-worker) + single image modality ->
+      Frame(Prioritized)StackReplayBuffer (stores one frame per observation in per-worker
+      rings; reconstructs the stack and the n-step next_obs by index, so 1e6 Atari
+      n-step replay costs ~7GB instead of ~35GB)
+    - compress_memory + single-step + multi-worker multi-modal image -> NstepReplayBuffer
+      with n_step=1 (reuses worker-local staging so rows stay reconstructible)
     - For prioritized + n_step -> PrioritizedNstepReplayBuffer
     - For prioritized only -> PrioritizedReplayBuffer
     - For n_step only -> NstepReplayBuffer
@@ -127,9 +126,16 @@ def make_replay_buffer(need: LocalReplayNeed):
                 alpha,
                 eps,
                 n_frames,
+                worker_size,
             )
         return FrameStackReplayBuffer(
-            buffer_size, observation_space, action_shape_or_n, n_step, gamma, n_frames
+            buffer_size,
+            observation_space,
+            action_shape_or_n,
+            n_step,
+            gamma,
+            n_frames,
+            worker_size,
         )
 
     if n_step > 1 or (
