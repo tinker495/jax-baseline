@@ -54,6 +54,7 @@ class MjlabVectorizedEnv(VectorizedEnv):
         jax_arrays=False,
         *,
         reuse_for_eval=False,
+        share_actor_obs=False,
     ):
         self.env = env
         self._torch = torch
@@ -62,10 +63,13 @@ class MjlabVectorizedEnv(VectorizedEnv):
         self.worker_num = env.num_envs
         self._no_autoreset = jnp.zeros(self.worker_num, dtype=bool) if jax_arrays else None
         self._observation_key = observation_key
+        self._share_actor_obs = share_actor_obs
         self._pending: tuple[Observation, Array, Array, Array, dict[str, Any]] | None = None
         self._closed = False
         self._frame = None
         self.reset(seed=seed)
+        if share_actor_obs and not any(key.startswith("critic_") for key in self._obs):
+            raise ValueError("share_actor_obs requires actor and critic observation groups")
         if reuse_for_eval:
             from env_builder.mjlab_state import validate_state_preservation
 
@@ -128,14 +132,16 @@ class MjlabVectorizedEnv(VectorizedEnv):
             }
             selected = normalize_observation(shared, array_converter=self._array) if shared else {}
             for role in ("actor", "critic"):
-                selected.update(
-                    {
-                        f"{role}_{key.removeprefix('unified_')}": value
-                        for key, value in normalize_observation(
-                            observation[role], array_converter=self._array
-                        ).items()
-                    }
-                )
+                # share_actor_obs marks the actor group unified_, so the critic sees actor ⊕ critic
+                # like FlashSAC's IsaacLab wrapper; otherwise the critic sees its own group only.
+                prefix = "unified" if role == "actor" and self._share_actor_obs else role
+                for key, value in normalize_observation(
+                    observation[role], array_converter=self._array
+                ).items():
+                    name = f"{prefix}_{key.removeprefix('unified_')}"
+                    if name in selected:
+                        raise ValueError(f"Observation key {name!r} is produced twice")
+                    selected[name] = value
             return dict(sorted(selected.items()))
         return normalize_observation(
             observation, self._observation_key, array_converter=self._array
@@ -437,6 +443,7 @@ def make_mjlab_env(
     render_mode=None,
     jax_arrays=False,
     reuse_for_eval=False,
+    share_actor_obs=False,
 ) -> MjlabSingleEnv | MjlabVectorizedEnv:
     if render_mode not in (None, "rgb_array"):
         raise ValueError("mjlab supports only render_mode=None or 'rgb_array'")
@@ -446,6 +453,8 @@ def make_mjlab_env(
         raise ValueError("episode_length must be at least 1")
     if reuse_for_eval and render_mode is not None:
         raise ValueError("reuse_for_eval requires a headless training environment")
+    if share_actor_obs and observation_key is not None:
+        raise ValueError("share_actor_obs needs both observation groups; drop observation_key")
     try:
         import mjlab.tasks  # noqa: F401 - registers built-in tasks
         import torch
@@ -476,6 +485,7 @@ def make_mjlab_env(
             observation_key,
             jax_arrays,
             reuse_for_eval=reuse_for_eval,
+            share_actor_obs=share_actor_obs,
         )
         return MjlabSingleEnv(vector) if worker_num == 1 else vector
     except Exception:

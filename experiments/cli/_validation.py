@@ -115,6 +115,12 @@ def parse_runner_args(
             parser.error("--env_jax_arrays requires --env_backend mjlab")
         if args.env_reuse_for_eval and args.env_backend == "envpool":
             parser.error("--env_reuse_for_eval does not support EnvPool")
+        if args.env_share_actor_obs and (
+            args.env_backend != "mjlab" or args.env_observation_key is not None
+        ):
+            parser.error(
+                "--env_share_actor_obs requires --env_backend mjlab and no observation key"
+            )
 
     try:
         select_optimizer(args.optimizer, args.learning_rate)

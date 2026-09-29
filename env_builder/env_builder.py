@@ -132,11 +132,14 @@ def get_env_builder(
     device="cuda:0",
     jax_arrays=False,
     reuse_for_eval=False,
+    share_actor_obs=False,
 ):
     if env_backend not in _ENV_BACKENDS:
         raise ValueError(f"env_backend must be one of {_ENV_BACKENDS}, got {env_backend!r}")
     if jax_arrays and env_backend != "mjlab":
         raise ValueError("jax_arrays requires env_backend='mjlab'")
+    if share_actor_obs and env_backend != "mjlab":
+        raise ValueError("share_actor_obs requires env_backend='mjlab'")
     if reuse_for_eval and env_backend == "envpool":
         raise ValueError("EnvPool does not support training environment state preservation")
 
@@ -154,6 +157,7 @@ def get_env_builder(
                 render_mode=render_mode,
                 jax_arrays=jax_arrays,
                 reuse_for_eval=reuse_for_eval and render_mode is None,
+                share_actor_obs=share_actor_obs,
             )
         # Vectorized backend is an explicit choice: gymnasium AsyncVectorEnv
         # (default, portable) or EnvPool (faster, only for envs it ships).
