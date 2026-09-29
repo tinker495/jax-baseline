@@ -54,6 +54,7 @@ class MjlabVectorizedEnv(VectorizedEnv):
         jax_arrays=False,
         *,
         reuse_for_eval=False,
+        share_actor_obs=False,
     ):
         self.env = env
         self._torch = torch
@@ -62,10 +63,14 @@ class MjlabVectorizedEnv(VectorizedEnv):
         self.worker_num = env.num_envs
         self._no_autoreset = jnp.zeros(self.worker_num, dtype=bool) if jax_arrays else None
         self._observation_key = observation_key
+        self._share_actor_obs = share_actor_obs
+        self._unsynced_device = None
         self._pending: tuple[Observation, Array, Array, Array, dict[str, Any]] | None = None
         self._closed = False
         self._frame = None
         self.reset(seed=seed)
+        if share_actor_obs and not any(key.startswith("critic_") for key in self._obs):
+            raise ValueError("share_actor_obs requires actor and critic observation groups")
         if reuse_for_eval:
             from env_builder.mjlab_state import validate_state_preservation
 
@@ -98,15 +103,21 @@ class MjlabVectorizedEnv(VectorizedEnv):
         if not self.jax_arrays:
             return _to_numpy(value).copy()
         if isinstance(value, self._torch.Tensor):
-            # Copy on the producer stream before mjlab reuses its mutable buffers.
+            # Copy on the producer stream before mjlab reuses its mutable buffers. The import is
+            # zero-copy; _finish_copies() must run before any JAX op reads the buffer.
             clone = value.detach().clone(memory_format=self._torch.contiguous_format)
             if clone.is_cuda:
-                # JAX consumers do not reliably wait for a busy torch stream behind a DLPack
-                # import: with the copy still queued, the reward normalizer read garbage
-                # (reward_scale inf/NaN). Finish the copy before JAX can see the buffer.
-                self._torch.cuda.current_stream(clone.device).synchronize()
+                self._unsynced_device = clone.device
             return jax.dlpack.from_dlpack(clone)
         return jnp.array(value, copy=True)
+
+    def _finish_copies(self) -> None:
+        # JAX consumers do not reliably wait for a busy torch stream behind a DLPack import:
+        # with a copy still queued, the reward normalizer read garbage (reward_scale inf/NaN).
+        # One stream sync after all of a step's copies, before JAX reads any of them.
+        if self._unsynced_device is not None:
+            self._torch.cuda.current_stream(self._unsynced_device).synchronize()
+            self._unsynced_device = None
 
     def _snapshot(self, value):
         if isinstance(value, Mapping):
@@ -128,14 +139,16 @@ class MjlabVectorizedEnv(VectorizedEnv):
             }
             selected = normalize_observation(shared, array_converter=self._array) if shared else {}
             for role in ("actor", "critic"):
-                selected.update(
-                    {
-                        f"{role}_{key.removeprefix('unified_')}": value
-                        for key, value in normalize_observation(
-                            observation[role], array_converter=self._array
-                        ).items()
-                    }
-                )
+                # share_actor_obs marks the actor group unified_, so the critic sees actor ⊕ critic
+                # like FlashSAC's IsaacLab wrapper; otherwise the critic sees its own group only.
+                prefix = "unified" if role == "actor" and self._share_actor_obs else role
+                for key, value in normalize_observation(
+                    observation[role], array_converter=self._array
+                ).items():
+                    name = f"{prefix}_{key.removeprefix('unified_')}"
+                    if name in selected:
+                        raise ValueError(f"Observation key {name!r} is produced twice")
+                    selected[name] = value
             return dict(sorted(selected.items()))
         return normalize_observation(
             observation, self._observation_key, array_converter=self._array
@@ -148,9 +161,9 @@ class MjlabVectorizedEnv(VectorizedEnv):
         self._metrics = EnvMetrics(array_converter=_to_numpy)
         observation, info = self.env.reset(seed=seed)
         self._obs = self._selected(observation)
-        return self._obs, self._snapshot(
-            {key: value for key, value in info.items() if key != "log"}
-        )
+        info = self._snapshot({key: value for key, value in info.items() if key != "log"})
+        self._finish_copies()
+        return self._obs, info
 
     def current_obs(self) -> Observation:
         return self._obs
@@ -265,12 +278,13 @@ class MjlabVectorizedEnv(VectorizedEnv):
         done = terminated | truncated
         reward = self._array(reward)
         terminated, truncated = self._array(terminated), self._array(truncated)
+        info = self._snapshot({key: value for key, value in info.items() if key != "log"})
+        self._finish_copies()
         terminated, truncated = (
             _done_flags_compiled(terminated, truncated)
             if self.jax_arrays
             else (terminated.astype(bool), truncated.astype(bool))
         )
-        info = self._snapshot({key: value for key, value in info.items() if key != "log"})
         self._obs = successor
         # Native auto-reset (evaluation) already returned reset observations for done rows.
         if self.env.cfg.auto_reset:
@@ -281,6 +295,7 @@ class MjlabVectorizedEnv(VectorizedEnv):
             current, reset_info = self.env.reset(env_ids=done_ids)
             self._record_metrics(reset_info["log"])
             current = self._selected(current)
+            self._finish_copies()
             self._obs = (
                 _merge_reset_rows_compiled(successor, current, terminated, truncated)
                 if self.jax_arrays
@@ -437,6 +452,7 @@ def make_mjlab_env(
     render_mode=None,
     jax_arrays=False,
     reuse_for_eval=False,
+    share_actor_obs=False,
 ) -> MjlabSingleEnv | MjlabVectorizedEnv:
     if render_mode not in (None, "rgb_array"):
         raise ValueError("mjlab supports only render_mode=None or 'rgb_array'")
@@ -446,6 +462,8 @@ def make_mjlab_env(
         raise ValueError("episode_length must be at least 1")
     if reuse_for_eval and render_mode is not None:
         raise ValueError("reuse_for_eval requires a headless training environment")
+    if share_actor_obs and observation_key is not None:
+        raise ValueError("share_actor_obs needs both observation groups; drop observation_key")
     try:
         import mjlab.tasks  # noqa: F401 - registers built-in tasks
         import torch
@@ -476,6 +494,7 @@ def make_mjlab_env(
             observation_key,
             jax_arrays,
             reuse_for_eval=reuse_for_eval,
+            share_actor_obs=share_actor_obs,
         )
         return MjlabSingleEnv(vector) if worker_num == 1 else vector
     except Exception:

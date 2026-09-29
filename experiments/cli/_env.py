@@ -19,6 +19,11 @@ def add_env_args(parser):
         action="store_true",
         help="reuse the training environment for evaluation (Gymnasium or mjlab)",
     )
+    parser.add_argument(
+        "--env_share_actor_obs",
+        action="store_true",
+        help="also feed the mjlab actor observation group to the critic (FlashSAC convention)",
+    )
 
 
 def env_builder_kwargs(args):
@@ -29,4 +34,5 @@ def env_builder_kwargs(args):
         "device": args.env_device,
         "jax_arrays": args.env_jax_arrays,
         "reuse_for_eval": args.env_reuse_for_eval,
+        "share_actor_obs": args.env_share_actor_obs,
     }
