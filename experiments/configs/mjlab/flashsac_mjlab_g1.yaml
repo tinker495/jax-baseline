@@ -1,6 +1,6 @@
 category: mjlab
 runner: dpg
-# FlashSAC's IsaacLab recipe, applied to the MJLab Go1 task.
+# FlashSAC's IsaacLab recipe, applied to the MJLab Unitree G1 flat velocity task.
 # https://github.com/Holiday-Robot/FlashSAC/blob/87edc9061150ae9e962dd84e6544e27a1554b3ab/scripts/run_isaaclab.sh
 runtime:
   device: 0
