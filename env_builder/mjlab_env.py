@@ -64,6 +64,7 @@ class MjlabVectorizedEnv(VectorizedEnv):
         self._no_autoreset = jnp.zeros(self.worker_num, dtype=bool) if jax_arrays else None
         self._observation_key = observation_key
         self._share_actor_obs = share_actor_obs
+        self._unsynced_device = None
         self._pending: tuple[Observation, Array, Array, Array, dict[str, Any]] | None = None
         self._closed = False
         self._frame = None
@@ -102,15 +103,21 @@ class MjlabVectorizedEnv(VectorizedEnv):
         if not self.jax_arrays:
             return _to_numpy(value).copy()
         if isinstance(value, self._torch.Tensor):
-            # Copy on the producer stream before mjlab reuses its mutable buffers.
+            # Copy on the producer stream before mjlab reuses its mutable buffers. The import is
+            # zero-copy; _finish_copies() must run before any JAX op reads the buffer.
             clone = value.detach().clone(memory_format=self._torch.contiguous_format)
             if clone.is_cuda:
-                # JAX consumers do not reliably wait for a busy torch stream behind a DLPack
-                # import: with the copy still queued, the reward normalizer read garbage
-                # (reward_scale inf/NaN). Finish the copy before JAX can see the buffer.
-                self._torch.cuda.current_stream(clone.device).synchronize()
+                self._unsynced_device = clone.device
             return jax.dlpack.from_dlpack(clone)
         return jnp.array(value, copy=True)
+
+    def _finish_copies(self) -> None:
+        # JAX consumers do not reliably wait for a busy torch stream behind a DLPack import:
+        # with a copy still queued, the reward normalizer read garbage (reward_scale inf/NaN).
+        # One stream sync after all of a step's copies, before JAX reads any of them.
+        if self._unsynced_device is not None:
+            self._torch.cuda.current_stream(self._unsynced_device).synchronize()
+            self._unsynced_device = None
 
     def _snapshot(self, value):
         if isinstance(value, Mapping):
@@ -154,9 +161,9 @@ class MjlabVectorizedEnv(VectorizedEnv):
         self._metrics = EnvMetrics(array_converter=_to_numpy)
         observation, info = self.env.reset(seed=seed)
         self._obs = self._selected(observation)
-        return self._obs, self._snapshot(
-            {key: value for key, value in info.items() if key != "log"}
-        )
+        info = self._snapshot({key: value for key, value in info.items() if key != "log"})
+        self._finish_copies()
+        return self._obs, info
 
     def current_obs(self) -> Observation:
         return self._obs
@@ -271,12 +278,13 @@ class MjlabVectorizedEnv(VectorizedEnv):
         done = terminated | truncated
         reward = self._array(reward)
         terminated, truncated = self._array(terminated), self._array(truncated)
+        info = self._snapshot({key: value for key, value in info.items() if key != "log"})
+        self._finish_copies()
         terminated, truncated = (
             _done_flags_compiled(terminated, truncated)
             if self.jax_arrays
             else (terminated.astype(bool), truncated.astype(bool))
         )
-        info = self._snapshot({key: value for key, value in info.items() if key != "log"})
         self._obs = successor
         # Native auto-reset (evaluation) already returned reset observations for done rows.
         if self.env.cfg.auto_reset:
@@ -287,6 +295,7 @@ class MjlabVectorizedEnv(VectorizedEnv):
             current, reset_info = self.env.reset(env_ids=done_ids)
             self._record_metrics(reset_info["log"])
             current = self._selected(current)
+            self._finish_copies()
             self._obs = (
                 _merge_reset_rows_compiled(successor, current, terminated, truncated)
                 if self.jax_arrays
