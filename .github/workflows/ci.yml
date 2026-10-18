@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  lint:
+    name: Lint and format
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: '0.12.23'
+          python-version: '3.11'
+          enable-cache: false
+      - name: Install locked lint tools only
+        run: uv sync --locked --only-group dev
+      - name: Check lint and formatting
+        run: uv run --no-sync pre-commit run --all-files --show-diff-on-failure
+
+  cpu:
+    name: CPU validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      JAX_PLATFORMS: cpu
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
+        with:
+          version: '0.12.23'
+          python-version: '3.11'
+          enable-cache: false
+      - name: Install locked core dependencies without optional extras
+        run: uv sync --locked --no-default-groups
+      - name: Check installed dependencies
+        run: uv pip check
+      - name: Check Python syntax
+        run: >-
+          uv run --no-sync python -m compileall -q
+          jax_baselines env_builder experiments model_builder replay_memory docs
+      - name: Initialize the JAX CPU backend
+        run: uv run --no-sync python -c 'import jax; print(jax.devices())'
+      - name: Check existing CLI entry points
+        run: |
+          for command in qnet dpg pg impala apex-qnet apex-dpg exp dashboard; do
+            printf 'Checking CLI: %s\n' "$command"
+            uv run --no-sync "$command" --help
+          done
+      - name: Validate existing experiment configs without training
+        run: |
+          for config in experiments/configs/*/*.yaml; do
+            printf 'Validating: %s\n' "$config"
+            uv run --no-sync exp "$config" --dry-run
+          done
