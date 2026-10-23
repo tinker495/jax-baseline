@@ -1,50 +1,50 @@
 version = 1
-revision = 3
+revision = 5
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.14' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version < '3.12' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version < '3.12' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version < '3.12' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version < '3.12' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version < '3.12' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version == '3.13.*' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version == '3.12.*' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version < '3.12' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version < '3.12' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version >= '3.14' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version < '3.12' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
 ]
 conflicts = [[
@@ -66,53 +66,105 @@ wheels = [
 
 [[package]]
 name = "aim"
-version = "3.29.1"
+version = "2.4.0"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "aim-ui" },
-    { name = "aimrecords" },
-    { name = "aimrocks" },
-    { name = "aiofiles" },
-    { name = "alembic" },
-    { name = "boto3" },
-    { name = "cachetools" },
-    { name = "click" },
-    { name = "cryptography" },
-    { name = "fastapi" },
-    { name = "filelock" },
-    { name = "jinja2" },
-    { name = "numpy" },
-    { name = "packaging" },
-    { name = "pillow", version = "11.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-13-jax-baselines-all' or extra == 'extra-13-jax-baselines-other'" },
-    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-13-jax-baselines-mjlab' or (extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other')" },
-    { name = "psutil" },
-    { name = "python-dateutil" },
-    { name = "pytz" },
-    { name = "requests" },
-    { name = "restrictedpython" },
-    { name = "sqlalchemy" },
-    { name = "tqdm" },
-    { name = "uvicorn" },
-    { name = "watchdog" },
-    { name = "websockets" },
+resolution-markers = [
+    "python_full_version == '3.13.*' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/da/25/c825c73ec2f48c93324f631dba6e4cdac3bb60a7fde36e0b916820ae62a5/aim-3.29.1.tar.gz", hash = "sha256:30fb70f983844eebd270049206c839e6dc09ce9de500048dc97a7a8b22ed83fb", size = 1660733, upload-time = "2025-05-08T09:51:58.892Z" }
+dependencies = [
+    { name = "aimrecords" },
+    { name = "anytree" },
+    { name = "click" },
+    { name = "docker" },
+    { name = "gitpython" },
+    { name = "protobuf" },
+    { name = "psutil" },
+    { name = "py3nvml" },
+    { name = "pyrser" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/14/1b/a11bcb52b73b8e17c731a438415860f2a0c0fb218916d5dd98b30a382171/aim-2.4.0.tar.gz", hash = "sha256:1629a3616f5ae536cd7030032b512f17bcbce04db6aa40541a808ddb20245dc4", size = 62463, upload-time = "2021-05-13T18:01:55.493Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/f4/e9a5d8fdb31d61c450492553e18f7aae6a5d5baf266747d99135c53b95c1/aim-3.29.1-cp311-cp311-macosx_10_14_x86_64.whl", hash = "sha256:a3fc8557dfb910c3aec784017c00ead65e1aeb5b994f7954de4679d83165d1ab", size = 2526973, upload-time = "2025-05-08T09:54:28.685Z" },
-    { url = "https://files.pythonhosted.org/packages/7a/5b/f4d949cbd13ccdc8f5ede254d44155fbad1fe05a4cb9d517740439b87efd/aim-3.29.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:ee164cfd5fceda2d751da2b10697e9bb3f64798d928596ee970e2b0891a1e0d0", size = 2480646, upload-time = "2025-05-08T09:52:52.495Z" },
-    { url = "https://files.pythonhosted.org/packages/96/04/4d523b4c6c19a521558aba8145ff49ab43d6663c95b4bf9905be0e18e2bf/aim-3.29.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:10bb79928b0017043428c227e33ee592b0f34f1f72e65ea94b74eddcc4038fc8", size = 7311952, upload-time = "2025-05-08T09:59:42.217Z" },
-    { url = "https://files.pythonhosted.org/packages/b9/02/0bd5126aad71bf0f789cb3c28f534aaef6d92be90f1925e6f5cb63438daf/aim-3.29.1-cp311-cp311-manylinux_2_24_x86_64.whl", hash = "sha256:165dc403cb4f9f04b83977e9fc40c86689e3a3f3bb61341cbe03591a16ec041d", size = 5873965, upload-time = "2025-05-08T10:01:33.935Z" },
-    { url = "https://files.pythonhosted.org/packages/8c/19/06cac7b4d200f337ee451482090cf02553e361595733ba5ee5e701a926fe/aim-3.29.1-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:350e640c3c6bc532e0ad6d5cf6479f82f309a38bf05f84d30947d00a36f94523", size = 7480743, upload-time = "2025-05-08T10:04:46.35Z" },
-    { url = "https://files.pythonhosted.org/packages/70/07/4b6c4bda0469fad31a902ff1205ed010b3459be9565a8ffa2bfdcbb1e2bd/aim-3.29.1-cp312-cp312-macosx_10_14_x86_64.whl", hash = "sha256:301afdf3e80b3ccac4cdc786a73f81656bd3b1ec73836de19a67a77a0b3d3379", size = 2512723, upload-time = "2025-05-08T09:54:30.314Z" },
-    { url = "https://files.pythonhosted.org/packages/a1/a5/da5e0de60a8d32ab8b2d725eec2ade3303117697cd714fb1b00134d01a64/aim-3.29.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:8fbb9a7f441721cd4999174d0d6fa1e18470c01dddf2f193e7c3d054543a4ca6", size = 2472712, upload-time = "2025-05-08T09:55:16.102Z" },
-    { url = "https://files.pythonhosted.org/packages/bc/05/a55a86258f3505e0ab53ee81afcc0057d805a1de8d5a66390f75e32aa777/aim-3.29.1-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:15cea0c63d9a61812229d7140cec04f02117626d1724e10bebe410554f3f7561", size = 7590249, upload-time = "2025-05-08T10:04:48.663Z" },
+    { url = "https://files.pythonhosted.org/packages/47/13/8910e01676239513b39aeea0724727ed0bec61e50fda0c751b241db4176d/aim-2.4.0-py2.py3-none-any.whl", hash = "sha256:57f703721de0dcf5f8e3f9e2bd0ab45034fc7cf4479cb5ec5467049510a12ccb", size = 79817, upload-time = "2021-05-13T18:01:53.568Z" },
 ]
 
 [[package]]
-name = "aim-ui"
-version = "3.29.1"
+name = "aim"
+version = "2.7.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/0c/fe/723615593ee1bffbf89c1cb8028b72893120b3d4e737712d91041a5f0382/aim-ui-3.29.1.tar.gz", hash = "sha256:bc30278acad048a087f84e3f6e2565f53f75e87d8c29748c90420ec06b820113", size = 30971471, upload-time = "2025-05-08T09:50:58.888Z" }
+resolution-markers = [
+    "python_full_version >= '3.14' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+]
+dependencies = [
+    { name = "aimrecords" },
+    { name = "alembic" },
+    { name = "anytree" },
+    { name = "click" },
+    { name = "docker" },
+    { name = "flask" },
+    { name = "flask-cors" },
+    { name = "flask-migrate" },
+    { name = "flask-restful" },
+    { name = "flask-script" },
+    { name = "flask-sqlalchemy" },
+    { name = "gitpython" },
+    { name = "gunicorn" },
+    { name = "protobuf" },
+    { name = "psutil" },
+    { name = "py3nvml" },
+    { name = "pyrser" },
+    { name = "pysqlite3" },
+    { name = "pytz" },
+    { name = "requests" },
+    { name = "sqlalchemy" },
+    { name = "tensorboard", version = "2.3.0", source = { registry = "https://pypi.org/simple" } },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a6/33/9491924c56aa44860828f03acf24dae05abd3aff46fad4aea532852f3959/aim-2.7.4.tar.gz", hash = "sha256:ddff060a1e4ba6e4ba12aee60cdafced463ab659bfb4eb864ff5a688164810cf", size = 341147, upload-time = "2021-10-11T13:22:39.595Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/92/44/58249698cad25f1793bf7da7e69807cdf8eef5a473ef49a14676ac83d877/aim-2.7.4-py2.py3-none-any.whl", hash = "sha256:661657199d9794b1fecaad32cf0884d438085ed5b3895478a41d71b55bd8d5e5", size = 1841185, upload-time = "2021-10-11T13:22:37.529Z" },
+]
 
 [[package]]
 name = "aimrecords"
@@ -124,25 +176,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c9/10/21182ef96acbd9a5ca4008556ba8590cbc1af833eccbf59d53308fa6d928/aimrecords-0.0.7.tar.gz", hash = "sha256:9b562fa5b5109b4b3dd4f83be0061cadbac63fa8031f281b8b5c8ae29967072f", size = 12667, upload-time = "2020-11-09T13:29:29.071Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/53/13/207ebb5b2315640a68378c31cb31cfe1182373d11a813bd52219c83700a7/aimrecords-0.0.7-py2.py3-none-any.whl", hash = "sha256:b9276890891c5fd68f817e20fc5d466a80c01e22fa468eaa979331448a75d601", size = 28657, upload-time = "2020-11-09T13:29:26.015Z" },
-]
-
-[[package]]
-name = "aimrocks"
-version = "0.5.2"
-source = { registry = "https://pypi.org/simple" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b1/95/725302cceba1e95dc5084d1a6244f3a97c9fd4923ae120195f5c79299e16/aimrocks-0.5.2-cp311-cp311-macosx_10_14_x86_64.whl", hash = "sha256:03ca9bd3a7d379f40c678e648d3ec1445738a32fee337009cfb6aa9aedc51964", size = 4187601, upload-time = "2024-04-24T17:21:55.249Z" },
-    { url = "https://files.pythonhosted.org/packages/97/65/4facb46715fb7bf9b3f22930dd04165fcc74991366bedd74740c82a29d70/aimrocks-0.5.2-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:d74170021b17451881df18683eb0aa97417cb8b030b3dea425d7580891c22608", size = 3933174, upload-time = "2024-04-24T17:21:56.887Z" },
-    { url = "https://files.pythonhosted.org/packages/01/13/a35d72ec37d2f654db8b2d9025b19f5a50d73d28024dafbc11fdddf01af2/aimrocks-0.5.2-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ff6334af4ac403438eae330bf25fff5b3a63ba9f8f87a77ebb2d34815ef36431", size = 6664690, upload-time = "2024-04-24T17:21:58.58Z" },
-    { url = "https://files.pythonhosted.org/packages/e0/24/829d6f9bd21aa898fb5ef598c47123d509a369b59212bbfc88b901b657da/aimrocks-0.5.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f479567d8514a63ee7f227d0841dc886870c37c3f6e17a8724ecaebfaa1331b2", size = 6858965, upload-time = "2024-04-24T17:22:01.342Z" },
-    { url = "https://files.pythonhosted.org/packages/63/d3/cd78c8f15ee8cd38b46ec6dc08404b9c6d65372c016ea755f06b9100bb29/aimrocks-0.5.2-cp311-cp311-manylinux_2_24_aarch64.whl", hash = "sha256:3f65583d29bcfc3baa422e45e73de89c4c781490664eb49c1a4c21c074f5bbfa", size = 5986214, upload-time = "2024-04-24T17:22:03.64Z" },
-    { url = "https://files.pythonhosted.org/packages/01/11/3fcb62df83e2f147ff787b7aad6b934512016fbf38f217dd3ce7fbe1f03b/aimrocks-0.5.2-cp311-cp311-manylinux_2_24_x86_64.whl", hash = "sha256:762f7b41793165717a9e0589658cd81bffb54161295ec7403534d40692ac9281", size = 6170762, upload-time = "2024-04-24T17:22:06.031Z" },
-    { url = "https://files.pythonhosted.org/packages/46/13/77aa7f850798104139ec1b6a3f5aa77a6d0333ee12ba31fe5bc166557976/aimrocks-0.5.2-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:9becbd34b2bac33dae7db5ce85f9ef70b83b20fd547794a40b7a7bd846be45fa", size = 6606015, upload-time = "2024-04-24T17:22:08.124Z" },
-    { url = "https://files.pythonhosted.org/packages/52/2d/21b14e4253b71378e70e7a0b21dd1fcca1d72dff22b1bd68b1e8f0694298/aimrocks-0.5.2-cp312-cp312-macosx_10_14_x86_64.whl", hash = "sha256:76258350f2715d686d5da12a5a2df0d7b88e1b33e45052e0ddeb549c7497a56e", size = 4178867, upload-time = "2024-04-24T17:22:09.989Z" },
-    { url = "https://files.pythonhosted.org/packages/0d/1d/a26c0a19b403986cd6d56142fe8b2c254211e7a64ec40e130e75edb1711c/aimrocks-0.5.2-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:79400c6f4c72bcc4485f2a4411a3e6c1f6ead7a3928a00a72739abb1ef9ec0d3", size = 3925297, upload-time = "2024-04-24T17:22:12.171Z" },
-    { url = "https://files.pythonhosted.org/packages/e1/80/e0c226cbf975b109589c56b7aecc7ca182e3a62f67eb4a791ee033cee2d1/aimrocks-0.5.2-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:9faaecf4fe0335c27e63523f6a25e038877a33c63a261ff2192582e52493b39b", size = 6541866, upload-time = "2024-04-24T17:22:13.853Z" },
-    { url = "https://files.pythonhosted.org/packages/e9/2b/109e6340b4ea052c762e61d386d79222855a2b0e27d6bb9ad7cd76d140b1/aimrocks-0.5.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a9ba647f32934ac999c4119cbb8b59510dfe69aec98558539b84db7db9f20acf", size = 6743116, upload-time = "2024-04-24T17:22:15.548Z" },
-    { url = "https://files.pythonhosted.org/packages/69/44/8b381f01ca1a1cbdec71e5329908ea1f782a6eced10dbbfa8cd9e44858d4/aimrocks-0.5.2-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:533eda940f4bd1641fee15da09595c965d6890e449706fb3442174472b468a19", size = 6506051, upload-time = "2024-04-24T17:22:17.224Z" },
 ]
 
 [[package]]
@@ -182,25 +215,26 @@ wheels = [
 
 [[package]]
 name = "alembic"
-version = "1.18.4"
+version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "mako" },
+    { name = "python-dateutil" },
+    { name = "python-editor" },
     { name = "sqlalchemy" },
-    { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/94/13/8b084e0f2efb0275a1d534838844926f798bd766566b1375174e2448cd31/alembic-1.18.4.tar.gz", hash = "sha256:cb6e1fd84b6174ab8dbb2329f86d631ba9559dd78df550b57804d607672cedbc", size = 2056725, upload-time = "2026-02-10T16:00:47.195Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ca/71/452801093bfc499805b1d7b273aaecf6f932c315ccad6e175b850765c8b3/alembic-1.6.0.tar.gz", hash = "sha256:3ff4f90d23dd283d7822d78ffbc07cb256344ae1d60500b933378bc13407efcc", size = 1166934, upload-time = "2021-05-03T18:47:55.998Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d2/29/6533c317b74f707ea28f8d633734dbda2119bbadfc61b2f3640ba835d0f7/alembic-1.18.4-py3-none-any.whl", hash = "sha256:a5ed4adcf6d8a4cb575f3d759f071b03cd6e5c7618eb796cb52497be25bfe19a", size = 263893, upload-time = "2026-02-10T16:00:49.997Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/3c/1e089b6a4b73481239615a10629acfb56c5625f0dde332932bac6efea972/alembic-1.6.0-py2.py3-none-any.whl", hash = "sha256:d7f6d4dc6abed18e1591932a85349a7d621298ef0daa40021609cdca54a6047c", size = 164180, upload-time = "2021-05-03T18:48:44.022Z" },
 ]
 
 [[package]]
-name = "annotated-doc"
-version = "0.0.4"
+name = "aniso8601"
+version = "10.0.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/57/ba/046ceea27344560984e26a590f90bc7f4a75b06701f653222458922b558c/annotated_doc-0.0.4.tar.gz", hash = "sha256:fbcda96e87e9c92ad167c2e53839e57503ecfda18804ea28102353485033faa4", size = 7288, upload-time = "2025-11-10T22:07:42.062Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8b/8d/52179c4e3f1978d3d9a285f98c706642522750ef343e9738286130423730/aniso8601-10.0.1.tar.gz", hash = "sha256:25488f8663dd1528ae1f54f94ac1ea51ae25b4d531539b8bc707fed184d16845", size = 47190, upload-time = "2025-04-18T17:29:42.995Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1e/d3/26bf1008eb3d2daa8ef4cacc7f3bfdc11818d111f7e2d0201bc6e3b49d45/annotated_doc-0.0.4-py3-none-any.whl", hash = "sha256:571ac1dc6991c450b25a9c2d84a3705e2ae7a53467b5d111c24fa8baabbed320", size = 5303, upload-time = "2025-11-10T22:07:40.673Z" },
+    { url = "https://files.pythonhosted.org/packages/59/75/e0e10dc7ed1408c28e03a6cb2d7a407f99320eb953f229d008a7a6d05546/aniso8601-10.0.1-py2.py3-none-any.whl", hash = "sha256:eb19717fd4e0db6de1aab06f12450ab92144246b257423fe020af5748c0cb89e", size = 52848, upload-time = "2025-04-18T17:29:41.492Z" },
 ]
 
 [[package]]
@@ -213,16 +247,12 @@ wheels = [
 ]
 
 [[package]]
-name = "anyio"
-version = "4.14.0"
+name = "anytree"
+version = "2.13.0"
 source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "idna" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/1c/b5/001890774a9552aff22502b8da382593109ce0c95314abaebbb116567545/anyio-4.14.0.tar.gz", hash = "sha256:b47c1f9ccf73e67021df785332508f99379c68fa7d0684e8e3492cb1d4b23f89", size = 253586, upload-time = "2026-06-15T22:00:49.021Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bc/a8/eb55fab589c56f9b6be2b3fd6997aa04bb6f3da93b01154ce6fc8e799db2/anytree-2.13.0.tar.gz", hash = "sha256:c9d3aa6825fdd06af7ebb05b4ef291d2db63e62bb1f9b7d9b71354be9d362714", size = 48389, upload-time = "2025-04-08T21:06:30.662Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ba/16/9826f089383c593cdfc4a6e5aca94d9e91ae1692c57af82c3b2aa5e810f7/anyio-4.14.0-py3-none-any.whl", hash = "sha256:dd9b7a2a9799ed6552fde617b2c5df02b7fdd7d88392fc48101e51bae46164d9", size = 123506, upload-time = "2026-06-15T22:00:47.595Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/98/f6aa7fe0783e42be3093d8ef1b0ecdc22c34c0d69640dfb37f56925cb141/anytree-2.13.0-py3-none-any.whl", hash = "sha256:4cbcf10df36b1f1cba131b7e487ff3edafc9d6e932a3c70071b5b768bab901ff", size = 45077, upload-time = "2025-04-08T21:06:29.494Z" },
 ]
 
 [[package]]
@@ -351,34 +381,6 @@ wheels = [
 ]
 
 [[package]]
-name = "boto3"
-version = "1.43.30"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "botocore" },
-    { name = "jmespath" },
-    { name = "s3transfer" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/f7/47/2db3e7c1317019d800a1b4181059656842b8aec69ad578ac01a73eba3b89/boto3-1.43.30.tar.gz", hash = "sha256:6b1ee360f363a457f67a8f5702f522043d8a32d67a97c362ad12075d8b5b531e", size = 113154, upload-time = "2026-06-15T20:32:58.123Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/31/61/4031fd64c458ab7e01879e6ac8b42e256e37139df551315beafe04e74b57/boto3-1.43.30-py3-none-any.whl", hash = "sha256:89e982463d94773136ccf69be77cccd54ff1ce351a6aadd1d3437fcb693681b5", size = 140534, upload-time = "2026-06-15T20:32:55.646Z" },
-]
-
-[[package]]
-name = "botocore"
-version = "1.43.30"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "jmespath" },
-    { name = "python-dateutil" },
-    { name = "urllib3" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/fb/dd/6df8586de6cc036eec2e491b1a65c489c43d9722929aef407c20b7323329/botocore-1.43.30.tar.gz", hash = "sha256:19ed560cb35ae43bf010d37da429a553c07063bf7efea0f2cb53be8a78d3e3d5", size = 15520608, upload-time = "2026-06-15T20:32:45.439Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ce/b0/9343b5007ad24363c63455facfb0859e9765cf245eebffee8233056b9696/botocore-1.43.30-py3-none-any.whl", hash = "sha256:26b1dded84d89b396180916f56900bd2ab1c0d545a66d1d2c3eeb40f772935b2", size = 15205423, upload-time = "2026-06-15T20:32:40.827Z" },
-]
-
-[[package]]
 name = "box2d"
 version = "2.3.10"
 source = { registry = "https://pypi.org/simple" }
@@ -417,11 +419,11 @@ sdist = { url = "https://files.pythonhosted.org/packages/81/20/51d6c0c87f7642efb
 
 [[package]]
 name = "cachetools"
-version = "7.1.4"
+version = "4.2.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f4/8b/0d3945a13955303b81272f759a0331e54c5c793da455e6f5706b89d2639c/cachetools-7.1.4.tar.gz", hash = "sha256:437f55a4e0c1b01a4f3077cc470e6991d47430970e36fbcb77e2be0df4fc1cd6", size = 40085, upload-time = "2026-05-21T22:40:43.376Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d7/69/c457a860456cbf80ecc2e44ed4c201b49ec7ad124d769b71f6d0a7935dca/cachetools-4.2.4.tar.gz", hash = "sha256:89ea6f1b638d5a73a4f9226be57ac5e4f399d22770b92355f92dcb0f7f001693", size = 25487, upload-time = "2021-09-30T10:26:22.593Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8c/7b/1fc1c09cc0756cf25861a3be10565915953876da48bb228fb9a672b20a42/cachetools-7.1.4-py3-none-any.whl", hash = "sha256:323dc4127934744db5b54eb4924482d7edafbf9554e820d1531c2e08c0e4ef54", size = 16761, upload-time = "2026-05-21T22:40:41.845Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/c1/4740af52db75e6dbdd57fc7e9478439815bbac549c1c05881be27d19a17d/cachetools-4.2.4-py3-none-any.whl", hash = "sha256:92971d3cb7d2a97efff7c7bb1657f21a8f5fb309a37530537c71b1774189f2d1", size = 10358, upload-time = "2021-09-30T10:26:20.649Z" },
 ]
 
 [[package]]
@@ -438,7 +440,7 @@ name = "cffi"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "implementation_name != 'PyPy' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "pycparser", marker = "python_full_version < '3.14' and implementation_name != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/eb/56/b1ba7935a17738ae8453301356628e8147c79dbb825bcbc73dc7401f9846/cffi-2.0.0.tar.gz", hash = "sha256:44d1b5909021139fe36001ae048dbdde8214afa20200eda0f64c068cac5d5529", size = 523588, upload-time = "2025-09-08T23:24:04.541Z" }
 wheels = [
@@ -623,7 +625,7 @@ name = "click"
 version = "8.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/23/e4/796662cd90cf80e3a363c99db2b88e0e394b988a575f60a17e16440cd011/click-8.4.0.tar.gz", hash = "sha256:638f1338fe1235c8f4e008e4a8a254fb5c5fbdcbb40ece3c9142ebb78e792973", size = 350843, upload-time = "2026-05-17T00:47:58.425Z" }
 wheels = [
@@ -743,7 +745,7 @@ name = "cryptography"
 version = "48.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "platform_python_implementation != 'PyPy' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "cffi", marker = "python_full_version < '3.14' and platform_python_implementation != 'PyPy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9f/a9/db8f313fdcd85d767d4973515e1db101f9c71f95fced83233de224673757/cryptography-48.0.0.tar.gz", hash = "sha256:5c3932f4436d1cccb036cb0eaef46e6e2db91035166f1ad6505c3c9d5a635920", size = 832984, upload-time = "2026-05-04T22:59:38.133Z" }
 wheels = [
@@ -911,11 +913,11 @@ wheels = [
 
 [[package]]
 name = "distlib"
-version = "0.4.0"
+version = "0.4.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/96/8e/709914eb2b5749865801041647dc7f4e6d00b549cfe88b65ca192995f07c/distlib-0.4.0.tar.gz", hash = "sha256:feec40075be03a04501a973d81f633735b4b69f98b05450592310c0f401a4e0d", size = 614605, upload-time = "2025-07-17T16:52:00.465Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/68/bc/d36966de7304047a1001a7559fbf266c464bb5d8cc85464536ef8c9bcc32/distlib-0.4.4.tar.gz", hash = "sha256:ca4175b4ac7f71223cc30ed7248c45d2b38c2439d8ee6e498ab67ed63cf3508d", size = 621304, upload-time = "2026-10-16T13:56:34.203Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/33/6b/e0547afaf41bf2c42e52430072fa5658766e3d65bd4b03a563d1b6336f57/distlib-0.4.0-py2.py3-none-any.whl", hash = "sha256:9659f7d87e46584a30b5780e43ac7a2143098441670ff0a49d5f9034c54a6c16", size = 469047, upload-time = "2025-07-17T16:51:58.613Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/2b/238f02a4927fa2e27aa995371d240a468b52e42eae44a678434aff736b38/distlib-0.4.4-py2.py3-none-any.whl", hash = "sha256:cf09d55b1e85a89576b036aeb71550bfd68320f3f21761ca329eadadad918638", size = 472099, upload-time = "2026-10-16T13:56:32.053Z" },
 ]
 
 [[package]]
@@ -993,6 +995,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/fd/2c/2aaa63a510db520cd9e0c51e053a608486169bb9710f51f4ecf5699cebb4/dm_tree-0.1.10-cp314-cp314t-macosx_10_15_universal2.whl", hash = "sha256:23682221f63ad011dbd762ce5314740d7900b0426a2681614ea2472369b0c49c", size = 324205, upload-time = "2026-03-31T17:35:34.679Z" },
     { url = "https://files.pythonhosted.org/packages/b0/89/a5a302bcf9c345e6bd0498627ee2aa12f0a1c3538d08a2f5884d3c6783ba/dm_tree-0.1.10-cp314-cp314t-manylinux_2_24_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:8baeb3db1e92587d686022fb67a52f6c584a7d32bd98444ed3aafb399ad9ce67", size = 185113, upload-time = "2026-03-31T17:35:36.179Z" },
     { url = "https://files.pythonhosted.org/packages/cc/e8/2d4fbc54bb68905588945cfb47c05445c66cab2d822b05827f1c62e23a70/dm_tree-0.1.10-cp314-cp314t-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:2236c9a4cf64ed0b04004a94902f39341be652b70dce322b33f08ada9b146baa", size = 187009, upload-time = "2026-03-31T17:35:37.584Z" },
+]
+
+[[package]]
+name = "docker"
+version = "7.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pywin32", marker = "sys_platform == 'win32'" },
+    { name = "requests" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/88/7f/731ff914b0255d3d065f45fd4e626d4b8c95dbcbaada049f337a6ac16410/docker-7.2.0.tar.gz", hash = "sha256:cebb93773d334f778e023a7ee352a8d6e13ab1bd3b863a4d4a59dec897df43ac", size = 118731, upload-time = "2026-07-09T14:53:46.39Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/75/23/529140fe1aab80fc6992f93a706deec709140a6397439139a054e1515c45/docker-7.2.0-py3-none-any.whl", hash = "sha256:a3f45fdeb9165e2d25d9a1d02ddf3bc70fb572cf5ebbf9b58558c22caf29b71f", size = 148775, upload-time = "2026-07-09T14:53:45.224Z" },
 ]
 
 [[package]]
@@ -1102,28 +1118,12 @@ wheels = [
 ]
 
 [[package]]
-name = "fastapi"
-version = "0.137.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "annotated-doc" },
-    { name = "pydantic" },
-    { name = "starlette" },
-    { name = "typing-extensions" },
-    { name = "typing-inspection" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d5/b1/e5b92c59d2c37817e77c1a8c2fc1f79cdcc04c68253e5406b43e3204cba7/fastapi-0.137.1.tar.gz", hash = "sha256:822360704230d9533d8d9475399613525968aa2f0b5bd2a3ccc9f18c88fd541c", size = 408293, upload-time = "2026-06-15T11:28:20.79Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/da/35/380b9a5922f4340e51c309cde09e5bd32e62f02302971bee30dc15aa0624/fastapi-0.137.1-py3-none-any.whl", hash = "sha256:64f6983c59e45c4b9fdc44e57cb8035c2451ee91ea8e8ec042aca37de7cf6b69", size = 121877, upload-time = "2026-06-15T11:28:19.523Z" },
-]
-
-[[package]]
 name = "filelock"
-version = "3.29.0"
+version = "4.2.1"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/b5/fe/997687a931ab51049acce6fa1f23e8f01216374ea81374ddee763c493db5/filelock-3.29.0.tar.gz", hash = "sha256:69974355e960702e789734cb4871f884ea6fe50bd8404051a3530bc07809cf90", size = 57571, upload-time = "2026-04-19T15:39:10.068Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d5/98/771d8ca889f220d7d7e352addf500666368f0fd081c6080a83767580c6e4/filelock-4.2.1.tar.gz", hash = "sha256:c4c937ccac2a813cee448e662a56366cfb374c0f8702e75f295c412cc1c5d5a3", size = 650997, upload-time = "2026-10-17T16:48:14.435Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/81/47/dd9a212ef6e343a6857485ffe25bba537304f1913bdbed446a23f7f592e1/filelock-3.29.0-py3-none-any.whl", hash = "sha256:96f5f6344709aa1572bbf631c640e4ebeeb519e08da902c39a001882f30ac258", size = 39812, upload-time = "2026-04-19T15:39:08.752Z" },
+    { url = "https://files.pythonhosted.org/packages/28/00/db89d339bc4ecdc8087fa7b8607ba22ffc27bf96286f340c9620bea428b3/filelock-4.2.1-py3-none-any.whl", hash = "sha256:7be2662e9e826b9bba28afc0f843a123280d799a2ea44bb5d35ccec67905ae44", size = 162455, upload-time = "2026-10-17T16:48:12.937Z" },
 ]
 
 [[package]]
@@ -1145,6 +1145,85 @@ wheels = [
 ]
 
 [[package]]
+name = "flask"
+version = "1.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "itsdangerous" },
+    { name = "jinja2" },
+    { name = "werkzeug" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/0b/cb02268c90e67545a0e3a37ea1ca3d45de3aca43ceb7dbf1712fb5127d5d/Flask-1.1.2.tar.gz", hash = "sha256:4efa1ae2d7c9865af48986de8aeb8504bf32c7f3d6fdc9353d34b21f4b127060", size = 637516, upload-time = "2020-04-03T17:17:56.951Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f2/28/2a03252dfb9ebf377f40fba6a7841b47083260bf8bd8e737b0c6952df83f/Flask-1.1.2-py2.py3-none-any.whl", hash = "sha256:8a4fdd8936eba2512e9c85df320a37e694c93945b33ef33c89946a340a238557", size = 94570, upload-time = "2020-04-03T17:17:53.739Z" },
+]
+
+[[package]]
+name = "flask-cors"
+version = "3.0.10"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flask" },
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cf/25/e3b2553d22ed542be807739556c69621ad2ab276ae8d5d2560f4ed20f652/Flask-Cors-3.0.10.tar.gz", hash = "sha256:b60839393f3b84a0f3746f6cdca56c1ad7426aa738b70d6c61375857823181de", size = 30867, upload-time = "2021-01-06T00:25:42.749Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/db/84/901e700de86604b1c4ef4b57110d4e947c218b9997adf5d38fa7da493bce/Flask_Cors-3.0.10-py2.py3-none-any.whl", hash = "sha256:74efc975af1194fc7891ff5cd85b0f7478be4f7f59fe158102e91abb72bb4438", size = 14067, upload-time = "2021-01-06T00:25:41.464Z" },
+]
+
+[[package]]
+name = "flask-migrate"
+version = "2.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "alembic" },
+    { name = "flask" },
+    { name = "flask-sqlalchemy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0b/d7/5a7e424759a6f6608d722913ae765307459e14f17503740d7fcee0191bd3/Flask-Migrate-2.7.0.tar.gz", hash = "sha256:ae2f05671588762dd83a21d8b18c51fe355e86783e24594995ff8d7380dffe38", size = 12627, upload-time = "2021-02-21T12:38:57.73Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/75/58/88b3f3cdebb5ccd83cb45b21305e69826851299df4cfbcf147272b536527/Flask_Migrate-2.7.0-py2.py3-none-any.whl", hash = "sha256:26871836a4e46d2d590cf8e558c6d60039e1c003079b240689d845726b6b57c0", size = 13387, upload-time = "2021-02-21T12:38:56.313Z" },
+]
+
+[[package]]
+name = "flask-restful"
+version = "0.3.8"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aniso8601" },
+    { name = "flask" },
+    { name = "pytz" },
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/67/65/84f3218666fc115497a13ff727f16d02374d07d1924cd4fd72e275294e8b/Flask-RESTful-0.3.8.tar.gz", hash = "sha256:5ea9a5991abf2cb69b4aac19793faac6c032300505b325687d7c305ffaa76915", size = 105736, upload-time = "2020-02-06T13:49:36.442Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e9/83/d0d33c971de2d38e54b0037136c8b8d20b9c83d308bc6c220a25162755fd/Flask_RESTful-0.3.8-py2.py3-none-any.whl", hash = "sha256:d891118b951921f1cec80cabb4db98ea6058a35e6404788f9e70d5b243813ec2", size = 25962, upload-time = "2020-02-06T13:49:38.741Z" },
+]
+
+[[package]]
+name = "flask-script"
+version = "2.0.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flask" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/00/a4/cd587b2b19f043b65bf33ceda2f6e4e6cdbd0ce18d01a52b9559781b1da6/Flask-Script-2.0.6.tar.gz", hash = "sha256:6425963d91054cfcc185807141c7314a9c5ad46325911bd24dcb489bd0161c65", size = 43146, upload-time = "2017-09-06T11:24:31.707Z" }
+
+[[package]]
+name = "flask-sqlalchemy"
+version = "2.5.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "flask" },
+    { name = "sqlalchemy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/35/f0/39dd2d8e7e5223f78a5206d7020dc0e16718a964acfb3564d89e9798ab9b/Flask-SQLAlchemy-2.5.1.tar.gz", hash = "sha256:2bda44b43e7cacb15d4e05ff3cc1f8bc97936cc464623424102bfc2c35e95912", size = 132750, upload-time = "2021-03-18T19:03:02.733Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/26/2c/9088b6bd95bca539230bbe9ad446737ed391aab9a83aff403e18dded3e75/Flask_SQLAlchemy-2.5.1-py2.py3-none-any.whl", hash = "sha256:f12c3d4cc5cc7fdcc148b9527ea05671718c3ea45d50c7e732cceb33f574b390", size = 17716, upload-time = "2021-03-18T19:03:00.702Z" },
+]
+
+[[package]]
 name = "flax"
 version = "0.12.7"
 source = { registry = "https://pypi.org/simple" }
@@ -1156,7 +1235,7 @@ dependencies = [
     { name = "orbax-checkpoint" },
     { name = "pyyaml" },
     { name = "rich", version = "14.3.4", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.14' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-    { name = "rich", version = "15.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14' or extra == 'extra-13-jax-baselines-all' or extra != 'extra-13-jax-baselines-mjlab' or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "rich", version = "15.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14' or extra == 'extra-13-jax-baselines-all' or extra != 'extra-13-jax-baselines-mjlab' or extra == 'extra-13-jax-baselines-other'" },
     { name = "tensorstore" },
     { name = "treescope" },
     { name = "typing-extensions" },
@@ -1278,6 +1357,35 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/3f/93/977b9e679e356871d428ae7a1139ec767dd5177bed58a6344b4d2199e00f/glfw-2.10.0-py2.py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:cca5158d62189e08792b1ae54f92307a282921a0e7783315b467e21b0a381c88", size = 243480, upload-time = "2026-03-10T17:21:30.538Z" },
     { url = "https://files.pythonhosted.org/packages/f9/bd/cea9569c8f2188b0a104472951420434a3e1f5cf26f5836ef9d7227a1a30/glfw-2.10.0-py2.py3-none-win32.whl", hash = "sha256:5e024509989740e8e7b86cc4aab508195495f79879072b0e1f68bd036a2916ad", size = 552641, upload-time = "2026-03-10T17:21:32.653Z" },
     { url = "https://files.pythonhosted.org/packages/cc/9b/4366ad3e1c0688146c70aa6143584d6a8d88583b9390f106250e25a3d5cd/glfw-2.10.0-py2.py3-none-win_amd64.whl", hash = "sha256:7f787ee8645781f10e8800438ce4357ab38c573ffb191aba380c1e72eba6311c", size = 559423, upload-time = "2026-03-10T17:21:34.766Z" },
+]
+
+[[package]]
+name = "google-auth"
+version = "1.35.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "cachetools" },
+    { name = "pyasn1-modules" },
+    { name = "rsa" },
+    { name = "setuptools" },
+    { name = "six" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9a/97/bf2edc87092301da1936b0df4d9d60e5f4287b6910b7d8f5cc0ea796d620/google-auth-1.35.0.tar.gz", hash = "sha256:b7033be9028c188ee30200b204ea00ed82ea1162e8ac1df4aa6ded19a191d88e", size = 181504, upload-time = "2021-08-16T23:24:10.787Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fb/7a/1b3eb54caee1b8c73c2c3645f78a382eca4805a301a30c64a078e736e446/google_auth-1.35.0-py2.py3-none-any.whl", hash = "sha256:997516b42ecb5b63e8d80f5632c1a61dddf41d2a4c2748057837e06e00014258", size = 152949, upload-time = "2021-08-16T23:24:09.117Z" },
+]
+
+[[package]]
+name = "google-auth-oauthlib"
+version = "0.4.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "google-auth" },
+    { name = "requests-oauthlib" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/30/21/b84fa7ef834d4b126faad13da6e582c8f888e196326b9d6aab1ae303df4f/google-auth-oauthlib-0.4.6.tar.gz", hash = "sha256:a90a072f6993f2c327067bf65270046384cda5a8ecb20b94ea9a687f1f233a7a", size = 19516, upload-time = "2021-09-01T09:54:17.701Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b1/0e/0636cc1448a7abc444fb1b3a63655e294e0d2d49092dc3de05241be6d43c/google_auth_oauthlib-0.4.6-py2.py3-none-any.whl", hash = "sha256:3f2a6e802eebbb6fb736a370fbf3b055edcb6b52878bf2f26330b5e041316c73", size = 18306, upload-time = "2021-09-01T09:54:15.745Z" },
 ]
 
 [[package]]
@@ -1409,6 +1517,18 @@ wheels = [
 ]
 
 [[package]]
+name = "gunicorn"
+version = "20.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "setuptools" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/28/5b/0d1f0296485a6af03366604142ea8f19f0833894db3512a40ed07b2a56dd/gunicorn-20.1.0.tar.gz", hash = "sha256:e0a968b5ba15f8a328fdfd7ab1fcb5af4470c28aaf7e55df02a99bc13138e6e8", size = 370601, upload-time = "2021-03-27T01:54:37.202Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e4/dd/5b190393e6066286773a67dfcc2f9492058e9b57c4867a95f1ba5caf0a83/gunicorn-20.1.0-py3-none-any.whl", hash = "sha256:9dcc4547dbb1cb284accfb15ab5667a0e5d1881cc443e0677b4882a4067a807e", size = 79531, upload-time = "2021-04-27T12:16:23.375Z" },
+]
+
+[[package]]
 name = "gymnasium"
 version = "1.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1442,15 +1562,6 @@ other = [
     { name = "moviepy" },
     { name = "opencv-python" },
     { name = "seaborn" },
-]
-
-[[package]]
-name = "h11"
-version = "0.16.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/01/ee/02a2c011bdab74c6fb3c75474d40b3052059d95df7e73351460c8588d963/h11-0.16.0.tar.gz", hash = "sha256:4e35b956cf45792e4caa5885e69fba00bdbc6ffafbfa020300e549b208ee5ff1", size = 101250, upload-time = "2025-04-24T03:35:25.427Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/04/4b/29cac41a4d98d144bf5f6d33995617b185d14b22401f75ca86f384e87ff1/h11-0.16.0-py3-none-any.whl", hash = "sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86", size = 37515, upload-time = "2025-04-24T03:35:24.344Z" },
 ]
 
 [[package]]
@@ -1574,6 +1685,15 @@ wheels = [
 ]
 
 [[package]]
+name = "itsdangerous"
+version = "2.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9c/cb/8ac0172223afbccb63986cc25049b154ecfb5e85932587206f42317be31d/itsdangerous-2.2.0.tar.gz", hash = "sha256:e0050c0b7da1eea53ffaf149c0cfbb5c6e2e2b69c4bef22c81fa6eb73e5f6173", size = 54410, upload-time = "2024-04-16T21:28:15.614Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/04/96/92447566d16df59b2a776c0fb82dbc4d9e07cd95062562af01e408583fc4/itsdangerous-2.2.0-py3-none-any.whl", hash = "sha256:c6242fc49e35958c8b15141343aa660db5fc54d4f13a1db01a3f5891b98700ef", size = 16234, upload-time = "2024-04-16T21:28:14.499Z" },
+]
+
+[[package]]
 name = "jax"
 version = "0.10.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1617,10 +1737,12 @@ dependencies = [
 
 [package.optional-dependencies]
 aim = [
-    { name = "aim" },
+    { name = "aim", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
+    { name = "aim", version = "2.7.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14'" },
 ]
 all = [
-    { name = "aim" },
+    { name = "aim", version = "2.4.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.14' and extra == 'extra-13-jax-baselines-all') or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "aim", version = "2.7.4", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.14' and extra == 'extra-13-jax-baselines-all') or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
     { name = "ale-py" },
     { name = "autorom", extra = ["accept-rom-license"], marker = "extra == 'extra-13-jax-baselines-all' or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
     { name = "box2d-kengz" },
@@ -1631,7 +1753,8 @@ all = [
     { name = "opencv-python" },
     { name = "ray" },
     { name = "setuptools" },
-    { name = "tensorboard" },
+    { name = "tensorboard", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.14' and extra == 'extra-13-jax-baselines-all') or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "tensorboard", version = "2.20.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.14' and extra == 'extra-13-jax-baselines-all') or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
     { name = "wandb" },
 ]
 atari = [
@@ -1649,7 +1772,8 @@ cuda12 = [
 ]
 dashboard = [
     { name = "setuptools" },
-    { name = "tensorboard" },
+    { name = "tensorboard", version = "2.3.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.14'" },
+    { name = "tensorboard", version = "2.20.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
 ]
 distributed = [
     { name = "ray" },
@@ -1667,7 +1791,7 @@ mujoco = [
     { name = "gymnasium", extra = ["mujoco"] },
 ]
 other = [
-    { name = "gymnasium", extra = ["other"], marker = "(extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other') or (extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "gymnasium", extra = ["other"], marker = "extra == 'extra-13-jax-baselines-other' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab')" },
 ]
 wandb = [
     { name = "wandb" },
@@ -1766,18 +1890,18 @@ wheels = [
 
 [package.optional-dependencies]
 with-cuda = [
-    { name = "nvidia-cublas-cu12", marker = "sys_platform == 'linux' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-    { name = "nvidia-cuda-cupti-cu12", marker = "sys_platform == 'linux' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-    { name = "nvidia-cuda-nvcc-cu12", marker = "sys_platform == 'linux' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-    { name = "nvidia-cuda-nvrtc-cu12", marker = "sys_platform == 'linux' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-    { name = "nvidia-cuda-runtime-cu12", marker = "sys_platform == 'linux' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-    { name = "nvidia-cudnn-cu12", marker = "sys_platform == 'linux' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-    { name = "nvidia-cufft-cu12", marker = "sys_platform == 'linux' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-    { name = "nvidia-cusolver-cu12", marker = "sys_platform == 'linux' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-    { name = "nvidia-cusparse-cu12", marker = "sys_platform == 'linux' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-    { name = "nvidia-nccl-cu12", marker = "sys_platform == 'linux' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-    { name = "nvidia-nvjitlink-cu12", marker = "sys_platform == 'linux' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-    { name = "nvidia-nvshmem-cu12", marker = "sys_platform == 'linux' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "nvidia-cublas-cu12", marker = "sys_platform == 'linux'" },
+    { name = "nvidia-cuda-cupti-cu12", marker = "sys_platform == 'linux'" },
+    { name = "nvidia-cuda-nvcc-cu12", marker = "sys_platform == 'linux'" },
+    { name = "nvidia-cuda-nvrtc-cu12", marker = "sys_platform == 'linux'" },
+    { name = "nvidia-cuda-runtime-cu12", marker = "sys_platform == 'linux'" },
+    { name = "nvidia-cudnn-cu12", marker = "sys_platform == 'linux'" },
+    { name = "nvidia-cufft-cu12", marker = "sys_platform == 'linux'" },
+    { name = "nvidia-cusolver-cu12", marker = "sys_platform == 'linux'" },
+    { name = "nvidia-cusparse-cu12", marker = "sys_platform == 'linux'" },
+    { name = "nvidia-nccl-cu12", marker = "sys_platform == 'linux'" },
+    { name = "nvidia-nvjitlink-cu12", marker = "sys_platform == 'linux'" },
+    { name = "nvidia-nvshmem-cu12", marker = "sys_platform == 'linux'" },
 ]
 
 [[package]]
@@ -1831,20 +1955,11 @@ name = "jinja2"
 version = "3.1.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "markupsafe" },
+    { name = "markupsafe", marker = "python_full_version >= '3.14' or extra == 'extra-13-jax-baselines-mjlab'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d", size = 245115, upload-time = "2025-03-05T20:05:02.478Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/62/a1/3d680cbfd5f4b8f15abc1d571870c5fc3e594bb582bc3b64ea099db13e56/jinja2-3.1.6-py3-none-any.whl", hash = "sha256:85ece4451f492d0c13c5dd7c13a64681a86afae63a5f347908daf103ce6d2f67", size = 134899, upload-time = "2025-03-05T20:05:00.369Z" },
-]
-
-[[package]]
-name = "jmespath"
-version = "1.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d3/59/322338183ecda247fb5d1763a6cbe46eff7222eaeebafd9fa65d4bf5cb11/jmespath-1.1.0.tar.gz", hash = "sha256:472c87d80f36026ae83c6ddd0f1d05d4e510134ed462851fd5f754c8c3cbb88d", size = 27377, upload-time = "2026-01-22T16:35:26.279Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/14/2f/967ba146e6d58cf6a652da73885f52fc68001525b4197effc174321d70b4/jmespath-1.1.0-py3-none-any.whl", hash = "sha256:a5663118de4908c91729bea0acadca56526eb2698e83de10cd116ae0f4e97c64", size = 20419, upload-time = "2026-01-22T16:35:24.919Z" },
 ]
 
 [[package]]
@@ -2215,7 +2330,7 @@ dependencies = [
     { name = "prettytable", marker = "python_full_version < '3.14'" },
     { name = "rsl-rl-lib", marker = "python_full_version < '3.14'" },
     { name = "scipy", marker = "python_full_version < '3.14'" },
-    { name = "tensorboard", marker = "python_full_version < '3.14'" },
+    { name = "tensorboard", version = "2.20.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
     { name = "tensordict", marker = "python_full_version < '3.14'" },
     { name = "torch", marker = "python_full_version < '3.14'" },
     { name = "torchrunx", marker = "python_full_version < '3.14'" },
@@ -2591,12 +2706,11 @@ name = "nvidia-cublas-cu12"
 version = "12.9.2.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cuda-nvrtc-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'win32' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other') or (sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other')" },
+    { name = "nvidia-cuda-nvrtc-cu12" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f7/a2/c96163a0fff1839c0c9548bbdeae7b853b867009e33b9b9264adc238b1cf/nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:5572131a59c3eebeeb1c4c8144f772d49372c20124916e072a0e3fc30df421d5", size = 575012079, upload-time = "2026-04-08T18:51:47.303Z" },
     { url = "https://files.pythonhosted.org/packages/cb/c0/0a517bfe63ccd3b92eb254d264e28fca3c7cab75d07daea315250fb1bf73/nvidia_cublas_cu12-12.9.2.10-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:e4f53a8ca8c5d6e8c492d0d0a3d565ecb59a751b19cfdaa4f6da0ab2104c1702", size = 581240110, upload-time = "2026-04-08T18:52:31.532Z" },
-    { url = "https://files.pythonhosted.org/packages/20/e2/fc9a0e985249d873150276d5afb02e39a66817fedbf1a385724393e505ed/nvidia_cublas_cu12-12.9.2.10-py3-none-win_amd64.whl", hash = "sha256:623f43027d40d44ceadf0043f002bd25cf353e8f13ce90b9a87057019f560661", size = 553162896, upload-time = "2026-04-08T18:53:10.035Z" },
 ]
 
 [[package]]
@@ -2606,7 +2720,6 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/61/7e/82e49956b046bdc506c789235c587d9b3ef58b8bc1782258c1e247229647/nvidia_cuda_cccl_cu12-12.9.27-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:d7898b38aa68beaa234d48f0868273702342a196d6e2e9d0ef058dca2390ebea", size = 3152245, upload-time = "2025-05-01T19:32:04.802Z" },
     { url = "https://files.pythonhosted.org/packages/18/2a/d4cd8506d2044e082f8cd921be57392e6a9b5ccd3ffdf050362430a3d5d5/nvidia_cuda_cccl_cu12-12.9.27-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:37869e17ce2e1ecec6eddf1927cca0f8c34e64fd848d40453df559091e2d7117", size = 3152243, upload-time = "2025-05-01T19:32:13.955Z" },
-    { url = "https://files.pythonhosted.org/packages/ce/9b/1daf405620c7ac371b76b823c6336dd742673d41a150d9a04eec2c690379/nvidia_cuda_cccl_cu12-12.9.27-py3-none-win_amd64.whl", hash = "sha256:72106f95a9bb3be18472806b4f663ebf0f9248a86d14b4ae3305725b855d9d92", size = 3152175, upload-time = "2025-05-01T19:45:11.372Z" },
 ]
 
 [[package]]
@@ -2626,7 +2739,6 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b4/78/351b5c8cdbd9a6b4fb0d6ee73fb176dcdc1b6b6ad47c2ffff5ae8ca4a1f7/nvidia_cuda_cupti_cu12-12.9.79-py3-none-manylinux_2_25_aarch64.whl", hash = "sha256:791853b030602c6a11d08b5578edfb957cadea06e9d3b26adbf8d036135a4afe", size = 10077166, upload-time = "2025-06-05T20:01:01.385Z" },
     { url = "https://files.pythonhosted.org/packages/c1/2e/b84e32197e33f39907b455b83395a017e697c07a449a2b15fd07fc1c9981/nvidia_cuda_cupti_cu12-12.9.79-py3-none-manylinux_2_25_x86_64.whl", hash = "sha256:096bcf334f13e1984ba36685ad4c1d6347db214de03dbb6eebb237b41d9d934f", size = 10814997, upload-time = "2025-06-05T20:01:10.168Z" },
-    { url = "https://files.pythonhosted.org/packages/3b/b4/298983ab1a83de500f77d0add86d16d63b19d1a82c59f8eaf04f90445703/nvidia_cuda_cupti_cu12-12.9.79-py3-none-win_amd64.whl", hash = "sha256:1848a9380067560d5bee10ed240eecc22991713e672c0515f9c3d9396adf93c8", size = 7730496, upload-time = "2025-06-05T20:11:26.444Z" },
 ]
 
 [[package]]
@@ -2636,7 +2748,6 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/25/48/b54a06168a2190572a312bfe4ce443687773eb61367ced31e064953dd2f7/nvidia_cuda_nvcc_cu12-12.9.86-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", hash = "sha256:5d6a0d32fdc7ea39917c20065614ae93add6f577d840233237ff08e9a38f58f0", size = 40546229, upload-time = "2025-06-05T20:01:53.357Z" },
     { url = "https://files.pythonhosted.org/packages/d6/5c/8cc072436787104bbbcbde1f76ab4a0d89e68f7cebc758dd2ad7913a43d0/nvidia_cuda_nvcc_cu12-12.9.86-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:44e1eca4d08926193a558d2434b1bf83d57b4d5743e0c431c0c83d51da1df62b", size = 39411138, upload-time = "2025-06-05T20:01:43.182Z" },
-    { url = "https://files.pythonhosted.org/packages/d2/9e/c71c53655a65d7531c89421c282359e2f626838762f1ce6180ea0bbebd29/nvidia_cuda_nvcc_cu12-12.9.86-py3-none-win_amd64.whl", hash = "sha256:8ed7f0b17dea662755395be029376db3b94fed5cbb17c2d35cc866c5b1b84099", size = 34669845, upload-time = "2025-06-05T20:11:56.308Z" },
 ]
 
 [[package]]
@@ -2656,7 +2767,6 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b8/85/e4af82cc9202023862090bfca4ea827d533329e925c758f0cde964cb54b7/nvidia_cuda_nvrtc_cu12-12.9.86-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", hash = "sha256:210cf05005a447e29214e9ce50851e83fc5f4358df8b453155d5e1918094dcb4", size = 89568129, upload-time = "2025-06-05T20:02:41.973Z" },
     { url = "https://files.pythonhosted.org/packages/64/eb/c2295044b8f3b3b08860e2f6a912b702fc92568a167259df5dddb78f325e/nvidia_cuda_nvrtc_cu12-12.9.86-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:096d4de6bda726415dfaf3198d4f5c522b8e70139c97feef5cd2ca6d4cd9cead", size = 44528905, upload-time = "2025-06-05T20:02:29.754Z" },
-    { url = "https://files.pythonhosted.org/packages/52/de/823919be3b9d0ccbf1f784035423c5f18f4267fb0123558d58b813c6ec86/nvidia_cuda_nvrtc_cu12-12.9.86-py3-none-win_amd64.whl", hash = "sha256:72972ebdcf504d69462d3bcd67e7b81edd25d0fb85a2c46d3ea3517666636349", size = 76408187, upload-time = "2025-06-05T20:12:27.819Z" },
 ]
 
 [[package]]
@@ -2676,7 +2786,6 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bc/e0/0279bd94539fda525e0c8538db29b72a5a8495b0c12173113471d28bce78/nvidia_cuda_runtime_cu12-12.9.79-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:83469a846206f2a733db0c42e223589ab62fd2fabac4432d2f8802de4bded0a4", size = 3515012, upload-time = "2025-06-05T20:00:35.519Z" },
     { url = "https://files.pythonhosted.org/packages/bc/46/a92db19b8309581092a3add7e6fceb4c301a3fd233969856a8cbf042cd3c/nvidia_cuda_runtime_cu12-12.9.79-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:25bba2dfb01d48a9b59ca474a1ac43c6ebf7011f1b0b8cc44f54eb6ac48a96c3", size = 3493179, upload-time = "2025-06-05T20:00:53.735Z" },
-    { url = "https://files.pythonhosted.org/packages/59/df/e7c3a360be4f7b93cee39271b792669baeb3846c58a4df6dfcf187a7ffab/nvidia_cuda_runtime_cu12-12.9.79-py3-none-win_amd64.whl", hash = "sha256:8e018af8fa02363876860388bd10ccb89eb9ab8fb0aa749aaf58430a9f7c4891", size = 3591604, upload-time = "2025-06-05T20:11:17.036Z" },
 ]
 
 [[package]]
@@ -2684,12 +2793,11 @@ name = "nvidia-cudnn-cu12"
 version = "9.22.0.52"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'win32' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other') or (sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other')" },
+    { name = "nvidia-cublas-cu12" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/51/ff/c6a098c1e0bccc68aac5f1684526cf8936abb7024dcc46dca315b8a6f47f/nvidia_cudnn_cu12-9.22.0.52-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:cd9011812498376f866b9826331cc965ac922eb2df8549c9f2989f10255e5001", size = 774536507, upload-time = "2026-05-08T15:36:09.067Z" },
     { url = "https://files.pythonhosted.org/packages/a0/8f/2ede6b758b7524608472010f632bdd3370ea271d715d1d66044614b84cdc/nvidia_cudnn_cu12-9.22.0.52-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:391b9a7ee6386daaca7f8dca41e83c2c99f760c9581a0400755e87b4287b8847", size = 718382818, upload-time = "2026-05-08T15:37:38.061Z" },
-    { url = "https://files.pythonhosted.org/packages/f2/a4/045f8d0ce6b99726d88e76bbb8ee147123f55e80111d89262762d8149abb/nvidia_cudnn_cu12-9.22.0.52-py3-none-win_amd64.whl", hash = "sha256:5d10117314c861245992dbcf8a6f8ae1f54852137a7c9f80cc9de9fa596f7d62", size = 687235974, upload-time = "2026-05-08T15:39:37.967Z" },
 ]
 
 [[package]]
@@ -2723,12 +2831,11 @@ name = "nvidia-cufft-cu12"
 version = "11.4.1.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'win32' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other') or (sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other')" },
+    { name = "nvidia-nvjitlink-cu12" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9b/2b/76445b0af890da61b501fde30650a1a4bd910607261b209cccb5235d3daa/nvidia_cufft_cu12-11.4.1.4-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:1a28c9b12260a1aa7a8fd12f5ebd82d027963d635ba82ff39a1acfa7c4c0fbcf", size = 200822453, upload-time = "2025-06-05T20:05:27.889Z" },
     { url = "https://files.pythonhosted.org/packages/95/f4/61e6996dd20481ee834f57a8e9dca28b1869366a135e0d42e2aa8493bdd4/nvidia_cufft_cu12-11.4.1.4-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:c67884f2a7d276b4b80eb56a79322a95df592ae5e765cf1243693365ccab4e28", size = 200877592, upload-time = "2025-06-05T20:05:45.862Z" },
-    { url = "https://files.pythonhosted.org/packages/20/ee/29955203338515b940bd4f60ffdbc073428f25ef9bfbce44c9a066aedc5c/nvidia_cufft_cu12-11.4.1.4-py3-none-win_amd64.whl", hash = "sha256:8e5bfaac795e93f80611f807d42844e8e27e340e0cde270dcb6c65386d795b80", size = 200067309, upload-time = "2025-06-05T20:13:59.762Z" },
 ]
 
 [[package]]
@@ -2770,14 +2877,13 @@ name = "nvidia-cusolver-cu12"
 version = "11.7.5.82"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'win32' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other') or (sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other')" },
-    { name = "nvidia-cusparse-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'win32' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other') or (sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other')" },
-    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'win32' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other') or (sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other')" },
+    { name = "nvidia-cublas-cu12" },
+    { name = "nvidia-cusparse-cu12" },
+    { name = "nvidia-nvjitlink-cu12" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/03/99/686ff9bf3a82a531c62b1a5c614476e8dfa24a9d89067aeedf3592ee4538/nvidia_cusolver_cu12-11.7.5.82-py3-none-manylinux_2_27_aarch64.whl", hash = "sha256:62efa83e4ace59a4c734d052bb72158e888aa7b770e1a5f601682f16fe5b4fd2", size = 337869834, upload-time = "2025-06-05T20:06:53.125Z" },
     { url = "https://files.pythonhosted.org/packages/33/40/79b0c64d44d6c166c0964ec1d803d067f4a145cca23e23925fd351d0e642/nvidia_cusolver_cu12-11.7.5.82-py3-none-manylinux_2_27_x86_64.whl", hash = "sha256:15da72d1340d29b5b3cf3fd100e3cd53421dde36002eda6ed93811af63c40d88", size = 338117415, upload-time = "2025-06-05T20:07:16.809Z" },
-    { url = "https://files.pythonhosted.org/packages/32/5d/feb7f86b809f89b14193beffebe24cf2e4bf7af08372ab8cdd34d19a65a0/nvidia_cusolver_cu12-11.7.5.82-py3-none-win_amd64.whl", hash = "sha256:77666337237716783c6269a658dea310195cddbd80a5b2919b1ba8735cec8efd", size = 326215953, upload-time = "2025-06-05T20:14:41.76Z" },
 ]
 
 [[package]]
@@ -2798,12 +2904,11 @@ name = "nvidia-cusparse-cu12"
 version = "12.5.10.65"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'win32' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other') or (sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other')" },
+    { name = "nvidia-nvjitlink-cu12" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5e/6f/8710fbd17cdd1d0fc3fea7d36d5b65ce1933611c31e1861da330206b253a/nvidia_cusparse_cu12-12.5.10.65-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:221c73e7482dd93eda44e65ce567c031c07e2f93f6fa0ecd3ba876a195023e83", size = 366359408, upload-time = "2025-06-05T20:07:42.501Z" },
     { url = "https://files.pythonhosted.org/packages/12/46/b0fd4b04f86577921feb97d8e2cf028afe04f614d17fb5013de9282c9216/nvidia_cusparse_cu12-12.5.10.65-py3-none-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:73060ce019ac064a057267c585bf1fd5a353734151f87472ff02b2c5c9984e78", size = 366465088, upload-time = "2025-06-05T20:08:20.413Z" },
-    { url = "https://files.pythonhosted.org/packages/73/ef/063500c25670fbd1cbb0cd3eb7c8a061585b53adb4dd8bf3492bb49b0df3/nvidia_cusparse_cu12-12.5.10.65-py3-none-win_amd64.whl", hash = "sha256:9e487468a22a1eaf1fbd1d2035936a905feb79c4ce5c2f67626764ee4f90227c", size = 362504719, upload-time = "2025-06-05T20:15:17.947Z" },
 ]
 
 [[package]]
@@ -2851,7 +2956,6 @@ source = { registry = "https://pypi.org/simple" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/46/0c/c75bbfb967457a0b7670b8ad267bfc4fffdf341c074e0a80db06c24ccfd4/nvidia_nvjitlink_cu12-12.9.86-py3-none-manylinux2010_x86_64.manylinux_2_12_x86_64.whl", hash = "sha256:e3f1171dbdc83c5932a45f0f4c99180a70de9bd2718c1ab77d14104f6d7147f9", size = 39748338, upload-time = "2025-06-05T20:10:25.613Z" },
     { url = "https://files.pythonhosted.org/packages/97/bc/2dcba8e70cf3115b400fef54f213bcd6715a3195eba000f8330f11e40c45/nvidia_nvjitlink_cu12-12.9.86-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:994a05ef08ef4b0b299829cde613a424382aff7efb08a7172c1fa616cc3af2ca", size = 39514880, upload-time = "2025-06-05T20:10:04.89Z" },
-    { url = "https://files.pythonhosted.org/packages/dd/7e/2eecb277d8a98184d881fb98a738363fd4f14577a4d2d7f8264266e82623/nvidia_nvjitlink_cu12-12.9.86-py3-none-win_amd64.whl", hash = "sha256:cc6fcec260ca843c10e34c936921a1c426b351753587fdd638e8cff7b16bb9db", size = 35584936, upload-time = "2025-06-05T20:16:08.525Z" },
 ]
 
 [[package]]
@@ -2859,7 +2963,7 @@ name = "nvidia-nvshmem-cu12"
 version = "3.6.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cuda-cccl-cu12", marker = "(sys_platform != 'emscripten' and sys_platform != 'win32') or (sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'win32' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other') or (sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-other')" },
+    { name = "nvidia-cuda-cccl-cu12" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/fb/da/bd8ae5201f8c5751ece31fe4fe489ece10fbcf5fcc1a595855b6459b6d6e/nvidia_nvshmem_cu12-3.6.5-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:7b38521ff84cdfc68da3360fe249cfbabfe05ee9aa271458857476124b03a420", size = 153109548, upload-time = "2026-03-24T19:19:19.523Z" },
@@ -2883,6 +2987,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/c2/f3/d86c845465a2723ad7e1e5c36dcd75ddb82898b3f53be47ebd429fb2fa5d/nvidia_nvtx-13.0.85-py3-none-manylinux1_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:4936d1d6780fbe68db454f5e72a42ff64d1fd6397df9f363ae786930fd5c1cd4", size = 148047, upload-time = "2025-09-04T08:29:01.761Z" },
     { url = "https://files.pythonhosted.org/packages/a8/64/3708a90d1ebe202ffdeb7185f878a3c84d15c2b2c31858da2ce0583e2def/nvidia_nvtx-13.0.85-py3-none-manylinux2014_aarch64.manylinux_2_17_aarch64.whl", hash = "sha256:cb7780edb6b14107373c835bf8b72e7a178bac7367e23da7acb108f973f157a6", size = 148878, upload-time = "2025-09-04T08:28:53.627Z" },
     { url = "https://files.pythonhosted.org/packages/d2/50/0e2220f8620a177de994211186ffc5bfa9f2ce1e1282797f8f90096f9f88/nvidia_nvtx-13.0.85-py3-none-win_amd64.whl", hash = "sha256:d66ea44254dd3c6eacc300047af6e1288d2269dd072b417e0adffbf479e18519", size = 137066, upload-time = "2025-09-04T08:39:25.649Z" },
+]
+
+[[package]]
+name = "oauthlib"
+version = "4.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/d8/a1bcc8ba112a627f8ffbdc212a78ce18d3ac07e91a5ca65d27918eee25a1/oauthlib-4.0.0.tar.gz", hash = "sha256:efb274799819440f95b4ab3b818869f1ce9ae26c5beacba0201d1a1b76b54f86", size = 187232, upload-time = "2026-09-28T06:01:18.77Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d9/f4/78229a1066068ca14fc60fb26cf7381cabe4382261392b90e5f9552722d4/oauthlib-4.0.0-py3-none-any.whl", hash = "sha256:624c28c13a0a59cabf9747dfa52af63be3e512a7f2714df16e91b5b3a145e6cd", size = 159715, upload-time = "2026-09-28T06:01:17.008Z" },
 ]
 
 [[package]]
@@ -3096,7 +3209,7 @@ dependencies = [
     { name = "humanize" },
     { name = "jax" },
     { name = "msgpack" },
-    { name = "nest-asyncio", marker = "sys_platform == 'win32' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "nest-asyncio", marker = "sys_platform == 'win32'" },
     { name = "numpy" },
     { name = "prometheus-client" },
     { name = "protobuf" },
@@ -3105,7 +3218,7 @@ dependencies = [
     { name = "simplejson" },
     { name = "tensorstore" },
     { name = "typing-extensions" },
-    { name = "uvloop", marker = "sys_platform != 'win32' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "uvloop", marker = "sys_platform != 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e2/58/89183fb43fd87a7fcd8af9c5a3f396c6620ac93742a5fa8333cde8f3789d/orbax_checkpoint-0.11.40.tar.gz", hash = "sha256:da7e873cfcef5f792b86936a36935f298bf229a0900b2fec57fccca750056b61", size = 637227, upload-time = "2026-05-19T18:20:17.584Z" }
 wheels = [
@@ -3177,11 +3290,11 @@ wheels = [
 
 [[package]]
 name = "packaging"
-version = "26.2"
+version = "26.3"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/d7/f1/e7a6dd94a8d4a5626c03e4e99c87f241ba9e350cd9e6d75123f992427270/packaging-26.2.tar.gz", hash = "sha256:ff452ff5a3e828ce110190feff1178bb1f2ea2281fa2075aadb987c2fb221661", size = 228134, upload-time = "2026-04-24T20:15:23.917Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/7d/fa/3944b40b07da9ce895c0e6303a5ab7d53da063554f534556b134a54d6093/packaging-26.3.tar.gz", hash = "sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79", size = 313412, upload-time = "2026-08-04T18:15:28.737Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/df/b2/87e62e8c3e2f4b32e5fe99e0b86d576da1312593b39f47d8ceef365e95ed/packaging-26.2-py3-none-any.whl", hash = "sha256:5fc45236b9446107ff2415ce77c807cee2862cb6fac22b8a73826d0693b0980e", size = 100195, upload-time = "2026-04-24T20:15:22.081Z" },
+    { url = "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl", hash = "sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c", size = 129956, upload-time = "2026-08-04T18:15:27.159Z" },
 ]
 
 [[package]]
@@ -3610,6 +3723,39 @@ wheels = [
 ]
 
 [[package]]
+name = "py3nvml"
+version = "0.2.7"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "xmltodict" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/10/7e/fa282e456b87570d663ce97946b4dcb16850d4495ce4bd625a1a10c8ed56/py3nvml-0.2.7.tar.gz", hash = "sha256:09ee1d04598a6e664e24465f804ce3bfe119a6fdb5362df1c168f8aa929fbd73", size = 58224, upload-time = "2021-11-22T14:30:27.541Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/03/3a/ea6f2419bd20f97f65ee55a9910c722313fe99cacc0bf77afb4b74b446ff/py3nvml-0.2.7-py3-none-any.whl", hash = "sha256:30101170d1f51419c8d21fd8ca6cdc333a552b4f8a945c2fc7d107d77e4220dd", size = 55503, upload-time = "2021-11-22T14:30:25.794Z" },
+]
+
+[[package]]
+name = "pyasn1"
+version = "0.6.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a4/9a/23310166d960def5897e91fe20e5b724601b02a22e84ba1f94232c0b7f67/pyasn1-0.6.4.tar.gz", hash = "sha256:9c447d8431c947fe4c8febc4ed9e760bc29011a5b01e5c74b67025bd9fb8ce81", size = 151262, upload-time = "2026-07-09T01:12:33.988Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9a/3b/6163796d69c3977d1e4287bea4a6979161cbbdd170ebb430511e8e1999ce/pyasn1-0.6.4-py3-none-any.whl", hash = "sha256:deda9277cfd454080ec40b207fb6df82206a3a2688735233cdcd8d3d565f088b", size = 84410, upload-time = "2026-07-09T01:12:32.92Z" },
+]
+
+[[package]]
+name = "pyasn1-modules"
+version = "0.4.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyasn1" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e9/e6/78ebbb10a8c8e4b61a59249394a4a594c1a7af95593dc933a349c8d00964/pyasn1_modules-0.4.2.tar.gz", hash = "sha256:677091de870a80aae844b1ca6134f54652fa2c8c5a52aa396440ac3106e941e6", size = 307892, upload-time = "2025-03-28T02:41:22.17Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/47/8d/d529b5d697919ba8c11ad626e835d4039be708a35b0d22de83a269a6682c/pyasn1_modules-0.4.2-py3-none-any.whl", hash = "sha256:29253a9207ce32b64c3ac6600edc75368f98473906e8fd1043bd6b5b1de2c14a", size = 181259, upload-time = "2025-03-28T02:41:19.028Z" },
+]
+
+[[package]]
 name = "pycparser"
 version = "3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3838,11 +3984,48 @@ wheels = [
 ]
 
 [[package]]
+name = "pyrser"
+version = "0.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a0/b9/997a6334cdbcf52d66debe4a4048e503a4eb86bbdebdf226240fc425fa62/pyrser-0.2.0.tar.gz", hash = "sha256:8a47bf439caee4f63017b109c82b17acd5d78a5459dc9ed50a080a0aa364a468", size = 45009, upload-time = "2017-06-06T12:12:34.414Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b2/c1/172359000c21c146aadf887f4d788a9fa95f7fcf466a52634add2933fcf3/pyrser-0.2.0-py2.py3-none-any.whl", hash = "sha256:683d68135ce1c34478c1babe1018e68907fba02c8198cf3cbc43320857fada56", size = 70749, upload-time = "2017-06-06T12:21:59.298Z" },
+]
+
+[[package]]
+name = "pysqlite3"
+version = "0.6.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/28/43/6f1f3adc88f9f77a0f49a2959f6aac5f56900da5e60c65fa6fbcc9c0afae/pysqlite3-0.6.1.tar.gz", hash = "sha256:dd7d2b7f3a29aebdbf569c359658b091d3345b5691d9ea765a5c3febe8872bf9", size = 41061, upload-time = "2026-10-04T13:43:21.792Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2c/cf/bcccdbbd39e352966f086a9a74f26668977ea6629f6d83ed0eedf31716ce/pysqlite3-0.6.1-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:f08ad36bf746cb7c1b3a6a56eecc0084ad53398f95ff57ec168698b1f638e23f", size = 966942, upload-time = "2026-10-04T13:42:46.828Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/53/350aa2e2b4c725122404c5db3a744628a53da9beb0b928de1a04874137bb/pysqlite3-0.6.1-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:227f07fe710a64c906b6049c65e2774710d4ad657dad1998d0122c0859e7e548", size = 4574896, upload-time = "2026-10-04T13:42:48.306Z" },
+    { url = "https://files.pythonhosted.org/packages/c2/c6/9a77cebe57869b2bf2bf40be71d1df7ba3bddd64548f9d4efe11c50cc9a3/pysqlite3-0.6.1-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:adba75c932353baf1ab014006b31c08fe59be6ac96957523194faa2c253fd12b", size = 4576017, upload-time = "2026-10-04T13:42:50.162Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/54/5590085e785198f897cb103e8157d7820a6d2280e05dfba343edabf1a34b/pysqlite3-0.6.1-cp311-cp311-win32.whl", hash = "sha256:00a8007923cda847c67b8a31899e50c1a31f5e77f55c3268e8a6543c26a32759", size = 736308, upload-time = "2026-10-04T13:42:51.5Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/fb/d6f5e2b7d24036b135c1e3cdad1c0b4d496b0bcc339861fe2cd332bfdb92/pysqlite3-0.6.1-cp311-cp311-win_amd64.whl", hash = "sha256:266db0b989aa8bdd71b599f1bb96ae8059db40fdcde79ca562c459d99ac6d0a2", size = 934219, upload-time = "2026-10-04T13:42:52.692Z" },
+    { url = "https://files.pythonhosted.org/packages/8d/3e/593d38220df5dc9a0c44b1fc279291f31875f5073b6cb9fdc614839f8cc3/pysqlite3-0.6.1-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:8808daaef25e1159435b2307ce184a3c46060dcd9cd7bc0bbb5aa92c0608b9d2", size = 968015, upload-time = "2026-10-04T13:42:53.836Z" },
+    { url = "https://files.pythonhosted.org/packages/22/f5/4c840365d594dd62a12ed643c978a2d7cdcafd961e63452c2076d631e71e/pysqlite3-0.6.1-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:0665dae735a06b78ef608d316c0f1664bb89b607270c716e2f91b3b0a40bf29f", size = 4582704, upload-time = "2026-10-04T13:42:55.47Z" },
+    { url = "https://files.pythonhosted.org/packages/66/9c/c736abe26b81f6f3f6ca296d1a8047e7f2aff6e2af27277a5470d626afdc/pysqlite3-0.6.1-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:be780c6bb78e7c80467a726dbd79cf8c9c695dc18dd03af0f1ef4419ae51621a", size = 4583161, upload-time = "2026-10-04T13:42:57.12Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/57/139ec834330359cb5a6755da6b722b40fd6b33f177340ea442e905f4078a/pysqlite3-0.6.1-cp312-cp312-win32.whl", hash = "sha256:f4656b742f583275bc561dfc654b7be0987e3d6be76bb76fa43168eb899372e5", size = 736768, upload-time = "2026-10-04T13:42:58.976Z" },
+    { url = "https://files.pythonhosted.org/packages/12/e0/87e904688edeea284b460ffd8f237967e62b7abbb56c4816cea967e386e4/pysqlite3-0.6.1-cp312-cp312-win_amd64.whl", hash = "sha256:03fad0784c151480c2c489af4832221a4685f21f229ce94723e7e5bfb4d94340", size = 934761, upload-time = "2026-10-04T13:42:59.999Z" },
+    { url = "https://files.pythonhosted.org/packages/e2/e6/2875ec3b65e0f371a52dcb16a6cce43292f996fcc3d2bcaf752f250883a2/pysqlite3-0.6.1-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:0089903d245dd162f73ccefd2acf5b9476689f21fa6836f9d85246af79a5c949", size = 967293, upload-time = "2026-10-04T13:43:01.46Z" },
+    { url = "https://files.pythonhosted.org/packages/ab/d4/0183020fd98890999f6fc46a070be4e0858961d70eb0ce0f1e20867e903f/pysqlite3-0.6.1-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:d796549cf19f7bff5c9f2645f428cca263a6e7f54fc207f9abc05b4d09b3f8ee", size = 4578777, upload-time = "2026-10-04T13:43:02.833Z" },
+    { url = "https://files.pythonhosted.org/packages/48/09/bedca1628e9437c4192ae20b9f9df9206e24706a699ff570c5fe05643011/pysqlite3-0.6.1-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:8b5f041ad321df8865499e47de32c0eeb708a0dd2582a506e96b050ba67174c2", size = 4581093, upload-time = "2026-10-04T13:43:04.445Z" },
+    { url = "https://files.pythonhosted.org/packages/da/43/184bdc55d88985dbbac994056995eba1d6bbd3966ae7c63ebc96563619db/pysqlite3-0.6.1-cp313-cp313-win32.whl", hash = "sha256:0029f5409d8b63618d9b7623f6efe9fc52bcb865b3399963631e7d936859f8d6", size = 736558, upload-time = "2026-10-04T13:43:05.895Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/bd/ae93287392041966dd5372cf78122fd819948bcc4af8219f13beaae68e65/pysqlite3-0.6.1-cp313-cp313-win_amd64.whl", hash = "sha256:720034608a5bc61414bbc47ad0b3c3c6f4dbdc6710f4cb2ab3035c1d4693adfe", size = 934249, upload-time = "2026-10-04T13:43:06.934Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/47/637985d7c326a79267f7a1baf258437c18e134047b0d406307dca12cb129/pysqlite3-0.6.1-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:961d7c31c8f43b5866d4eeaf24b47c820b9da2d6124338d63f6f45398a3b2139", size = 967379, upload-time = "2026-10-04T13:43:08.069Z" },
+    { url = "https://files.pythonhosted.org/packages/b6/f4/7a12f69e354fc6165eeab4cf30b9d478fe2c3d7cab592ddc2d14c7b63f9f/pysqlite3-0.6.1-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:195103e62cc350091554dec76fdd50798ddcd2516deb042c3cc5d4e5354b8a4a", size = 4578621, upload-time = "2026-10-04T13:43:09.431Z" },
+    { url = "https://files.pythonhosted.org/packages/d3/94/72bd05b3c5980a648c3c98ecf3071d4890f41cb3ab6865d552decd1fd0eb/pysqlite3-0.6.1-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:ad23a1c092fed0e37343fb079e5a8ab72219e989a30df549a0418ed51c164ec0", size = 4581008, upload-time = "2026-10-04T13:43:10.971Z" },
+    { url = "https://files.pythonhosted.org/packages/be/76/567bfdb43722399068becf35167381eeedfc13e1c996ffcc9dd6e9c229c9/pysqlite3-0.6.1-cp314-cp314-win32.whl", hash = "sha256:9c25ed49cee4792726e4575967046c65cd8ceb29023bfbd27361248b519402ed", size = 753380, upload-time = "2026-10-04T13:43:12.349Z" },
+    { url = "https://files.pythonhosted.org/packages/90/81/8a5b3169aaa9b4fd19488f538eb8d803460d9817be45c63e0e9fce4576f3/pysqlite3-0.6.1-cp314-cp314-win_amd64.whl", hash = "sha256:2e82b8d40fd6519a97b5f233b71287c97070442c4257f4410b8e891b4dadd24a", size = 963046, upload-time = "2026-10-04T13:43:13.575Z" },
+]
+
+[[package]]
 name = "pytest"
 version = "9.0.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
     { name = "iniconfig" },
     { name = "packaging" },
     { name = "pluggy" },
@@ -3867,15 +4050,14 @@ wheels = [
 
 [[package]]
 name = "python-discovery"
-version = "1.3.1"
+version = "1.6.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "filelock" },
-    { name = "platformdirs" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/48/60/e88788207d81e46362cfbef0d4aaf4c0f49efc3c12d4c3fa3f542c34ebec/python_discovery-1.3.1.tar.gz", hash = "sha256:62f6db28064c9613e7ca76cb3f00c38c839a07c31c00dfe7ed0986493d2150a6", size = 68011, upload-time = "2026-05-12T20:53:36.336Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f3/ee/cf608372c88ce2c136ee13c69ab6f667dbc0d0c1176af188b4ddc8853e66/python_discovery-1.6.4.tar.gz", hash = "sha256:bc70d31f0ec5de11eda13d4d64c16e24b3506a65984684f2b6c98cb83b2ea9df", size = 89883, upload-time = "2026-10-19T01:45:14.855Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b7/6f/a05a317a66fee0aad270011461f1a63a453ed12471249f172f7d2e2bc7b4/python_discovery-1.3.1-py3-none-any.whl", hash = "sha256:ed188687ebb3b82c01a17cd5ac62fc94d9f6487a7f1a0f9dfe89753fec91039c", size = 33185, upload-time = "2026-05-12T20:53:34.969Z" },
+    { url = "https://files.pythonhosted.org/packages/60/91/1aa70d3dfcab0dbcf88a2cbc3bce7f7c69562287a90216e617eaa4937e25/python_discovery-1.6.4-py3-none-any.whl", hash = "sha256:530179cc51a1816d512b15635b3dc931295ae12efb183783ad31190a5d425d2b", size = 39385, upload-time = "2026-10-19T01:45:13.668Z" },
 ]
 
 [[package]]
@@ -3888,12 +4070,21 @@ wheels = [
 ]
 
 [[package]]
-name = "pytz"
-version = "2026.2"
+name = "python-editor"
+version = "1.0.4"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ff/46/dd499ec9038423421951e4fad73051febaa13d2df82b4064f87af8b8c0c3/pytz-2026.2.tar.gz", hash = "sha256:0e60b47b29f21574376f218fe21abc009894a2321ea16c6754f3cad6eb7cdd6a", size = 320861, upload-time = "2026-05-04T01:35:29.667Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/0a/85/78f4a216d28343a67b7397c99825cff336330893f00601443f7c7b2f2234/python-editor-1.0.4.tar.gz", hash = "sha256:51fda6bcc5ddbbb7063b2af7509e43bd84bfc32a4ff71349ec7847713882327b", size = 7132, upload-time = "2019-02-01T07:33:13.653Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/ec/dd/96da98f892250475bdf2328112d7468abdd4acc7b902b6af23f4ed958ea0/pytz-2026.2-py2.py3-none-any.whl", hash = "sha256:04156e608bee23d3792fd45c94ae47fae1036688e75032eea2e3bf0323d1f126", size = 510141, upload-time = "2026-05-04T01:35:27.408Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/d3/201fc3abe391bbae6606e6f1d598c15d367033332bd54352b12f35513717/python_editor-1.0.4-py3-none-any.whl", hash = "sha256:1bf6e860a8ad52a14c3ee1252d5dc25b2030618ed80c022598f00176adc8367d", size = 4877, upload-time = "2019-02-01T07:33:12.47Z" },
+]
+
+[[package]]
+name = "pytz"
+version = "2020.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f4/f6/94fee50f4d54f58637d4b9987a1b862aeb6cd969e73623e02c5c00755577/pytz-2020.1.tar.gz", hash = "sha256:c35965d010ce31b23eeb663ed3cc8c906275d6be1a34393a1d73a41febf4a048", size = 311771, upload-time = "2020-04-28T08:28:24.561Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/a4/879454d49688e2fad93e59d7d4efda580b783c745fd2ec2a3adf87b0808d/pytz-2020.1-py2.py3-none-any.whl", hash = "sha256:a494d53b6d39c3c6e44c3bec237336e14305e4f29bbf800b599253057fbb79ed", size = 510223, upload-time = "2020-04-28T08:28:21.201Z" },
 ]
 
 [[package]]
@@ -3903,6 +4094,28 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/62/21/9daf8da2793d112a04b46ac33ab9046c91b0af8292cd93b3cfdd07ff7169/pyvers-0.2.3.tar.gz", hash = "sha256:c4b81c3a033963245e124cdecb052783c9c4cea3bb08c051833af1c44faa6283", size = 12347, upload-time = "2026-07-09T13:58:07.046Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2d/8d/63787e8feda59d981ebc953b6581ccab3c97cf7bfe0a6a407c07b50fc86c/pyvers-0.2.3-py3-none-any.whl", hash = "sha256:6f5b5612f2f4bd08caa49baa70fc5f875fc7da701a5385c13e244eea6b8114dd", size = 11757, upload-time = "2026-07-09T13:58:06.078Z" },
+]
+
+[[package]]
+name = "pywin32"
+version = "312"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1f/f5/10a6e845a00fc5e7afd0a988b744f403d4d57162a28d160a093c4d9322f0/pywin32-312-cp311-cp311-win32.whl", hash = "sha256:17948aeadbdb091f0ced6ef0841620794e68327b94ee415571c1203594b7215c", size = 6362659, upload-time = "2026-06-04T07:49:21.349Z" },
+    { url = "https://files.pythonhosted.org/packages/35/c4/dcd2d62b5944b6d5db53413a5899016ccd57ffcb7278f3f81655d25d2027/pywin32-312-cp311-cp311-win_amd64.whl", hash = "sha256:d11417d84412f859b722fad0841b3614459ed0047f7542d8362e77884f6b6e8a", size = 6928825, upload-time = "2026-06-04T07:49:23.934Z" },
+    { url = "https://files.pythonhosted.org/packages/b7/56/3cbb433fe4501cdba2eb9040f56a4e1a8243faa4186b25295564d1a7a79d/pywin32-312-cp311-cp311-win_arm64.whl", hash = "sha256:b2200a054ca6d6625c4842fc56a4976a4b47f96b73dbe5538c3f813a80359f47", size = 6721875, upload-time = "2026-06-04T07:49:26.416Z" },
+    { url = "https://files.pythonhosted.org/packages/83/ff/32aa7d2ed0ab12b323aaa64f9b75e6ad4f8fd09f9ccfc28c79414d46838d/pywin32-312-cp312-cp312-win32.whl", hash = "sha256:dab4f65ac9c4e48400a2a0530c46c3c579cd5905ecd11b80692373915269208b", size = 6371877, upload-time = "2026-06-04T07:49:28.836Z" },
+    { url = "https://files.pythonhosted.org/packages/03/d9/77040d3b43df3f3be32ea289433d660d2727f5ba327bc73be835127d9d60/pywin32-312-cp312-cp312-win_amd64.whl", hash = "sha256:b457f6d628a47e8a7346ce22acb7e1a46a4a78b52e1d17e1af56871bd19a93bc", size = 6914841, upload-time = "2026-06-04T07:49:31.85Z" },
+    { url = "https://files.pythonhosted.org/packages/e3/cc/7b1ec671775756020a0ee7f4feeaf3c568f0ab86bd3900088cf986937a92/pywin32-312-cp312-cp312-win_arm64.whl", hash = "sha256:6017c58e12f6809fbb0555b75df144c2922a9ffd18e4b9b5afa863b6c1a9d950", size = 6727901, upload-time = "2026-06-04T07:49:34.244Z" },
+    { url = "https://files.pythonhosted.org/packages/2d/41/12fbfd7f36ed2146d8bc9de96c2741296bf0d490b98508496cff322e274c/pywin32-312-cp313-cp313-win32.whl", hash = "sha256:7a27df850933d16a8eabfbaeb73d52b273e2da667f80d70b01a89d1f6828d02c", size = 6370184, upload-time = "2026-06-04T07:49:36.253Z" },
+    { url = "https://files.pythonhosted.org/packages/ba/db/36a78e3403099d31d9746d13fdcde5accc43c1155f375a34d15983a479a7/pywin32-312-cp313-cp313-win_amd64.whl", hash = "sha256:c53e878d15a1c44788082bfe712a905433473aa38f86375b7cf8b45e3acbaaf9", size = 6914298, upload-time = "2026-06-04T07:49:38.876Z" },
+    { url = "https://files.pythonhosted.org/packages/84/37/c1697194092b76de9ed47ca124323f02c57ffc8a45c06f88a3d5acaf01eb/pywin32-312-cp313-cp313-win_arm64.whl", hash = "sha256:59aba5d5940842075343a5ddc6b11f1cdf0d1567fe745290359dfbcc7c2eb831", size = 6727640, upload-time = "2026-06-04T07:49:41.083Z" },
+    { url = "https://files.pythonhosted.org/packages/fc/2b/1f3cded5822fd49c02f40544cbb5f58c7cfd6b1694869fd476cb6170ee97/pywin32-312-cp314-cp314-win32.whl", hash = "sha256:a77a90fbb6881238d2ca9c6fd797b25817f3768fe78d214a90137ff055a75f5b", size = 6468928, upload-time = "2026-06-04T07:49:43.188Z" },
+    { url = "https://files.pythonhosted.org/packages/21/82/3bf86d2e2808902013132e1ce905a7da0da53790f3836c64bf44d55e24f3/pywin32-312-cp314-cp314-win_amd64.whl", hash = "sha256:a4dd3a848290ef724347b19f301045831d8e802fa4464f491b98b1e0a081432e", size = 7024157, upload-time = "2026-06-04T07:49:45.34Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/0e/73f6d6800b4f27655abd9e9f6aaeaefcddb2b946e4674efa2bab184a7f7b/pywin32-312-cp314-cp314-win_arm64.whl", hash = "sha256:9fce94568364e0155e6dfb781ac5d95903be8baf28670632beab1b523f300daa", size = 6839598, upload-time = "2026-06-04T07:49:47.613Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/61/caa39686032d2ebdd04ff0ab5cbe163126c0066d98e00c9018646e42393b/pywin32-312-cp315-cp315-win32.whl", hash = "sha256:5c1fbe4a937a73ae9297384a3da38518cbc694c68ad8a809b2e19acd350f03ed", size = 6471159, upload-time = "2026-06-04T07:49:50.035Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/cd/7e1de64a4a6f69c04214169657ccab0d93a670ea50e35eb8f489d7378249/pywin32-312-cp315-cp315-win_amd64.whl", hash = "sha256:c2f03a0f73f804a13c2735b99392b0cd426bb4f2c4d0178e5ac966a0f21618d5", size = 7025293, upload-time = "2026-06-04T07:49:54.857Z" },
+    { url = "https://files.pythonhosted.org/packages/23/ed/4532e9388e65fa16b46776ef47ad631a64eda1631884488af707666350ed/pywin32-312-cp315-cp315-win_arm64.whl", hash = "sha256:a8597d28f267b39074aef51fa593530082b39cbe5a074226096857b1fed2dfb9", size = 6840337, upload-time = "2026-06-04T07:49:57.531Z" },
 ]
 
 [[package]]
@@ -3998,7 +4211,7 @@ source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "attrs" },
     { name = "rpds-py" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/22/f5/df4e9027acead3ecc63e50fe1e36aca1523e1719559c499951bb4b53188f/referencing-0.37.0.tar.gz", hash = "sha256:44aefc3142c5b842538163acb373e24cce6632bd54bdb01b21ad5863489f50d8", size = 78036, upload-time = "2025-10-13T15:30:48.871Z" }
 wheels = [
@@ -4021,12 +4234,16 @@ wheels = [
 ]
 
 [[package]]
-name = "restrictedpython"
-version = "8.3"
+name = "requests-oauthlib"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/01/dc/19d6b8541f638b90411408a5f755e04da79c9df1651601465fb66a82fe5d/restrictedpython-8.3.tar.gz", hash = "sha256:9f31663ff2b86d9112bd7af4cd0601f12ef619c4f6ad162a1c9f9f186341337a", size = 449827, upload-time = "2026-06-16T10:05:20.243Z" }
+dependencies = [
+    { name = "oauthlib" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/42/f2/05f29bc3913aea15eb670be136045bf5c5bbf4b99ecb839da9b422bb2c85/requests-oauthlib-2.0.0.tar.gz", hash = "sha256:b3dffaebd884d8cd778494369603a9e7b58d29111bf6b41bdc2dcd87203af4e9", size = 55650, upload-time = "2024-03-22T20:32:29.939Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fc/26/059538503370f82ffce8a4a1307c5c0a28134a7c27a6c88bdca83b743833/restrictedpython-8.3-py3-none-any.whl", hash = "sha256:de36a9b27ad4490a368984984751179e5fc28e2b49540dc348878e5c0e79d737", size = 27385, upload-time = "2026-06-16T10:05:18.508Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/5d/63d4ae3b9daea098d5d6f5da83984853c1bbacd5dc826764b249fe119d24/requests_oauthlib-2.0.0-py2.py3-none-any.whl", hash = "sha256:7dd8a5c40426b779b0868c404bdef9768deccf22749cde15852df527e6269b36", size = 24179, upload-time = "2024-03-22T20:32:28.055Z" },
 ]
 
 [[package]]
@@ -4056,47 +4273,47 @@ resolution-markers = [
     "python_full_version >= '3.14' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version < '3.12' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version < '3.12' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version < '3.12' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version < '3.12' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version == '3.13.*' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version == '3.12.*' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version < '3.12' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version < '3.12' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
     "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
-    "python_full_version >= '3.14' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.13.*' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
-    "python_full_version == '3.12.*' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
     "python_full_version < '3.12' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
 ]
 dependencies = [
-    { name = "markdown-it-py", marker = "python_full_version >= '3.14' or extra == 'extra-13-jax-baselines-all' or extra != 'extra-13-jax-baselines-mjlab' or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-    { name = "pygments", marker = "python_full_version >= '3.14' or extra == 'extra-13-jax-baselines-all' or extra != 'extra-13-jax-baselines-mjlab' or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "markdown-it-py", marker = "python_full_version >= '3.14' or extra == 'extra-13-jax-baselines-all' or extra != 'extra-13-jax-baselines-mjlab' or extra == 'extra-13-jax-baselines-other'" },
+    { name = "pygments", marker = "python_full_version >= '3.14' or extra == 'extra-13-jax-baselines-all' or extra != 'extra-13-jax-baselines-mjlab' or extra == 'extra-13-jax-baselines-other'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c0/8f/0722ca900cc807c13a6a0c696dacf35430f72e0ec571c4275d2371fca3e9/rich-15.0.0.tar.gz", hash = "sha256:edd07a4824c6b40189fb7ac9bc4c52536e9780fbbfbddf6f1e2502c31b068c36", size = 230680, upload-time = "2026-04-12T08:24:00.75Z" }
 wheels = [
@@ -4212,6 +4429,18 @@ wheels = [
 ]
 
 [[package]]
+name = "rsa"
+version = "4.9.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyasn1" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/da/8a/22b7beea3ee0d44b1916c0c1cb0ee3af23b700b6da9f04991899d0c555d4/rsa-4.9.1.tar.gz", hash = "sha256:e7bdbfdb5497da4c07dfd35530e1a902659db6ff241e39d9953cad06ebd0ae75", size = 29034, upload-time = "2025-04-16T09:51:18.218Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/64/8d/0133e4eb4beed9e425d9a98ed6e081a55d195481b7632472be1af08d2f6b/rsa-4.9.1-py3-none-any.whl", hash = "sha256:68635866661c6836b8d39430f97a996acbd61bfa49406748ea243539fe239762", size = 34696, upload-time = "2025-04-16T09:51:17.142Z" },
+]
+
+[[package]]
 name = "rsl-rl-lib"
 version = "5.4.2"
 source = { registry = "https://pypi.org/simple" }
@@ -4220,7 +4449,7 @@ dependencies = [
     { name = "numpy", marker = "python_full_version < '3.14'" },
     { name = "onnx", marker = "python_full_version < '3.14'" },
     { name = "onnxscript", marker = "python_full_version < '3.14'" },
-    { name = "tensorboard", marker = "python_full_version < '3.14'" },
+    { name = "tensorboard", version = "2.20.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.14'" },
     { name = "tensordict", marker = "python_full_version < '3.14'" },
     { name = "torch", marker = "python_full_version < '3.14'" },
     { name = "torchvision", marker = "python_full_version < '3.14'" },
@@ -4228,18 +4457,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/cc/a6/11460213f75318253ae20d792802faa0c3cfe2b49e29ec785e590cd81eaa/rsl_rl_lib-5.4.2.tar.gz", hash = "sha256:688e881db7f7af06d12e5498fd6f0c41b0e2f858dc0667f5fd68219c86b9667d", size = 66011, upload-time = "2026-07-15T09:45:34.847Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/48/fa/7f4da9b79f98c1f6d899b80723da8ede4c408a30f5a832ce8e94f92c1052/rsl_rl_lib-5.4.2-py3-none-any.whl", hash = "sha256:8fe07f6746df351f23467e0825e17e776835cb172d7e3fdf806120774bab61a3", size = 92923, upload-time = "2026-07-15T09:45:33.579Z" },
-]
-
-[[package]]
-name = "s3transfer"
-version = "0.18.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "botocore" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e0/1f/12417f7f493fc45e1f9fd5d4a9b6c125cf8d2cf3f8ddbdfab3e76406e9d6/s3transfer-0.18.0.tar.gz", hash = "sha256:3760b8b7ec1315da54048b2d626276732bee4300d054d492d4e1d43e20d4ecbd", size = 160560, upload-time = "2026-05-28T19:39:09.124Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2b/58/a58fc997655386daa2e25784e30c288aa3e3819e401f77029ee4899fb55a/s3transfer-0.18.0-py3-none-any.whl", hash = "sha256:239c13b09e65ad0346e1be7348b8a202dcad44ac7ea7c6eb858fc881dce739b6", size = 88572, upload-time = "2026-05-28T19:39:07.999Z" },
 ]
 
 [[package]]
@@ -4433,51 +4650,12 @@ wheels = [
 
 [[package]]
 name = "sqlalchemy"
-version = "2.0.51"
+version = "1.4.13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "greenlet", marker = "platform_machine == 'AMD64' or platform_machine == 'WIN32' or platform_machine == 'aarch64' or platform_machine == 'amd64' or platform_machine == 'ppc64le' or platform_machine == 'win32' or platform_machine == 'x86_64' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-    { name = "typing-extensions" },
+    { name = "greenlet" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/02/f1/a7a892f18d4d224e6b26f706531eafccc41e37594d37d304786969ee13cb/sqlalchemy-2.0.51.tar.gz", hash = "sha256:804dccd8a4a6242c4e30ad961e540e18a588f6527202f2d6791b01845d59fdc9", size = 9912201, upload-time = "2026-06-15T15:41:20.012Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/3a/69/a67c69e5f28fc9c99d6f7bd60bd50e91f2fed2423e3b30fb228fa00e51f3/sqlalchemy-2.0.51-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:1aa10c0daee6705294d181daadaa793221e1a59ed55000a3fab1d42b088ce4ba", size = 2161838, upload-time = "2026-06-15T16:05:17.144Z" },
-    { url = "https://files.pythonhosted.org/packages/9a/a4/c8c22b8438bddc0a030157c6ec0f6ef97b3c38effa444bdab2a27af04090/sqlalchemy-2.0.51-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:a5b2ed6d828f1f09bd812861f4f59ca3bc3803f9df871f4555187f0faf018604", size = 3319402, upload-time = "2026-06-15T16:10:40.002Z" },
-    { url = "https://files.pythonhosted.org/packages/90/54/44012d32fd77d991256d2ff793ba3807c51d40cb27a85b4796224f6744df/sqlalchemy-2.0.51-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:436728ce18a80f6951a1e11cc6112c2ede9faf20766f1a26195a7c441ca12dbd", size = 3319675, upload-time = "2026-06-15T16:12:25.658Z" },
-    { url = "https://files.pythonhosted.org/packages/29/a5/de0592acaf5906cd7430874392d6f7e8b4a7c8437610953ee2d1501c0b44/sqlalchemy-2.0.51-cp311-cp311-musllinux_1_2_aarch64.whl", hash = "sha256:dc261707bf5739aea8a541593f3cc1d463c2701fb05fbcbba0ce031b69a21260", size = 3270777, upload-time = "2026-06-15T16:10:42.125Z" },
-    { url = "https://files.pythonhosted.org/packages/cb/14/a44c90739c780b362238e4ac3cb19dd0ca40d13e6ddc5daa112166ddab4f/sqlalchemy-2.0.51-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:a6d26094615306d116dd5e4a51b0304c99dd2356fc569eed6922a80a6bd3b265", size = 3293940, upload-time = "2026-06-15T16:12:27.156Z" },
-    { url = "https://files.pythonhosted.org/packages/65/eb/fbd0f206a330e66f8c602a99c37c4e731f107faed62954b41b01f16dd9d9/sqlalchemy-2.0.51-cp311-cp311-win32.whl", hash = "sha256:ca8435d13829b92f4a97362d91975154a4015db3a2634154e1754e9a915e6b86", size = 2121183, upload-time = "2026-06-15T16:13:29.905Z" },
-    { url = "https://files.pythonhosted.org/packages/ad/fd/005bf80f3cf6e5c62b5dd68616280f51cd012c60840fa74781b3ed7b1623/sqlalchemy-2.0.51-cp311-cp311-win_amd64.whl", hash = "sha256:4a011ea4510683319ce4ed274b56ee05194b39b6da9d09ca7a39388f0fa84dcc", size = 2145796, upload-time = "2026-06-15T16:13:31.283Z" },
-    { url = "https://files.pythonhosted.org/packages/d5/70/e868bc5412acd101a8280f25c95f10eeae0771c4eb806b02491142810ee8/sqlalchemy-2.0.51-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:7d78702b26ba1c18b2d0fb2ea940ba7f17a9581b42e8361ff93920ebbee1235a", size = 2160291, upload-time = "2026-06-15T16:08:48.918Z" },
-    { url = "https://files.pythonhosted.org/packages/e5/1c/71ee0f8a6b9d7316a1ccd30430b4c62b6c2e36adc96017a4e3a72dce49d6/sqlalchemy-2.0.51-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:581921d849d6e6f994d560389192955e80e2950e18fcdfe2ccea863e01158e6e", size = 3343835, upload-time = "2026-06-15T16:19:42.613Z" },
-    { url = "https://files.pythonhosted.org/packages/2b/7c/7ab9f9aadc5944fdd06612484ed7918fe376ad871a5f50404dc1536e0194/sqlalchemy-2.0.51-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:1d21ce524ab86c23046e992a5b81cb54c21079c6df6e78b8fc77d77cac70a6b9", size = 3358470, upload-time = "2026-06-15T16:26:38.011Z" },
-    { url = "https://files.pythonhosted.org/packages/d0/7d/ff77169fee6186de145a7f2b87006c39638391130abbab2b1f63ac6ea583/sqlalchemy-2.0.51-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:c5d98a2709840027f5a347c3af0a7c3d5f6c1ff93af2ca1c54494e23cba8f389", size = 3289874, upload-time = "2026-06-15T16:19:45.212Z" },
-    { url = "https://files.pythonhosted.org/packages/6f/3b/6c505903710d781b55bc3141ee34a062bf9745a6b5bc7333305b9ed63b33/sqlalchemy-2.0.51-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:1181256e0f16479691b5616d36375dc2620ad8332b25978763c3d206ad3f3f1d", size = 3321692, upload-time = "2026-06-15T16:26:39.747Z" },
-    { url = "https://files.pythonhosted.org/packages/3c/b7/c5ffe50aa2f4d947c9250e1519d939260329a07fe6272edfccd784b3d007/sqlalchemy-2.0.51-cp312-cp312-win32.whl", hash = "sha256:9f380393be5abeb6815f68fd39271b95127173511b6706b0a630a9995d53f8f5", size = 2119674, upload-time = "2026-06-15T16:23:09.543Z" },
-    { url = "https://files.pythonhosted.org/packages/25/dc/46a65916af68a06ef6b972c6050ba4c8f97070fe3fb33097d34229d9bef6/sqlalchemy-2.0.51-cp312-cp312-win_amd64.whl", hash = "sha256:2cf39aabdf48e87c1c2c2ed6d20d33ffa0733b3071ce9c5f66357947dd009080", size = 2146670, upload-time = "2026-06-15T16:23:11.048Z" },
-    { url = "https://files.pythonhosted.org/packages/54/fe/a210d52fd1a90ecfae8a78e9d8b27e18d733d60818a8bf250ff690b75120/sqlalchemy-2.0.51-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:7c2056838b6685b72fdb36c99996cf862753461a62f2e84f4196371d3b2d6a07", size = 2157184, upload-time = "2026-06-15T16:08:50.374Z" },
-    { url = "https://files.pythonhosted.org/packages/17/6b/2dce8369b199cb855110e056032f94a9f66dacc2237d3d39c115a86eac56/sqlalchemy-2.0.51-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:483b11bd46bf35fc14c52faf338b04300c9e6ce554bce9b11be85bfec3bc3195", size = 3284735, upload-time = "2026-06-15T16:19:46.934Z" },
-    { url = "https://files.pythonhosted.org/packages/53/ff/dbc495b8a14da840faffb353857a72d4190113cac33727906fb997047f0f/sqlalchemy-2.0.51-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:1bed1ee8b01da6088210aa9412023326fb98a599ba502e6118308601dcbef77f", size = 3302756, upload-time = "2026-06-15T16:26:41.336Z" },
-    { url = "https://files.pythonhosted.org/packages/cf/d5/fde8f4dddcf518ee15ab35a7c6a28acc32c8ba548d1d2aa451f96e6dbb0b/sqlalchemy-2.0.51-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:72ca54c952107ba5cd58854b67a5a6268631289d21651a1235396f3b98b47400", size = 3232055, upload-time = "2026-06-15T16:19:49.286Z" },
-    { url = "https://files.pythonhosted.org/packages/67/d1/43d3a0ac955a58601c24fa23038b1c55ee3a1ec02c0f96ebb1eae2bcf614/sqlalchemy-2.0.51-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:b3e693d15533a45cd5906f0589f9c35090bef6ef45bf1e8195c424aa0ae06a8d", size = 3269850, upload-time = "2026-06-15T16:26:43.017Z" },
-    { url = "https://files.pythonhosted.org/packages/94/df/de669c7054cd47c4439ac34b1b2ee8b804a794791fbb10720e997a2c87c7/sqlalchemy-2.0.51-cp313-cp313-win32.whl", hash = "sha256:b93ab07b5292dbe7e6b8da89475275e7042744283921344b56105f3eeb0f828b", size = 2117721, upload-time = "2026-06-15T16:23:12.36Z" },
-    { url = "https://files.pythonhosted.org/packages/d0/8a/403c51d064196bae20a0bc2476577f83a3f8dd299719a97417086b7f2ec5/sqlalchemy-2.0.51-cp313-cp313-win_amd64.whl", hash = "sha256:0f053118c30e53161857a953e4de667d90e274980dccbe5dd3829bbbeece72a5", size = 2143615, upload-time = "2026-06-15T16:23:13.906Z" },
-    { url = "https://files.pythonhosted.org/packages/b1/49/a739be2e1d02a96a658eb71ab45d921c874249252358ad24a5bffdd02525/sqlalchemy-2.0.51-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:6ea306caaae6bd5afd0a46050003c88f6bf33227377a49298c498c3cb88ff491", size = 2158999, upload-time = "2026-06-15T16:08:51.759Z" },
-    { url = "https://files.pythonhosted.org/packages/23/6b/2e0e38cf75c8780eca78d9b2e78164f8bcfd70125e5caa588ff5cbb9c9f4/sqlalchemy-2.0.51-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:c45a496d6bc05dec41dcd4c3a2b183723f47473255c159cd80b503c8f246424d", size = 3282539, upload-time = "2026-06-15T16:19:51.065Z" },
-    { url = "https://files.pythonhosted.org/packages/dd/a1/e77854cb5336fd37dc3c6ae3b71de242c98caac5725120be0b526b31cbd0/sqlalchemy-2.0.51-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:4004ada0aafe8ae1991b2cd1d99c6d9146126e123bd6f883c260d974aa012e54", size = 3287545, upload-time = "2026-06-15T16:26:44.735Z" },
-    { url = "https://files.pythonhosted.org/packages/f6/ab/9e17272fd4dac8df3b83c4fbe52b998a1c9d89a843c8c35ff29b74ff7364/sqlalchemy-2.0.51-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:0f6bcad487aee1c638d707235682fc96f741de00663619881ab235400d03289e", size = 3230929, upload-time = "2026-06-15T16:19:52.625Z" },
-    { url = "https://files.pythonhosted.org/packages/02/3c/52f408ea701781caee975606beccc48845f2aee8711ac29843d612c0306c/sqlalchemy-2.0.51-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:39a76529db6305693d8d4affa58ad5b5e2e18edd62daea628b29b97930b3513d", size = 3252888, upload-time = "2026-06-15T16:26:46.454Z" },
-    { url = "https://files.pythonhosted.org/packages/24/16/3efd2ee6bc4ca4693a30a1dd17a91b606cae15d517d2a4746611d9b73ce8/sqlalchemy-2.0.51-cp314-cp314-win32.whl", hash = "sha256:08a204d8b5638717c26a24df18fcf40af45a6b22e35b70b1d62f0113c2e278e8", size = 2120551, upload-time = "2026-06-15T16:23:15.629Z" },
-    { url = "https://files.pythonhosted.org/packages/7b/78/55b12e70f45bccc40d9e483925c065027b3b98ea4cbbdf6f8c2546feaf6c/sqlalchemy-2.0.51-cp314-cp314-win_amd64.whl", hash = "sha256:96747bfbadb055466e5b46d572618170046b45ce5a4879167f50d70a5319a499", size = 2146318, upload-time = "2026-06-15T16:23:17.108Z" },
-    { url = "https://files.pythonhosted.org/packages/21/db/a9574ed40fed418924b1b1a3e54f47ee3963053b3d3d325a0d36b41f2c08/sqlalchemy-2.0.51-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:e5ea1a213be1fcd5e49d9904c3b9939211ded90bc2a64e93f4c01963474285de", size = 2178920, upload-time = "2026-06-15T15:59:56.285Z" },
-    { url = "https://files.pythonhosted.org/packages/bf/90/a1bb5c7cbba76b7bc1fbd586d0a5479a7bc9c27b4a8298f22ec9423b2bb3/sqlalchemy-2.0.51-cp314-cp314t-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:7c6b36ed71f41942bdcd2ad2522be46bfce09d5705be5640ecf19bbc7660e4b7", size = 3566534, upload-time = "2026-06-15T15:58:35.024Z" },
-    { url = "https://files.pythonhosted.org/packages/15/4b/481f1fed30e0e9e8dd24aecbb49f29eb57fe7657ece5cf06ee9b84bb97d8/sqlalchemy-2.0.51-cp314-cp314t-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:0c2c62877097e1a0db401fba5cb4debee33265e5b2a55c4ccb489c02c53b4f72", size = 3535844, upload-time = "2026-06-15T16:02:43.973Z" },
-    { url = "https://files.pythonhosted.org/packages/02/71/0aa64aeda645510af0a43f7d9ee70932f0d1dc4263aed34c50ee891d9df3/sqlalchemy-2.0.51-cp314-cp314t-musllinux_1_2_aarch64.whl", hash = "sha256:0378d055e9e8cd6ce4d8dff683bdd3d7d413533c4ee51d67a2b1e0f9eacc0f23", size = 3475355, upload-time = "2026-06-15T15:58:36.592Z" },
-    { url = "https://files.pythonhosted.org/packages/05/db/6061db32316446135a3abae5f308d144ab988a34234726042da3e58b1c63/sqlalchemy-2.0.51-cp314-cp314t-musllinux_1_2_x86_64.whl", hash = "sha256:6e46fc36029eff666391e0531e5387b62ce6c4f1d8e50b3fb3099eaca1b42522", size = 3486591, upload-time = "2026-06-15T16:02:45.346Z" },
-    { url = "https://files.pythonhosted.org/packages/0d/c9/f14fdf71bb8957e0c7e39db69bbdf12b5c80f4ef775fdfa127bf4e0d6760/sqlalchemy-2.0.51-cp314-cp314t-win32.whl", hash = "sha256:9161cfc9efce70d1715f47d6ff40f79c6778c00d53be4fbc09d70301e4b83ba7", size = 2151313, upload-time = "2026-06-15T16:03:39.127Z" },
-    { url = "https://files.pythonhosted.org/packages/6a/c6/673e618e6f4f297e126d9b56ea2f6478708f6c1af4e3223835c22e2c3697/sqlalchemy-2.0.51-cp314-cp314t-win_amd64.whl", hash = "sha256:159bb6ba32059f57ad7375a8f50d844dd2f19d14954ecf820cd33e20debd46b2", size = 2186280, upload-time = "2026-06-15T16:03:40.569Z" },
-    { url = "https://files.pythonhosted.org/packages/e2/22/dbf013a12ec759e54a34a119e9e217435b3f71b2dd5c61a7ade0a25dae87/sqlalchemy-2.0.51-py3-none-any.whl", hash = "sha256:bb024d8b621d0be75f4f44ecc7c950450026e76d66dc8f791bb5331d7fed59d5", size = 1944334, upload-time = "2026-06-15T16:09:22.418Z" },
-]
+sdist = { url = "https://files.pythonhosted.org/packages/24/5f/b65c7a8216ee84a2f3a42db8876ee0fa4925529cde4c7f4bb4a60e106e6d/SQLAlchemy-1.4.13.tar.gz", hash = "sha256:1d8a71c2bf21437d6216ba1963507d4d1a37920429eafd09d85387d0d078fa5a", size = 7589942, upload-time = "2021-05-03T19:32:32.219Z" }
 
 [[package]]
 name = "stack-data"
@@ -4491,19 +4669,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/28/e3/55dcc2cfbc3ca9c29519eb6884dd1415ecb53b0e934862d3559ddcb7e20b/stack_data-0.6.3.tar.gz", hash = "sha256:836a778de4fec4dcd1dcd89ed8abff8a221f58308462e1c4aa2a3cf30148f0b9", size = 44707, upload-time = "2023-09-30T13:58:05.479Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f1/7b/ce1eafaf1a76852e2ec9b22edecf1daa58175c090266e9f6c64afcd81d91/stack_data-0.6.3-py3-none-any.whl", hash = "sha256:d5558e0c25a4cb0853cddad3d77da9891a08cb85dd9f9f91b9f8cd66e511e695", size = 24521, upload-time = "2023-09-30T13:58:03.53Z" },
-]
-
-[[package]]
-name = "starlette"
-version = "1.3.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/eb/e3/7c1dc7381d9f8ab7d854328ebfa884e62cb3f3d8549ddfd37c7814f42afa/starlette-1.3.1.tar.gz", hash = "sha256:05d0213193f2fbaae60e2ecb593b4add4262ad4e46536b54abe36f11a71724e0", size = 2703240, upload-time = "2026-06-12T09:23:11.602Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/ec/bb/2799cc2ede3ed41131f8975621e7213dfc7ef4acbbaadfa440f32500c370/starlette-1.3.1-py3-none-any.whl", hash = "sha256:c7372aae11c3c3f26a42df7bd626cec2f47d03483d261d369516a615a53714c6", size = 73632, upload-time = "2026-06-12T09:23:10.017Z" },
 ]
 
 [[package]]
@@ -4554,8 +4719,79 @@ wheels = [
 
 [[package]]
 name = "tensorboard"
+version = "2.3.0"
+source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version >= '3.14' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version >= '3.14' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+]
+dependencies = [
+    { name = "absl-py" },
+    { name = "google-auth" },
+    { name = "google-auth-oauthlib" },
+    { name = "grpcio" },
+    { name = "markdown" },
+    { name = "numpy" },
+    { name = "protobuf" },
+    { name = "requests" },
+    { name = "setuptools" },
+    { name = "six" },
+    { name = "tensorboard-plugin-wit" },
+    { name = "werkzeug" },
+    { name = "wheel" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e9/1b/6a420d7e6ba431cf3d51b2a5bfa06a958c4141e3189385963dc7f6fbffb6/tensorboard-2.3.0-py3-none-any.whl", hash = "sha256:d34609ed83ff01dd5b49ef81031cfc9c166bba0dabd60197024f14df5e8eae5e", size = 6789437, upload-time = "2020-07-21T23:19:33.689Z" },
+]
+
+[[package]]
+name = "tensorboard"
 version = "2.20.0"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "python_full_version == '3.13.*' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.13.*' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version == '3.12.*' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and extra != 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra == 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform == 'emscripten' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and sys_platform != 'emscripten' and sys_platform != 'win32' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other'",
+    "python_full_version < '3.12' and extra != 'extra-13-jax-baselines-all' and extra != 'extra-13-jax-baselines-mjlab' and extra != 'extra-13-jax-baselines-other'",
+]
 dependencies = [
     { name = "absl-py" },
     { name = "grpcio" },
@@ -4581,6 +4817,14 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/7a/13/e503968fefabd4c6b2650af21e110aa8466fe21432cd7c43a84577a89438/tensorboard_data_server-0.7.2-py3-none-any.whl", hash = "sha256:7e0610d205889588983836ec05dc098e80f97b7e7bbff7e994ebb78f578d0ddb", size = 2356, upload-time = "2023-10-23T21:23:32.16Z" },
     { url = "https://files.pythonhosted.org/packages/b7/85/dabeaf902892922777492e1d253bb7e1264cadce3cea932f7ff599e53fea/tensorboard_data_server-0.7.2-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:9fe5d24221b29625dbc7328b0436ca7fc1c23de4acf4d272f1180856e32f9f60", size = 4823598, upload-time = "2023-10-23T21:23:33.714Z" },
     { url = "https://files.pythonhosted.org/packages/73/c6/825dab04195756cf8ff2e12698f22513b3db2f64925bdd41671bfb33aaa5/tensorboard_data_server-0.7.2-py3-none-manylinux_2_31_x86_64.whl", hash = "sha256:ef687163c24185ae9754ed5650eb5bc4d84ff257aabdc33f0cc6f74d8ba54530", size = 6590363, upload-time = "2023-10-23T21:23:35.583Z" },
+]
+
+[[package]]
+name = "tensorboard-plugin-wit"
+version = "1.8.1"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e0/68/e8ecfac5dd594b676c23a7f07ea34c197d7d69b3313afdf8ac1b0a9905a2/tensorboard_plugin_wit-1.8.1-py3-none-any.whl", hash = "sha256:ff26bdd583d155aa951ee3b152b3d0cffae8005dc697f72b44a8e8c2a77a8cbe", size = 781327, upload-time = "2022-01-05T20:29:51.358Z" },
 ]
 
 [[package]]
@@ -4684,7 +4928,7 @@ version = "2.14.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cuda-bindings", marker = "python_full_version < '3.14' and sys_platform == 'linux'" },
-    { name = "cuda-toolkit", extra = ["cublas", "cudart", "cufft", "cufile", "cupti", "curand", "cusolver", "cusparse", "nvjitlink", "nvrtc", "nvtx"], marker = "(python_full_version < '3.14' and sys_platform == 'linux' and extra == 'extra-13-jax-baselines-mjlab') or (python_full_version >= '3.14' and extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (python_full_version >= '3.14' and extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other') or (sys_platform != 'linux' and extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (sys_platform != 'linux' and extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "cuda-toolkit", extra = ["cublas", "cudart", "cufft", "cufile", "cupti", "curand", "cusolver", "cusparse", "nvjitlink", "nvrtc", "nvtx"], marker = "(python_full_version < '3.14' and sys_platform == 'linux' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
     { name = "filelock", marker = "python_full_version < '3.14'" },
     { name = "fsspec", marker = "python_full_version < '3.14'" },
     { name = "jinja2", marker = "python_full_version < '3.14'" },
@@ -4773,7 +5017,7 @@ name = "tqdm"
 version = "4.67.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-13-jax-baselines-all' and extra == 'extra-13-jax-baselines-mjlab') or (extra == 'extra-13-jax-baselines-mjlab' and extra == 'extra-13-jax-baselines-other')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/09/a9/6ba95a270c6f1fbcd8dac228323f2777d886cb206987444e4bce66338dd4/tqdm-4.67.3.tar.gz", hash = "sha256:7d825f03f89244ef73f1d4ce193cb1774a8179fd96f31d7e1dcde62092b960bb", size = 169598, upload-time = "2026-02-03T17:35:53.048Z" }
 wheels = [
@@ -4905,19 +5149,6 @@ wheels = [
 ]
 
 [[package]]
-name = "uvicorn"
-version = "0.49.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "click" },
-    { name = "h11" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c4/1f/fa18009dea8469069cca78a4e877a008ab78f08b064bfc9ab891579077ff/uvicorn-0.49.0.tar.gz", hash = "sha256:ebf4271aa580d9de97f93192d4595176df6e91f9aae919ca73e4fc07df1e66a3", size = 91284, upload-time = "2026-06-03T22:01:30.448Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/88/fa/e1388bbcf24ef3274f45c0c1c7b501fd14971037c1b6ee23610553307497/uvicorn-0.49.0-py3-none-any.whl", hash = "sha256:ba3d14c3ee7e41c6c654c46c9eb489d33213cdd30aa1696eab1374337c13f68f", size = 71376, upload-time = "2026-06-03T22:01:29.037Z" },
-]
-
-[[package]]
 name = "uvloop"
 version = "0.22.1"
 source = { registry = "https://pypi.org/simple" }
@@ -4957,17 +5188,18 @@ wheels = [
 
 [[package]]
 name = "virtualenv"
-version = "21.3.3"
+version = "21.14.13"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "distlib" },
     { name = "filelock" },
+    { name = "packaging" },
     { name = "platformdirs" },
     { name = "python-discovery" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/15/ba/1f6e8c957e4932be060dcdc482d339c12e0216351478add3645cdaa53c05/virtualenv-21.3.3.tar.gz", hash = "sha256:f5bda277e553b1c2b3c1a8debfc30496e1288cc93ce6b7b71b3280047e317328", size = 7613784, upload-time = "2026-05-13T18:01:30.19Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/70/aa/bff50daee0488e16d611258a9b6c5a1d0c9e128f8ca424e9f4e1c0444ef2/virtualenv-21.14.13.tar.gz", hash = "sha256:de5307ba4b9a0001d9c8ea02832d38f63ca432880f416c1bface61c4323fd905", size = 5570301, upload-time = "2026-10-22T20:10:16.952Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f4/34/a9dbe051de88a63eb7408ea66630bac38e72f7f6077d4be58737106860d9/virtualenv-21.3.3-py3-none-any.whl", hash = "sha256:7d5987d8369e098e41406efb780a3d4ca79280097293899e351a6407ee153ab3", size = 7594554, upload-time = "2026-05-13T18:01:27.815Z" },
+    { url = "https://files.pythonhosted.org/packages/bb/a9/c10d8a44a29fb94a18b43fdf11f38caca53ae7c9406f11a72b1cb8f624f1/virtualenv-21.14.13-py3-none-any.whl", hash = "sha256:5fbb04138a4861580b78ba9110d529a26bc48fcc93c8ec36bc0202eeed96a788", size = 5557094, upload-time = "2026-10-22T20:10:15.096Z" },
 ]
 
 [[package]]
@@ -5032,33 +5264,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/a8/ba/36023c3161c45f1c509c20c501b17980705fdd3b6c20b7ee9267f50f44a2/warp_lang-1.15.0-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:95c169f28bd7d6c78ac4ad62e2df1e61a096033748f757157fa4551aed80d010", size = 166711381, upload-time = "2026-07-07T22:26:56.524Z" },
     { url = "https://files.pythonhosted.org/packages/04/24/2c06013209ad4edb1f9e52692d43738b4945fceaa6acc30f34e2d25fc087/warp_lang-1.15.0-py3-none-manylinux_2_34_aarch64.whl", hash = "sha256:3c0711b39ad98ff924d29654b028ec4eaa02330e207ae3efc72445e9cde05b34", size = 171756145, upload-time = "2026-07-07T22:28:07.427Z" },
     { url = "https://files.pythonhosted.org/packages/c5/00/4de2563f88c882e6621349654cee770ce5ae86c8113b63c09bd8aa3e5274/warp_lang-1.15.0-py3-none-win_amd64.whl", hash = "sha256:06ef42c3ce522749268056653ea253645eb4a96ca164af74ae5113f0d55a6970", size = 149948459, upload-time = "2026-07-07T22:28:32.767Z" },
-]
-
-[[package]]
-name = "watchdog"
-version = "6.0.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/db/7d/7f3d619e951c88ed75c6037b246ddcf2d322812ee8ea189be89511721d54/watchdog-6.0.0.tar.gz", hash = "sha256:9ddf7c82fda3ae8e24decda1338ede66e1c99883db93711d8fb941eaa2d8c282", size = 131220, upload-time = "2024-11-01T14:07:13.037Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/e0/24/d9be5cd6642a6aa68352ded4b4b10fb0d7889cb7f45814fb92cecd35f101/watchdog-6.0.0-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:6eb11feb5a0d452ee41f824e271ca311a09e250441c262ca2fd7ebcf2461a06c", size = 96393, upload-time = "2024-11-01T14:06:31.756Z" },
-    { url = "https://files.pythonhosted.org/packages/63/7a/6013b0d8dbc56adca7fdd4f0beed381c59f6752341b12fa0886fa7afc78b/watchdog-6.0.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:ef810fbf7b781a5a593894e4f439773830bdecb885e6880d957d5b9382a960d2", size = 88392, upload-time = "2024-11-01T14:06:32.99Z" },
-    { url = "https://files.pythonhosted.org/packages/d1/40/b75381494851556de56281e053700e46bff5b37bf4c7267e858640af5a7f/watchdog-6.0.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:afd0fe1b2270917c5e23c2a65ce50c2a4abb63daafb0d419fde368e272a76b7c", size = 89019, upload-time = "2024-11-01T14:06:34.963Z" },
-    { url = "https://files.pythonhosted.org/packages/39/ea/3930d07dafc9e286ed356a679aa02d777c06e9bfd1164fa7c19c288a5483/watchdog-6.0.0-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:bdd4e6f14b8b18c334febb9c4425a878a2ac20efd1e0b231978e7b150f92a948", size = 96471, upload-time = "2024-11-01T14:06:37.745Z" },
-    { url = "https://files.pythonhosted.org/packages/12/87/48361531f70b1f87928b045df868a9fd4e253d9ae087fa4cf3f7113be363/watchdog-6.0.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:c7c15dda13c4eb00d6fb6fc508b3c0ed88b9d5d374056b239c4ad1611125c860", size = 88449, upload-time = "2024-11-01T14:06:39.748Z" },
-    { url = "https://files.pythonhosted.org/packages/5b/7e/8f322f5e600812e6f9a31b75d242631068ca8f4ef0582dd3ae6e72daecc8/watchdog-6.0.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:6f10cb2d5902447c7d0da897e2c6768bca89174d0c6e1e30abec5421af97a5b0", size = 89054, upload-time = "2024-11-01T14:06:41.009Z" },
-    { url = "https://files.pythonhosted.org/packages/68/98/b0345cabdce2041a01293ba483333582891a3bd5769b08eceb0d406056ef/watchdog-6.0.0-cp313-cp313-macosx_10_13_universal2.whl", hash = "sha256:490ab2ef84f11129844c23fb14ecf30ef3d8a6abafd3754a6f75ca1e6654136c", size = 96480, upload-time = "2024-11-01T14:06:42.952Z" },
-    { url = "https://files.pythonhosted.org/packages/85/83/cdf13902c626b28eedef7ec4f10745c52aad8a8fe7eb04ed7b1f111ca20e/watchdog-6.0.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:76aae96b00ae814b181bb25b1b98076d5fc84e8a53cd8885a318b42b6d3a5134", size = 88451, upload-time = "2024-11-01T14:06:45.084Z" },
-    { url = "https://files.pythonhosted.org/packages/fe/c4/225c87bae08c8b9ec99030cd48ae9c4eca050a59bf5c2255853e18c87b50/watchdog-6.0.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:a175f755fc2279e0b7312c0035d52e27211a5bc39719dd529625b1930917345b", size = 89057, upload-time = "2024-11-01T14:06:47.324Z" },
-    { url = "https://files.pythonhosted.org/packages/a9/c7/ca4bf3e518cb57a686b2feb4f55a1892fd9a3dd13f470fca14e00f80ea36/watchdog-6.0.0-py3-none-manylinux2014_aarch64.whl", hash = "sha256:7607498efa04a3542ae3e05e64da8202e58159aa1fa4acddf7678d34a35d4f13", size = 79079, upload-time = "2024-11-01T14:06:59.472Z" },
-    { url = "https://files.pythonhosted.org/packages/5c/51/d46dc9332f9a647593c947b4b88e2381c8dfc0942d15b8edc0310fa4abb1/watchdog-6.0.0-py3-none-manylinux2014_armv7l.whl", hash = "sha256:9041567ee8953024c83343288ccc458fd0a2d811d6a0fd68c4c22609e3490379", size = 79078, upload-time = "2024-11-01T14:07:01.431Z" },
-    { url = "https://files.pythonhosted.org/packages/d4/57/04edbf5e169cd318d5f07b4766fee38e825d64b6913ca157ca32d1a42267/watchdog-6.0.0-py3-none-manylinux2014_i686.whl", hash = "sha256:82dc3e3143c7e38ec49d61af98d6558288c415eac98486a5c581726e0737c00e", size = 79076, upload-time = "2024-11-01T14:07:02.568Z" },
-    { url = "https://files.pythonhosted.org/packages/ab/cc/da8422b300e13cb187d2203f20b9253e91058aaf7db65b74142013478e66/watchdog-6.0.0-py3-none-manylinux2014_ppc64.whl", hash = "sha256:212ac9b8bf1161dc91bd09c048048a95ca3a4c4f5e5d4a7d1b1a7d5752a7f96f", size = 79077, upload-time = "2024-11-01T14:07:03.893Z" },
-    { url = "https://files.pythonhosted.org/packages/2c/3b/b8964e04ae1a025c44ba8e4291f86e97fac443bca31de8bd98d3263d2fcf/watchdog-6.0.0-py3-none-manylinux2014_ppc64le.whl", hash = "sha256:e3df4cbb9a450c6d49318f6d14f4bbc80d763fa587ba46ec86f99f9e6876bb26", size = 79078, upload-time = "2024-11-01T14:07:05.189Z" },
-    { url = "https://files.pythonhosted.org/packages/62/ae/a696eb424bedff7407801c257d4b1afda455fe40821a2be430e173660e81/watchdog-6.0.0-py3-none-manylinux2014_s390x.whl", hash = "sha256:2cce7cfc2008eb51feb6aab51251fd79b85d9894e98ba847408f662b3395ca3c", size = 79077, upload-time = "2024-11-01T14:07:06.376Z" },
-    { url = "https://files.pythonhosted.org/packages/b5/e8/dbf020b4d98251a9860752a094d09a65e1b436ad181faf929983f697048f/watchdog-6.0.0-py3-none-manylinux2014_x86_64.whl", hash = "sha256:20ffe5b202af80ab4266dcd3e91aae72bf2da48c0d33bdb15c66658e685e94e2", size = 79078, upload-time = "2024-11-01T14:07:07.547Z" },
-    { url = "https://files.pythonhosted.org/packages/07/f6/d0e5b343768e8bcb4cda79f0f2f55051bf26177ecd5651f84c07567461cf/watchdog-6.0.0-py3-none-win32.whl", hash = "sha256:07df1fdd701c5d4c8e55ef6cf55b8f0120fe1aef7ef39a1c6fc6bc2e606d517a", size = 79065, upload-time = "2024-11-01T14:07:09.525Z" },
-    { url = "https://files.pythonhosted.org/packages/db/d9/c495884c6e548fce18a8f40568ff120bc3a4b7b99813081c8ac0c936fa64/watchdog-6.0.0-py3-none-win_amd64.whl", hash = "sha256:cbafb470cf848d93b5d013e2ecb245d4aa1c8fd0504e863ccefa32445359d680", size = 79070, upload-time = "2024-11-01T14:07:10.686Z" },
-    { url = "https://files.pythonhosted.org/packages/33/e8/e40370e6d74ddba47f002a32919d91310d6074130fe4e17dabcafc15cbf1/watchdog-6.0.0-py3-none-win_ia64.whl", hash = "sha256:a1914259fa9e1454315171103c6a30961236f508b9b623eae470268bbcc6a22f", size = 79067, upload-time = "2024-11-01T14:07:11.845Z" },
 ]
 
 [[package]]
@@ -5142,6 +5347,18 @@ wheels = [
 ]
 
 [[package]]
+name = "wheel"
+version = "0.48.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "packaging" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d0/20/50ed6bdf27dec98b568a8ae25dc599f35baa3d9709f9e83fd1edb56b9a90/wheel-0.48.0.tar.gz", hash = "sha256:94800765601e9171bf5d58d066e640662842bcedcbab982b2c90787a2c987322", size = 66471, upload-time = "2026-08-11T22:02:27.327Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2e/29/69cfbb602cd91690c55d38ba9fe53e6a7e76a6fa647bf38f19c138d25449/wheel-0.48.0-py3-none-any.whl", hash = "sha256:3217dcc807155e45db462d7ef2431f5ddda0d7273b700d05a67b271ceb1287ab", size = 33320, upload-time = "2026-08-11T22:02:26.1Z" },
+]
+
+[[package]]
 name = "wrapt"
 version = "2.1.2"
 source = { registry = "https://pypi.org/simple" }
@@ -5214,6 +5431,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/82/dd/e5176e4b241c9f528402cebb238a36785a628179d7d8b71091154b3e4c9e/wrapt-2.1.2-cp314-cp314t-win_amd64.whl", hash = "sha256:08ffa54146a7559f5b8df4b289b46d963a8e74ed16ba3687f99896101a3990c5", size = 63969, upload-time = "2026-03-06T02:54:39Z" },
     { url = "https://files.pythonhosted.org/packages/5c/99/79f17046cf67e4a95b9987ea129632ba8bcec0bc81f3fb3d19bdb0bd60cd/wrapt-2.1.2-cp314-cp314t-win_arm64.whl", hash = "sha256:72aaa9d0d8e4ed0e2e98019cea47a21f823c9dd4b43c7b77bba6679ffcca6a00", size = 60554, upload-time = "2026-03-06T02:53:14.132Z" },
     { url = "https://files.pythonhosted.org/packages/1a/c7/8528ac2dfa2c1e6708f647df7ae144ead13f0a31146f43c7264b4942bf12/wrapt-2.1.2-py3-none-any.whl", hash = "sha256:b8fd6fa2b2c4e7621808f8c62e8317f4aae56e59721ad933bac5239d913cf0e8", size = 43993, upload-time = "2026-03-06T02:53:12.905Z" },
+]
+
+[[package]]
+name = "xmltodict"
+version = "1.0.4"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/19/70/80f3b7c10d2630aa66414bf23d210386700aa390547278c789afa994fd7e/xmltodict-1.0.4.tar.gz", hash = "sha256:6d94c9f834dd9e44514162799d344d815a3a4faec913717a9ecbfa5be1bb8e61", size = 26124, upload-time = "2026-02-22T02:21:22.074Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/38/34/98a2f52245f4d47be93b580dae5f9861ef58977d73a79eb47c58f1ad1f3a/xmltodict-1.0.4-py3-none-any.whl", hash = "sha256:a4a00d300b0e1c59fc2bfccb53d7b2e88c32f200df138a0dd2229f842497026a", size = 13580, upload-time = "2026-02-22T02:21:21.039Z" },
 ]
 
 [[package]]
